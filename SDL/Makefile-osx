@@ -1,0 +1,394 @@
+# Makefile to build the SDL library
+# This file MUST be executed with working directory in SDL root
+
+BIN_DIR = bin
+
+CC      = gcc
+
+CFLAGS  = -g -O3 -DUSING_GENERATED_CONFIG_H
+EXTRA_CFLAGS = -Iinclude -mmmx -m3dnow -msse -msse2 -DTARGET_API_MAC_CARBON -DTARGET_API_MAC_OSX -fvisibility=hidden -D_THREAD_SAFE -fpascal-strings -Wno-deprecated-declarations
+
+LDFLAGS = 
+EXTRA_LDFLAGS =  -lm -liconv  -Wl,-framework,ForceFeedback -lobjc -Wl,-framework,CoreVideo -Wl,-framework,Cocoa -Wl,-framework,Carbon -Wl,-framework,IOKit -Wl,-framework,CoreAudio -Wl,-framework,AudioToolbox -Wl,-framework,AudioUnit
+
+TARGET  = SDL2.so
+OBJECTS = $(BIN_DIR)/SDL.o $(BIN_DIR)/SDL_assert.o $(BIN_DIR)/SDL_error.o $(BIN_DIR)/SDL_hints.o $(BIN_DIR)/SDL_log.o $(BIN_DIR)/SDL_atomic.o $(BIN_DIR)/SDL_spinlock.o $(BIN_DIR)/SDL_audio.o $(BIN_DIR)/SDL_audiocvt.o $(BIN_DIR)/SDL_audiodev.o $(BIN_DIR)/SDL_audiotypecvt.o $(BIN_DIR)/SDL_mixer.o $(BIN_DIR)/SDL_wave.o $(BIN_DIR)/SDL_cpuinfo.o $(BIN_DIR)/SDL_dynapi.o $(BIN_DIR)/SDL_clipboardevents.o $(BIN_DIR)/SDL_dropevents.o $(BIN_DIR)/SDL_events.o $(BIN_DIR)/SDL_gesture.o $(BIN_DIR)/SDL_keyboard.o $(BIN_DIR)/SDL_mouse.o $(BIN_DIR)/SDL_quit.o $(BIN_DIR)/SDL_touch.o $(BIN_DIR)/SDL_windowevents.o $(BIN_DIR)/SDL_rwops.o $(BIN_DIR)/SDL_haptic.o $(BIN_DIR)/SDL_gamecontroller.o $(BIN_DIR)/SDL_joystick.o $(BIN_DIR)/e_atan2.o $(BIN_DIR)/e_log.o $(BIN_DIR)/e_pow.o $(BIN_DIR)/e_rem_pio2.o $(BIN_DIR)/e_sqrt.o $(BIN_DIR)/k_cos.o $(BIN_DIR)/k_rem_pio2.o $(BIN_DIR)/k_sin.o $(BIN_DIR)/k_tan.o $(BIN_DIR)/s_atan.o $(BIN_DIR)/s_copysign.o $(BIN_DIR)/s_cos.o $(BIN_DIR)/s_fabs.o $(BIN_DIR)/s_floor.o $(BIN_DIR)/s_scalbn.o $(BIN_DIR)/s_sin.o $(BIN_DIR)/s_tan.o $(BIN_DIR)/SDL_power.o $(BIN_DIR)/SDL_d3dmath.o $(BIN_DIR)/SDL_render.o $(BIN_DIR)/SDL_yuv_mmx.o $(BIN_DIR)/SDL_yuv_sw.o $(BIN_DIR)/SDL_render_d3d.o $(BIN_DIR)/SDL_render_d3d11.o $(BIN_DIR)/SDL_render_gl.o $(BIN_DIR)/SDL_shaders_gl.o $(BIN_DIR)/SDL_render_gles.o $(BIN_DIR)/SDL_render_gles2.o $(BIN_DIR)/SDL_shaders_gles2.o $(BIN_DIR)/SDL_render_psp.o $(BIN_DIR)/SDL_blendfillrect.o $(BIN_DIR)/SDL_blendline.o $(BIN_DIR)/SDL_blendpoint.o $(BIN_DIR)/SDL_drawline.o $(BIN_DIR)/SDL_drawpoint.o $(BIN_DIR)/SDL_render_sw.o $(BIN_DIR)/SDL_rotate.o $(BIN_DIR)/SDL_getenv.o $(BIN_DIR)/SDL_iconv.o $(BIN_DIR)/SDL_malloc.o $(BIN_DIR)/SDL_qsort.o $(BIN_DIR)/SDL_stdlib.o $(BIN_DIR)/SDL_string.o $(BIN_DIR)/SDL_thread.o $(BIN_DIR)/SDL_timer.o $(BIN_DIR)/SDL_RLEaccel.o $(BIN_DIR)/SDL_blit.o $(BIN_DIR)/SDL_blit_0.o $(BIN_DIR)/SDL_blit_1.o $(BIN_DIR)/SDL_blit_A.o $(BIN_DIR)/SDL_blit_N.o $(BIN_DIR)/SDL_blit_auto.o $(BIN_DIR)/SDL_blit_copy.o $(BIN_DIR)/SDL_blit_slow.o $(BIN_DIR)/SDL_bmp.o $(BIN_DIR)/SDL_clipboard.o $(BIN_DIR)/SDL_egl.o $(BIN_DIR)/SDL_fillrect.o $(BIN_DIR)/SDL_pixels.o $(BIN_DIR)/SDL_rect.o $(BIN_DIR)/SDL_shape.o $(BIN_DIR)/SDL_stretch.o $(BIN_DIR)/SDL_surface.o $(BIN_DIR)/SDL_video.o $(BIN_DIR)/SDL_nullevents.o $(BIN_DIR)/SDL_nullframebuffer.o $(BIN_DIR)/SDL_nullvideo.o $(BIN_DIR)/SDL_diskaudio.o $(BIN_DIR)/SDL_dummyaudio.o $(BIN_DIR)/SDL_sysloadso.o $(BIN_DIR)/SDL_cocoaclipboard.o $(BIN_DIR)/SDL_cocoaevents.o $(BIN_DIR)/SDL_cocoakeyboard.o $(BIN_DIR)/SDL_cocoamessagebox.o $(BIN_DIR)/SDL_cocoamodes.o $(BIN_DIR)/SDL_cocoamouse.o $(BIN_DIR)/SDL_cocoamousetap.o $(BIN_DIR)/SDL_cocoaopengl.o $(BIN_DIR)/SDL_cocoashape.o $(BIN_DIR)/SDL_cocoavideo.o $(BIN_DIR)/SDL_cocoawindow.o $(BIN_DIR)/SDL_systhread.o $(BIN_DIR)/SDL_syssem.o $(BIN_DIR)/SDL_sysmutex.o $(BIN_DIR)/SDL_syscond.o $(BIN_DIR)/SDL_systls.o $(BIN_DIR)/SDL_coreaudio.o $(BIN_DIR)/SDL_sysjoystick.o $(BIN_DIR)/SDL_syshaptic.o $(BIN_DIR)/SDL_syspower.o $(BIN_DIR)/SDL_sysfilesystem.o $(BIN_DIR)/SDL_systimer.o $(BIN_DIR)/SDL_rwopsbundlesupport.o
+
+all: make_build_dir ../$(BIN_DIR)/$(TARGET)
+
+rebuild: clean all
+
+make_build_dir:
+	@mkdir -p $(BIN_DIR)
+	@mkdir -p ../$(BIN_DIR)/$(TARGET)
+
+../$(BIN_DIR)/$(TARGET): $(OBJECTS)
+	@echo "  Linking SDL  "; $(CC) -shared -o $@ $(OBJECTS) $(LDFLAGS) $(EXTRA_LDFLAGS)
+	@echo "  SDL Compilation and Linking done  "
+
+clean:
+	@rm -rf $(BIN_DIR)
+	@echo "  SDL binaries removed  "
+
+$(BIN_DIR)/SDL.o: SDL.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_assert.o: SDL_assert.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_error.o: SDL_error.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_hints.o: SDL_hints.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_log.o: SDL_log.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_atomic.o: atomic/SDL_atomic.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_spinlock.o: atomic/SDL_spinlock.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_audio.o: audio/SDL_audio.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_audiocvt.o: audio/SDL_audiocvt.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_audiodev.o: audio/SDL_audiodev.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_audiotypecvt.o: audio/SDL_audiotypecvt.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_mixer.o: audio/SDL_mixer.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_wave.o: audio/SDL_wave.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_cpuinfo.o: cpuinfo/SDL_cpuinfo.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_dynapi.o: dynapi/SDL_dynapi.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_clipboardevents.o: events/SDL_clipboardevents.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_dropevents.o: events/SDL_dropevents.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_events.o: events/SDL_events.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_gesture.o: events/SDL_gesture.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_keyboard.o: events/SDL_keyboard.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_mouse.o: events/SDL_mouse.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_quit.o: events/SDL_quit.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_touch.o: events/SDL_touch.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_windowevents.o: events/SDL_windowevents.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_rwops.o: file/SDL_rwops.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_haptic.o: haptic/SDL_haptic.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_gamecontroller.o: joystick/SDL_gamecontroller.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_joystick.o: joystick/SDL_joystick.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/e_atan2.o: libm/e_atan2.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/e_log.o: libm/e_log.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/e_pow.o: libm/e_pow.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/e_rem_pio2.o: libm/e_rem_pio2.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/e_sqrt.o: libm/e_sqrt.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/k_cos.o: libm/k_cos.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/k_rem_pio2.o: libm/k_rem_pio2.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/k_sin.o: libm/k_sin.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/k_tan.o: libm/k_tan.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/s_atan.o: libm/s_atan.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/s_copysign.o: libm/s_copysign.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/s_cos.o: libm/s_cos.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/s_fabs.o: libm/s_fabs.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/s_floor.o: libm/s_floor.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/s_scalbn.o: libm/s_scalbn.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/s_sin.o: libm/s_sin.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/s_tan.o: libm/s_tan.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_power.o: power/SDL_power.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_d3dmath.o: render/SDL_d3dmath.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_render.o: render/SDL_render.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_yuv_mmx.o: render/SDL_yuv_mmx.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_yuv_sw.o: render/SDL_yuv_sw.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_render_d3d.o: render/direct3d/SDL_render_d3d.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_render_d3d11.o: render/direct3d11/SDL_render_d3d11.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_render_gl.o: render/opengl/SDL_render_gl.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_shaders_gl.o: render/opengl/SDL_shaders_gl.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_render_gles.o: render/opengles/SDL_render_gles.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_render_gles2.o: render/opengles2/SDL_render_gles2.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_shaders_gles2.o: render/opengles2/SDL_shaders_gles2.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_render_psp.o: render/psp/SDL_render_psp.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_blendfillrect.o: render/software/SDL_blendfillrect.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_blendline.o: render/software/SDL_blendline.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_blendpoint.o: render/software/SDL_blendpoint.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_drawline.o: render/software/SDL_drawline.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_drawpoint.o: render/software/SDL_drawpoint.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_render_sw.o: render/software/SDL_render_sw.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_rotate.o: render/software/SDL_rotate.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_getenv.o: stdlib/SDL_getenv.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_iconv.o: stdlib/SDL_iconv.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_malloc.o: stdlib/SDL_malloc.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_qsort.o: stdlib/SDL_qsort.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_stdlib.o: stdlib/SDL_stdlib.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_string.o: stdlib/SDL_string.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_thread.o: thread/SDL_thread.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_timer.o: timer/SDL_timer.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_RLEaccel.o: video/SDL_RLEaccel.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_blit.o: video/SDL_blit.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_blit_0.o: video/SDL_blit_0.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_blit_1.o: video/SDL_blit_1.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_blit_A.o: video/SDL_blit_A.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_blit_N.o: video/SDL_blit_N.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_blit_auto.o: video/SDL_blit_auto.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_blit_copy.o: video/SDL_blit_copy.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_blit_slow.o: video/SDL_blit_slow.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_bmp.o: video/SDL_bmp.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_clipboard.o: video/SDL_clipboard.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_egl.o: video/SDL_egl.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_fillrect.o: video/SDL_fillrect.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_pixels.o: video/SDL_pixels.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_rect.o: video/SDL_rect.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_shape.o: video/SDL_shape.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_stretch.o: video/SDL_stretch.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_surface.o: video/SDL_surface.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_video.o: video/SDL_video.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_nullevents.o: video/dummy/SDL_nullevents.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_nullframebuffer.o: video/dummy/SDL_nullframebuffer.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_nullvideo.o: video/dummy/SDL_nullvideo.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_diskaudio.o: audio/disk/SDL_diskaudio.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_dummyaudio.o: audio/dummy/SDL_dummyaudio.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_sysloadso.o: loadso/dlopen/SDL_sysloadso.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_cocoaclipboard.o: video/cocoa/SDL_cocoaclipboard.m
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_cocoaevents.o: video/cocoa/SDL_cocoaevents.m
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_cocoakeyboard.o: video/cocoa/SDL_cocoakeyboard.m
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_cocoamessagebox.o: video/cocoa/SDL_cocoamessagebox.m
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_cocoamodes.o: video/cocoa/SDL_cocoamodes.m
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_cocoamouse.o: video/cocoa/SDL_cocoamouse.m
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_cocoamousetap.o: video/cocoa/SDL_cocoamousetap.m
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_cocoaopengl.o: video/cocoa/SDL_cocoaopengl.m
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_cocoashape.o: video/cocoa/SDL_cocoashape.m
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_cocoavideo.o: video/cocoa/SDL_cocoavideo.m
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_cocoawindow.o: video/cocoa/SDL_cocoawindow.m
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_systhread.o: thread/pthread/SDL_systhread.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_syssem.o: thread/pthread/SDL_syssem.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_sysmutex.o: thread/pthread/SDL_sysmutex.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_syscond.o: thread/pthread/SDL_syscond.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_systls.o: thread/pthread/SDL_systls.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_coreaudio.o: audio/coreaudio/SDL_coreaudio.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_sysjoystick.o: joystick/darwin/SDL_sysjoystick.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_syshaptic.o: haptic/darwin/SDL_syshaptic.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_syspower.o: power/macosx/SDL_syspower.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_sysfilesystem.o: filesystem/cocoa/SDL_sysfilesystem.m
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_systimer.o: timer/unix/SDL_systimer.c
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
+
+$(BIN_DIR)/SDL_rwopsbundlesupport.o: file/cocoa/SDL_rwopsbundlesupport.m
+	@echo "  Compiling $?  "; $(CC) -c $(CFLAGS) $(EXTRA_CFLAGS) -o $@ $?
