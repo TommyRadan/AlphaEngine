@@ -3,10 +3,12 @@
 // SDL
 #include <SDL.h>
 
-#include <Utilities\Singleton.hpp>
-#include "EventCallbacks.hpp"
+#include "../Utilities/Singleton.hpp"
 
-enum KeyBinding 
+#include <list>
+#include <functional>
+
+enum class KeyBinding
 {
 	KEY_W = 119,
 	KEY_A = 97,
@@ -22,24 +24,28 @@ enum KeyBinding
 class Events : public Singleton<Events>
 {
 	friend Singleton<Events>;
-	Events(void) : 
-		m_IsUserQuit{ false } 
-	{ }
+	Events(void) { }
 
 public:
 	void Process(void);
-	void Update(const Uint32);
 
 	bool IsQuitRequested(void) const  {
-		if (m_Events.type == SDL_QUIT || m_IsUserQuit) return true;
+		if (m_Events.type == SDL_QUIT) return true;
 		return false;
 	}
 
-	void RequestQuit(void) {
-		m_IsUserQuit = true;
+	void AddKeyboardEventCallback(std::function<void(int)> func)
+	{
+		m_KeyboardCallbacks.push_back(func);
+	}
+
+	void RemoveKeyboardEventCallback(std::function<void(int)> func)
+	{
+		m_KeyboardCallbacks.remove(func);
 	}
 
 private:
-	bool m_IsUserQuit;
 	SDL_Event m_Events;
+
+	std::list<std::function<void(int)>> m_KeyboardCallbacks;
 };

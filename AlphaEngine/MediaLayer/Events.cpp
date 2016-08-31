@@ -2,13 +2,15 @@
 
 void Events::Process(void)
 {
-	while (SDL_PollEvent(&m_Events)) {
-		switch (m_Events.type) {
+	while (SDL_PollEvent(&m_Events))
+	{
+		switch (m_Events.type)
+		{
 			case SDL_MOUSEMOTION: {
 				int mouseMoveX = m_Events.motion.xrel;
 				int mouseMoveY = m_Events.motion.yrel;
 				int mouseMoveZ = m_Events.wheel.y;
-				EventCallBacks::GetInstance()->OnMouseMove(mouseMoveX, mouseMoveY);
+				//EventCallBacks::GetInstance()->OnMouseMove(mouseMoveX, mouseMoveY);
 				break;
 			}
 			case SDL_MOUSEWHEEL: {
@@ -24,22 +26,17 @@ void Events::Process(void)
 				break;
 			}
 			case SDL_KEYDOWN: {
-				EventCallBacks::GetInstance()->OnKeyDown(m_Events.key.keysym.sym);
+				//EventCallBacks::GetInstance()->OnKeyDown(m_Events.key.keysym.sym);
 				break;
 			}
 			case SDL_KEYUP: {
-				EventCallBacks::GetInstance()->OnKeyUp(m_Events.key.keysym.sym);
+				//EventCallBacks::GetInstance()->OnKeyUp(m_Events.key.keysym.sym);
 				break;
 			}
 			case SDL_QUIT: {
-				m_IsUserQuit = true;
+				//m_IsUserQuit = true;
 				break; 
 			}
 		}
 	}
-}
-
-void Events::Update(const Uint32 deltaTime)
-{
-	EventCallBacks::GetInstance()->OnFrame(deltaTime);
 }
