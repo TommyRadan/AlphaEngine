@@ -20,7 +20,7 @@ rebuild: clean all
 
 make_build_dir:
 	@mkdir -p $(BIN_DIR)
-	@mkdir -p ../$(BIN_DIR)/$(TARGET)
+	@mkdir -p ../$(BIN_DIR)
 
 ../$(BIN_DIR)/$(TARGET): $(OBJECTS)
 	@echo "  Linking SDL  "; $(CC) -shared -o $@ $(OBJECTS) $(LDFLAGS) $(EXTRA_LDFLAGS)
