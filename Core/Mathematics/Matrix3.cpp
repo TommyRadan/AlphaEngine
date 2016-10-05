@@ -4,7 +4,7 @@
 
 namespace Math
 {
-	Matrix3::Matrix3()
+	Matrix3::Matrix3(void)
 	{
 		m[0] = 1.0f; m[3] = 0.0f; m[6] = 0.0f; 
 		m[1] = 0.0f; m[4] = 1.0f; m[7] = 0.0f;
@@ -23,7 +23,6 @@ namespace Math
 
 	const Matrix3 Matrix3::operator*(const Matrix3& mat)
 	{
-		// Wow! What a mess!
 		return Matrix3(
 			mat.m[0]*m[0]+mat.m[1]*m[3]+mat.m[2]*m[6], 
 			mat.m[3]*m[0]+mat.m[4]*m[3]+mat.m[5]*m[6], 
@@ -45,58 +44,50 @@ namespace Math
 		);
 	}
 
-	Matrix3& Matrix3::Translate( const Vector2& v )
+	static Matrix3 Matrix3::Translate( const Vector2& v )
 	{
-		return *this = *this * Matrix3(
-			1, 0, v.X,
-			0, 1, v.Y,
-			0, 0, 1
-		);
-	}
-
-	Matrix3& Matrix3::Scale( const Vector2& v )
-	{
-		return *this = *this * Matrix3(
-			v.X, 0, 0,
-			0, v.Y, 0,
-			0, 0, 1
-		);
-	}
-
-	Matrix3& Matrix3::Rotation( float ang )
-	{
-		return *this = *this * Matrix3(
-			cos( ang ), -sin( ang ), 0.0f,
-			sin( ang ),  cos( ang ), 0.0f,
+		return Matrix3(
+			1.0f, 0.0f, v.X,
+			0.0f, 1.0f, v.Y,
 			0.0f, 0.0f, 1.0f
 		);
 	}
 
-	Matrix3 Matrix3::Transpose() const
+	static Matrix3 Matrix3::Scale( const Vector2& v )
 	{
-		Matrix3 res;
-
-		res.m[0] = m[0];
-		res.m[1] = m[3];
-		res.m[2] = m[6];
-
-		res.m[3] = m[1];
-		res.m[4] = m[4];
-		res.m[5] = m[7];
-
-		res.m[6] = m[2];
-		res.m[7] = m[5];
-		res.m[8] = m[8];
-
-		return res;
+		return Matrix3(
+			 v.X, 0.0f, 0.0f,
+			0.0f,  v.Y, 0.0f,
+			0.0f, 0.0f, 1.0f
+		);
 	}
 
-	float Matrix3::Determinant() const
+	static Matrix3 Matrix3::Rotation( float ang )
 	{
-		return m[0] * ( m[8] * m[4] - m[5] * m[7] ) + m[1] * ( -m[8] * m[3] + m[5] * m[6] ) + m[2] * ( m[7] * m[3] - m[4] * m[6] );
+		return Matrix3(
+			cos( ang ), -sin( ang ), 0.0f,
+			sin( ang ),  cos( ang ), 0.0f,
+			0.0000000f,  0.0000000f, 1.0f
+		);
 	}
 
-	Matrix3 Matrix3::Inverse() const
+	const Matrix3 Matrix3::Transpose(void) const
+	{
+		return Matrix3(
+			m[0],m[3],m[6],
+			m[1],m[4],m[7],
+			m[2],m[5],m[8]
+		);
+	}
+
+	const float Matrix3::Determinant(void) const
+	{
+		return m[0] * (  m[8] * m[4] - m[5] * m[7] ) + 
+			   m[1] * ( -m[8] * m[3] + m[5] * m[6] ) + 
+			   m[2] * (  m[7] * m[3] - m[4] * m[6] );
+	}
+
+	const Matrix3 Matrix3::Inverse(void) const
 	{
 		const float det = Determinant();
 

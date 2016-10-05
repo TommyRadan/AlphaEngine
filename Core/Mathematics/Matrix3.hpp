@@ -6,7 +6,7 @@ namespace Math
 {
 	struct Matrix3
 	{
-		Matrix3();
+		Matrix3(void);
 		Matrix3(
 			float v00, float v01, float v02,
 			float v10, float v11, float v12,
@@ -16,15 +16,16 @@ namespace Math
 		const Matrix3 operator*(const Matrix3& mat);
 		const Vector2 operator*(const Vector2& v);
 
-		Matrix3& Translate(const Vector2& v);
-		Matrix3& Scale(const Vector2& v);
-		Matrix3& Rotation(const float ang);
+		static Matrix3 Translate(const Vector2& v);
+		static Matrix3 Scale(const Vector2& v);
+		static Matrix3 Rotation(const float ang);
 
-		Matrix3 Transpose() const;
+		const Matrix3 Transpose(void) const;
 
-		float Determinant() const;
-		Matrix3 Inverse() const;
-		
+		const float Determinant(void) const;
+		const Matrix3 Inverse(void) const;
+
+		// Data
 		float m[9];
 	};
 }

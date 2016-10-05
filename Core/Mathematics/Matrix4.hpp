@@ -1,49 +1,50 @@
 #pragma once
 
-#include "Vec3.hpp"
-#include "Vec4.hpp"
+#include "Vector3.hpp"
+#include "Vector4.hpp"
 
 namespace Math
 {
-	struct Mat4
+	struct Matrix4
 	{
 	public:
-		Mat4();
-		Mat4(
+		Matrix4(void);
+		Matrix4(
 			float v00, float v01, float v02, float v03,
 			float v10, float v11, float v12, float v13,
 			float v20, float v21, float v22, float v23,
 			float v30, float v31, float v32, float v33
 		);
 
-		const Mat4 operator*( const Mat4& mat ) const;
-		const Vec3 operator*( const Vec3& v ) const;
-		const Vec4 operator*( const Vec4& v ) const;
+		const Matrix4 operator*(const Matrix4& mat) const;
+		const Vector3 operator*(const Vector3& v) const;
+		const Vector4 operator*(const Vector4& v) const;
 
-		Mat4& Translate( const Vec3& v );
-		Mat4& Scale( const Vec3& v );
+		const Matrix4 Translate(const Vector3& v) const;
+		const Matrix4 Scale(const Vector3& v) const;
 
-		Mat4& RotateX( float ang );
-		Mat4& RotateY( float ang );
-		Mat4& RotateZ( float ang );
-		Mat4& Rotate( const Vec3& axis, float ang );
+		const Matrix4 RotateX(const float ang) const;
+		const Matrix4 RotateY(const float ang) const;
+		const Matrix4 RotateZ(const float ang) const;
+		const Matrix4 Rotate(const Vector3& axis, float ang) const;
 
-		Mat4 Transpose() const;
+		const Matrix4 Transpose(void) const;
 
 		// The implementations of the functions below are based on the awesome
 		// glMatrix library developed by Brandon Jones and Colin MacKenzie IV
 
-		float Determinant() const;
-		Mat4 Inverse() const;
+		const float Determinant(void) const;
+		const Matrix4 Inverse(void) const;
 
-		static Mat4 Frustum( float left, float right, float bottom, float top, float near, float far );
-		static Mat4 Perspective( float fovy, float aspect, float near, float far );
-		static Mat4 Ortho( float left, float right, float bottom, float top, float near, float far );
-		static Mat4 LookAt( const Vec3& eye, const Vec3& center, const Vec3& up );
+		static const Matrix4 Frustum(const float left, const float right, const float bottom, const float top, const float near, const float far);
+		static const Matrix4 Perspective(const float fovy, const float aspect, const float near, const float far);
+		static const Matrix4 Ortho(const float left, const float right, const float bottom, const float top, const float near, const float far);
+		static const Matrix4 LookAt(const Vector3& eye, const Vector3& center, const Vector3& up);
 
-		static Vec3 UnProject( const Vec3& vec, const Mat4& view, const Mat4& proj, const float viewport[] );
-		static Vec3 Project( const Vec3& vec, const Mat4& view, const Mat4& proj, const float viewport[] );
+		static const Vector3 UnProject(const Vector3& vec, const Matrix4& view, const Matrix4& proj, const float viewport[]);
+		static const Vector3 Project(const Vector3& vec, const Matrix4& view, const Matrix4& proj, const float viewport[]);
 		
+		// Data
 		float m[16];
 	};
 }
