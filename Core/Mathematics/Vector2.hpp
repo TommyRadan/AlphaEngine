@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Utilities/Exception/OutOfRange.hpp>
+
 namespace Math
 {
 	struct Vector2
@@ -29,6 +31,7 @@ namespace Math
 
 		const Vector2 Normal() const;
 
+		// Data
 		float X, Y;
 	};
 }
