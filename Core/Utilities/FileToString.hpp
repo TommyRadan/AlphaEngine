@@ -4,7 +4,7 @@
 #include <fstream>
 #include <streambuf>
 
-#include "Exception.hpp"
+#include "Exceptions/Exception.hpp"
 
 static std::string FileToString(std::string& filename)
 {
