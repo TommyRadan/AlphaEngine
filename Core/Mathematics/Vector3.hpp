@@ -20,8 +20,6 @@ namespace Math
 		friend Vector3 operator/( const Vector3& v, float n );
 		friend Vector3 operator/( float n, const Vector3& v );
 
-		float& operator[](const int i);
-
 		const Vector3 Cross( const Vector3& v ) const;
 
 		const float Dot( const Vector3& v ) const;

@@ -47,17 +47,6 @@ namespace Math
 		return Vector2( v.X / n, v.Y / n );
 	}
 
-	float& Vector2::operator[](const int i)
-	{
-		// Throw exception if index is out of range
-		if(i < 0 || i > 1) {
-			throw OutOfRangeException("Vector2 operator[] received bad index!");
-		}
-
-		if(i == 0) return X;
-		else return Y;
-	}
-
 	const float Vector2::Dot( const Vector2& v ) const
 	{
 		return X * v.X + Y * v.Y;

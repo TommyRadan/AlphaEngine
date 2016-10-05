@@ -49,18 +49,6 @@ namespace Math
 		return Vector3( v.X / n, v.Y / n, v.Z / n );
 	}
 
-	float& Vector3::operator[](const int i)
-	{
-		if(i < 0 || i > 2)
-		{
-			throw OutOfRangeException("Vector3 operator[] received bad index!");
-		}
-
-		if(i == 0) return X;
-		else if(i == 1) return Y;
-		else return Z;
-	}
-
 	const Vector3 Vector3::Cross( const Vector3& v ) const
 	{
 		return Vector3( Y*v.Z - Z*v.Y, Z*v.X - X*v.Z, X*v.Y - Y*v.X );

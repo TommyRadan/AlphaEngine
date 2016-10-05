@@ -50,17 +50,4 @@ namespace Math
 	{
 		return Vector4( v.X / n, v.Y / n, v.Z / n, v.W / n );
 	}
-
-	float& Vector4::operator[](const int i)
-	{
-		if(i < 0 || i > 3)
-		{
-			throw OutOfRangeException("Vector4 operator[] received bad index!");
-		}
-
-		if(i == 0) return X;
-		else if(i == 1) return Y;
-		else if(i == 2) return Z;
-		else return W;
-	}
 }

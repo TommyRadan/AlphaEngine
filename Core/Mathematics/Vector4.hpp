@@ -24,8 +24,6 @@ namespace Math
 		friend Vector4 operator/( const Vector4& v, float n );
 		friend Vector4 operator/( float n, const Vector4& v );
 
-		float& operator[](const int i);
-
 		// Data
 		float X, Y, Z, W;
 	};

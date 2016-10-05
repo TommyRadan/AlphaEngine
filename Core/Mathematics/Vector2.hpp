@@ -20,8 +20,6 @@ namespace Math
 		friend Vector2 operator/(const Vector2& v, float n);
 		friend Vector2 operator/(float n, const Vector2& v);
 
-		float& operator[](const int i);
-
 		const float Dot(const Vector2& v) const;
 		const float Angle(const Vector2& v) const;
 
