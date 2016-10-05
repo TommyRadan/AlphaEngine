@@ -27,3 +27,10 @@
 *.exe
 *.out
 *.app
+
+# VS Code Specific
+c_cpp_properties.json
+launch.json
+
+# Mac Specific
+.DS_store
