@@ -34,3 +34,4 @@ launch.json
 
 # Mac Specific
 .DS_store
+/VisualStudio/.vs/AlphaEngine/v14/.suo
