@@ -14,10 +14,10 @@ namespace Math
 	}
 
 	Matrix4::Matrix4(
-		float v00, float v01, float v02, float v03, 
-		float v10, float v11, float v12, float v13, 
-		float v20, float v21, float v22, float v23, 
-		float v30, float v31, float v32, float v33 
+		const float v00, const float v01, const float v02, const float v03,
+		const float v10, const float v11, const float v12, const float v13,
+		const float v20, const float v21, const float v22, const float v23,
+		const float v30, const float v31, const float v32, const float v33
 	) {
 		m[0] = v00; m[4] = v01; m[8]  = v02; m[12] = v03;
 		m[1] = v10; m[5] = v11; m[9]  = v12; m[13] = v13;
@@ -106,7 +106,7 @@ namespace Math
 		);
 	}
 
-	const Matrix4 Matrix4::RotateZ(const float ang)
+	const Matrix4 Matrix4::RotateZ(const float ang) const
 	{
 		return Matrix4(
 			cos(ang), -sin(ang), 0.0f, 0.0f,

@@ -12,9 +12,9 @@ namespace Math
 	}
 
 	Matrix3::Matrix3( 
-		float v00, float v01, float v02, 
-		float v10, float v11, float v12, 
-		float v20, float v21, float v22 
+		const float v00, const float v01, const float v02,
+		const float v10, const float v11, const float v12,
+		const float v20, const float v21, const float v22
 	) {
 		m[0] = v00; m[3] = v01; m[6] = v02; 
 		m[1] = v10; m[4] = v11; m[7] = v12;
@@ -36,7 +36,7 @@ namespace Math
 		);
 	}
 
-	const Vector2 Matrix3::operator*( const Vector2& v )
+	const Vector2 Matrix3::operator*(const Vector2& v)
 	{
 		return Vector2(
 			m[0]*v.X + m[3]*v.Y + m[6],
@@ -44,7 +44,7 @@ namespace Math
 		);
 	}
 
-	static Matrix3 Matrix3::Translate( const Vector2& v )
+	Matrix3 Matrix3::Translate(const Vector2& v)
 	{
 		return Matrix3(
 			1.0f, 0.0f, v.X,
@@ -53,7 +53,7 @@ namespace Math
 		);
 	}
 
-	static Matrix3 Matrix3::Scale( const Vector2& v )
+	Matrix3 Matrix3::Scale(const Vector2& v)
 	{
 		return Matrix3(
 			 v.X, 0.0f, 0.0f,
@@ -62,7 +62,7 @@ namespace Math
 		);
 	}
 
-	static Matrix3 Matrix3::Rotation( float ang )
+	Matrix3 Matrix3::Rotation(const float ang)
 	{
 		return Matrix3(
 			cos( ang ), -sin( ang ), 0.0f,
