@@ -41,6 +41,7 @@
     <ClCompile Include="..\..\Core\RenderingEngine\Scene.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\..\Core\Mathematics\Math.hpp" />
     <ClInclude Include="..\..\Core\Mathematics\Matrix3.hpp" />
     <ClInclude Include="..\..\Core\Mathematics\Matrix4.hpp" />
     <ClInclude Include="..\..\Core\Mathematics\Util.hpp" />

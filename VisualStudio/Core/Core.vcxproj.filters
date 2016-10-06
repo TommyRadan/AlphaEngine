@@ -179,6 +179,9 @@
     <ClInclude Include="..\..\Core\RenderingEngine\StandardRenderer\StandardRenderer.hpp">
       <Filter>RenderingEngine\Renderers</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\Core\Mathematics\Math.hpp">
+      <Filter>Mathematics</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\Core\RenderingEngine\StandardRenderer\StandardShader.fs">
