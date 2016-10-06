@@ -1,0 +1,191 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Mathematics">
+      <UniqueIdentifier>{93ca2a06-d182-4675-a787-4238e2bc8fc9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Control">
+      <UniqueIdentifier>{3009ee94-7ca6-4a78-9b2c-813304849233}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="MediaLayer">
+      <UniqueIdentifier>{1eb036f6-819e-40e3-b438-0d37f35f6a82}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RenderingEngine">
+      <UniqueIdentifier>{5d95a667-1fc0-42c3-83f9-025448d7a2f9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Utilities">
+      <UniqueIdentifier>{788760c2-4177-4886-857c-6a4dcda22b12}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Utilities\Exceptions">
+      <UniqueIdentifier>{a23dcf45-e5d3-4147-b8af-0e926b27f61c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RenderingEngine\Renderers">
+      <UniqueIdentifier>{02418a59-8c17-410c-82f6-5a13f6be495d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RenderingEngine\OpenGL">
+      <UniqueIdentifier>{495481a9-e8b3-4911-bf96-71c8287fa0b4}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\Core\Mathematics\Matrix3.cpp">
+      <Filter>Mathematics</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Mathematics\Matrix4.cpp">
+      <Filter>Mathematics</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Mathematics\Vector2.cpp">
+      <Filter>Mathematics</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Mathematics\Vector3.cpp">
+      <Filter>Mathematics</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Mathematics\Vector4.cpp">
+      <Filter>Mathematics</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Control\MainLoop.cpp">
+      <Filter>Control</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\MediaLayer\Window.cpp">
+      <Filter>MediaLayer</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\RenderingEngine\Geometry.cpp">
+      <Filter>RenderingEngine</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\RenderingEngine\Mesh.cpp">
+      <Filter>RenderingEngine</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\RenderingEngine\Model.cpp">
+      <Filter>RenderingEngine</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\RenderingEngine\RenderingEngine.cpp">
+      <Filter>RenderingEngine</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\RenderingEngine\Scene.cpp">
+      <Filter>RenderingEngine</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\RenderingEngine\OpenGL\Framebuffer.cpp">
+      <Filter>RenderingEngine\OpenGL</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\RenderingEngine\OpenGL\OpenGL.cpp">
+      <Filter>RenderingEngine\OpenGL</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\RenderingEngine\OpenGL\Program.cpp">
+      <Filter>RenderingEngine\OpenGL</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\RenderingEngine\OpenGL\Renderbuffer.cpp">
+      <Filter>RenderingEngine\OpenGL</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\RenderingEngine\OpenGL\Shader.cpp">
+      <Filter>RenderingEngine\OpenGL</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\RenderingEngine\OpenGL\Texture.cpp">
+      <Filter>RenderingEngine\OpenGL</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\RenderingEngine\OpenGL\VertexArray.cpp">
+      <Filter>RenderingEngine\OpenGL</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\RenderingEngine\OpenGL\VertexBuffer.cpp">
+      <Filter>RenderingEngine\OpenGL</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\Core\Mathematics\Matrix3.hpp">
+      <Filter>Mathematics</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\Mathematics\Matrix4.hpp">
+      <Filter>Mathematics</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\Mathematics\Util.hpp">
+      <Filter>Mathematics</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\Mathematics\Vector2.hpp">
+      <Filter>Mathematics</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\Mathematics\Vector3.hpp">
+      <Filter>Mathematics</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\Mathematics\Vector4.hpp">
+      <Filter>Mathematics</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\Event.hpp">
+      <Filter>MediaLayer</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\Window.hpp">
+      <Filter>MediaLayer</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\Utilities\FileToString.hpp">
+      <Filter>Utilities</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\Utilities\Singleton.hpp">
+      <Filter>Utilities</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\Utilities\Exceptions\Exception.hpp">
+      <Filter>Utilities\Exceptions</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\Utilities\Exceptions\OutOfRange.hpp">
+      <Filter>Utilities\Exceptions</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\RenderingEngine\Camera.hpp">
+      <Filter>RenderingEngine</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\RenderingEngine\Geometry.hpp">
+      <Filter>RenderingEngine</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\RenderingEngine\Material.hpp">
+      <Filter>RenderingEngine</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\RenderingEngine\Mesh.hpp">
+      <Filter>RenderingEngine</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\RenderingEngine\Model.hpp">
+      <Filter>RenderingEngine</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\RenderingEngine\Renderer.hpp">
+      <Filter>RenderingEngine</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\RenderingEngine\Scene.hpp">
+      <Filter>RenderingEngine</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\RenderingEngine\OpenGL\Color.hpp">
+      <Filter>RenderingEngine\OpenGL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\RenderingEngine\OpenGL\Framebuffer.hpp">
+      <Filter>RenderingEngine\OpenGL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\RenderingEngine\OpenGL\OpenGL.hpp">
+      <Filter>RenderingEngine\OpenGL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\RenderingEngine\OpenGL\Program.hpp">
+      <Filter>RenderingEngine\OpenGL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\RenderingEngine\OpenGL\Renderbuffer.hpp">
+      <Filter>RenderingEngine\OpenGL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\RenderingEngine\OpenGL\Shader.hpp">
+      <Filter>RenderingEngine\OpenGL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\RenderingEngine\OpenGL\Texture.hpp">
+      <Filter>RenderingEngine\OpenGL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\RenderingEngine\OpenGL\Typedef.hpp">
+      <Filter>RenderingEngine\OpenGL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\RenderingEngine\OpenGL\VertexArray.hpp">
+      <Filter>RenderingEngine\OpenGL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\RenderingEngine\OpenGL\VertexBuffer.hpp">
+      <Filter>RenderingEngine\OpenGL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\RenderingEngine\StandardRenderer\StandardRenderer.hpp">
+      <Filter>RenderingEngine\Renderers</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\Core\RenderingEngine\StandardRenderer\StandardShader.fs">
+      <Filter>RenderingEngine\Renderers</Filter>
+    </None>
+    <None Include="..\..\Core\RenderingEngine\StandardRenderer\StandardShader.vs">
+      <Filter>RenderingEngine\Renderers</Filter>
+    </None>
+  </ItemGroup>
+</Project>

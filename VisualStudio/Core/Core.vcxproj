@@ -18,6 +18,64 @@
       <Platform>x64</Platform>
     </ProjectConfiguration>
   </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\Core\Control\MainLoop.cpp" />
+    <ClCompile Include="..\..\Core\Mathematics\Matrix3.cpp" />
+    <ClCompile Include="..\..\Core\Mathematics\Matrix4.cpp" />
+    <ClCompile Include="..\..\Core\Mathematics\Vector2.cpp" />
+    <ClCompile Include="..\..\Core\Mathematics\Vector3.cpp" />
+    <ClCompile Include="..\..\Core\Mathematics\Vector4.cpp" />
+    <ClCompile Include="..\..\Core\MediaLayer\Window.cpp" />
+    <ClCompile Include="..\..\Core\RenderingEngine\Geometry.cpp" />
+    <ClCompile Include="..\..\Core\RenderingEngine\Mesh.cpp" />
+    <ClCompile Include="..\..\Core\RenderingEngine\Model.cpp" />
+    <ClCompile Include="..\..\Core\RenderingEngine\OpenGL\Framebuffer.cpp" />
+    <ClCompile Include="..\..\Core\RenderingEngine\OpenGL\OpenGL.cpp" />
+    <ClCompile Include="..\..\Core\RenderingEngine\OpenGL\Program.cpp" />
+    <ClCompile Include="..\..\Core\RenderingEngine\OpenGL\Renderbuffer.cpp" />
+    <ClCompile Include="..\..\Core\RenderingEngine\OpenGL\Shader.cpp" />
+    <ClCompile Include="..\..\Core\RenderingEngine\OpenGL\Texture.cpp" />
+    <ClCompile Include="..\..\Core\RenderingEngine\OpenGL\VertexArray.cpp" />
+    <ClCompile Include="..\..\Core\RenderingEngine\OpenGL\VertexBuffer.cpp" />
+    <ClCompile Include="..\..\Core\RenderingEngine\RenderingEngine.cpp" />
+    <ClCompile Include="..\..\Core\RenderingEngine\Scene.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\Core\Mathematics\Matrix3.hpp" />
+    <ClInclude Include="..\..\Core\Mathematics\Matrix4.hpp" />
+    <ClInclude Include="..\..\Core\Mathematics\Util.hpp" />
+    <ClInclude Include="..\..\Core\Mathematics\Vector2.hpp" />
+    <ClInclude Include="..\..\Core\Mathematics\Vector3.hpp" />
+    <ClInclude Include="..\..\Core\Mathematics\Vector4.hpp" />
+    <ClInclude Include="..\..\Core\MediaLayer\Event.hpp" />
+    <ClInclude Include="..\..\Core\MediaLayer\Window.hpp" />
+    <ClInclude Include="..\..\Core\RenderingEngine\Camera.hpp" />
+    <ClInclude Include="..\..\Core\RenderingEngine\Geometry.hpp" />
+    <ClInclude Include="..\..\Core\RenderingEngine\Material.hpp" />
+    <ClInclude Include="..\..\Core\RenderingEngine\Mesh.hpp" />
+    <ClInclude Include="..\..\Core\RenderingEngine\Model.hpp" />
+    <ClInclude Include="..\..\Core\RenderingEngine\OpenGL\Color.hpp" />
+    <ClInclude Include="..\..\Core\RenderingEngine\OpenGL\Framebuffer.hpp" />
+    <ClInclude Include="..\..\Core\RenderingEngine\OpenGL\OpenGL.hpp" />
+    <ClInclude Include="..\..\Core\RenderingEngine\OpenGL\Program.hpp" />
+    <ClInclude Include="..\..\Core\RenderingEngine\OpenGL\Renderbuffer.hpp" />
+    <ClInclude Include="..\..\Core\RenderingEngine\OpenGL\Shader.hpp" />
+    <ClInclude Include="..\..\Core\RenderingEngine\OpenGL\Texture.hpp" />
+    <ClInclude Include="..\..\Core\RenderingEngine\OpenGL\Typedef.hpp" />
+    <ClInclude Include="..\..\Core\RenderingEngine\OpenGL\VertexArray.hpp" />
+    <ClInclude Include="..\..\Core\RenderingEngine\OpenGL\VertexBuffer.hpp" />
+    <ClInclude Include="..\..\Core\RenderingEngine\Renderer.hpp" />
+    <ClInclude Include="..\..\Core\RenderingEngine\Scene.hpp" />
+    <ClInclude Include="..\..\Core\RenderingEngine\StandardRenderer\StandardRenderer.hpp" />
+    <ClInclude Include="..\..\Core\Utilities\Exceptions\Exception.hpp" />
+    <ClInclude Include="..\..\Core\Utilities\Exceptions\OutOfRange.hpp" />
+    <ClInclude Include="..\..\Core\Utilities\FileToString.hpp" />
+    <ClInclude Include="..\..\Core\Utilities\Singleton.hpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\Core\RenderingEngine\StandardRenderer\StandardShader.fs" />
+    <None Include="..\..\Core\RenderingEngine\StandardRenderer\StandardShader.vs" />
+  </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{22FC049B-8BE2-4124-8E86-8642750B26D7}</ProjectGuid>
     <RootNamespace>Core</RootNamespace>
@@ -109,64 +167,6 @@
       <OptimizeReferences>true</OptimizeReferences>
     </Link>
   </ItemDefinitionGroup>
-  <ItemGroup>
-    <ClCompile Include="..\..\Core\Control\MainLoop.cpp" />
-    <ClCompile Include="..\..\Core\Mathematics\Matrix3.cpp" />
-    <ClCompile Include="..\..\Core\Mathematics\Matrix4.cpp" />
-    <ClCompile Include="..\..\Core\Mathematics\Vector2.cpp" />
-    <ClCompile Include="..\..\Core\Mathematics\Vector3.cpp" />
-    <ClCompile Include="..\..\Core\Mathematics\Vector4.cpp" />
-    <ClCompile Include="..\..\Core\MediaLayer\Window.cpp" />
-    <ClCompile Include="..\..\Core\RenderingEngine\Geometry.cpp" />
-    <ClCompile Include="..\..\Core\RenderingEngine\Mesh.cpp" />
-    <ClCompile Include="..\..\Core\RenderingEngine\Model.cpp" />
-    <ClCompile Include="..\..\Core\RenderingEngine\OpenGL\Framebuffer.cpp" />
-    <ClCompile Include="..\..\Core\RenderingEngine\OpenGL\OpenGL.cpp" />
-    <ClCompile Include="..\..\Core\RenderingEngine\OpenGL\Program.cpp" />
-    <ClCompile Include="..\..\Core\RenderingEngine\OpenGL\Renderbuffer.cpp" />
-    <ClCompile Include="..\..\Core\RenderingEngine\OpenGL\Shader.cpp" />
-    <ClCompile Include="..\..\Core\RenderingEngine\OpenGL\Texture.cpp" />
-    <ClCompile Include="..\..\Core\RenderingEngine\OpenGL\VertexArray.cpp" />
-    <ClCompile Include="..\..\Core\RenderingEngine\OpenGL\VertexBuffer.cpp" />
-    <ClCompile Include="..\..\Core\RenderingEngine\RenderingEngine.cpp" />
-    <ClCompile Include="..\..\Core\RenderingEngine\Scene.cpp" />
-  </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="..\..\Core\Mathematics\Matrix3.hpp" />
-    <ClInclude Include="..\..\Core\Mathematics\Matrix4.hpp" />
-    <ClInclude Include="..\..\Core\Mathematics\Util.hpp" />
-    <ClInclude Include="..\..\Core\Mathematics\Vector2.hpp" />
-    <ClInclude Include="..\..\Core\Mathematics\Vector3.hpp" />
-    <ClInclude Include="..\..\Core\Mathematics\Vector4.hpp" />
-    <ClInclude Include="..\..\Core\MediaLayer\Event.hpp" />
-    <ClInclude Include="..\..\Core\MediaLayer\Window.hpp" />
-    <ClInclude Include="..\..\Core\RenderingEngine\Camera.hpp" />
-    <ClInclude Include="..\..\Core\RenderingEngine\Geometry.hpp" />
-    <ClInclude Include="..\..\Core\RenderingEngine\Material.hpp" />
-    <ClInclude Include="..\..\Core\RenderingEngine\Mesh.hpp" />
-    <ClInclude Include="..\..\Core\RenderingEngine\Model.hpp" />
-    <ClInclude Include="..\..\Core\RenderingEngine\OpenGL\Color.hpp" />
-    <ClInclude Include="..\..\Core\RenderingEngine\OpenGL\Framebuffer.hpp" />
-    <ClInclude Include="..\..\Core\RenderingEngine\OpenGL\OpenGL.hpp" />
-    <ClInclude Include="..\..\Core\RenderingEngine\OpenGL\Program.hpp" />
-    <ClInclude Include="..\..\Core\RenderingEngine\OpenGL\Renderbuffer.hpp" />
-    <ClInclude Include="..\..\Core\RenderingEngine\OpenGL\Shader.hpp" />
-    <ClInclude Include="..\..\Core\RenderingEngine\OpenGL\Texture.hpp" />
-    <ClInclude Include="..\..\Core\RenderingEngine\OpenGL\Typedef.hpp" />
-    <ClInclude Include="..\..\Core\RenderingEngine\OpenGL\VertexArray.hpp" />
-    <ClInclude Include="..\..\Core\RenderingEngine\OpenGL\VertexBuffer.hpp" />
-    <ClInclude Include="..\..\Core\RenderingEngine\Renderer.hpp" />
-    <ClInclude Include="..\..\Core\RenderingEngine\Scene.hpp" />
-    <ClInclude Include="..\..\Core\RenderingEngine\StandardRenderer\StandardRenderer.hpp" />
-    <ClInclude Include="..\..\Core\Utilities\Exceptions\Exception.hpp" />
-    <ClInclude Include="..\..\Core\Utilities\Exceptions\OutOfRange.hpp" />
-    <ClInclude Include="..\..\Core\Utilities\FileToString.hpp" />
-    <ClInclude Include="..\..\Core\Utilities\Singleton.hpp" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="..\..\Core\RenderingEngine\StandardRenderer\StandardShader.fs" />
-    <None Include="..\..\Core\RenderingEngine\StandardRenderer\StandardShader.vs" />
-  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
