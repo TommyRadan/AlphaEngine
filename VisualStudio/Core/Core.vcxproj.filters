@@ -57,12 +57,6 @@
     <ClCompile Include="..\..\Core\RenderingEngine\Model.cpp">
       <Filter>RenderingEngine</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\Core\RenderingEngine\RenderingEngine.cpp">
-      <Filter>RenderingEngine</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\Core\RenderingEngine\Scene.cpp">
-      <Filter>RenderingEngine</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\Core\RenderingEngine\OpenGL\Framebuffer.cpp">
       <Filter>RenderingEngine\OpenGL</Filter>
     </ClCompile>
@@ -92,6 +86,9 @@
     </ClCompile>
     <ClCompile Include="..\..\Core\MediaLayer\Events.cpp">
       <Filter>MediaLayer</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Control\Scene.cpp">
+      <Filter>Control</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -141,9 +138,6 @@
       <Filter>RenderingEngine</Filter>
     </ClInclude>
     <ClInclude Include="..\..\Core\RenderingEngine\Renderer.hpp">
-      <Filter>RenderingEngine</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\Core\RenderingEngine\Scene.hpp">
       <Filter>RenderingEngine</Filter>
     </ClInclude>
     <ClInclude Include="..\..\Core\RenderingEngine\OpenGL\Color.hpp">
@@ -364,6 +358,9 @@
     </ClInclude>
     <ClInclude Include="..\..\Core\MediaLayer\Events.hpp">
       <Filter>MediaLayer</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\Control\Scene.hpp">
+      <Filter>Control</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

@@ -12,6 +12,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\Core\Control\MainLoop.cpp" />
+    <ClCompile Include="..\..\Core\Control\Scene.cpp" />
     <ClCompile Include="..\..\Core\Mathematics\Matrix3.cpp" />
     <ClCompile Include="..\..\Core\Mathematics\Matrix4.cpp" />
     <ClCompile Include="..\..\Core\Mathematics\Vector2.cpp" />
@@ -30,10 +31,9 @@
     <ClCompile Include="..\..\Core\RenderingEngine\OpenGL\Texture.cpp" />
     <ClCompile Include="..\..\Core\RenderingEngine\OpenGL\VertexArray.cpp" />
     <ClCompile Include="..\..\Core\RenderingEngine\OpenGL\VertexBuffer.cpp" />
-    <ClCompile Include="..\..\Core\RenderingEngine\RenderingEngine.cpp" />
-    <ClCompile Include="..\..\Core\RenderingEngine\Scene.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\..\Core\Control\Scene.hpp" />
     <ClInclude Include="..\..\Core\Control\Settings.hpp" />
     <ClInclude Include="..\..\Core\Mathematics\Math.hpp" />
     <ClInclude Include="..\..\Core\Mathematics\Matrix3.hpp" />
@@ -118,7 +118,6 @@
     <ClInclude Include="..\..\Core\RenderingEngine\OpenGL\VertexArray.hpp" />
     <ClInclude Include="..\..\Core\RenderingEngine\OpenGL\VertexBuffer.hpp" />
     <ClInclude Include="..\..\Core\RenderingEngine\Renderer.hpp" />
-    <ClInclude Include="..\..\Core\RenderingEngine\Scene.hpp" />
     <ClInclude Include="..\..\Core\RenderingEngine\StandardRenderer\StandardRenderer.hpp" />
     <ClInclude Include="..\..\Core\Utilities\Exceptions\Exception.hpp" />
     <ClInclude Include="..\..\Core\Utilities\Exceptions\OutOfRange.hpp" />
