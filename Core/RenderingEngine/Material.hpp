@@ -3,7 +3,7 @@
 #include <string>
 #include <map>
 
-#include <Mathematics\glm.hpp>
+#include <Mathematics\Math.hpp>
 
 #include "OpenGL\Color.hpp"
 #include "OpenGL\Texture.hpp"
