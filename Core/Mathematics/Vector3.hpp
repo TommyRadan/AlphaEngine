@@ -1,6 +1,6 @@
 #pragma once
 
-#include <Utilities/Exception/OutOfRange.hpp>
+#include <Utilities/Exceptions/OutOfRange.hpp>
 
 namespace Math
 {
