@@ -1,6 +1,6 @@
 #pragma once
 
-#include "GLEW\glew.h"
+#include "Typedef.hpp"
 
 namespace OpenGL
 {
