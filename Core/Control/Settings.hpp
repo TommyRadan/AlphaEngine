@@ -14,10 +14,10 @@ class Settings : public Singleton<Settings>
 {
 	friend Singleton<Settings>;
 	Settings(void) {
-		m_WindowWidth = 1920;
-		m_WindowHeight = 1080;
+		m_WindowWidth = 640;
+		m_WindowHeight = 480;
 		m_WindowName = "Hello World!";
-		m_WindowType = WinType::WIN_TYPE_FULLSCREEN;
+		m_WindowType = WinType::WIN_TYPE_WINDOWED;
 		m_IsDoubleBuffered = true;
 		m_FieldOfView = 70.0f;
 		m_MouseSensitivity = 0.005f;
