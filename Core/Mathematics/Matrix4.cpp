@@ -66,7 +66,7 @@ namespace Math
 		);
 	}
 
-	const Matrix4 Matrix4::Translate(const Vector3& v) const
+	const Matrix4 Matrix4::Translate(const Vector3& v)
 	{
 		return Matrix4(
 			1.0f, 0.0f, 0.0f, v.X,
@@ -76,7 +76,7 @@ namespace Math
 		);
 	}
 
-	const Matrix4 Matrix4::Scale(const Vector3& v) const
+	const Matrix4 Matrix4::Scale(const Vector3& v)
 	{
 		return Matrix4(
 			v.X, 0.0f, 0.0f, 0.0f,
@@ -86,7 +86,7 @@ namespace Math
 		);
 	}
 
-	const Matrix4 Matrix4::RotateX(const float ang) const
+	const Matrix4 Matrix4::RotateX(const float ang)
 	{
 		return Matrix4(
 			1.0f, 0.0f, 0.0f, 0.0f,
@@ -96,7 +96,7 @@ namespace Math
 		);
 	}
 
-	const Matrix4 Matrix4::RotateY(const float ang) const
+	const Matrix4 Matrix4::RotateY(const float ang)
 	{
 		return Matrix4(
 			cos(ang), 0.0f, sin(ang), 0.0f,
@@ -106,7 +106,7 @@ namespace Math
 		);
 	}
 
-	const Matrix4 Matrix4::RotateZ(const float ang) const
+	const Matrix4 Matrix4::RotateZ(const float ang)
 	{
 		return Matrix4(
 			cos(ang), -sin(ang), 0.0f, 0.0f,
@@ -116,7 +116,7 @@ namespace Math
 		);
 	}
 
-	const Matrix4 Matrix4::Rotate(const Vector3& axis, const float ang) const
+	const Matrix4 Matrix4::Rotate(const Vector3& axis, const float ang)
 	{
 		const float s = sin(ang);
 		const float c = cos(ang);

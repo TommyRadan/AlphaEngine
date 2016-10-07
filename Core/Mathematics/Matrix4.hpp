@@ -20,13 +20,13 @@ namespace Math
 		const Vector3 operator*(const Vector3& v) const;
 		const Vector4 operator*(const Vector4& v) const;
 
-		const Matrix4 Translate(const Vector3& v) const;
-		const Matrix4 Scale(const Vector3& v) const;
+		static const Matrix4 Translate(const Vector3& v);
+		static const Matrix4 Scale(const Vector3& v);
 
-		const Matrix4 RotateX(const float ang) const;
-		const Matrix4 RotateY(const float ang) const;
-		const Matrix4 RotateZ(const float ang) const;
-		const Matrix4 Rotate(const Vector3& axis, float ang) const;
+		static const Matrix4 RotateX(const float ang);
+		static const Matrix4 RotateY(const float ang);
+		static const Matrix4 RotateZ(const float ang);
+		static const Matrix4 Rotate(const Vector3& axis, float ang);
 
 		const Matrix4 Transpose(void) const;
 
