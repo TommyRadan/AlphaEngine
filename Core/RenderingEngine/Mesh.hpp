@@ -1,8 +1,7 @@
 #pragma once
 
-#include <Utilities\Exception.hpp>
-
-#include <Mathematics\glm.hpp>
+#include <Utilities\Exceptions\Exception.hpp>
+#include <Mathematics\Math.hpp>
 
 #include <fstream>
 #include <vector>
