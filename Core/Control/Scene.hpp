@@ -2,7 +2,7 @@
 
 #include <Utilities\Singleton.hpp>
 
-#include "Model.hpp"
+#include <RenderingEngine\Model.hpp>
 
 #include <list>
 
