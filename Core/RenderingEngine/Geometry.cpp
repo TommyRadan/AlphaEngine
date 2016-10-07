@@ -11,10 +11,10 @@ Geometry::Geometry(const Mesh& mesh)
 	m_VertexArrayObject.BindAttribute(0, m_VertexBufferObject, OpenGL::Type::Float, (unsigned)mesh.VertexCount(), sizeof(Vertex), 0U);
 	
 	// Texture Coordinates mapping
-	m_VertexArrayObject.BindAttribute(1, m_VertexBufferObject, OpenGL::Type::Float, (unsigned)mesh.VertexCount(), sizeof(Vertex), sizeof(Math::vec3));
+	m_VertexArrayObject.BindAttribute(1, m_VertexBufferObject, OpenGL::Type::Float, (unsigned)mesh.VertexCount(), sizeof(Vertex), sizeof(Math::Vector3));
 	
 	// Normals mapping
-	m_VertexArrayObject.BindAttribute(2, m_VertexBufferObject, OpenGL::Type::Float, (unsigned)mesh.VertexCount(), sizeof(Vertex), sizeof(Math::vec3) + sizeof(Math::vec2));
+	m_VertexArrayObject.BindAttribute(2, m_VertexBufferObject, OpenGL::Type::Float, (unsigned)mesh.VertexCount(), sizeof(Vertex), sizeof(Math::Vector3) + sizeof(Math::Vector2));
 }
 
 void Geometry::Draw(void)

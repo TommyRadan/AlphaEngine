@@ -71,7 +71,7 @@ inline int readFloat(char* buf, float& out)
 	return ln + lf + 1;
 }
 
-int readVector(char* buf, Math::vec3& out)
+int readVector(char* buf, Math::Vector3& out)
 {
 	int i = 0;
 	while (IS_SPACING(*buf)) { buf++; i++; };
@@ -117,13 +117,13 @@ Mesh::Mesh(const std::string& filename)
 
 	// Data
 	int approxMem = 295 + fileLen / 1024 * 11;
-	std::vector<Math::vec3> vectors;
+	std::vector<Math::Vector3> vectors;
 	vectors.reserve(approxMem);
 
-	std::vector<Math::vec3> normals;
+	std::vector<Math::Vector3> normals;
 	normals.reserve(approxMem);
 
-	std::vector<Math::vec2> texcoords;
+	std::vector<Math::Vector2> texcoords;
 	texcoords.reserve(approxMem);
 
 	vertices.reserve(approxMem);
@@ -131,7 +131,7 @@ Mesh::Mesh(const std::string& filename)
 	// Parser state
 	bool inComment = false;
 	int mode = MODE_NONE;
-	Math::vec3 v3;
+	Math::Vector3 v3;
 	face f;
 
 	bool hasNormals = false;
@@ -192,7 +192,7 @@ Mesh::Mesh(const std::string& filename)
 
 			case MODE_TEXTURE:
 				i += readVector((char*)&buf[i], v3);
-				texcoords.push_back(Math::vec2(v3.x, v3.y));
+				texcoords.push_back(Math::Vector2(v3.x, v3.y));
 				mode = MODE_NONE;
 				hasTexcoords = true;
 				break;
@@ -202,19 +202,19 @@ Mesh::Mesh(const std::string& filename)
 
 				Vertex vertex = {
 					vectors[f.v1 - 1],
-					hasTexcoords ? texcoords[f.t1 - 1] : Math::vec2(0.0f, 0.0f),
-					hasNormals ? normals[f.n1 - 1] : Math::vec3(0.0f, 0.0f, 0.0f)
+					hasTexcoords ? texcoords[f.t1 - 1] : Math::Vector2(0.0f, 0.0f),
+					hasNormals ? normals[f.n1 - 1] : Math::Vector3(0.0f, 0.0f, 0.0f)
 				};
 				vertices.push_back(vertex);
 
 				vertex.Pos = vectors[f.v2 - 1];
-				vertex.Tex = (hasTexcoords ? texcoords[f.t2 - 1] : Math::vec2(0.0f, 0.0f));
-				vertex.Normal = (hasNormals ? normals[f.n2 - 1] : Math::vec3(0.0f, 0.0f, 0.0f));
+				vertex.Tex = (hasTexcoords ? texcoords[f.t2 - 1] : Math::Vector2(0.0f, 0.0f));
+				vertex.Normal = (hasNormals ? normals[f.n2 - 1] : Math::Vector3(0.0f, 0.0f, 0.0f));
 				vertices.push_back(vertex);
 
 				vertex.Pos = vectors[f.v3 - 1];
-				vertex.Tex = (hasTexcoords ? texcoords[f.t3 - 1] : Math::vec2(0.0f, 0.0f));
-				vertex.Normal = (hasNormals ? normals[f.n3 - 1] : Math::vec3(0.0f, 0.0f, 0.0f));
+				vertex.Tex = (hasTexcoords ? texcoords[f.t3 - 1] : Math::Vector2(0.0f, 0.0f));
+				vertex.Normal = (hasNormals ? normals[f.n3 - 1] : Math::Vector3(0.0f, 0.0f, 0.0f));
 				vertices.push_back(vertex);
 
 				mode = MODE_NONE;
