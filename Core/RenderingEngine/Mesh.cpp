@@ -224,12 +224,12 @@ Mesh::Mesh(const std::string& filename)
 	}
 }
 
-const Vertex* Mesh::Vertices() const
+const Vertex* Mesh::Vertices(void) const
 {
 	return &vertices[0];
 }
 
-std::size_t Mesh::VertexCount() const
+std::size_t Mesh::VertexCount(void) const
 {
 	return vertices.size();
 }

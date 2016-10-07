@@ -8,9 +8,9 @@
 
 struct Vertex
 {
-	Math::vec3 Pos;
-	Math::vec2 Tex;
-	Math::vec3 Normal;
+	Math::Vector3 Pos;
+	Math::Vector2 Tex;
+	Math::Vector2 Normal;
 };
 
 class Mesh
@@ -18,8 +18,8 @@ class Mesh
 public:
 	Mesh(const std::string& filename);
 
-	const Vertex* Vertices() const;
-	std::size_t VertexCount() const;
+	const Vertex* Vertices(void) const;
+	std::size_t VertexCount(void) const;
 
 private:
 	std::vector<Vertex> vertices;
