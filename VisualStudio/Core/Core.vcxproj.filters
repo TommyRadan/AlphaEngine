@@ -28,6 +28,9 @@
     <Filter Include="MediaLayer\SDL">
       <UniqueIdentifier>{7384bc8d-0759-455b-b6c8-1d92fe9d7ce7}</UniqueIdentifier>
     </Filter>
+    <Filter Include="RenderingEngine\OpenGL\GLEW">
+      <UniqueIdentifier>{580828c3-edc6-496d-89a9-346cb95fa36a}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\Core\Mathematics\Matrix3.cpp">
@@ -361,6 +364,18 @@
     </ClInclude>
     <ClInclude Include="..\..\Core\Control\Scene.hpp">
       <Filter>Control</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\RenderingEngine\OpenGL\GLEW\eglew.h">
+      <Filter>RenderingEngine\OpenGL\GLEW</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\RenderingEngine\OpenGL\GLEW\glew.h">
+      <Filter>RenderingEngine\OpenGL\GLEW</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\RenderingEngine\OpenGL\GLEW\glxew.h">
+      <Filter>RenderingEngine\OpenGL\GLEW</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\RenderingEngine\OpenGL\GLEW\wglew.h">
+      <Filter>RenderingEngine\OpenGL\GLEW</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

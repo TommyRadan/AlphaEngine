@@ -109,6 +109,10 @@
     <ClInclude Include="..\..\Core\RenderingEngine\Model.hpp" />
     <ClInclude Include="..\..\Core\RenderingEngine\OpenGL\Color.hpp" />
     <ClInclude Include="..\..\Core\RenderingEngine\OpenGL\Framebuffer.hpp" />
+    <ClInclude Include="..\..\Core\RenderingEngine\OpenGL\GLEW\eglew.h" />
+    <ClInclude Include="..\..\Core\RenderingEngine\OpenGL\GLEW\glew.h" />
+    <ClInclude Include="..\..\Core\RenderingEngine\OpenGL\GLEW\glxew.h" />
+    <ClInclude Include="..\..\Core\RenderingEngine\OpenGL\GLEW\wglew.h" />
     <ClInclude Include="..\..\Core\RenderingEngine\OpenGL\OpenGL.hpp" />
     <ClInclude Include="..\..\Core\RenderingEngine\OpenGL\Program.hpp" />
     <ClInclude Include="..\..\Core\RenderingEngine\OpenGL\Renderbuffer.hpp" />

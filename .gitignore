@@ -1,4 +1,4 @@
-# Compiled Object files
+﻿# Compiled Object files
 *.slo
 *.lo
 *.o
@@ -8,21 +8,10 @@
 *.gch
 *.pch
 
-# Compiled Static libraries
-*.lai
-*.la
-*.a
-*.lib
-
 # Executables
 *.exe
 *.out
 *.app
 
-# VS Code Specific
-c_cpp_properties.json
-launch.json
-
-# Mac Specific
-.DS_store
-/VisualStudio/.vs/AlphaEngine/v14/.suo
+# Other
+*.suo
