@@ -40,8 +40,6 @@ Display::Display(void)
 	if(m_GlContext == nullptr) {
 		throw Exception(SDL_GetError());
 	}
-
-	SDL_SetRelativeMouseMode(SDL_TRUE);
 	return;
 }
 
