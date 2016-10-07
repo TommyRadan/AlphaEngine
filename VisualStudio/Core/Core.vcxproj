@@ -25,7 +25,8 @@
     <ClCompile Include="..\..\Core\Mathematics\Vector2.cpp" />
     <ClCompile Include="..\..\Core\Mathematics\Vector3.cpp" />
     <ClCompile Include="..\..\Core\Mathematics\Vector4.cpp" />
-    <ClCompile Include="..\..\Core\MediaLayer\Window.cpp" />
+    <ClCompile Include="..\..\Core\MediaLayer\Display.cpp" />
+    <ClCompile Include="..\..\Core\MediaLayer\Events.cpp" />
     <ClCompile Include="..\..\Core\RenderingEngine\Geometry.cpp" />
     <ClCompile Include="..\..\Core\RenderingEngine\Mesh.cpp" />
     <ClCompile Include="..\..\Core\RenderingEngine\Model.cpp" />
@@ -41,6 +42,7 @@
     <ClCompile Include="..\..\Core\RenderingEngine\Scene.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\..\Core\Control\Settings.hpp" />
     <ClInclude Include="..\..\Core\Mathematics\Math.hpp" />
     <ClInclude Include="..\..\Core\Mathematics\Matrix3.hpp" />
     <ClInclude Include="..\..\Core\Mathematics\Matrix4.hpp" />
@@ -48,8 +50,66 @@
     <ClInclude Include="..\..\Core\Mathematics\Vector2.hpp" />
     <ClInclude Include="..\..\Core\Mathematics\Vector3.hpp" />
     <ClInclude Include="..\..\Core\Mathematics\Vector4.hpp" />
-    <ClInclude Include="..\..\Core\MediaLayer\Event.hpp" />
-    <ClInclude Include="..\..\Core\MediaLayer\Window.hpp" />
+    <ClInclude Include="..\..\Core\MediaLayer\Display.hpp" />
+    <ClInclude Include="..\..\Core\MediaLayer\Events.hpp" />
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\begin_code.h" />
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\close_code.h" />
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL.h" />
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_assert.h" />
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_atomic.h" />
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_audio.h" />
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_bits.h" />
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_blendmode.h" />
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_clipboard.h" />
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_config.h" />
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_cpuinfo.h" />
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_egl.h" />
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_endian.h" />
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_error.h" />
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_events.h" />
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_filesystem.h" />
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_gamecontroller.h" />
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_gesture.h" />
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_haptic.h" />
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_hints.h" />
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_joystick.h" />
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_keyboard.h" />
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_keycode.h" />
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_loadso.h" />
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_log.h" />
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_main.h" />
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_messagebox.h" />
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_mouse.h" />
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_mutex.h" />
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_name.h" />
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_opengl.h" />
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_opengles.h" />
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_opengles2.h" />
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_opengles2_gl2.h" />
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_opengles2_gl2ext.h" />
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_opengles2_gl2platform.h" />
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_opengles2_khrplatform.h" />
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_opengl_glext.h" />
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_pixels.h" />
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_platform.h" />
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_power.h" />
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_quit.h" />
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_rect.h" />
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_render.h" />
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_revision.h" />
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_rwops.h" />
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_scancode.h" />
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_shape.h" />
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_stdinc.h" />
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_surface.h" />
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_system.h" />
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_syswm.h" />
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_thread.h" />
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_timer.h" />
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_touch.h" />
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_types.h" />
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_version.h" />
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_video.h" />
     <ClInclude Include="..\..\Core\RenderingEngine\Camera.hpp" />
     <ClInclude Include="..\..\Core\RenderingEngine\Geometry.hpp" />
     <ClInclude Include="..\..\Core\RenderingEngine\Material.hpp" />
@@ -127,7 +187,22 @@
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
-  <PropertyGroup />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <IncludePath>$(SolutionDir)..\$(ProjectName);$(IncludePath)</IncludePath>
+    <LibraryPath>$(SolutionDir)..\Libraries\$(PlatformTarget);$(LibraryPath)</LibraryPath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <IncludePath>$(SolutionDir)..\$(ProjectName);$(IncludePath)</IncludePath>
+    <LibraryPath>$(SolutionDir)..\Libraries\$(PlatformTarget);$(LibraryPath)</LibraryPath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <IncludePath>$(SolutionDir)..\$(ProjectName);$(IncludePath)</IncludePath>
+    <LibraryPath>$(SolutionDir)..\Libraries\$(PlatformTarget);$(LibraryPath)</LibraryPath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <IncludePath>$(SolutionDir)..\$(ProjectName);$(IncludePath)</IncludePath>
+    <LibraryPath>$(SolutionDir)..\Libraries\$(PlatformTarget);$(LibraryPath)</LibraryPath>
+  </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>

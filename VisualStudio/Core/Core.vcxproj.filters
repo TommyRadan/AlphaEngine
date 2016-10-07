@@ -25,6 +25,9 @@
     <Filter Include="RenderingEngine\OpenGL">
       <UniqueIdentifier>{495481a9-e8b3-4911-bf96-71c8287fa0b4}</UniqueIdentifier>
     </Filter>
+    <Filter Include="MediaLayer\SDL">
+      <UniqueIdentifier>{7384bc8d-0759-455b-b6c8-1d92fe9d7ce7}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\Core\Mathematics\Matrix3.cpp">
@@ -44,9 +47,6 @@
     </ClCompile>
     <ClCompile Include="..\..\Core\Control\MainLoop.cpp">
       <Filter>Control</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\Core\MediaLayer\Window.cpp">
-      <Filter>MediaLayer</Filter>
     </ClCompile>
     <ClCompile Include="..\..\Core\RenderingEngine\Geometry.cpp">
       <Filter>RenderingEngine</Filter>
@@ -87,6 +87,12 @@
     <ClCompile Include="..\..\Core\RenderingEngine\OpenGL\VertexBuffer.cpp">
       <Filter>RenderingEngine\OpenGL</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\Core\MediaLayer\Display.cpp">
+      <Filter>MediaLayer</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\MediaLayer\Events.cpp">
+      <Filter>MediaLayer</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\Core\Mathematics\Matrix3.hpp">
@@ -106,12 +112,6 @@
     </ClInclude>
     <ClInclude Include="..\..\Core\Mathematics\Vector4.hpp">
       <Filter>Mathematics</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\Core\MediaLayer\Event.hpp">
-      <Filter>MediaLayer</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\Core\MediaLayer\Window.hpp">
-      <Filter>MediaLayer</Filter>
     </ClInclude>
     <ClInclude Include="..\..\Core\Utilities\FileToString.hpp">
       <Filter>Utilities</Filter>
@@ -181,6 +181,189 @@
     </ClInclude>
     <ClInclude Include="..\..\Core\Mathematics\Math.hpp">
       <Filter>Mathematics</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\Control\Settings.hpp">
+      <Filter>Control</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\begin_code.h">
+      <Filter>MediaLayer\SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\close_code.h">
+      <Filter>MediaLayer\SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL.h">
+      <Filter>MediaLayer\SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_assert.h">
+      <Filter>MediaLayer\SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_atomic.h">
+      <Filter>MediaLayer\SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_audio.h">
+      <Filter>MediaLayer\SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_bits.h">
+      <Filter>MediaLayer\SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_blendmode.h">
+      <Filter>MediaLayer\SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_clipboard.h">
+      <Filter>MediaLayer\SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_config.h">
+      <Filter>MediaLayer\SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_cpuinfo.h">
+      <Filter>MediaLayer\SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_egl.h">
+      <Filter>MediaLayer\SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_endian.h">
+      <Filter>MediaLayer\SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_error.h">
+      <Filter>MediaLayer\SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_events.h">
+      <Filter>MediaLayer\SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_filesystem.h">
+      <Filter>MediaLayer\SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_gamecontroller.h">
+      <Filter>MediaLayer\SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_gesture.h">
+      <Filter>MediaLayer\SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_haptic.h">
+      <Filter>MediaLayer\SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_hints.h">
+      <Filter>MediaLayer\SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_joystick.h">
+      <Filter>MediaLayer\SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_keyboard.h">
+      <Filter>MediaLayer\SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_keycode.h">
+      <Filter>MediaLayer\SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_loadso.h">
+      <Filter>MediaLayer\SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_log.h">
+      <Filter>MediaLayer\SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_main.h">
+      <Filter>MediaLayer\SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_messagebox.h">
+      <Filter>MediaLayer\SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_mouse.h">
+      <Filter>MediaLayer\SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_mutex.h">
+      <Filter>MediaLayer\SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_name.h">
+      <Filter>MediaLayer\SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_opengl.h">
+      <Filter>MediaLayer\SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_opengl_glext.h">
+      <Filter>MediaLayer\SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_opengles.h">
+      <Filter>MediaLayer\SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_opengles2.h">
+      <Filter>MediaLayer\SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_opengles2_gl2.h">
+      <Filter>MediaLayer\SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_opengles2_gl2ext.h">
+      <Filter>MediaLayer\SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_opengles2_gl2platform.h">
+      <Filter>MediaLayer\SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_opengles2_khrplatform.h">
+      <Filter>MediaLayer\SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_pixels.h">
+      <Filter>MediaLayer\SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_platform.h">
+      <Filter>MediaLayer\SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_power.h">
+      <Filter>MediaLayer\SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_quit.h">
+      <Filter>MediaLayer\SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_rect.h">
+      <Filter>MediaLayer\SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_render.h">
+      <Filter>MediaLayer\SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_revision.h">
+      <Filter>MediaLayer\SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_rwops.h">
+      <Filter>MediaLayer\SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_scancode.h">
+      <Filter>MediaLayer\SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_shape.h">
+      <Filter>MediaLayer\SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_stdinc.h">
+      <Filter>MediaLayer\SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_surface.h">
+      <Filter>MediaLayer\SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_system.h">
+      <Filter>MediaLayer\SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_syswm.h">
+      <Filter>MediaLayer\SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_thread.h">
+      <Filter>MediaLayer\SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_timer.h">
+      <Filter>MediaLayer\SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_touch.h">
+      <Filter>MediaLayer\SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_types.h">
+      <Filter>MediaLayer\SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_version.h">
+      <Filter>MediaLayer\SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\SDL\SDL_video.h">
+      <Filter>MediaLayer\SDL</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\Display.hpp">
+      <Filter>MediaLayer</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\MediaLayer\Events.hpp">
+      <Filter>MediaLayer</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
