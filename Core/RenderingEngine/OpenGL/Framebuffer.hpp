@@ -3,6 +3,8 @@
 #include "Typedef.hpp"
 #include "Texture.hpp"
 
+#include <Utilities\Exceptions\Exception.hpp>
+
 namespace OpenGL
 {
 	class Framebuffer
