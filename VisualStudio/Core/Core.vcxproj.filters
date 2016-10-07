@@ -19,9 +19,6 @@
     <Filter Include="Utilities\Exceptions">
       <UniqueIdentifier>{a23dcf45-e5d3-4147-b8af-0e926b27f61c}</UniqueIdentifier>
     </Filter>
-    <Filter Include="RenderingEngine\Renderers">
-      <UniqueIdentifier>{02418a59-8c17-410c-82f6-5a13f6be495d}</UniqueIdentifier>
-    </Filter>
     <Filter Include="RenderingEngine\OpenGL">
       <UniqueIdentifier>{495481a9-e8b3-4911-bf96-71c8287fa0b4}</UniqueIdentifier>
     </Filter>
@@ -30,6 +27,9 @@
     </Filter>
     <Filter Include="RenderingEngine\OpenGL\GLEW">
       <UniqueIdentifier>{580828c3-edc6-496d-89a9-346cb95fa36a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RenderingEngine\StandardRenderer">
+      <UniqueIdentifier>{02418a59-8c17-410c-82f6-5a13f6be495d}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -174,7 +174,7 @@
       <Filter>RenderingEngine\OpenGL</Filter>
     </ClInclude>
     <ClInclude Include="..\..\Core\RenderingEngine\StandardRenderer\StandardRenderer.hpp">
-      <Filter>RenderingEngine\Renderers</Filter>
+      <Filter>RenderingEngine\StandardRenderer</Filter>
     </ClInclude>
     <ClInclude Include="..\..\Core\Mathematics\Math.hpp">
       <Filter>Mathematics</Filter>
@@ -380,10 +380,10 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\Core\RenderingEngine\StandardRenderer\StandardShader.fs">
-      <Filter>RenderingEngine\Renderers</Filter>
+      <Filter>RenderingEngine\StandardRenderer</Filter>
     </None>
     <None Include="..\..\Core\RenderingEngine\StandardRenderer\StandardShader.vs">
-      <Filter>RenderingEngine\Renderers</Filter>
+      <Filter>RenderingEngine\StandardRenderer</Filter>
     </None>
   </ItemGroup>
 </Project>
