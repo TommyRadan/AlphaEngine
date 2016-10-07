@@ -79,17 +79,17 @@ namespace OpenGL
 
 	void Program::SetUniform(const Uniform& uniform, const Math::Vector2& value)
 	{
-		glUniform2f(uniform, value.x, value.y);
+		glUniform2f(uniform, value.X, value.Y);
 	}
 
 	void Program::SetUniform(const Uniform& uniform, const Math::Vector3& value)
 	{
-		glUniform3f(uniform, value.x, value.y, value.z);
+		glUniform3f(uniform, value.X, value.Y, value.Z);
 	}
 
 	void Program::SetUniform(const Uniform& uniform, const Math::Vector4& value)
 	{
-		glUniform4f(uniform, value.x, value.y, value.z, value.w);
+		glUniform4f(uniform, value.X, value.Y, value.Z, value.W);
 	}
 
 	void Program::SetUniform(const Uniform& uniform, const float* values, const unsigned int count)
@@ -114,11 +114,11 @@ namespace OpenGL
 
 	void Program::SetUniform(const Uniform& uniform, const Math::Matrix3& value)
 	{
-		glUniformMatrix3fv(uniform, 1, GL_FALSE, &value[0][0]);
+		glUniformMatrix3fv(uniform, 1, GL_FALSE, &value.m[0]);
 	}
 
 	void Program::SetUniform(const Uniform& uniform, const Math::Matrix4& value)
 	{
-		glUniformMatrix4fv(uniform, 1, GL_FALSE, &value[0][0]);
+		glUniformMatrix4fv(uniform, 1, GL_FALSE, &value.m[0]);
 	}
 }

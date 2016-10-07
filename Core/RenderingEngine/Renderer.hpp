@@ -80,7 +80,7 @@ public:
 		m_Program.SetUniform(uniform, vector);
 	}
 
-	void UploadVector4(const std::string& vec4Name, const Math::Vectro4& vector)
+	void UploadVector4(const std::string& vec4Name, const Math::Vector4& vector)
 	{
 		OpenGL::Uniform uniform = m_Program.GetUniform(vec4Name);
 		if (uniform == -1) {

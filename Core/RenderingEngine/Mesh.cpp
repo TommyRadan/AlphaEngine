@@ -75,11 +75,11 @@ int readVector(char* buf, Math::Vector3& out)
 {
 	int i = 0;
 	while (IS_SPACING(*buf)) { buf++; i++; };
-	buf += readFloat(buf, out.x);
+	buf += readFloat(buf, out.X);
 	while (IS_SPACING(*buf)) { buf++; i++; }
-	buf += readFloat(buf, out.y);
+	buf += readFloat(buf, out.Y);
 	while (IS_SPACING(*buf)) { buf++; i++; }
-	buf += readFloat(buf, out.z);
+	buf += readFloat(buf, out.Z);
 	return i;
 }
 
@@ -192,7 +192,7 @@ Mesh::Mesh(const std::string& filename)
 
 			case MODE_TEXTURE:
 				i += readVector((char*)&buf[i], v3);
-				texcoords.push_back(Math::Vector2(v3.x, v3.y));
+				texcoords.push_back(Math::Vector2(v3.X, v3.Y));
 				mode = MODE_NONE;
 				hasTexcoords = true;
 				break;

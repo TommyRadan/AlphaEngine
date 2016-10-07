@@ -10,7 +10,7 @@ struct Vertex
 {
 	Math::Vector3 Pos;
 	Math::Vector2 Tex;
-	Math::Vector2 Normal;
+	Math::Vector3 Normal;
 };
 
 class Mesh
