@@ -1,6 +1,7 @@
 #pragma once
 
 #include "OpenGL\Typedef.hpp"
+#include "OpenGL\OpenGL.hpp"
 #include "OpenGL\VertexBuffer.hpp"
 #include "OpenGL\VertexArray.hpp"
 
