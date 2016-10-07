@@ -10,7 +10,7 @@ enum class WinType {
 	WIN_TYPE_FULLSCREEN
 };
 
-class Settings : Singleton<Settings>
+class Settings : public Singleton<Settings>
 {
 	friend Singleton<Settings>;
 	Settings(void) {
