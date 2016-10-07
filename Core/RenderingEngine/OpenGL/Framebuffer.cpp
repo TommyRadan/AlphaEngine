@@ -57,7 +57,7 @@ namespace OpenGL
 
 	Framebuffer::~Framebuffer(void)
 	{
-		glDeleteFramebuffers(m_ObjectID);
+		glDeleteFramebuffers(1, &m_ObjectID);
 	}
 
 	const GLuint Framebuffer::Handle(void) const
