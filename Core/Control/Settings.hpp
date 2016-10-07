@@ -25,14 +25,6 @@ class Settings : Singleton<Settings>
 	}
 
 public:
-	static Settings* GetInstance() {
-		static Settings* instance = nullptr;
-		if (instance == nullptr) {
-			instance = new Settings();
-		}
-		return instance;
-	}
-
 	const unsigned int GetWindowWidth(void) const noexcept { return m_WindowWidth; }
 	const unsigned int GetWindowHeight(void) const noexcept { return m_WindowHeight; }
 	const char* GetWindowName(void) const noexcept { return m_WindowName.c_str(); }
