@@ -23,7 +23,7 @@ namespace OpenGL
 			Type type, 
 			unsigned int count, 
 			unsigned int stride, 
-			intptr_t offset
+			unsigned long long offset
 		);
 
 		void BindElements(const VertexBuffer& elements);

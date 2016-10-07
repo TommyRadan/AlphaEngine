@@ -23,12 +23,12 @@ namespace OpenGL
 		Type type, 
 		unsigned int count, 
 		unsigned int stride, 
-		intptr_t offset
+		unsigned long long offset
 	) {
 		glBindVertexArray(m_ObjectID);
 		glBindBuffer(GL_ARRAY_BUFFER, buffer.Handle());
 		glEnableVertexAttribArray(attribute);
-		glVertexAttribPointer(attribute, count, (GLenum)type, GL_FALSE, stride, (const GLvoid*)offset);
+		glVertexAttribPointer(attribute, count, (GLenum)type, GL_FALSE, stride, (GLvoid*)offset);
 	}
 
 	void VertexArray::BindElements(const VertexBuffer& elements)
