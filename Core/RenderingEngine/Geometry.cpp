@@ -1,6 +1,6 @@
 #include "Geometry.hpp"
 
-Geometry::Geometry(Mesh& mesh)
+Geometry::Geometry(const Mesh& mesh)
 {
 	m_DrawCount = (unsigned) mesh.VertexCount();
 

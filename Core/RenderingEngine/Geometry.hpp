@@ -9,7 +9,7 @@
 class Geometry
 {
 public:
-	Geometry(Mesh& mesh);
+	Geometry(const Mesh& mesh);
 	~Geometry(void) {}
 
 	void Draw(void);
