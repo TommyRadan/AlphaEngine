@@ -7,8 +7,8 @@ namespace OpenGL
 	class VertexBuffer
 	{
 	public:
-		VertexBuffer();
-		~VertexBuffer();
+		VertexBuffer(void);
+		~VertexBuffer(void);
 
 		const GLuint Handle(void) const;
 

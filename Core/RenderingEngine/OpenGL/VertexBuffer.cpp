@@ -2,12 +2,12 @@
 
 namespace OpenGL
 {
-	VertexBuffer::VertexBuffer()
+	VertexBuffer::VertexBuffer(void)
 	{
 		glGenBuffers(1, &m_ObjectID);
 	}
 
-	VertexBuffer::~VertexBuffer()
+	VertexBuffer::~VertexBuffer(void)
 	{
 		glDeleteBuffers(1, &m_ObjectID);
 	}

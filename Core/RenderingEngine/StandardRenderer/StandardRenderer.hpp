@@ -2,7 +2,7 @@
 
 #include <Utilities\FileToString.hpp>
 
-#include <Mathematics\glm.hpp>
+#include <Mathematics\Math.hpp>
 
 #include <Utilities\Singleton.hpp>
 #include <RenderingEngine\Renderer.hpp>
@@ -12,7 +12,7 @@ class StandardRenderer :
 	public Renderer
 {
 	friend Singleton<StandardRenderer>;
-	StandardRenderer()
+	StandardRenderer(void)
 	{
 		std::string vertexCode = FileToString(std::string("StandardShader.vs"));
 		std::string fragmentCode = FileToString(std::string("StandardShader.fs"));

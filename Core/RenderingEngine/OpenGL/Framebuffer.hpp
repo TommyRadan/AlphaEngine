@@ -14,12 +14,12 @@ namespace OpenGL
 			const unsigned char color = 32, 
 			const unsigned char depth = 24
 		);
-		~Framebuffer();
+		~Framebuffer(void);
 
 		const GLuint Handle(void) const;
 
-		const Texture& GetTexture() const;
-		const Texture& GetDepthTexture() const;
+		const Texture& GetTexture(void) const;
+		const Texture& GetDepthTexture(void) const;
 
 	private:
 		Framebuffer(const Framebuffer&);

@@ -2,12 +2,12 @@
 
 namespace OpenGL
 {
-	VertexArray::VertexArray()
+	VertexArray::VertexArray(void)
 	{
 		glGenVertexArrays(1, &m_ObjectID);
 	}
 
-	VertexArray::~VertexArray()
+	VertexArray::~VertexArray(void)
 	{
 		glDeleteVertexArrays(1, &m_ObjectID);
 	}

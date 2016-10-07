@@ -55,7 +55,7 @@ namespace OpenGL
 		POPSTATE()
 	}
 
-	Framebuffer::~Framebuffer()
+	Framebuffer::~Framebuffer(void)
 	{
 		glDeleteFramebuffers(m_ObjectID);
 	}
@@ -65,12 +65,12 @@ namespace OpenGL
 		return m_ObjectID;
 	}
 
-	const Texture& Framebuffer::GetTexture() const
+	const Texture& Framebuffer::GetTexture(void) const
 	{
 		return m_ColorTexture;
 	}
 
-	const Texture& Framebuffer::GetDepthTexture() const
+	const Texture& Framebuffer::GetDepthTexture(void) const
 	{
 		return m_DepthTexture;
 	}

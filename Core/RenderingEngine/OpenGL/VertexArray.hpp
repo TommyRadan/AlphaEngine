@@ -9,10 +9,10 @@ namespace OpenGL
 	class VertexArray
 	{
 	public:
-		VertexArray();
+		VertexArray(void);
 		VertexArray(const VertexArray& other);
 
-		~VertexArray();
+		~VertexArray(void);
 
 		const GLuint Handle(void) const;
 		const VertexArray& operator=(const VertexArray& other);
