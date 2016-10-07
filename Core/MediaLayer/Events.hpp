@@ -20,13 +20,7 @@ struct Events
 
 	void Process(void);
 	void Update(unsigned long);
-
-	bool IsQuitRequested(void) const {
-		if (m_IsUserQuit) {
-			return true;
-		}
-		return false;
-	}
+	bool IsQuitRequested(void) const;
 
 private:
 	bool m_IsUserQuit;

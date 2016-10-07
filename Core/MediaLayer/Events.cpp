@@ -21,9 +21,18 @@ void Events::Process(void)
 				break;
 			}
 			case SDL_KEYUP: break;
+			case SDL_QUIT: m_IsUserQuit = true; break;
 		}
 	}
 }
 
 void Events::Update(unsigned long deltaTime)
 {}
+
+bool Events::IsQuitRequested(void) const
+{
+	if (m_IsUserQuit) {
+		return true;
+	}
+	return false;
+}
