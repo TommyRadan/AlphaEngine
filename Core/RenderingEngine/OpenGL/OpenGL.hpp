@@ -5,10 +5,15 @@
 #include "VertexArray.hpp"
 #include "Texture.hpp"
 #include "Framebuffer.hpp"
+#include "Program.hpp"
+#include "Renderbuffer.hpp"
+#include "Shader.hpp"
+#include "VertexArray.hpp"
+#include "VertexBuffer.hpp"
 
 #include "Color.hpp"
 
-#include <Utilities\Exception.hpp>
+#include <Utilities\Exceptions\Exception.hpp>
 #include <Utilities\Singleton.hpp>
 
 class OGL : public Singleton<OGL>
