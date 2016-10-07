@@ -25,7 +25,6 @@ namespace Math
 		const float Determinant(void) const;
 		const Matrix3 Inverse(void) const;
 
-	private:
 		float m[9];
 	};
 }

@@ -43,8 +43,7 @@ namespace Math
 
 		static const Vector3 UnProject(const Vector3& vec, const Matrix4& view, const Matrix4& proj, const float viewport[]);
 		static const Vector3 Project(const Vector3& vec, const Matrix4& view, const Matrix4& proj, const float viewport[]);
-		
-	private:
+
 		float m[16];
 	};
 }
