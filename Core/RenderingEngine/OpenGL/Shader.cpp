@@ -22,7 +22,7 @@ namespace OpenGL
 	void Shader::Source(const std::string& code)
 	{
 		const char* c = code.c_str();
-		const int length = code.length();
+		const int length = (int)code.length();
 		glShaderSource(m_ObjectID, 1, &c, &length);
 	}
 
