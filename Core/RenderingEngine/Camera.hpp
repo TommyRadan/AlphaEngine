@@ -1,38 +1,38 @@
 #pragma once
 
-// OpenGL Mathematics
-#include <Mathematics\glm.hpp>
-#include <Mathematics\gtx\transform.hpp>
-
+#include <Mathematics\Math.hpp>
 #include <Utilities\Singleton.hpp>
+#include <Control\Settings.hpp>
 
 class Camera : public Singleton<Camera>
 {
 	friend Singleton<Camera>;
-	Camera()
+	Camera(void)
 	{
-		m_Position = Math::vec3(0.0f, 0.0f, 0.0f);
-		m_LookAt = Math::vec3(1.0f, 0.0f, 0.0f);
+		m_Position = Math::Vector3(0.0f, 0.0f, 0.0f);
+		m_LookAt = Math::Vector3(1.0f, 0.0f, 0.0f);
 
-		m_FieldOfView = 1.22f; 		// Defaulting to 70 degrees
-		m_AspectRatio = 1.78f; 		// Defaulting 16/9
-		m_NearClip = 0.1f; 			// Defaulting to 10cm
-		m_FarClip = 10000.f; 		// Defaulting to 10km
-		m_Perspective = Math::perspective(m_FieldOfView, m_AspectRatio, m_NearClip, m_FarClip);
+		const Settings* settings = Settings::GetInstance();
+
+		m_FieldOfView = settings->GetFieldOfView();
+		m_AspectRatio = settings->GetAspectRatio();
+		m_NearClip = 0.1f;
+		m_FarClip = 10000.f;
+		m_Perspective = Math::Matrix4::Perspective(m_FieldOfView, m_AspectRatio, m_NearClip, m_FarClip);
 
 		m_IsViewMatrixDirty = true;
 	}
 
 public:
 	// Position
-	void SetPosition(const Math::vec3& pos) 
+	void SetPosition(const Math::Vector3& pos)
 	{
 		m_Position = pos;
 		m_IsViewMatrixDirty = true;
 	}
 
 	// Rotation
-	void SetLookAt(const Math::vec3& lookAt)
+	void SetLookAt(const Math::Vector3& lookAt)
 	{
 		m_LookAt = lookAt;
 		m_IsViewMatrixDirty = true;
@@ -57,23 +57,23 @@ public:
 
 	void UpdatePerspectiveMatrix(void)
 	{
-		m_Perspective = Math::perspective(m_FieldOfView, m_AspectRatio, m_NearClip, m_FarClip);
+		m_Perspective = Math::Matrix4::Perspective(m_FieldOfView, m_AspectRatio, m_NearClip, m_FarClip);
 	}
 
 	// Feedback
-	Math::mat4 GetViewMatrix(void)
+	Math::Matrix4 GetViewMatrix(void)
 	{
 		if (!m_IsViewMatrixDirty) {
 			return m_ViewMatrix;
 		}
 
-		Math::vec3 upVector(0.0f, 0.0f, 1.0f);
-		m_ViewMatrix = Math::lookAt(m_Position, m_LookAt, upVector);
+		Math::Vector3 upVector(0.0f, 0.0f, 1.0f);
+		m_ViewMatrix = Math::Matrix4::LookAt(m_Position, m_LookAt, upVector);
 		m_IsViewMatrixDirty = false;
 		return m_ViewMatrix;
 	}
 
-	Math::mat4 GetProjectionMatrix(void)
+	Math::Matrix4 GetProjectionMatrix(void)
 	{
 		return m_Perspective;
 	}
@@ -86,11 +86,11 @@ private:
 	float m_FarClip;
 
 	// Feedback
-	Math::mat4 m_ViewMatrix;
+	Math::Matrix4 m_ViewMatrix;
 	bool m_IsViewMatrixDirty;
 
 	// Data
-	Math::vec3 m_Position;
-	Math::vec3 m_LookAt;
-	Math::mat4 m_Perspective;
+	Math::Vector3 m_Position;
+	Math::Vector3 m_LookAt;
+	Math::Matrix4 m_Perspective;
 };
