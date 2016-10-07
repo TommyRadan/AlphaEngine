@@ -6,9 +6,8 @@
 
 namespace Math
 {
-	class Vector4
+	struct Vector4
 	{
-	public:
 		Vector4( float x = 0.0f, float y = 0.0f, float z = 0.0f, float w = 1.0f ) : X( x ), Y( y ), Z( z ), W( w ) {}
 		Vector4( const Vector3& v, float w = 1.0f ) : X( v.X ), Y( v.Y ), Z( v.Z ), W( w ) {}
 
