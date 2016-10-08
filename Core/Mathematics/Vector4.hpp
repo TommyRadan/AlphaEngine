@@ -2,8 +2,6 @@
 
 #include "Vector3.hpp"
 
-#include <Utilities/Exceptions/OutOfRange.hpp>
-
 namespace Math
 {
 	struct Vector4

@@ -1,7 +1,5 @@
 #pragma once
 
-#include <Utilities/Exceptions/OutOfRange.hpp>
-
 namespace Math
 {
 	struct Vector2

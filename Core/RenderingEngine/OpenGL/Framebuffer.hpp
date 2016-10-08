@@ -3,7 +3,7 @@
 #include "Typedef.hpp"
 #include "Texture.hpp"
 
-#include <Utilities\Exceptions\Exception.hpp>
+#include <Utilities\Exception.hpp>
 
 namespace OpenGL
 {

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <Utilities\Exceptions\Exception.hpp>
+#include <Utilities\Exception.hpp>
 #include <Mathematics\Math.hpp>
 
 #include <fstream>

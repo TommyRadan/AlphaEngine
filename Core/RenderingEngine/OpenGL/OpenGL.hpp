@@ -13,7 +13,7 @@
 
 #include "Color.hpp"
 
-#include <Utilities\Exceptions\Exception.hpp>
+#include <Utilities\Exception.hpp>
 #include <Utilities\Singleton.hpp>
 
 namespace OpenGL

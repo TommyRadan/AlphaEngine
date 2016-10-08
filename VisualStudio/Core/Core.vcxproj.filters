@@ -16,9 +16,6 @@
     <Filter Include="Utilities">
       <UniqueIdentifier>{788760c2-4177-4886-857c-6a4dcda22b12}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Utilities\Exceptions">
-      <UniqueIdentifier>{a23dcf45-e5d3-4147-b8af-0e926b27f61c}</UniqueIdentifier>
-    </Filter>
     <Filter Include="RenderingEngine\OpenGL">
       <UniqueIdentifier>{495481a9-e8b3-4911-bf96-71c8287fa0b4}</UniqueIdentifier>
     </Filter>
@@ -118,12 +115,6 @@
     </ClInclude>
     <ClInclude Include="..\..\Core\Utilities\Singleton.hpp">
       <Filter>Utilities</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\Core\Utilities\Exceptions\Exception.hpp">
-      <Filter>Utilities\Exceptions</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\Core\Utilities\Exceptions\OutOfRange.hpp">
-      <Filter>Utilities\Exceptions</Filter>
     </ClInclude>
     <ClInclude Include="..\..\Core\RenderingEngine\Camera.hpp">
       <Filter>RenderingEngine</Filter>
@@ -376,6 +367,9 @@
     </ClInclude>
     <ClInclude Include="..\..\Core\RenderingEngine\OpenGL\GLEW\wglew.h">
       <Filter>RenderingEngine\OpenGL\GLEW</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\Utilities\Exception.hpp">
+      <Filter>Utilities</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

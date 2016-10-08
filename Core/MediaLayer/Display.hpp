@@ -4,7 +4,7 @@
 #include <Utilities\Singleton.hpp>
 
 // Exception
-#include <Utilities\Exceptions\Exception.hpp>
+#include <Utilities\Exception.hpp>
 
 // Global settings
 #include <Control\Settings.hpp>

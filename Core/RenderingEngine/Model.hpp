@@ -4,7 +4,7 @@
 
 #include <Mathematics\Math.hpp>
 
-#include <Utilities\Exceptions\Exception.hpp>
+#include <Utilities\Exception.hpp>
 
 #include "Geometry.hpp"
 #include "Material.hpp"
