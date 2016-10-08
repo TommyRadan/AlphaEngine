@@ -5,20 +5,18 @@
 
 int main(int argc, char* argv[])
 {
-	Display* display = new Display();
-	Events* events = new Events();
+	Display::GetInstance()->Init();
 
 	for (;;)
 	{
-		events->Process();
-		if (events->IsQuitRequested()) break;
+		Events::GetInstance()->Process();
+		if (Events::GetInstance()->IsQuitRequested()) break;
 
 
 		
-		display->SwapBuffers();
+		Display::GetInstance()->SwapBuffers();
 	}
 
-	delete events;
-	delete display;
+	Display::GetInstance()->Quit();
     return 0;
 }
