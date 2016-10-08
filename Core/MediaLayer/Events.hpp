@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Utilities\Singleton.hpp>
+
 enum KeyBinding {
 	KEY_W = 119,
 	KEY_A = 97,
@@ -12,16 +14,17 @@ enum KeyBinding {
 	KEY_ESCAPE = 27
 };
 
-struct Events
+struct Events : public Singleton<Events>
 {
+	void Process(void);
+	void Update(void);
+	bool IsQuitRequested(void) const;
+
+private:
+	friend Singleton<Events>;
 	Events(void) :
 		m_IsUserQuit{ false }
 	{}
 
-	void Process(void);
-	void Update(unsigned long);
-	bool IsQuitRequested(void) const;
-
-private:
 	bool m_IsUserQuit;
 };

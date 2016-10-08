@@ -26,7 +26,7 @@ void Events::Process(void)
 	}
 }
 
-void Events::Update(unsigned long deltaTime)
+void Events::Update(void)
 {}
 
 bool Events::IsQuitRequested(void) const

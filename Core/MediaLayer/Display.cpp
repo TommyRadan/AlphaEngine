@@ -1,9 +1,21 @@
 #include"Display.hpp"
 #include "SDL\SDL.h"
 
-Display::Display(void)
-	: m_Settings{ Settings::GetInstance() }
+Display::Display(void) : 
+	m_Settings{ Settings::GetInstance() },
+	m_Window{ nullptr },
+	m_GlContext{ nullptr },
+	m_IsInit{ false }
+{}
+
+void Display::Init(void)
 {
+	if (m_IsInit) {
+		throw Exception("Called Display::Init twice");
+	}
+
+	SDL_Init(SDL_INIT_EVERYTHING);
+
 	Uint32 window_flags = SDL_WINDOW_OPENGL;
 
 	switch (m_Settings->GetWindowType()) {
@@ -37,24 +49,36 @@ Display::Display(void)
 	}
 
 	m_GlContext = SDL_GL_CreateContext((SDL_Window*)m_Window);
-	if(m_GlContext == nullptr) {
+	if (m_GlContext == nullptr) {
 		throw Exception(SDL_GetError());
 	}
+
+	m_IsInit = true;
 	return;
 }
 
-Display::~Display(void)
+void Display::Quit(void)
 {
+	if (!m_IsInit) {
+		throw Exception("Called Display::Quit before Display::Init");
+	}
+
 	SDL_GL_DeleteContext(m_GlContext);
 
 	SDL_DestroyWindow((SDL_Window*)m_Window);
 	m_Window = nullptr;
 
-	m_Settings = nullptr;
+	SDL_Quit();
+
+	m_IsInit = false;
 	return;
 }
 
 void Display::SwapBuffers(void)
 {
+	if (!m_IsInit) {
+		throw Exception("Called Display::SwapBuffers before Display::Init");
+	}
+
 	SDL_GL_SwapWindow((SDL_Window*)m_Window);
 }
