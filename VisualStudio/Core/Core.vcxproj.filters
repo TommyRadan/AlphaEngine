@@ -134,9 +134,6 @@
     <ClInclude Include="..\..\Core\RenderingEngine\Renderer.hpp">
       <Filter>RenderingEngine</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\Core\RenderingEngine\OpenGL\Color.hpp">
-      <Filter>RenderingEngine\OpenGL</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\Core\RenderingEngine\OpenGL\Framebuffer.hpp">
       <Filter>RenderingEngine\OpenGL</Filter>
     </ClInclude>
@@ -375,6 +372,9 @@
       <Filter>Utilities</Filter>
     </ClInclude>
     <ClInclude Include="..\..\Core\Utilities\Vertex.hpp">
+      <Filter>Utilities</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\Utilities\Color.hpp">
       <Filter>Utilities</Filter>
     </ClInclude>
   </ItemGroup>

@@ -5,7 +5,8 @@
 
 #include <Mathematics\Math.hpp>
 
-#include "OpenGL\Color.hpp"
+#include <Utilities\Color.hpp>
+
 #include "OpenGL\Texture.hpp"
 
 struct Material
