@@ -10,6 +10,26 @@ Model::Model(void) :
 	m_Renderer		{ nullptr }
 {}
 
+void Model::SetGeometry(Geometry* const geometry)
+{
+	m_Geometry = geometry;
+}
+
+void Model::SetRenderer(Renderer* const renderer)
+{
+	m_Renderer = renderer;
+}
+
+const Geometry* Model::GetGeometry(void) const
+{
+	return m_Geometry;
+}
+
+Material& Model::GetMaterial(void)
+{
+	return m_Material;
+}
+
 const Math::Matrix4 Model::GetModelMatrix(void)
 {
 	if (!m_IsModelDirty) return m_ModelMatrix;
@@ -65,4 +85,37 @@ void Model::Render(void)
 
 	m_Geometry->Draw();
 	m_Renderer->StopRenderer();
+}
+
+const Math::Vector3 Model::GetPos(void) const
+{
+	return m_Position;
+}
+
+void Model::SetPos(const Math::Vector3 & pos)
+{
+	m_IsModelDirty = true;
+	m_Position = pos;
+}
+
+const Math::Vector3 Model::GetRot(void) const
+{
+	return m_Rotation;
+}
+
+void Model::SetRot(const Math::Vector3 & rot)
+{
+	m_IsModelDirty = true;
+	m_Rotation = rot;
+}
+
+const Math::Vector3 Model::GetScale(void) const
+{
+	return m_Scale;
+}
+
+void Model::SetScale(const Math::Vector3 & scale)
+{
+	m_IsModelDirty = true;
+	m_Scale = scale;
 }
