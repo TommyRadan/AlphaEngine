@@ -371,6 +371,12 @@
     <ClInclude Include="..\..\Core\Utilities\Exception.hpp">
       <Filter>Utilities</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\Core\Utilities\ObjLoader.hpp">
+      <Filter>Utilities</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\Utilities\Vertex.hpp">
+      <Filter>Utilities</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\Core\RenderingEngine\StandardRenderer\StandardShader.fs">

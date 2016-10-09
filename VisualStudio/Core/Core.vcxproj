@@ -125,7 +125,9 @@
     <ClInclude Include="..\..\Core\RenderingEngine\StandardRenderer\StandardRenderer.hpp" />
     <ClInclude Include="..\..\Core\Utilities\Exception.hpp" />
     <ClInclude Include="..\..\Core\Utilities\FileToString.hpp" />
+    <ClInclude Include="..\..\Core\Utilities\ObjLoader.hpp" />
     <ClInclude Include="..\..\Core\Utilities\Singleton.hpp" />
+    <ClInclude Include="..\..\Core\Utilities\Vertex.hpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\Core\RenderingEngine\StandardRenderer\StandardShader.fs" />
