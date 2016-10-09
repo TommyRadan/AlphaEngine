@@ -3,7 +3,7 @@
 Mesh::Mesh(void)
 {}
 
-void Mesh::UploadOBJ(const std::vector<Vertex>& v)
+void Mesh::UploadOBJ(const VertexVector& v)
 {
 	m_Vertices = std::move(v);
 }

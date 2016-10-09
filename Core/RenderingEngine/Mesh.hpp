@@ -9,7 +9,7 @@ class Mesh
 public:
 	Mesh(void);
 
-	void UploadOBJ(const std::vector<Vertex>& v);
+	void UploadOBJ(const VertexVector& v);
 
 	const Vertex* Vertices(void) const;
 	std::size_t VertexCount(void) const;
