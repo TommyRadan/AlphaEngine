@@ -2,8 +2,16 @@
 
 namespace OpenGL
 {
-	OGL::OGL()
+	OGL::OGL(void) :
+		m_IsInit{ false }
+	{}
+
+	void OGL::Init(void)
 	{
+		if (m_IsInit) {
+			throw Exception("Called OGL::Init twice");
+		}
+
 		GLenum status = glewInit();
 		if (status != GLEW_OK) {
 			throw Exception("Could not gather OpenGL function pointers!");
@@ -18,6 +26,9 @@ namespace OpenGL
 			throw Exception("OpenGL 3.3 is the oldest version supported!");
 		}
 	}
+
+	void OGL::Quit(void)
+	{}
 
 	void OGL::Enable(const OpenGL::Capability capability)
 	{

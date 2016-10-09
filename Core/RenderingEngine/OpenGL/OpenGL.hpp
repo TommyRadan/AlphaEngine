@@ -11,8 +11,7 @@
 #include "VertexArray.hpp"
 #include "VertexBuffer.hpp"
 
-#include "Color.hpp"
-
+#include <Utilities\Color.hpp>
 #include <Utilities\Exception.hpp>
 #include <Utilities\Singleton.hpp>
 
@@ -21,9 +20,14 @@ namespace OpenGL
 	class OGL : public Singleton<OGL>
 	{
 		friend Singleton<OGL>;
-		OGL();
+		OGL(void);
+
+		bool m_IsInit;
 
 	public:
+		void Init(void);
+		void Quit(void);
+
 		void Enable(const OpenGL::Capability capability);
 		void Disable(const OpenGL::Capability capability);
 
