@@ -9,21 +9,24 @@
 // Global settings
 #include <Control\Settings.hpp>
 
-struct Display : public Singleton<Display>
+namespace MediaLayer
 {
-	void Init(void);
-	void Quit(void);
+	struct Display : public Singleton<Display>
+	{
+		void Init(void);
+		void Quit(void);
 
-	void SwapBuffers(void);
+		void SwapBuffers(void);
 
-private:
-	friend Singleton<Display>;
-	Display(void);
+	private:
+		friend Singleton<Display>;
+		Display(void);
 
-	bool m_IsInit;
+		bool m_IsInit;
 
-	void* m_Window;
-	void* m_GlContext;
+		void* m_Window;
+		void* m_GlContext;
 
-	Settings* m_Settings;
-};
+		Settings* m_Settings;
+	};
+}

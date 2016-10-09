@@ -3,20 +3,25 @@
 #include <MediaLayer\Display.hpp>
 #include <MediaLayer\Events.hpp>
 
+#include <RenderingEngine\OpenGL\OpenGL.hpp>
+
 int main(int argc, char* argv[])
 {
-	Display::GetInstance()->Init();
+	MediaLayer::Display::GetInstance()->Init();
+	OpenGL::OGL::GetInstance()->Init();
 
 	for (;;)
 	{
-		Events::GetInstance()->Process();
-		if (Events::GetInstance()->IsQuitRequested()) break;
+		MediaLayer::Events::GetInstance()->Process();
+		if (MediaLayer::Events::GetInstance()->IsQuitRequested()) break;
 
-
+		OpenGL::OGL::GetInstance()->ClearColor(Color(41, 128, 185, 255));
+		OpenGL::OGL::GetInstance()->Clear();
 		
-		Display::GetInstance()->SwapBuffers();
+		MediaLayer::Display::GetInstance()->SwapBuffers();
 	}
 
-	Display::GetInstance()->Quit();
+	OpenGL::OGL::GetInstance()->Quit();
+	MediaLayer::Display::GetInstance()->Quit();
     return 0;
 }

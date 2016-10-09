@@ -2,12 +2,14 @@
 
 #include "SDL\SDL.h"
 
-void Events::Process(void)
+namespace MediaLayer
 {
-	SDL_Event events;
+	void Events::Process(void)
+	{
+		SDL_Event events;
 
-	while (SDL_PollEvent(&events)) {
-		switch (events.type) {
+		while (SDL_PollEvent(&events)) {
+			switch (events.type) {
 			case SDL_MOUSEMOTION: {
 				break;
 			}
@@ -16,23 +18,24 @@ void Events::Process(void)
 			case SDL_MOUSEBUTTONUP: break;
 			case SDL_KEYDOWN: {
 				switch (events.key.keysym.sym) {
-					case KeyBinding::KEY_ESCAPE: m_IsUserQuit = true; break;
+				case KeyBinding::KEY_ESCAPE: m_IsUserQuit = true; break;
 				}
 				break;
 			}
 			case SDL_KEYUP: break;
 			case SDL_QUIT: m_IsUserQuit = true; break;
+			}
 		}
 	}
-}
 
-void Events::Update(void)
-{}
+	void Events::Update(void)
+	{}
 
-bool Events::IsQuitRequested(void) const
-{
-	if (m_IsUserQuit) {
-		return true;
+	bool Events::IsQuitRequested(void) const
+	{
+		if (m_IsUserQuit) {
+			return true;
+		}
+		return false;
 	}
-	return false;
 }
