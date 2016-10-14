@@ -15,5 +15,5 @@ public:
 	std::size_t VertexCount(void) const;
 
 private:
-	std::vector<Vertex> m_Vertices;
+	VertexVector m_Vertices;
 };

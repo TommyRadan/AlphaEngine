@@ -8,20 +8,20 @@
 int main(int argc, char* argv[])
 {
 	MediaLayer::Display::GetInstance()->Init();
-	OpenGL::OGL::GetInstance()->Init();
+	OpenGL::Context::GetInstance()->Init();
 
 	for (;;)
 	{
 		MediaLayer::Events::GetInstance()->Process();
 		if (MediaLayer::Events::GetInstance()->IsQuitRequested()) break;
 
-		OpenGL::OGL::GetInstance()->ClearColor(Color(41, 128, 185, 255));
-		OpenGL::OGL::GetInstance()->Clear();
+		OpenGL::Context::GetInstance()->ClearColor(Color(41, 128, 185, 255));
+		OpenGL::Context::GetInstance()->Clear();
 		
 		MediaLayer::Display::GetInstance()->SwapBuffers();
 	}
 
-	OpenGL::OGL::GetInstance()->Quit();
+	OpenGL::Context::GetInstance()->Quit();
 	MediaLayer::Display::GetInstance()->Quit();
     return 0;
 }

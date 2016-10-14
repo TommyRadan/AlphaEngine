@@ -17,10 +17,10 @@
 
 namespace OpenGL
 {
-	class OGL : public Singleton<OGL>
+	class Context : public Singleton<Context>
 	{
-		friend Singleton<OGL>;
-		OGL(void);
+		friend Singleton<Context>;
+		Context(void);
 
 		bool m_IsInit;
 

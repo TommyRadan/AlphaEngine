@@ -19,6 +19,6 @@ Geometry::Geometry(const Mesh& mesh)
 
 void Geometry::Draw(void)
 {
-	OpenGL::OGL* context = OpenGL::OGL::GetInstance();
+	OpenGL::Context* context = OpenGL::Context::GetInstance();
 	context->DrawArrays(m_VertexArrayObject, OpenGL::Primitive::Triangles, 0U, m_DrawCount);
 }

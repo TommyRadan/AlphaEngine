@@ -2,14 +2,14 @@
 
 namespace OpenGL
 {
-	OGL::OGL(void) :
+	Context::Context(void) :
 		m_IsInit{ false }
 	{}
 
-	void OGL::Init(void)
+	void Context::Init(void)
 	{
 		if (m_IsInit) {
-			throw Exception("Called OGL::Init twice");
+			throw Exception("Called Context::Init twice");
 		}
 
 		GLenum status = glewInit();
@@ -27,41 +27,41 @@ namespace OpenGL
 		}
 	}
 
-	void OGL::Quit(void)
+	void Context::Quit(void)
 	{}
 
-	void OGL::Enable(const OpenGL::Capability capability)
+	void Context::Enable(const OpenGL::Capability capability)
 	{
 		glEnable((GLenum)capability);
 	}
 
-	void OGL::Disable(const OpenGL::Capability capability)
+	void Context::Disable(const OpenGL::Capability capability)
 	{
 		glDisable((GLenum)capability);
 	}
 
-	void OGL::ClearColor(const Color& col)
+	void Context::ClearColor(const Color& col)
 	{
 		glClearColor(col.R / 255.0f, col.G / 255.0f, col.B / 255.0f, col.A / 255.0f);
 	}
 
-	void OGL::Clear(const OpenGL::Buffer buffers)
+	void Context::Clear(const OpenGL::Buffer buffers)
 	{
 		glClear((GLbitfield)buffers);
 	}
 
-	void OGL::DepthMask(const bool writeEnabled)
+	void Context::DepthMask(const bool writeEnabled)
 	{
 		glDepthMask(writeEnabled ? GL_TRUE : GL_FALSE);
 	}
 
-	void OGL::BindTexture(const OpenGL::Texture& texture, const unsigned char unit)
+	void Context::BindTexture(const OpenGL::Texture& texture, const unsigned char unit)
 	{
 		glActiveTexture(GL_TEXTURE0 + unit);
 		glBindTexture(GL_TEXTURE_2D, texture.Handle());
 	}
 
-	void OGL::BindFramebuffer(const OpenGL::Framebuffer& framebuffer)
+	void Context::BindFramebuffer(const OpenGL::Framebuffer& framebuffer)
 	{
 		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, framebuffer.Handle());
 
@@ -79,7 +79,7 @@ namespace OpenGL
 		glViewport(0, 0, width, height);
 	}
 
-	void OGL::BindFramebuffer(void)
+	void Context::BindFramebuffer(void)
 	{
 		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
 
@@ -87,14 +87,14 @@ namespace OpenGL
 		//glViewport(m_DefaultViewport[0], m_DefaultViewport[1], m_DefaultViewport[2], m_DefaultViewport[3]);
 	}
 
-	void OGL::DrawArrays(const OpenGL::VertexArray& vao, const OpenGL::Primitive mode, const unsigned int offset, const unsigned int vertices)
+	void Context::DrawArrays(const OpenGL::VertexArray& vao, const OpenGL::Primitive mode, const unsigned int offset, const unsigned int vertices)
 	{
 		glBindVertexArray(vao.Handle());
 		glDrawArrays((GLenum)mode, offset, vertices);
 		glBindVertexArray(0);
 	}
 
-	void OGL::DrawElements(const OpenGL::VertexArray& vao, const OpenGL::Primitive mode, const intptr_t offset, const unsigned int count, const unsigned int type)
+	void Context::DrawElements(const OpenGL::VertexArray& vao, const OpenGL::Primitive mode, const intptr_t offset, const unsigned int count, const unsigned int type)
 	{
 		glBindVertexArray(vao.Handle());
 		glDrawElements((GLenum)mode, count, type, (const GLvoid*)offset);
