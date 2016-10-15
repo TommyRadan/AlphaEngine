@@ -81,7 +81,6 @@ namespace MediaLayer
 		KEY_F10 = 1073741891,
 		KEY_F11 = 1073741892,
 		KEY_F12 = 1073741893
-		
 	};
 
 	struct Events : public Singleton<Events>
