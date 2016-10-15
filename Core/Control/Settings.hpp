@@ -15,8 +15,8 @@ class Settings : public Singleton<Settings>
 	friend Singleton<Settings>;
 	Settings(void) {
 #ifdef _DEBUG
-		m_WindowWidth = 640;
-		m_WindowHeight = 480;
+		m_WindowWidth = 1024;
+		m_WindowHeight = 768;
 		m_WindowType = WinType::WIN_TYPE_WINDOWED;
 #else
 		m_WindowWidth = 1920;
@@ -24,7 +24,7 @@ class Settings : public Singleton<Settings>
 		m_WindowType = WinType::WIN_TYPE_FULLSCREEN;
 #endif
 
-		m_WindowName = "Hello World!";
+		m_WindowName = "Wiiiiiiiiiiiii!!!!";
 		m_IsDoubleBuffered = true;
 		m_FieldOfView = 70.0f;
 		m_MouseSensitivity = 0.005f;

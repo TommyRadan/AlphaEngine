@@ -15,7 +15,7 @@ int main(int argc, char* argv[])
 		MediaLayer::Events::GetInstance()->Process();
 		if (MediaLayer::Events::GetInstance()->IsQuitRequested()) break;
 
-		OpenGL::Context::GetInstance()->ClearColor(Color(41, 128, 185, 255));
+		OpenGL::Context::GetInstance()->ClearColor(Color(245, 128, 185, 255));
 		OpenGL::Context::GetInstance()->Clear();
 		
 		MediaLayer::Display::GetInstance()->SwapBuffers();
