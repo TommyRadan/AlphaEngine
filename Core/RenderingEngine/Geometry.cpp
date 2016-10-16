@@ -1,13 +1,11 @@
 #include "Geometry.hpp"
-#include "OpenGL\OpenGL.hpp"
 #include "Utilities\Exception.hpp"
 
-Geometry::Geometry(const Mesh& mesh) :
+Geometry::Geometry() :
 	m_DataUploaded { false }
 {}
 
-Geometry::Geometry(const Mesh& mesh) :
-	m_DataUploaded { false }
+Geometry::~Geometry()
 {
 	delete m_VertexArrayObject;
 	delete m_VertexBufferObject;
@@ -19,8 +17,8 @@ void Geometry::UploadMesh(const Mesh& mesh)
 		throw Exception("Attempted to call Geometry::UploadMesh on full Geometry");
 	}
 
-	m_VertexBufferObject = new VertexBuffer();
-	m_VertexArrayObject = new VertexArray();
+	m_VertexBufferObject = new OpenGL::VertexBuffer();
+	m_VertexArrayObject = new OpenGL::VertexArray();
 
 	m_DrawCount = (unsigned)mesh.VertexCount();
 	m_DataUploaded = true;
@@ -51,5 +49,5 @@ void Geometry::Draw(void)
 	}
 
 	OpenGL::Context* context = OpenGL::Context::GetInstance();
-	context->DrawArrays(m_VertexArrayObject, OpenGL::Primitive::Triangles, 0U, m_DrawCount);
+	context->DrawArrays(*m_VertexArrayObject, OpenGL::Primitive::Triangles, 0U, m_DrawCount);
 }
