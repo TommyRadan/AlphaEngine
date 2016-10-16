@@ -6,18 +6,12 @@ Model::Model(void) :
 	m_Rotation		{ Math::Vector3(0.0f, 0.0f, 0.0f) },
 	m_Scale			{ Math::Vector3(1.0f, 1.0f, 1.0f) },
 	m_IsModelDirty	{ true },
-	m_Geometry		{ nullptr },
-	m_Renderer		{ nullptr }
+	m_Geometry		{ nullptr }
 {}
 
 void Model::SetGeometry(Geometry* const geometry)
 {
 	m_Geometry = geometry;
-}
-
-void Model::SetRenderer(Renderer* const renderer)
-{
-	m_Renderer = renderer;
 }
 
 const Geometry* Model::GetGeometry(void) const
@@ -46,23 +40,23 @@ const Math::Matrix4 Model::GetModelMatrix(void)
 	return m_ModelMatrix;
 }
 
-void Model::Render(void)
+void Model::Render(const Renderer* const renderer)
 {
 	if (m_Geometry == nullptr) {
 		throw Exception("Attempt to render model without geometry!");
 	}
 
-	if (m_Renderer == nullptr) {
+	if (renderer == nullptr) {
 		throw Exception("Attempt to render model without renderer!");
 	}
 
-	m_Renderer->StartRenderer();
-	m_Renderer->UploadMatrix4("modelMatrix", this->GetModelMatrix());
-	m_Renderer->UploadMatrix4("viewMatrix", Camera::GetInstance()->GetViewMatrix());
-	m_Renderer->UploadMatrix4("projectionMatrix", Camera::GetInstance()->GetProjectionMatrix());
+	renderer->StartRenderer();
+	renderer->UploadMatrix4("modelMatrix", this->GetModelMatrix());
+	renderer->UploadMatrix4("viewMatrix", Camera::GetInstance()->GetViewMatrix());
+	renderer->UploadMatrix4("projectionMatrix", Camera::GetInstance()->GetProjectionMatrix());
 
 	for (auto& element : m_Material.Coefficients) {
-		m_Renderer->UploadCoefficient(element.first, element.second);
+		renderer->UploadCoefficient(element.first, element.second);
 	}
 
 	for (auto& element : m_Material.Colors) {
@@ -73,18 +67,18 @@ void Model::Render(void)
 			element.second.A / 255.0f
 		);
 
-		m_Renderer->UploadVector4(element.first, vector);
+		renderer->UploadVector4(element.first, vector);
 	}
 
 	int uploadedTextureReferences = 0;
 	for (auto& element : m_Material.Textures) {
-		m_Renderer->UploadTextureReference(element.first, uploadedTextureReferences);
+		renderer->UploadTextureReference(element.first, uploadedTextureReferences);
 		OpenGL::Context::GetInstance()->BindTexture(*(element.second), uploadedTextureReferences);
 		uploadedTextureReferences++;
 	}
 
 	m_Geometry->Draw();
-	m_Renderer->StopRenderer();
+	renderer->StopRenderer();
 }
 
 const Math::Vector3 Model::GetPos(void) const

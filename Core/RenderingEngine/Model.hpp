@@ -1,7 +1,5 @@
 #pragma once
 
-#include <type_traits>
-
 #include <Mathematics\Math.hpp>
 #include <Utilities\Exception.hpp>
 
@@ -16,13 +14,12 @@ public:
 	Model(void);
 
 	void SetGeometry(Geometry* const geometry);
-	void SetRenderer(Renderer* const renderer);
-
 	const Geometry* GetGeometry(void) const;
+
 	Material& GetMaterial(void);
 
 	const Math::Matrix4 GetModelMatrix(void);
-	void Render(void);
+	void Render(const Renderer* const renderer);
 
 	const Math::Vector3 GetPos(void) const;
 	void SetPos(const Math::Vector3& pos);
@@ -40,6 +37,5 @@ private:
 	bool m_IsModelDirty;
 
 	Geometry* m_Geometry;
-	Renderer* m_Renderer;
 	Material m_Material;
 };
