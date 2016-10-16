@@ -1,11 +1,11 @@
 #pragma once
 
+// Utilities
 #include <Utilities\Exception.hpp>
 #include <Utilities\FileToString.hpp>
 #include <Utilities\Singleton.hpp>
 
-#include <Mathematics\Math.hpp>
-
+// Base class
 #include <RenderingEngine\Renderer.hpp>
 
 class StandardRenderer : 
@@ -13,7 +13,8 @@ class StandardRenderer :
 	public Renderer
 {
 	friend Singleton<StandardRenderer>;
-	StandardRenderer(void)
+	StandardRenderer(void) :
+		Renderer()
 	{}
 
 	void Init(void) override
