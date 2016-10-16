@@ -40,7 +40,7 @@ const Math::Matrix4 Model::GetModelMatrix(void)
 	return m_ModelMatrix;
 }
 
-void Model::Render(const Renderer* const renderer)
+void Model::Render(Renderer* const renderer)
 {
 	if (m_Geometry == nullptr) {
 		throw Exception("Attempt to render model without geometry!");

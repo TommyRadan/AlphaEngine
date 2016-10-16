@@ -19,7 +19,7 @@ public:
 	Material& GetMaterial(void);
 
 	const Math::Matrix4 GetModelMatrix(void);
-	void Render(const Renderer* const renderer);
+	void Render(Renderer* const renderer);
 
 	const Math::Vector3 GetPos(void) const;
 	void SetPos(const Math::Vector3& pos);
