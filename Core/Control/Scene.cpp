@@ -8,6 +8,6 @@ void Scene::AddModel(Model* const model)
 void Scene::Render(void)
 {
 	for (auto& model : m_Models) {
-		model->Render();
+		//model->Render();
 	}
 }
