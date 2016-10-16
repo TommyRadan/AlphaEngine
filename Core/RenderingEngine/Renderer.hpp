@@ -1,11 +1,9 @@
 #pragma once
 
-#include "OpenGL\Shader.hpp"
-#include "OpenGL\Program.hpp"
+// OpenGL
+#include "OpenGL\OpenGL.hpp"
 
-#include "OpenGL\Texture.hpp"
-#include "Camera.hpp"
-
+// Mathematics
 #include <Mathematics\Math.hpp>
 
 class Renderer
@@ -23,11 +21,21 @@ protected:
 	OpenGL::Shader* m_FragmentShader;
 	OpenGL::Program* m_Program;
 
+private:
+	const bool CheckForBadInit(void)
+	{
+		if(m_VertexShader == nullptr) return false;
+		if(m_FragmentShader == nullptr) return false;
+		if(m_Program == nullptr) return false;
+		if(m_IsInit == false) return false;
+		return true;
+	}
+
 public:
 	void StartRenderer(void)
 	{
-		if (!m_IsInit) {
-			throw Exception("Renderer::StartRenderer called before Renderer::Init");
+		if (!CheckForBadInit()) {
+			throw Exception("Renderer::StartRenderer called before proper initialization");
 		}
 
 		m_Program->Start();
@@ -35,8 +43,8 @@ public:
 
 	void UploadTextureReference(const std::string& textureName, const int position)
 	{
-		if (!m_IsInit) {
-			throw Exception("Renderer::UploadTextureReference called before Renderer::Init");
+		if (!CheckForBadInit()) {
+			throw Exception("Renderer::UploadTextureReference called before proper initialization");
 		}
 
 		OpenGL::Uniform uniform = m_Program->GetUniform(textureName);
@@ -48,8 +56,8 @@ public:
 
 	void UploadCoefficient(const std::string& coefficientName, const float coefficient)
 	{
-		if (!m_IsInit) {
-			throw Exception("Renderer::UploadCoefficient called before Renderer::Init");
+		if (!CheckForBadInit()) {
+			throw Exception("Renderer::UploadCoefficient called before proper initialization");
 		}
 
 		OpenGL::Uniform uniform = m_Program->GetUniform(coefficientName);
@@ -61,8 +69,8 @@ public:
 
 	void UploadMatrix3(const std::string& mat3Name, const Math::Matrix3& matrix)
 	{
-		if (!m_IsInit) {
-			throw Exception("Renderer::UploadMatrix3 called before Renderer::Init");
+		if (!CheckForBadInit()) {
+			throw Exception("Renderer::UploadMatrix3 called before proper initialization");
 		}
 
 		OpenGL::Uniform uniform = m_Program->GetUniform(mat3Name);
@@ -74,8 +82,8 @@ public:
 
 	void UploadMatrix4(const std::string& mat4Name, const Math::Matrix4& matrix)
 	{
-		if (!m_IsInit) {
-			throw Exception("Renderer::UploadMatrix4 called before Renderer::Init");
+		if (!CheckForBadInit()) {
+			throw Exception("Renderer::UploadMatrix4 called before proper initialization");
 		}
 
 		OpenGL::Uniform uniform = m_Program->GetUniform(mat4Name);
@@ -87,8 +95,8 @@ public:
 
 	void UploadVector2(const std::string& vec2Name, const Math::Vector2& vector)
 	{
-		if (!m_IsInit) {
-			throw Exception("Renderer::UploadVector2 called before Renderer::Init");
+		if (!CheckForBadInit()) {
+			throw Exception("Renderer::UploadVector2 called before proper initialization");
 		}
 
 		OpenGL::Uniform uniform = m_Program->GetUniform(vec2Name);
@@ -100,8 +108,8 @@ public:
 
 	void UploadVector3(const std::string& vec3Name, const Math::Vector3& vector)
 	{
-		if (!m_IsInit) {
-			throw Exception("Renderer::UploadVector3 called before Renderer::Init");
+		if (!CheckForBadInit()) {
+			throw Exception("Renderer::UploadVector3 called before proper initialization");
 		}
 
 		OpenGL::Uniform uniform = m_Program->GetUniform(vec3Name);
@@ -113,8 +121,8 @@ public:
 
 	void UploadVector4(const std::string& vec4Name, const Math::Vector4& vector)
 	{
-		if (!m_IsInit) {
-			throw Exception("Renderer::UploadVector4 called before Renderer::Init");
+		if (!CheckForBadInit()) {
+			throw Exception("Renderer::UploadVector4 called before proper initialization");
 		}
 
 		OpenGL::Uniform uniform = m_Program->GetUniform(vec4Name);
@@ -126,8 +134,8 @@ public:
 
 	void StopRenderer(void)
 	{
-		if (!m_IsInit) {
-			throw Exception("Renderer::StopRenderer called before Renderer::Init");
+		if (!CheckForBadInit()) {
+			throw Exception("Renderer::StopRenderer called before proper initialization");
 		}
 
 		m_Program->Stop();
