@@ -1,5 +1,9 @@
 #pragma once
 
+// OpenGL
+#include "OpenGL\OpenGL.hpp"
+
+// Mesh container
 #include "Mesh.hpp"
 
 class Geometry
