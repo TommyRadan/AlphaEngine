@@ -1,11 +1,10 @@
-#version 430
+#version 330
 
 in layout(location=0) vec3 inPosition;
 in layout(location=1) vec2 inTexCoord;
 in layout(location=2) vec3 inNormal;
 
-out vec2 midTexCoord;
-out vec3 midNormal;
+out vec3 midPosition;
 
 // Transforming
 uniform mat4 modelMatrix;
@@ -21,7 +20,5 @@ void main(void)
 	// Vertex position
 	gl_Position = MVP * vec4(inPosition, 1.0);
 
-	// Output
-	midTexCoord = inTexCoord;
-	midNormal = inNormal;
+	midPosition = gl_Position.xyz;
 }
