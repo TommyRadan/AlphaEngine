@@ -4,8 +4,6 @@ in layout(location=0) vec3 inPosition;
 in layout(location=1) vec2 inTexCoord;
 in layout(location=2) vec3 inNormal;
 
-out vec3 midPosition;
-
 // Transforming
 uniform mat4 modelMatrix;
 uniform mat4 viewMatrix;
@@ -19,6 +17,4 @@ void main(void)
 
 	// Vertex position
 	gl_Position = MVP * vec4(inPosition, 1.0);
-
-	midPosition = gl_Position.xyz;
 }
