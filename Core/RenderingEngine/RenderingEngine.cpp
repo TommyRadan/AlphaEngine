@@ -7,8 +7,9 @@ void RenderingEngine::Init(void)
 	}
 
 	m_GlContext->Init();
-	// To avoid shader compilation error
-	//StandardRenderer::GetInstance()->Init();
+	StandardRenderer::GetInstance()->Init();
+
+	m_GlContext->Enable(OpenGL::Capability::DepthTest);
 }
 
 void RenderingEngine::Quit(void)
@@ -17,11 +18,16 @@ void RenderingEngine::Quit(void)
 		throw Exception("RenderingEngine::Quit called before RenderingEngine::Init!");
 	}
 
-	// To avoid shader compilation error
-	//StandardRenderer::GetInstance()->Quit();
+	StandardRenderer::GetInstance()->Quit();
 	m_GlContext->Quit();
 }
 
 void RenderingEngine::RenderScene(void)
 {
+	OpenGL::Context::GetInstance()->ClearColor(Color(52, 152, 219, 255));
+	OpenGL::Context::GetInstance()->Clear();
+
+	for (auto& m : m_Models) {
+		m->Render(StandardRenderer::GetInstance());
+	}
 }
