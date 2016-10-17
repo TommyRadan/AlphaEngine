@@ -90,6 +90,9 @@
     <ClCompile Include="..\..\Core\Control\Scene.cpp">
       <Filter>Control</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\Core\RenderingEngine\RenderingEngine.cpp">
+      <Filter>RenderingEngine</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\Core\Mathematics\Matrix3.hpp">
@@ -376,6 +379,9 @@
     </ClInclude>
     <ClInclude Include="..\..\Core\Utilities\Color.hpp">
       <Filter>Utilities</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\RenderingEngine\RenderingEngine.hpp">
+      <Filter>RenderingEngine</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

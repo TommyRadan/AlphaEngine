@@ -31,6 +31,7 @@
     <ClCompile Include="..\..\Core\RenderingEngine\OpenGL\Texture.cpp" />
     <ClCompile Include="..\..\Core\RenderingEngine\OpenGL\VertexArray.cpp" />
     <ClCompile Include="..\..\Core\RenderingEngine\OpenGL\VertexBuffer.cpp" />
+    <ClCompile Include="..\..\Core\RenderingEngine\RenderingEngine.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\Core\Control\Scene.hpp" />
@@ -121,6 +122,7 @@
     <ClInclude Include="..\..\Core\RenderingEngine\OpenGL\VertexArray.hpp" />
     <ClInclude Include="..\..\Core\RenderingEngine\OpenGL\VertexBuffer.hpp" />
     <ClInclude Include="..\..\Core\RenderingEngine\Renderer.hpp" />
+    <ClInclude Include="..\..\Core\RenderingEngine\RenderingEngine.hpp" />
     <ClInclude Include="..\..\Core\RenderingEngine\StandardRenderer\StandardRenderer.hpp" />
     <ClInclude Include="..\..\Core\Utilities\Color.hpp" />
     <ClInclude Include="..\..\Core\Utilities\Exception.hpp" />
