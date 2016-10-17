@@ -84,4 +84,9 @@ namespace MediaLayer
 
 		SDL_GL_SwapWindow((SDL_Window*)m_Window);
 	}
+
+	void Display::ShowDialog(const char* title, const char* text)
+	{
+		SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, title, text, (SDL_Window*)m_Window);
+	}
 }

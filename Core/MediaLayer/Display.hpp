@@ -17,6 +17,7 @@ namespace MediaLayer
 		void Quit(void);
 
 		void SwapBuffers(void);
+		void ShowDialog(const char* title, const char* text);
 
 	private:
 		friend Singleton<Display>;
