@@ -11,7 +11,8 @@
 
 namespace MediaLayer
 {
-	struct Display : public Singleton<Display>
+	struct Display : 
+		public Singleton<Display>
 	{
 		void Init(void);
 		void Quit(void);
