@@ -4,8 +4,8 @@ template <typename Type>
 class Singleton 
 {
 protected:
-	Singleton() = default;
-	virtual ~Singleton() = default;
+	Singleton(void) = default;
+	virtual ~Singleton(void) = default;
 
 public:
 	static Type* GetInstance(void) {
