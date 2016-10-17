@@ -7,18 +7,26 @@
 
 int main(int argc, char* argv[])
 {
-	MediaLayer::Display::GetInstance()->Init();
-	RenderingEngine::GetInstance()->Init();
+	try {
+		MediaLayer::Display::GetInstance()->Init();
+		RenderingEngine::GetInstance()->Init();
+	} catch (Exception e) {
+		MediaLayer::Display::GetInstance()->ShowDialog("Initialization error!", e.what());
+		return 1;
+	}
 
-	for (;;)
-	{
-		MediaLayer::Events::GetInstance()->Process();
-		if (MediaLayer::Events::GetInstance()->IsQuitRequested()) break;
-		
-		OpenGL::Context::GetInstance()->ClearColor(Color(52, 152, 219, 255));
-		OpenGL::Context::GetInstance()->Clear();
-		
-		MediaLayer::Display::GetInstance()->SwapBuffers();
+	try {
+		for (;;)
+		{
+			MediaLayer::Events::GetInstance()->Process();
+			if (MediaLayer::Events::GetInstance()->IsQuitRequested()) break;
+
+			RenderingEngine::GetInstance()->RenderScene();
+			MediaLayer::Display::GetInstance()->SwapBuffers();
+		}
+	} catch (Exception e) {
+		MediaLayer::Display::GetInstance()->ShowDialog("Runtime error!", e.what());
+		return 1;
 	}
 
 	RenderingEngine::GetInstance()->Quit();
