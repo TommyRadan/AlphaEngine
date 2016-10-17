@@ -17,6 +17,7 @@ class StandardRenderer :
 		Renderer()
 	{}
 
+public:
 	void Init(void) override
 	{
 		if (m_IsInit) {
