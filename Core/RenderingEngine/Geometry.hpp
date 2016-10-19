@@ -4,7 +4,7 @@
 #include "OpenGL\OpenGL.hpp"
 
 // Mesh container
-#include "Mesh.hpp"
+#include <Utilities\Mesh.hpp>
 
 class Geometry
 {

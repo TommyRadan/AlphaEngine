@@ -28,6 +28,15 @@
     <Filter Include="RenderingEngine\StandardRenderer">
       <UniqueIdentifier>{02418a59-8c17-410c-82f6-5a13f6be495d}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Utilities\libpng">
+      <UniqueIdentifier>{6a74e352-c7ef-49de-9008-a3c376ff2349}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Utilities\zlib">
+      <UniqueIdentifier>{f48a7bd4-ac7e-402f-b1c3-810a2fb3ce96}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Utilities\libjpeg">
+      <UniqueIdentifier>{d25da617-1ab9-4de5-ae05-1a9d5e5cb5a8}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\Core\Mathematics\Matrix3.cpp">
@@ -49,9 +58,6 @@
       <Filter>Control</Filter>
     </ClCompile>
     <ClCompile Include="..\..\Core\RenderingEngine\Geometry.cpp">
-      <Filter>RenderingEngine</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\Core\RenderingEngine\Mesh.cpp">
       <Filter>RenderingEngine</Filter>
     </ClCompile>
     <ClCompile Include="..\..\Core\RenderingEngine\Model.cpp">
@@ -87,11 +93,233 @@
     <ClCompile Include="..\..\Core\MediaLayer\Events.cpp">
       <Filter>MediaLayer</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\Core\Control\Scene.cpp">
-      <Filter>Control</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\Core\RenderingEngine\RenderingEngine.cpp">
       <Filter>RenderingEngine</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\Mesh.cpp">
+      <Filter>Utilities</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\Image.cpp">
+      <Filter>Utilities</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libjpeg\jaricom.c">
+      <Filter>Utilities\libjpeg</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libjpeg\jcapimin.c">
+      <Filter>Utilities\libjpeg</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libjpeg\jcapistd.c">
+      <Filter>Utilities\libjpeg</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libjpeg\jcarith.c">
+      <Filter>Utilities\libjpeg</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libjpeg\jccoefct.c">
+      <Filter>Utilities\libjpeg</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libjpeg\jccolor.c">
+      <Filter>Utilities\libjpeg</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libjpeg\jcdctmgr.c">
+      <Filter>Utilities\libjpeg</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libjpeg\jchuff.c">
+      <Filter>Utilities\libjpeg</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libjpeg\jcinit.c">
+      <Filter>Utilities\libjpeg</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libjpeg\jcmainct.c">
+      <Filter>Utilities\libjpeg</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libjpeg\jcmarker.c">
+      <Filter>Utilities\libjpeg</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libjpeg\jcmaster.c">
+      <Filter>Utilities\libjpeg</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libjpeg\jcomapi.c">
+      <Filter>Utilities\libjpeg</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libjpeg\jcparam.c">
+      <Filter>Utilities\libjpeg</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libjpeg\jcprepct.c">
+      <Filter>Utilities\libjpeg</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libjpeg\jcsample.c">
+      <Filter>Utilities\libjpeg</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libjpeg\jctrans.c">
+      <Filter>Utilities\libjpeg</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libjpeg\jdapimin.c">
+      <Filter>Utilities\libjpeg</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libjpeg\jdapistd.c">
+      <Filter>Utilities\libjpeg</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libjpeg\jdarith.c">
+      <Filter>Utilities\libjpeg</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libjpeg\jdatadst.c">
+      <Filter>Utilities\libjpeg</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libjpeg\jdatasrc.c">
+      <Filter>Utilities\libjpeg</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libjpeg\jdcoefct.c">
+      <Filter>Utilities\libjpeg</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libjpeg\jdcolor.c">
+      <Filter>Utilities\libjpeg</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libjpeg\jddctmgr.c">
+      <Filter>Utilities\libjpeg</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libjpeg\jdhuff.c">
+      <Filter>Utilities\libjpeg</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libjpeg\jdinput.c">
+      <Filter>Utilities\libjpeg</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libjpeg\jdmainct.c">
+      <Filter>Utilities\libjpeg</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libjpeg\jdmarker.c">
+      <Filter>Utilities\libjpeg</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libjpeg\jdmaster.c">
+      <Filter>Utilities\libjpeg</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libjpeg\jdmerge.c">
+      <Filter>Utilities\libjpeg</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libjpeg\jdpostct.c">
+      <Filter>Utilities\libjpeg</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libjpeg\jdsample.c">
+      <Filter>Utilities\libjpeg</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libjpeg\jdtrans.c">
+      <Filter>Utilities\libjpeg</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libjpeg\jerror.c">
+      <Filter>Utilities\libjpeg</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libjpeg\jfdctflt.c">
+      <Filter>Utilities\libjpeg</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libjpeg\jfdctfst.c">
+      <Filter>Utilities\libjpeg</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libjpeg\jfdctint.c">
+      <Filter>Utilities\libjpeg</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libjpeg\jidctflt.c">
+      <Filter>Utilities\libjpeg</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libjpeg\jidctfst.c">
+      <Filter>Utilities\libjpeg</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libjpeg\jidctint.c">
+      <Filter>Utilities\libjpeg</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libjpeg\jmemmgr.c">
+      <Filter>Utilities\libjpeg</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libjpeg\jmemnobs.c">
+      <Filter>Utilities\libjpeg</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libjpeg\jquant1.c">
+      <Filter>Utilities\libjpeg</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libjpeg\jquant2.c">
+      <Filter>Utilities\libjpeg</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libjpeg\jutils.c">
+      <Filter>Utilities\libjpeg</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libpng\png.c">
+      <Filter>Utilities\libpng</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libpng\pngerror.c">
+      <Filter>Utilities\libpng</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libpng\pnggccrd.c">
+      <Filter>Utilities\libpng</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libpng\pngget.c">
+      <Filter>Utilities\libpng</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libpng\pngmem.c">
+      <Filter>Utilities\libpng</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libpng\pngpread.c">
+      <Filter>Utilities\libpng</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libpng\pngread.c">
+      <Filter>Utilities\libpng</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libpng\pngrio.c">
+      <Filter>Utilities\libpng</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libpng\pngrtran.c">
+      <Filter>Utilities\libpng</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libpng\pngrutil.c">
+      <Filter>Utilities\libpng</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libpng\pngset.c">
+      <Filter>Utilities\libpng</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libpng\pngtrans.c">
+      <Filter>Utilities\libpng</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libpng\pngvcrd.c">
+      <Filter>Utilities\libpng</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libpng\pngwio.c">
+      <Filter>Utilities\libpng</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libpng\pngwrite.c">
+      <Filter>Utilities\libpng</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libpng\pngwtran.c">
+      <Filter>Utilities\libpng</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\libpng\pngwutil.c">
+      <Filter>Utilities\libpng</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\zlib\adler32.c">
+      <Filter>Utilities\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\zlib\compress.c">
+      <Filter>Utilities\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\zlib\crc32.c">
+      <Filter>Utilities\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\zlib\deflate.c">
+      <Filter>Utilities\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\zlib\inffast.c">
+      <Filter>Utilities\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\zlib\inflate.c">
+      <Filter>Utilities\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\zlib\inftrees.c">
+      <Filter>Utilities\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\zlib\trees.c">
+      <Filter>Utilities\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\zlib\uncompr.c">
+      <Filter>Utilities\zlib</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Core\Utilities\zlib\zutil.c">
+      <Filter>Utilities\zlib</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -126,9 +354,6 @@
       <Filter>RenderingEngine</Filter>
     </ClInclude>
     <ClInclude Include="..\..\Core\RenderingEngine\Material.hpp">
-      <Filter>RenderingEngine</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\Core\RenderingEngine\Mesh.hpp">
       <Filter>RenderingEngine</Filter>
     </ClInclude>
     <ClInclude Include="..\..\Core\RenderingEngine\Model.hpp">
@@ -353,9 +578,6 @@
     <ClInclude Include="..\..\Core\MediaLayer\Events.hpp">
       <Filter>MediaLayer</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\Core\Control\Scene.hpp">
-      <Filter>Control</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\Core\RenderingEngine\OpenGL\GLEW\eglew.h">
       <Filter>RenderingEngine\OpenGL\GLEW</Filter>
     </ClInclude>
@@ -382,6 +604,78 @@
     </ClInclude>
     <ClInclude Include="..\..\Core\RenderingEngine\RenderingEngine.hpp">
       <Filter>RenderingEngine</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\Utilities\Mesh.hpp">
+      <Filter>Utilities</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\Utilities\Image.hpp">
+      <Filter>Utilities</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\Utilities\libjpeg\cderror.h">
+      <Filter>Utilities\libjpeg</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\Utilities\libjpeg\jconfig.h">
+      <Filter>Utilities\libjpeg</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\Utilities\libjpeg\jdct.h">
+      <Filter>Utilities\libjpeg</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\Utilities\libjpeg\jerror.h">
+      <Filter>Utilities\libjpeg</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\Utilities\libjpeg\jinclude.h">
+      <Filter>Utilities\libjpeg</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\Utilities\libjpeg\jmemsys.h">
+      <Filter>Utilities\libjpeg</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\Utilities\libjpeg\jmorecfg.h">
+      <Filter>Utilities\libjpeg</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\Utilities\libjpeg\jpegint.h">
+      <Filter>Utilities\libjpeg</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\Utilities\libjpeg\jpeglib.h">
+      <Filter>Utilities\libjpeg</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\Utilities\libjpeg\jversion.h">
+      <Filter>Utilities\libjpeg</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\Utilities\libpng\png.h">
+      <Filter>Utilities\libpng</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\Utilities\libpng\pngconf.h">
+      <Filter>Utilities\libpng</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\Utilities\zlib\crc32.h">
+      <Filter>Utilities\zlib</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\Utilities\zlib\deflate.h">
+      <Filter>Utilities\zlib</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\Utilities\zlib\inffast.h">
+      <Filter>Utilities\zlib</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\Utilities\zlib\inffixed.h">
+      <Filter>Utilities\zlib</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\Utilities\zlib\inflate.h">
+      <Filter>Utilities\zlib</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\Utilities\zlib\inftrees.h">
+      <Filter>Utilities\zlib</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\Utilities\zlib\trees.h">
+      <Filter>Utilities\zlib</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\Utilities\zlib\zconf.h">
+      <Filter>Utilities\zlib</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\Utilities\zlib\zlib.h">
+      <Filter>Utilities\zlib</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Core\Utilities\zlib\zutil.h">
+      <Filter>Utilities\zlib</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

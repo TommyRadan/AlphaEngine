@@ -1,0 +1,17 @@
+﻿  Mesh.cpp
+  Generating Code...
+  Compiling...
+  MainLoop.cpp
+  Generating Code...
+  Compiling...
+  RenderingEngine.cpp
+  Model.cpp
+  Geometry.cpp
+  Scene.cpp
+  Generating Code...
+  Core.vcxproj -> C:\Users\Tomislav\Documents\Visual Studio 2015\Projects\AlphaEngine\VisualStudio\\..\Binaries\Core.exe
+  Core.vcxproj -> C:\Users\Tomislav\Documents\Visual Studio 2015\Projects\AlphaEngine\VisualStudio\\..\Binaries\Core.pdb (Partial PDB)
+  C:\Users\Tomislav\Documents\Visual Studio 2015\Projects\AlphaEngine\VisualStudio\..\Core\RenderingEngine\StandardRenderer\StandardShader.vs
+  1 File(s) copied
+  C:\Users\Tomislav\Documents\Visual Studio 2015\Projects\AlphaEngine\VisualStudio\..\Core\RenderingEngine\StandardRenderer\StandardShader.fs
+  1 File(s) copied
