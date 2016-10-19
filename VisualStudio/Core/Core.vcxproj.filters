@@ -677,6 +677,9 @@
     <ClInclude Include="..\..\Core\Utilities\zlib\zutil.h">
       <Filter>Utilities\zlib</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\Core\Utilities\ByteBuffer.hpp">
+      <Filter>Utilities</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\Core\RenderingEngine\StandardRenderer\StandardShader.fs">

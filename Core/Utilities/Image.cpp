@@ -1,8 +1,3 @@
-// libpng
-#ifdef _MSC_VER
-#pragma warning( disable : 4611 )
-#endif
-
 #include "Image.hpp"
 
 #include "libjpeg/jpeglib.h"
@@ -18,7 +13,7 @@ Image::Image(void) :
 	height{ 0u }
 {}
 
-Image::Image(unsigned int width, unsigned int height, const Color& background )
+Image::Image(const unsigned int width, const unsigned int height, const Color& background )
 {
 	image = new Color[ width * height ];
 	for (unsigned int i = 0; i < (unsigned int)( width * height ); i++ )
@@ -28,7 +23,7 @@ Image::Image(unsigned int width, unsigned int height, const Color& background )
 	this->height = height;
 }
 
-Image::Image(unsigned int width, unsigned int height, unsigned char* pixels)
+Image::Image(const unsigned int width, const unsigned int height, const unsigned char* const pixels)
 {
 	image = new Color[ width * height ];
 
@@ -66,9 +61,9 @@ void Image::Load( const std::string& filename )
 
 	// Load data from file
 	std::ifstream file( filename.c_str(), std::ios::binary | std::ios::ate );
-	if ( !file.is_open() ) throw FileException();
+	if (!file.is_open()) throw Exception("Could not load image file!");
 
-	uint fileSize = (uint)file.tellg();
+	unsigned int fileSize = (unsigned int)file.tellg();
 	file.seekg( 0, std::ios::beg );
 
 	ByteReader data( fileSize, true );
@@ -79,14 +74,14 @@ void Image::Load( const std::string& filename )
 	// Determine format and process
 	if ( data.PeekByte( 0 ) == 'B' && data.PeekByte( 1 ) == 'M' )
 		LoadBMP( data );
-	else if ( data.Compare( data.Length() - 18, 18, (const uchar*)"TRUEVISION-XFILE." ) )
+	else if ( data.Compare( data.Length() - 18, 18, (const unsigned char*)"TRUEVISION-XFILE." ) )
 		LoadTGA( data );
 	else if ( data.PeekByte( 0 ) == 0xFF && data.PeekByte( 1 ) == 0xD8 )
 		LoadJPEG( data );
-	else if ( data.Compare( 0, 4, (const uchar*)"\x89PNG" ) )
+	else if ( data.Compare( 0, 4, (const unsigned char*)"\x89PNG" ) )
 		LoadPNG( data );
 	else
-		throw FormatException();
+		throw Exception("Bad image format!");
 }
 
 void Image::Save( const std::string& filename, ImageFileFormat format )
@@ -102,15 +97,15 @@ void Image::Save( const std::string& filename, ImageFileFormat format )
 	else if ( format == ImageFileFormat::PNG )
 		SavePNG( filename );
 	else
-		throw FormatException();
+		throw Exception("Bad image format!");
 }
 
-ushort Image::GetWidth() const
+const unsigned int Image::GetWidth(void) const
 {
 	return width;
 }
 
-ushort Image::GetHeight() const
+const unsigned int Image::GetHeight(void) const
 {
 	return height;
 }
@@ -120,13 +115,13 @@ const Color* Image::GetPixels() const
 	return image;
 }
 
-Color Image::GetPixel( uint x, uint y ) const
+Color Image::GetPixel( unsigned int x, unsigned int y ) const
 {
 	if ( x >= width || y >= height ) return Color();
 	return image[ x + y * width ];
 }
 
-void Image::SetPixel( uint x, uint y, const Color& color )
+void Image::SetPixel( unsigned int x, unsigned int y, const Color& color )
 {
 	if ( x >= width || y >= height ) return;
 	image[ x + y * width ] = color;
@@ -136,48 +131,48 @@ void Image::LoadBMP( ByteReader& data )
 {
 	// BMP header
 	data.Advance( 2 + 4 + 4 ); // Skip magic number, file size and application specific data
-	uint pixelOffset = data.ReadUint();
+	unsigned int pixelOffset = data.ReadUint();
 
 	// DIB header
-	if ( data.ReadUint() != 40 ) throw FormatException(); // Only version 1 is currently supported
-	uint width = data.ReadUint();
+	if ( data.ReadUint() != 40 ) throw Exception("Bad image format!"); // Only version 1 is currently supported
+	unsigned int width = data.ReadUint();
 	int rawHeight = data.ReadInt();
-	uint height = abs( rawHeight );
-	if ( width == 0 || height == 0 ) throw FormatException();
-	if ( width > USHRT_MAX || height > USHRT_MAX ) throw FormatException();
-	if ( data.ReadUshort() != 1 ) throw FormatException(); // Color planes
-	if ( data.ReadUshort() != 24 ) throw FormatException(); // Bits per pixel
-	if ( data.ReadUint() != 0 ) throw FormatException(); // Compression
+	unsigned int height = abs( rawHeight );
+	if ( width == 0 || height == 0 ) throw Exception("Bad image format!");
+	if ( width > USHRT_MAX || height > USHRT_MAX ) throw Exception("Bad image format!");
+	if ( data.ReadUshort() != 1 ) throw Exception("Bad image format!"); // Color planes
+	if ( data.ReadUshort() != 24 ) throw Exception("Bad image format!"); // Bits per pixel
+	if ( data.ReadUint() != 0 ) throw Exception("Bad image format!"); // Compression
 	data.Advance( 4 ); // Skip pixel array size (very unreliable, a value of 0 is not uncommon)
 	data.Advance( 4 + 4 ); // Skip X/Y resolution
-	if ( data.ReadUint() != 0 ) throw FormatException(); // Palette colors
-	if ( data.ReadUint() != 0 ) throw FormatException(); // Important colors
+	if ( data.ReadUint() != 0 ) throw Exception("Bad image format!"); // Palette colors
+	if ( data.ReadUint() != 0 ) throw Exception("Bad image format!"); // Important colors
 
 	// Pixel data
 	data.Move( pixelOffset );
-	uint padding = ( width * 3 ) % 4;
+	unsigned int padding = ( width * 3 ) % 4;
 
 	image = new Color[ width * height ];
 		
-	for ( ushort y = 0; y < height; y++ )
+	for (unsigned short y = 0; y < height; y++)
 	{
-		for ( ushort x = 0; x < width; x++ )
+		for (unsigned short x = 0; x < width; x++)
 		{
-			uint o = rawHeight > 0 ? x + ( height - y - 1 ) * width : x + y * width; // Flip image vertically if height is negative
+			unsigned int o = rawHeight > 0 ? x + ( height - y - 1 ) * width : x + y * width; // Flip image vertically if height is negative
 			image[ o ] = Color( data.PeekByte( 2 ), data.PeekByte( 1 ), data.PeekByte( 0 ) ); // BGR byte order
 			data.Advance( 3 );
 			if ( x == width - 1 ) data.Advance( padding );
 		}
 	}
 
-	this->width = (ushort)width;
-	this->height = (ushort)height;
+	this->width = (unsigned short)width;
+	this->height = (unsigned short)height;
 }
 
 void Image::SaveBMP( const std::string& filename )
 {
 	ByteWriter data( true );
-	uint padding = ( width * 3 ) % 4;
+	unsigned int padding = ( width * 3 ) % 4;
 
 	// BMP header
 	data.WriteUbyte( 'B' );
@@ -202,7 +197,7 @@ void Image::SaveBMP( const std::string& filename )
 	// Pixel data
 	for ( short y = height - 1; y >= 0; y-- )
 	{
-		for ( ushort x = 0; x < width; x++ )
+		for ( unsigned short x = 0; x < width; x++ )
 		{
 			Color& col = image[ x + y * width ];
 			data.WriteUbyte( col.B );
@@ -214,7 +209,7 @@ void Image::SaveBMP( const std::string& filename )
 	}
 
 	std::ofstream file( filename.c_str(), std::ios::binary );
-	if ( !file.is_open() ) throw FileException();
+	if ( !file.is_open() ) throw Exception("Could not load image file!");
 
 	file.write( (char*)data.Data(), data.Length() );
 
@@ -225,18 +220,18 @@ void Image::LoadTGA( ByteReader& data )
 {
 	// TGA header
 	data.Advance( 1 ); // Image ID field length, ignored
-	if ( data.ReadUbyte() != 0 ) throw FormatException(); // Color map
-	uchar type = data.ReadUbyte();
-	if ( type != 2 && type != 10 ) throw FormatException(); // Image type not true-color
+	if ( data.ReadUbyte() != 0 ) throw Exception("Bad image format!"); // Color map
+	unsigned char type = data.ReadUbyte();
+	if ( type != 2 && type != 10 ) throw Exception("Bad image format!"); // Image type not true-color
 	data.Advance( 5 ); // Color map info, ignored
 	data.Advance( 4 ); // XY offset, ignored
-	ushort width = data.ReadUshort();
-	ushort height = data.ReadUshort();
-	uchar depth = data.ReadUbyte();
-	if ( depth != 24 && depth != 32 ) throw FormatException(); // Not RGB(A)
-	uchar bytesPerPixel = depth / 8;
-	uchar descriptor = data.ReadUbyte();
-	if ( ( depth == 24 && descriptor != 0 ) || ( depth == 32 && descriptor != 8 ) ) throw FormatException(); // Check for alpha channel if bit depth is 32
+	unsigned short width = data.ReadUshort();
+	unsigned short height = data.ReadUshort();
+	unsigned char depth = data.ReadUbyte();
+	if ( depth != 24 && depth != 32 ) throw Exception("Bad image format!"); // Not RGB(A)
+	unsigned char bytesPerPixel = depth / 8;
+	unsigned char descriptor = data.ReadUbyte();
+	if ( ( depth == 24 && descriptor != 0 ) || ( depth == 32 && descriptor != 8 ) ) throw Exception("Bad image format!"); // Check for alpha channel if bit depth is 32
 
 	// If pixels are RLE encoded, they need to be unpacked first
 	if ( type == 10 )
@@ -247,7 +242,7 @@ void Image::LoadTGA( ByteReader& data )
 
 	for ( short y = height - 1; y >= 0; y-- )
 	{
-		for ( ushort x = 0; x < width; x++ )
+		for ( unsigned short x = 0; x < width; x++ )
 		{
 			if ( bytesPerPixel == 3 )
 				image[ x + y * width ] = Color( data.PeekByte( 2 ), data.PeekByte( 1 ), data.PeekByte( 0 ) ); // BGR byte order
@@ -262,14 +257,14 @@ void Image::LoadTGA( ByteReader& data )
 	this->height = height;
 }
 
-void Image::DecodeRLE( ByteReader& data, uint decodedLength, uchar bytesPerPixel )
+void Image::DecodeRLE( ByteReader& data, unsigned int decodedLength, unsigned char bytesPerPixel )
 {
-	std::vector<uchar> buffer;
+	std::vector<unsigned char> buffer;
 
 	while ( buffer.size() < decodedLength )
 	{
-		uchar rle = data.ReadUbyte();
-		uint count = ( rle & 0x7F ) + 1;
+		unsigned char rle = data.ReadUbyte();
+		unsigned int count = ( rle & 0x7F ) + 1;
 
 		if ( rle & 0x80 ) // RLE packet
 		{
@@ -277,7 +272,7 @@ void Image::DecodeRLE( ByteReader& data, uint decodedLength, uchar bytesPerPixel
 			if ( bytesPerPixel == 4 ) value.A = data.PeekByte( 3 );
 			data.Advance( bytesPerPixel );
 
-			for ( uint i = 0; i < count; i++ )
+			for ( unsigned int i = 0; i < count; i++ )
 			{
 				buffer.push_back( value.B );
 				buffer.push_back( value.G );
@@ -285,7 +280,7 @@ void Image::DecodeRLE( ByteReader& data, uint decodedLength, uchar bytesPerPixel
 				if ( bytesPerPixel == 4 ) buffer.push_back( value.A );
 			}
 		} else { // Non-RLE packet
-			for ( uint i = 0; i < count * bytesPerPixel; i++ )
+			for ( unsigned int i = 0; i < count * bytesPerPixel; i++ )
 				buffer.push_back( data.ReadUbyte() );
 		}
 	}
@@ -309,12 +304,12 @@ void Image::SaveTGA( const std::string& filename )
 	data.WriteUbyte( 0 ); // Image descriptor (No alpha depth or direction)
 
 	// Pixel data
-	std::vector<uchar> pixelData;
+	std::vector<unsigned char> pixelData;
 	pixelData.reserve( width * height * 3 );
 
 	for ( short y = height - 1; y >= 0; y-- )
 	{
-		for ( ushort x = 0; x < width; x++ )
+		for ( unsigned short x = 0; x < width; x++ )
 		{
 			Color& col = image[ x + y * width ];
 			pixelData.push_back( col.B );
@@ -332,7 +327,7 @@ void Image::SaveTGA( const std::string& filename )
 	data.WriteString( "TRUEVISION-XFILE." );
 		
 	std::ofstream file( filename.c_str(), std::ios::binary );
-	if ( !file.is_open() ) throw FileException();
+	if ( !file.is_open() ) throw Exception("Could not load image file!");
 
 	file.write( (char*)data.Data(), data.Length() );
 
@@ -343,7 +338,7 @@ inline void flushRLE( ByteWriter& data, std::vector<Color>& backlog )
 {
 	if ( backlog.size() > 0 )
 	{
-		data.WriteUbyte( 0x80 + (uchar)backlog.size() - 1 );
+		data.WriteUbyte( 0x80 + (unsigned char)backlog.size() - 1 );
 
 		data.WriteUbyte( backlog[0].B );
 		data.WriteUbyte( backlog[0].G );
@@ -357,9 +352,9 @@ inline void flushNonRLE( ByteWriter& data, std::vector<Color>& backlog, Color& l
 {
 	if ( backlog.size() > 1 )
 	{
-		data.WriteUbyte( (uchar)backlog.size() - 2 );
+		data.WriteUbyte( (unsigned char)backlog.size() - 2 );
 
-		for ( uint i = 0; i < backlog.size() - 1; i++ )
+		for ( unsigned int i = 0; i < backlog.size() - 1; i++ )
 		{
 			data.WriteUbyte( backlog[i].B );
 			data.WriteUbyte( backlog[i].G );
@@ -372,13 +367,13 @@ inline void flushNonRLE( ByteWriter& data, std::vector<Color>& backlog, Color& l
 	}
 }
 
-void Image::EncodeRLE( ByteWriter& data, std::vector<uchar>& pixels, ushort width )
+void Image::EncodeRLE( ByteWriter& data, std::vector<unsigned char>& pixels, unsigned int width )
 {
 	std::vector<Color> backlog;
 	Color lastColor;
 	bool rleMode = false;
 
-	for ( uint i = 0; i < pixels.size(); i += 3 )
+	for ( unsigned int i = 0; i < pixels.size(); i += 3 )
 	{
 		Color col( pixels[i+2], pixels[i+1], pixels[i+0] );
 
@@ -425,8 +420,8 @@ void Image::LoadJPEG( ByteReader& data )
 
 	// JPEG header
 	jpeg_read_header( &cinfo, true );
-	if ( cinfo.output_width > USHRT_MAX ) throw FormatException();
-	if ( cinfo.output_height > USHRT_MAX ) throw FormatException();
+	if ( cinfo.output_width > USHRT_MAX ) throw Exception("Bad image format!");
+	if ( cinfo.output_height > USHRT_MAX ) throw Exception("Bad image format!");
 
 	// Pixel data
 	jpeg_start_decompress( &cinfo );
@@ -436,11 +431,11 @@ void Image::LoadJPEG( ByteReader& data )
 
 	image = new Color[ cinfo.output_width * cinfo.output_height ];
 
-	for ( ushort y = 0; y < cinfo.output_height; y++ )
+	for ( unsigned short y = 0; y < cinfo.output_height; y++ )
 	{
 		jpeg_read_scanlines( &cinfo, buffer, 1 );
 			
-		for ( ushort x = 0; x < cinfo.output_width; x++ )
+		for (unsigned short x = 0; x < cinfo.output_width; x++ )
 			image[ x + y * cinfo.output_width ] = Color( buffer[0][x*3+0], buffer[0][x*3+1], buffer[0][x*3+2] );
 	}
 
@@ -448,14 +443,14 @@ void Image::LoadJPEG( ByteReader& data )
 
 	jpeg_destroy_decompress( &cinfo );
 
-	this->width = (ushort)cinfo.output_width;
-	this->height = (ushort)cinfo.output_height;
+	this->width = (unsigned short)cinfo.output_width;
+	this->height = (unsigned short)cinfo.output_height;
 }
 
 void Image::SaveJPEG( const std::string& filename )
 {
 	FILE* file = fopen( filename.c_str(), "wb" );
-	if ( !file ) throw FileException();
+	if ( !file ) throw Exception("Could not load image file!");
 
 	// Initialize structures
 	jpeg_compress_struct cinfo;
@@ -475,12 +470,12 @@ void Image::SaveJPEG( const std::string& filename )
 	jpeg_set_quality( &cinfo, 90, true );
 
 	// Prepare pixel data
-	std::vector<uchar> pixelData;
+	std::vector<unsigned char> pixelData;
 	pixelData.reserve( width * height * 3 );
 
-	for ( ushort y = 0; y < height; y++ )
+	for (unsigned short y = 0; y < height; y++ )
 	{
-		for ( ushort x = 0; x < width; x++ )
+		for (unsigned short x = 0; x < width; x++ )
 		{
 			Color& col = image[ x + y * width ];
 			pixelData.push_back( col.R );
@@ -492,7 +487,7 @@ void Image::SaveJPEG( const std::string& filename )
 	// Compress
 	jpeg_start_compress( &cinfo, true );
 
-	for ( ushort y = 0; y < height; y++ )
+	for (unsigned short y = 0; y < height; y++ )
 	{
 		JSAMPROW row = &pixelData[ y * width * 3 ];
 		jpeg_write_scanlines( &cinfo, &row, 1 );
@@ -508,7 +503,7 @@ void Image::SaveJPEG( const std::string& filename )
 void readPNG( png_structp png_ptr, png_bytep dest, png_size_t length )
 {
 	ByteReader& data = *(ByteReader*)png_ptr->io_ptr;
-	data.Read( dest, length );
+	data.Read( dest, (unsigned int)length );
 }
 
 void Image::LoadPNG( ByteReader& data )
@@ -523,31 +518,31 @@ void Image::LoadPNG( ByteReader& data )
 
 	// Header
 	png_read_info( png, info );
-	if ( info->width > USHRT_MAX ) throw FormatException();
-	if ( info->height > USHRT_MAX ) throw FormatException();
+	if ( info->width > USHRT_MAX ) throw Exception("Bad image format!");
+	if ( info->height > USHRT_MAX ) throw Exception("Bad image format!");
 
 	// Pixel data
 	image = new Color[ info->width * info->height ];
 
 	png_uint_32 rowLength = png_get_rowbytes( png, info );
-	std::vector<uchar> row( rowLength );
+	std::vector<unsigned char> row( rowLength );
 
-	for ( ushort y = 0; y < info->height; y++ )
+	for (unsigned short y = 0; y < info->height; y++ )
 	{
 		png_read_row( png, &row[0], NULL );
 
 		if ( info->color_type == PNG_COLOR_TYPE_RGB )
-			for ( ushort x = 0; x < info->width; x++ )
+			for (unsigned short x = 0; x < info->width; x++ )
 				image[ x + y * info->width ] = Color( row[x*3+0], row[x*3+1], row[x*3+2] );
 		else if ( info->color_type == PNG_COLOR_TYPE_RGBA )
-			for ( ushort x = 0; x < info->width; x++ )
+			for (unsigned short x = 0; x < info->width; x++ )
 				image[ x + y * info->width ] = Color( row[x*4+0], row[x*4+1], row[x*4+2], row[x*4+3] );
 		else
-			throw FormatException();
+			throw Exception("Bad image format!");
 	}
 
-	width = (ushort)info->width;
-	height = (ushort)info->height;
+	width = (unsigned short)info->width;
+	height = (unsigned short)info->height;
 
 	png_destroy_read_struct( &png, &info, NULL );
 }
@@ -555,7 +550,7 @@ void Image::LoadPNG( ByteReader& data )
 void Image::SavePNG( const std::string& filename )
 {
 	FILE* file = fopen( filename.c_str(), "wb" );
-	if ( !file ) throw FileException();
+	if ( !file ) throw Exception("Could not load image file!");
 
 	// Initialize structures
 	png_structp png = png_create_write_struct( PNG_LIBPNG_VER_STRING, NULL, NULL, NULL );
@@ -569,12 +564,12 @@ void Image::SavePNG( const std::string& filename )
 	png_write_info( png, info );
 
 	// Prepare pixel data
-	std::vector<uchar> pixelData;
+	std::vector<unsigned char> pixelData;
 	pixelData.reserve( width * height * 4 );
 
-	for ( ushort y = 0; y < height; y++ )
+	for (unsigned short y = 0; y < height; y++ )
 	{
-		for ( ushort x = 0; x < width; x++ )
+		for (unsigned short x = 0; x < width; x++ )
 		{
 			Color& col = image[ x + y * width ];
 			pixelData.push_back( col.R );
@@ -585,7 +580,7 @@ void Image::SavePNG( const std::string& filename )
 	}
 
 	// Write rows
-	for ( ushort y = 0; y < height; y++ )
+	for (unsigned short y = 0; y < height; y++ )
 		png_write_row( png, &pixelData[ y * width * 4 ] );
 
 	png_write_end( png, info );

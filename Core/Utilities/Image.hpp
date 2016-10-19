@@ -1,7 +1,8 @@
 #pragma once
 
 #include "Color.hpp"
-#include <GL/Util/ByteBuffer.hpp>
+#include "ByteBuffer.hpp"
+#include "Exception.hpp"
 
 #include <string>
 #include <vector>
@@ -17,8 +18,8 @@ struct Image
 {
 	Image(void);
 
-	Image(unsigned int width, unsigned int height, const Color& background);
-	Image(unsigned int width, unsigned int height, unsigned char* pixels);
+	Image(const unsigned int width, const unsigned int height, const Color& background);
+	Image(const unsigned int width, const unsigned int height, const unsigned char* const pixels);
 	Image(const std::string& filename);
 
 	~Image(void);
@@ -26,8 +27,8 @@ struct Image
 	void Load(const std::string& filename);
 	void Save(const std::string& filename, ImageFileFormat format);
 
-	unsigned int GetWidth(void) const;
-	unsigned int GetHeight(void) const;
+	const unsigned int GetWidth(void) const;
+	const unsigned int GetHeight(void) const;
 	const Color* GetPixels(void) const;
 
 	Color GetPixel(unsigned int x, unsigned int y) const;
