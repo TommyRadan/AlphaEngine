@@ -4,7 +4,7 @@
 
 #include <vector>
 #include <string>
-#include <map>
+#include <utility>
 
 struct Vertex
 {
@@ -14,4 +14,4 @@ struct Vertex
 };
 
 typedef std::vector<Vertex> VertexVector;
-typedef std::map<std::string, size_t> VertexFormat;
+typedef std::vector<std::pair<std::string, unsigned int> > VertexFormat;
