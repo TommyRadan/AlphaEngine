@@ -4,6 +4,7 @@
 #include "OpenGL\OpenGL.hpp"
 
 // Mesh container
+#include <Utilities\Vertex.hpp>
 #include <Utilities\Mesh.hpp>
 
 class Geometry
@@ -16,6 +17,7 @@ public:
 	void ReleaseData(void);
 
 	void Draw(void);
+	VertexFormat GetVertexFormat(void);
 
 private:
 	Geometry(Geometry&);
@@ -25,5 +27,6 @@ private:
 
 	OpenGL::VertexBuffer* m_VertexBufferObject;
 	OpenGL::VertexArray* m_VertexArrayObject;
+	VertexFormat m_VertexFormat;
 	unsigned int m_DrawCount;
 };

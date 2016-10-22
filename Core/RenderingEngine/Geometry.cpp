@@ -38,6 +38,7 @@ void Geometry::ReleaseData(void)
 
 	delete m_VertexArrayObject;
 	delete m_VertexBufferObject;
+	m_VertexFormat.clear();
 	m_DrawCount = 0u;
 	m_DataUploaded = false;
 }
@@ -50,4 +51,9 @@ void Geometry::Draw(void)
 
 	OpenGL::Context* context = OpenGL::Context::GetInstance();
 	context->DrawArrays(*m_VertexArrayObject, OpenGL::Primitive::Triangles, 0U, m_DrawCount);
+}
+
+VertexFormat Geometry::GetVertexFormat(void)
+{
+	return m_VertexFormat;
 }
