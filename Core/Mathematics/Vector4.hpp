@@ -19,7 +19,7 @@ namespace Math
 		friend float DotProduct(const Vector4& v1, const Vector4& v2);
 		const Vector4 Normal(void) const;
 
-		// Vector-Vector operationsz
+		// Vector-Vector operations
 		Vector4& operator+=(const Vector4& v);
 		Vector4& operator-=(const Vector4& v);
 
