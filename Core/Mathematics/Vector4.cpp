@@ -3,7 +3,7 @@
 
 namespace Math
 {
-	const float Vector4::GetVectorLength(void) const 
+	const float Vector4::Length(void) const 
 	{
 		return sqrt(X*X + Y*Y + Z*Z + W*W);
 	}
@@ -20,6 +20,11 @@ namespace Math
 		Z += v.Z;
 		W += v.W;
 		return *this;
+	}
+
+	const Vector4 Vector4::Normal() const
+	{
+		return *this / Length();
 	}
 
 	Vector4& Vector4::operator-=(const Vector4& v)
@@ -42,12 +47,12 @@ namespace Math
 	}
 
 	const Vector4 Vector4::operator/(const Vector4& v) const {
-		return *this / v.GetVectorLength();
+		return *this / v.Length();
 	}
 
 	Vector4& Vector4::operator/=(const Vector4& v)
 	{
-		float l = v.GetVectorLength();
+		float l = v.Length();
 
 		X /= l;
 		Y /= l;
