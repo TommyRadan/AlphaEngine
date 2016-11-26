@@ -15,8 +15,9 @@ namespace Math
 			X( v.X ), Y( v.Y ), Z( v.Z ), W( w ) 
 		{}
 
-		const float GetVectorLength(void) const;
+		const float Length(void) const;
 		friend float DotProduct(const Vector4& v1, const Vector4& v2);
+		const Vector4 Normal(void) const;
 
 		// Vector-Vector operations
 		Vector4& operator+=(const Vector4& v);
