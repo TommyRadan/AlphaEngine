@@ -1,12 +1,13 @@
 #pragma once
 
-#include <Mathematics\Math.hpp>
-#include <Utilities\Singleton.hpp>
-#include <Control\Settings.hpp>
+#include <Mathematics/Math.hpp>
+#include <Utilities/ISingleton.hpp>
+#include <Control/Settings.hpp>
 
-class Camera : public Singleton<Camera>
+class Camera : public ISingleton<Camera>
 {
-	friend Singleton<Camera>;
+	template<typename Camera>
+	friend class ISingleton;
 	Camera(void)
 	{
 		m_Position = Math::Vector3(0.0f, 0.0f, 0.0f);

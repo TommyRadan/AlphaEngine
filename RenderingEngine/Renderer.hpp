@@ -1,10 +1,10 @@
 #pragma once
 
 // OpenGL
-#include "OpenGL\OpenGL.hpp"
+#include "OpenGL/OpenGL.hpp"
 
 // Mathematics
-#include <Mathematics\Math.hpp>
+#include <Mathematics/Math.hpp>
 
 class Renderer
 {

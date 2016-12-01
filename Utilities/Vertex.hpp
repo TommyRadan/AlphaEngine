@@ -1,6 +1,6 @@
 #pragma once
 
-#include <Mathematics\Math.hpp>
+#include <Mathematics/Math.hpp>
 
 #include <vector>
 #include <string>

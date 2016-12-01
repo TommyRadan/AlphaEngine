@@ -1,11 +1,11 @@
 #pragma once
 
 // OpenGL
-#include "OpenGL\OpenGL.hpp"
+#include "OpenGL/OpenGL.hpp"
 
 // Mesh container
-#include <Utilities\Vertex.hpp>
-#include <Utilities\Mesh.hpp>
+#include <Utilities/Vertex.hpp>
+#include <Utilities/Mesh.hpp>
 
 class Geometry
 {

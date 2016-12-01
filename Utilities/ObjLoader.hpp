@@ -1,8 +1,8 @@
 #pragma once
 
-#include <Utilities\Exception.hpp>
-#include <Mathematics\Math.hpp>
-#include <Utilities\Vertex.hpp>
+#include <Utilities/Exception.hpp>
+#include <Mathematics/Math.hpp>
+#include <Utilities/Vertex.hpp>
 
 #include <fstream>
 #include <vector>

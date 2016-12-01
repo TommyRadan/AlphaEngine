@@ -16,20 +16,20 @@ namespace MediaLayer
 		Resize = 1,
 		Close = 2,
 		Fullscreen = 4
-	}
+	};
 
 	WindowStyle operator|(const WindowStyle ws1, const WindowStyle ws2)
 	{
-		return (WindowStyle)(int(ws1) | int(ws2));
+		return (WindowStyle)(long(ws1) | long(ws2));
 	}
 
 	struct Window
 	{
 		Window(
-			const unsigned int width = 800, 
-			const unsigned int height = 600, 
-			const std::string& title = "Window", 
-			const WindowStyle style = WindowStyle::Close
+			const unsigned int width,
+			const unsigned int height,
+			const std::string& title,
+			const WindowStyle style
 		);
 		~Window(void);
 		
@@ -57,20 +57,18 @@ namespace MediaLayer
 		const bool IsMouseButtonDown(const MouseButton button) const;
 		const bool IsKeyDown(const Key key) const;
 
-		Context& GetContext( uchar color = 32, uchar depth = 24, uchar stencil = 8, uchar antialias = 1 );
+		//void* const GetHandle(void) const;
 		void Present(void);
 
 	private:
 		unsigned int m_Width, m_Height;
 		int m_X, m_Y;
-		bool m_IsOpen, m_IsInFocus;
+		bool m_IsOpen, m_IsFocused;
 		std::queue<Event> m_Events;
 
 		unsigned int m_MouseX, m_MouseY;
 		bool m_Mouse[3];
 		bool m_Keys[100];
-
-		Context* context;
 
 #if defined PLATFORM_WINDOWS
 
@@ -98,6 +96,6 @@ namespace MediaLayer
 		Window(const Window&);
 		const Window& operator=(const Window&);
 
-		Key TranslateKey(const unsigned int code);
+		static Key TranslateKey(const unsigned int code) const;
 	};
 }

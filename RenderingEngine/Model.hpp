@@ -1,7 +1,7 @@
 #pragma once
 
-#include <Mathematics\Math.hpp>
-#include <Utilities\Exception.hpp>
+#include <Mathematics/Math.hpp>
+#include <Utilities/Exception.hpp>
 
 #include "Geometry.hpp"
 #include "Material.hpp"

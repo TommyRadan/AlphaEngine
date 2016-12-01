@@ -1,6 +1,6 @@
 #pragma once
 
-struct Component
+struct IComponent
 {
     virtual void Init(void) = 0;
     virtual void Quit(void) = 0;

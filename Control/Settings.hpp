@@ -1,6 +1,6 @@
 #pragma once
 
-#include <Utilities\Singleton.hpp>
+#include <Utilities/ISingleton.hpp>
 
 #include<string>
 
@@ -10,9 +10,10 @@ enum class WinType {
 	WIN_TYPE_FULLSCREEN
 };
 
-class Settings : public Singleton<Settings>
+class Settings : public ISingleton<Settings>
 {
-	friend Singleton<Settings>;
+	template<typename Settings>
+	friend class ISingleton;
 	Settings(void) {
 #ifdef _DEBUG
 		m_WindowWidth = 640;

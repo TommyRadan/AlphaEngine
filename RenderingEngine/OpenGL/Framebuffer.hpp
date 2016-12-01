@@ -3,7 +3,7 @@
 #include "Typedef.hpp"
 #include "Texture.hpp"
 
-#include <Utilities\Exception.hpp>
+#include <Utilities/Exception.hpp>
 
 namespace OpenGL
 {
@@ -13,12 +13,12 @@ namespace OpenGL
 		Framebuffer(
 			const unsigned int width, 
 			const unsigned int height, 
-			const unsigned char color = 32, 
-			const unsigned char depth = 24
+			const unsigned char color = 32u,
+			const unsigned char depth = 24u
 		);
 		~Framebuffer(void);
 
-		const GLuint Handle(void) const;
+		const unsigned int Handle(void) const;
 
 		const Texture& GetTexture(void) const;
 		const Texture& GetDepthTexture(void) const;
@@ -27,7 +27,7 @@ namespace OpenGL
 		Framebuffer(const Framebuffer&);
 		const Framebuffer& operator=(const Framebuffer&);
 
-		GLuint m_ObjectID;
+		unsigned int m_ObjectID;
 		Texture m_ColorTexture;
 		Texture m_DepthTexture;
 	};

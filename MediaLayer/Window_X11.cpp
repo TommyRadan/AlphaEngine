@@ -8,7 +8,7 @@
 
 namespace MediaLayer
 {
-	Window::Window( uint width, uint height, const std::string& title, WindowStyle::window_style_t style )
+	Window::Window(unsigned int width, unsigned int height, const std::string& title, WindowStyle style)
 	{
 		// Connect to X server
 		display = XOpenDisplay( NULL );

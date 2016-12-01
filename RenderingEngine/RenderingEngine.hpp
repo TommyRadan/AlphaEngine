@@ -1,13 +1,14 @@
 #pragma once
 
-#include <Utilities\Component.hpp>
-#include <Utilities\Exception.hpp>
-#include <Utilities\Mesh.hpp>
+#include <Utilities/IComponent.hpp>
+#include <Utilities/Exception.hpp>
+#include <Utilities/Color.hpp>
+#include <Utilities/Mesh.hpp>
 
 // Global settings
-#include <Control\Settings.hpp>
+#include <Control/Settings.hpp>
 
-#include "OpenGL\OpenGL.hpp"
+#include "OpenGL/OpenGL.hpp"
 #include "Geometry.hpp"
 #include "Material.hpp"
 #include "Renderer.hpp"
@@ -15,12 +16,13 @@
 #include "Model.hpp"
 
 // Specific renderers
-#include "StandardRenderer\StandardRenderer.hpp"
+#include "StandardRenderer/StandardRenderer.hpp"
 
 class RenderingEngine : 
-	public Component
+	public IComponent,
+	public ISingleton<RenderingEngine>
 {
-	friend Singleton<RenderingEngine>;
+	friend ISingleton<RenderingEngine>;
 	RenderingEngine(void) : 
 		m_IsInit{ false },
 		m_GlContext{ OpenGL::Context::GetInstance() }

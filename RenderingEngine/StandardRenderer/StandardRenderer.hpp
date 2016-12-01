@@ -1,18 +1,18 @@
 #pragma once
 
 // Utilities
-#include <Utilities\Exception.hpp>
-#include <Utilities\FileToString.hpp>
-#include <Utilities\Singleton.hpp>
+#include <Utilities/Exception.hpp>
+#include <Utilities/FileToString.hpp>
+#include <Utilities/ISingleton.hpp>
 
 // Base class
-#include <RenderingEngine\Renderer.hpp>
+#include <RenderingEngine/Renderer.hpp>
 
 class StandardRenderer : 
-	public Singleton<StandardRenderer>, 
+	public ISingleton<StandardRenderer>,
 	public Renderer
 {
-	friend Singleton<StandardRenderer>;
+	friend ISingleton<StandardRenderer>;
 	StandardRenderer(void) :
 		Renderer()
 	{}

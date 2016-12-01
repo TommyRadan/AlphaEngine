@@ -35,8 +35,8 @@ struct Image
 	void SetPixel(unsigned int x, unsigned int y, const Color& color);
 
 private:
-	Color* image;
-	unsigned int width, height;
+	Color* m_ImageData;
+	unsigned int m_Width, m_Height;
 
 	Image(const Image&);
 	const Image& operator=(const Image&);

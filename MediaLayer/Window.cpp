@@ -29,7 +29,7 @@ namespace MediaLayer
 
 	const bool Window::HasFocus(void) const
 	{
-		return m_IsInFocus;
+		return m_IsFocused;
 	}
 
 	const int Window::GetMouseX(void) const
@@ -44,13 +44,13 @@ namespace MediaLayer
 
 	const bool Window::IsMouseButtonDown(const MouseButton button) const
 	{
-		if(button >= sizeof(m_Mouse) / sizeof(bool)) return false;
-		return m_Mouse[button];
+		if(int(button) >= sizeof(m_Mouse) / sizeof(bool)) return false;
+		return m_Mouse[int(button)];
 	}
 
 	const bool Window::IsKeyDown(const Key key) const
 	{
-		if(key >= sizeof(m_Keys) / sizeof(bool)) return false;
-		return m_Keys[key];
+		if(int(key) >= sizeof(m_Keys) / sizeof(bool)) return false;
+		return m_Keys[int(key)];
 	}
 }

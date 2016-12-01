@@ -1,5 +1,5 @@
 #include "Geometry.hpp"
-#include "Utilities\Exception.hpp"
+#include "Utilities/Exception.hpp"
 
 Geometry::Geometry() :
 	m_DataUploaded { false }

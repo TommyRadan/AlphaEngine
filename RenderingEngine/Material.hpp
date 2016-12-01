@@ -3,11 +3,11 @@
 #include <string>
 #include <map>
 
-#include <Mathematics\Math.hpp>
+#include <Mathematics/Math.hpp>
 
-#include <Utilities\Color.hpp>
+#include <Utilities/Color.hpp>
 
-#include "OpenGL\Texture.hpp"
+#include "OpenGL/Texture.hpp"
 
 struct Material
 {

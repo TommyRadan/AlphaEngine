@@ -1,5 +1,5 @@
 #include "Model.hpp"
-#include "OpenGL\OpenGL.hpp"
+#include "OpenGL/OpenGL.hpp"
 
 Model::Model(void) :
 	m_Position		{ Math::Vector3(0.0f, 0.0f, 0.0f) },

@@ -1,33 +1,29 @@
-#include <MediaLayer\Display.hpp>
-#include <MediaLayer\Events.hpp>
+#include <MediaLayer/MediaLayer.hpp>
+#include <RenderingEngine/RenderingEngine.hpp>
 
-#include <RenderingEngine\RenderingEngine.hpp>
+#include <Utilities/Exception.hpp>
 
 int main(int argc, char* argv[])
 {
 	try {
-		MediaLayer::Display::GetInstance()->Init();
+		MediaLayer::GetInstance()->Init();
 		RenderingEngine::GetInstance()->Init();
 	} catch (Exception e) {
-		MediaLayer::Display::GetInstance()->ShowDialog("Initialization error!", e.what());
+		MediaLayer::GetInstance()->ShowDialog("Initialization error!", e.what());
 		return 1;
 	}
 
 	try {
 		for (;;)
 		{
-			MediaLayer::Events::GetInstance()->Process();
-			if (MediaLayer::Events::GetInstance()->IsQuitRequested()) break;
-
-			RenderingEngine::GetInstance()->RenderScene();
-			MediaLayer::Display::GetInstance()->SwapBuffers();
+			break; // Exit immediately
 		}
 	} catch (Exception e) {
-		MediaLayer::Display::GetInstance()->ShowDialog("Runtime error!", e.what());
+		//MediaLayer::Display::GetInstance()->ShowDialog("Runtime error!", e.what());
 		return 1;
 	}
 
 	RenderingEngine::GetInstance()->Quit();
-	MediaLayer::Display::GetInstance()->Quit();
+	MediaLayer::GetInstance()->Quit();
     return 0;
 }

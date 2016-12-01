@@ -150,7 +150,7 @@ set(SOURCE_FILES
     Utilities/zlib/zutil.h
     Utilities/ByteBuffer.hpp
     Utilities/Color.hpp
-    Utilities/Component.hpp
+        Utilities/IComponent.hpp
     Utilities/Exception.hpp
     Utilities/FileToString.hpp
     Utilities/Image.cpp
@@ -158,7 +158,7 @@ set(SOURCE_FILES
     Utilities/Mesh.cpp
     Utilities/Mesh.hpp
     Utilities/ObjLoader.hpp
-    Utilities/Singleton.hpp
+        Utilities/ISingleton.hpp
     Utilities/Vertex.hpp)
 
 include_directories(.)

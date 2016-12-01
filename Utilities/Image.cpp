@@ -8,60 +8,62 @@
 #include <cstdlib>
 
 Image::Image(void) :
-	image{ nullptr },
-	width{ 0u },
-	height{ 0u }
+	m_ImageData{ nullptr },
+	m_Width{ 0u },
+	m_Height{ 0u }
 {}
 
 Image::Image(const unsigned int width, const unsigned int height, const Color& background )
 {
-	image = new Color[ width * height ];
+	m_ImageData = new Color[ width * height ];
 	for (unsigned int i = 0; i < (unsigned int)( width * height ); i++ )
-		image[i] = background;
+		m_ImageData[i] = background;
 
-	this->width = width;
-	this->height = height;
+	m_Width = width;
+	m_Height = height;
 }
 
 Image::Image(const unsigned int width, const unsigned int height, const unsigned char* const pixels)
 {
-	image = new Color[ width * height ];
+	m_ImageData = new Color[ width * height ];
 
 	for (unsigned int x = 0; x < width; x++ )
 	{
 		for (unsigned int y = 0; y < height; y++ )
 		{
 			unsigned int o = ( x + y * width ) * sizeof( Color );
-			image[ x + y * width ] = Color( pixels[o+0], pixels[o+1], pixels[o+2], pixels[o+3] );
+			m_ImageData[ x + y * width ] = Color( pixels[o+0], pixels[o+1], pixels[o+2], pixels[o+3] );
 		}
 	}
 
-	this->width = width;
-	this->height = height;
+	m_Width = width;
+	m_Height = height;
 }
 
-Image::Image(const std::string& filename)
+Image::Image(const std::string& filename) :
+	m_ImageData { nullptr },
+	m_Width { 0u },
+	m_Height { 0u }
 {
-	image = nullptr;
-	this->Load( filename );
+	Load(filename);
 }
 
 Image::~Image()
 {
-	if (image) delete[] image;
+	if (m_ImageData) delete[] m_ImageData;
 }
 
 void Image::Load( const std::string& filename )
 {
 	// Unload image
-	if (image) delete[] image;
-	image = nullptr;
-	width = 0u;
-	height = 0u;
+	if (m_ImageData) delete[] m_ImageData;
+	m_ImageData = nullptr;
+	m_Width = 0u;
+	m_Height = 0u;
 
 	// Load data from file
 	std::ifstream file( filename.c_str(), std::ios::binary | std::ios::ate );
-	if (!file.is_open()) throw Exception("Could not load image file!");
+	if (!file.is_open()) throw Exception("Could not load m_ImageData file!");
 
 	unsigned int fileSize = (unsigned int)file.tellg();
 	file.seekg( 0, std::ios::beg );
@@ -81,12 +83,12 @@ void Image::Load( const std::string& filename )
 	else if ( data.Compare( 0, 4, (const unsigned char*)"\x89PNG" ) )
 		LoadPNG( data );
 	else
-		throw Exception("Bad image format!");
+		throw Exception("Bad m_ImageData format!");
 }
 
 void Image::Save( const std::string& filename, ImageFileFormat format )
 {
-	if ( image == 0 || width == 0 || height == 0 ) return;
+	if ( m_ImageData == 0 || m_Width == 0 || m_Height == 0 ) return;
 
 	if ( format == ImageFileFormat::BMP )
 		SaveBMP( filename );
@@ -97,34 +99,34 @@ void Image::Save( const std::string& filename, ImageFileFormat format )
 	else if ( format == ImageFileFormat::PNG )
 		SavePNG( filename );
 	else
-		throw Exception("Bad image format!");
+		throw Exception("Bad m_ImageData format!");
 }
 
 const unsigned int Image::GetWidth(void) const
 {
-	return width;
+	return m_Width;
 }
 
 const unsigned int Image::GetHeight(void) const
 {
-	return height;
+	return m_Height;
 }
 
 const Color* Image::GetPixels() const
 {
-	return image;
+	return m_ImageData;
 }
 
 Color Image::GetPixel( unsigned int x, unsigned int y ) const
 {
-	if ( x >= width || y >= height ) return Color();
-	return image[ x + y * width ];
+	if ( x >= m_Width || y >= m_Height ) return Color();
+	return m_ImageData[ x + y * m_Width ];
 }
 
 void Image::SetPixel( unsigned int x, unsigned int y, const Color& color )
 {
-	if ( x >= width || y >= height ) return;
-	image[ x + y * width ] = color;
+	if ( x >= m_Width || y >= m_Height ) return;
+	m_ImageData[ x + y * m_Width ] = color;
 }
 
 void Image::LoadBMP( ByteReader& data )
@@ -134,82 +136,82 @@ void Image::LoadBMP( ByteReader& data )
 	unsigned int pixelOffset = data.ReadUint();
 
 	// DIB header
-	if ( data.ReadUint() != 40 ) throw Exception("Bad image format!"); // Only version 1 is currently supported
+	if ( data.ReadUint() != 40 ) throw Exception("Bad m_ImageData format!"); // Only version 1 is currently supported
 	unsigned int width = data.ReadUint();
 	int rawHeight = data.ReadInt();
 	unsigned int height = abs( rawHeight );
-	if ( width == 0 || height == 0 ) throw Exception("Bad image format!");
-	if ( width > USHRT_MAX || height > USHRT_MAX ) throw Exception("Bad image format!");
-	if ( data.ReadUshort() != 1 ) throw Exception("Bad image format!"); // Color planes
-	if ( data.ReadUshort() != 24 ) throw Exception("Bad image format!"); // Bits per pixel
-	if ( data.ReadUint() != 0 ) throw Exception("Bad image format!"); // Compression
+	if ( width == 0 || height == 0 ) throw Exception("Bad m_ImageData format!");
+	if ( width > USHRT_MAX || height > USHRT_MAX ) throw Exception("Bad m_ImageData format!");
+	if ( data.ReadUshort() != 1 ) throw Exception("Bad m_ImageData format!"); // Color planes
+	if ( data.ReadUshort() != 24 ) throw Exception("Bad m_ImageData format!"); // Bits per pixel
+	if ( data.ReadUint() != 0 ) throw Exception("Bad m_ImageData format!"); // Compression
 	data.Advance( 4 ); // Skip pixel array size (very unreliable, a value of 0 is not uncommon)
 	data.Advance( 4 + 4 ); // Skip X/Y resolution
-	if ( data.ReadUint() != 0 ) throw Exception("Bad image format!"); // Palette colors
-	if ( data.ReadUint() != 0 ) throw Exception("Bad image format!"); // Important colors
+	if ( data.ReadUint() != 0 ) throw Exception("Bad m_ImageData format!"); // Palette colors
+	if ( data.ReadUint() != 0 ) throw Exception("Bad m_ImageData format!"); // Important colors
 
 	// Pixel data
 	data.Move( pixelOffset );
 	unsigned int padding = ( width * 3 ) % 4;
 
-	image = new Color[ width * height ];
+	m_ImageData = new Color[ width * height ];
 		
 	for (unsigned short y = 0; y < height; y++)
 	{
 		for (unsigned short x = 0; x < width; x++)
 		{
 			unsigned int o = rawHeight > 0 ? x + ( height - y - 1 ) * width : x + y * width; // Flip image vertically if height is negative
-			image[ o ] = Color( data.PeekByte( 2 ), data.PeekByte( 1 ), data.PeekByte( 0 ) ); // BGR byte order
+			m_ImageData[ o ] = Color( data.PeekByte( 2 ), data.PeekByte( 1 ), data.PeekByte( 0 ) ); // BGR byte order
 			data.Advance( 3 );
 			if ( x == width - 1 ) data.Advance( padding );
 		}
 	}
 
-	this->width = (unsigned short)width;
-	this->height = (unsigned short)height;
+	this->m_Width = (unsigned short)width;
+	this->m_Height = (unsigned short)height;
 }
 
 void Image::SaveBMP( const std::string& filename )
 {
 	ByteWriter data( true );
-	unsigned int padding = ( width * 3 ) % 4;
+	unsigned int padding = ( m_Width * 3 ) % 4;
 
 	// BMP header
 	data.WriteUbyte( 'B' );
 	data.WriteUbyte( 'M' );
-	data.WriteUint( width * height * 3 + padding * height + 54 ); // File size
+	data.WriteUint( m_Width * m_Height * 3 + padding * m_Height + 54 ); // File size
 	data.WriteUint( 0 ); // Two application specific shorts
 	data.WriteUint( 54 ); // Offset to pixel array
 
 	// DIB header
 	data.WriteUint( 40 ); // Header size
-	data.WriteUint( width );
-	data.WriteUint( height );
+	data.WriteUint( m_Width );
+	data.WriteUint( m_Height );
 	data.WriteUshort( 1 ); // Color planes
 	data.WriteUshort( 24 ); // Bits per pixel
 	data.WriteUint( 0 ); // Compression
-	data.WriteUint( width * height * 3 + padding * height );
+	data.WriteUint( m_Width * m_Height * 3 + padding * m_Height );
 	data.WriteUint( 0 ); // X resolution, ignored
 	data.WriteUint( 0 ); // Y resolution, ignored
 	data.WriteUint( 0 ); // Palette colors
 	data.WriteUint( 0 ); // Important colors
 
 	// Pixel data
-	for ( short y = height - 1; y >= 0; y-- )
+	for ( short y = m_Height - 1; y >= 0; y-- )
 	{
-		for ( unsigned short x = 0; x < width; x++ )
+		for ( unsigned short x = 0; x < m_Width; x++ )
 		{
-			Color& col = image[ x + y * width ];
+			Color& col = m_ImageData[ x + y * m_Width ];
 			data.WriteUbyte( col.B );
 			data.WriteUbyte( col.G );
 			data.WriteUbyte( col.R );
 
-			if ( x == width - 1 ) data.Pad( padding );
+			if ( x == m_Width - 1 ) data.Pad( padding );
 		}
 	}
 
 	std::ofstream file( filename.c_str(), std::ios::binary );
-	if ( !file.is_open() ) throw Exception("Could not load image file!");
+	if ( !file.is_open() ) throw Exception("Could not load m_ImageData file!");
 
 	file.write( (char*)data.Data(), data.Length() );
 
@@ -220,41 +222,41 @@ void Image::LoadTGA( ByteReader& data )
 {
 	// TGA header
 	data.Advance( 1 ); // Image ID field length, ignored
-	if ( data.ReadUbyte() != 0 ) throw Exception("Bad image format!"); // Color map
+	if ( data.ReadUbyte() != 0 ) throw Exception("Bad m_ImageData format!"); // Color map
 	unsigned char type = data.ReadUbyte();
-	if ( type != 2 && type != 10 ) throw Exception("Bad image format!"); // Image type not true-color
+	if ( type != 2 && type != 10 ) throw Exception("Bad m_ImageData format!"); // Image type not true-color
 	data.Advance( 5 ); // Color map info, ignored
 	data.Advance( 4 ); // XY offset, ignored
 	unsigned short width = data.ReadUshort();
 	unsigned short height = data.ReadUshort();
 	unsigned char depth = data.ReadUbyte();
-	if ( depth != 24 && depth != 32 ) throw Exception("Bad image format!"); // Not RGB(A)
+	if ( depth != 24 && depth != 32 ) throw Exception("Bad m_ImageData format!"); // Not RGB(A)
 	unsigned char bytesPerPixel = depth / 8;
 	unsigned char descriptor = data.ReadUbyte();
-	if ( ( depth == 24 && descriptor != 0 ) || ( depth == 32 && descriptor != 8 ) ) throw Exception("Bad image format!"); // Check for alpha channel if bit depth is 32
+	if ( ( depth == 24 && descriptor != 0 ) || ( depth == 32 && descriptor != 8 ) ) throw Exception("Bad m_ImageData format!"); // Check for alpha channel if bit depth is 32
 
 	// If pixels are RLE encoded, they need to be unpacked first
 	if ( type == 10 )
 		DecodeRLE( data, width * height * bytesPerPixel, bytesPerPixel );
 		
 	// Pixel data
-	image = new Color[ width * height ];
+	m_ImageData = new Color[ width * height ];
 
 	for ( short y = height - 1; y >= 0; y-- )
 	{
 		for ( unsigned short x = 0; x < width; x++ )
 		{
 			if ( bytesPerPixel == 3 )
-				image[ x + y * width ] = Color( data.PeekByte( 2 ), data.PeekByte( 1 ), data.PeekByte( 0 ) ); // BGR byte order
+				m_ImageData[ x + y * width ] = Color( data.PeekByte( 2 ), data.PeekByte( 1 ), data.PeekByte( 0 ) ); // BGR byte order
 			else
-				image[ x + y * width ] = Color( data.PeekByte( 2 ), data.PeekByte( 1 ), data.PeekByte( 0 ), data.PeekByte( 3 ) ); // BGRA byte order
+				m_ImageData[ x + y * width ] = Color( data.PeekByte( 2 ), data.PeekByte( 1 ), data.PeekByte( 0 ), data.PeekByte( 3 ) ); // BGRA byte order
 
 			data.Advance( bytesPerPixel );
 		}
 	}
 
-	this->width = width;
-	this->height = height;
+	this->m_Width = width;
+	this->m_Height = height;
 }
 
 void Image::DecodeRLE( ByteReader& data, unsigned int decodedLength, unsigned char bytesPerPixel )
@@ -298,20 +300,20 @@ void Image::SaveTGA( const std::string& filename )
 	data.WriteUbyte( 0 ); // Color map
 	data.WriteUbyte( 10 ); // Image type (true-color, RLE)
 	data.Pad( 5 + 4 ); // No color map or XY offset
-	data.WriteUshort( width );
-	data.WriteUshort( height );
+	data.WriteUshort( m_Width );
+	data.WriteUshort( m_Height );
 	data.WriteUbyte( 24 ); // Bits per pixel
 	data.WriteUbyte( 0 ); // Image descriptor (No alpha depth or direction)
 
 	// Pixel data
 	std::vector<unsigned char> pixelData;
-	pixelData.reserve( width * height * 3 );
+	pixelData.reserve( m_Width * m_Height * 3 );
 
-	for ( short y = height - 1; y >= 0; y-- )
+	for ( short y = m_Height - 1; y >= 0; y-- )
 	{
-		for ( unsigned short x = 0; x < width; x++ )
+		for ( unsigned short x = 0; x < m_Width; x++ )
 		{
-			Color& col = image[ x + y * width ];
+			Color& col = m_ImageData[ x + y * m_Width ];
 			pixelData.push_back( col.B );
 			pixelData.push_back( col.G );
 			pixelData.push_back( col.R );
@@ -319,7 +321,7 @@ void Image::SaveTGA( const std::string& filename )
 	}
 
 	// Compress using RLE
-	EncodeRLE( data, pixelData, width );
+	EncodeRLE( data, pixelData, m_Width );
 
 	// Footer
 	data.WriteUint( 0 );
@@ -327,7 +329,7 @@ void Image::SaveTGA( const std::string& filename )
 	data.WriteString( "TRUEVISION-XFILE." );
 		
 	std::ofstream file( filename.c_str(), std::ios::binary );
-	if ( !file.is_open() ) throw Exception("Could not load image file!");
+	if ( !file.is_open() ) throw Exception("Could not load m_ImageData file!");
 
 	file.write( (char*)data.Data(), data.Length() );
 
@@ -420,8 +422,8 @@ void Image::LoadJPEG( ByteReader& data )
 
 	// JPEG header
 	jpeg_read_header( &cinfo, true );
-	if ( cinfo.output_width > USHRT_MAX ) throw Exception("Bad image format!");
-	if ( cinfo.output_height > USHRT_MAX ) throw Exception("Bad image format!");
+	if ( cinfo.output_width > USHRT_MAX ) throw Exception("Bad m_ImageData format!");
+	if ( cinfo.output_height > USHRT_MAX ) throw Exception("Bad m_ImageData format!");
 
 	// Pixel data
 	jpeg_start_decompress( &cinfo );
@@ -429,28 +431,28 @@ void Image::LoadJPEG( ByteReader& data )
 	int stride = cinfo.output_width * cinfo.output_components;
 	JSAMPARRAY buffer = cinfo.mem->alloc_sarray( (j_common_ptr)&cinfo, JPOOL_IMAGE, stride, 1 );
 
-	image = new Color[ cinfo.output_width * cinfo.output_height ];
+	m_ImageData = new Color[ cinfo.output_width * cinfo.output_height ];
 
 	for ( unsigned short y = 0; y < cinfo.output_height; y++ )
 	{
 		jpeg_read_scanlines( &cinfo, buffer, 1 );
 			
 		for (unsigned short x = 0; x < cinfo.output_width; x++ )
-			image[ x + y * cinfo.output_width ] = Color( buffer[0][x*3+0], buffer[0][x*3+1], buffer[0][x*3+2] );
+			m_ImageData[ x + y * cinfo.output_width ] = Color( buffer[0][x*3+0], buffer[0][x*3+1], buffer[0][x*3+2] );
 	}
 
 	jpeg_finish_decompress( &cinfo );
 
 	jpeg_destroy_decompress( &cinfo );
 
-	this->width = (unsigned short)cinfo.output_width;
-	this->height = (unsigned short)cinfo.output_height;
+	this->m_Width = (unsigned short)cinfo.output_width;
+	this->m_Height = (unsigned short)cinfo.output_height;
 }
 
 void Image::SaveJPEG( const std::string& filename )
 {
 	FILE* file = fopen( filename.c_str(), "wb" );
-	if ( !file ) throw Exception("Could not load image file!");
+	if ( !file ) throw Exception("Could not load m_ImageData file!");
 
 	// Initialize structures
 	jpeg_compress_struct cinfo;
@@ -459,8 +461,8 @@ void Image::SaveJPEG( const std::string& filename )
 	cinfo.err = jpeg_std_error( &jerr );
 	jpeg_create_compress( &cinfo );
 		
-	cinfo.image_width = width;
-	cinfo.image_height = height;
+	cinfo.image_width = m_Width;
+	cinfo.image_height = m_Height;
 	cinfo.input_components = 3;
 	cinfo.in_color_space = JCS_RGB;
 
@@ -471,13 +473,13 @@ void Image::SaveJPEG( const std::string& filename )
 
 	// Prepare pixel data
 	std::vector<unsigned char> pixelData;
-	pixelData.reserve( width * height * 3 );
+	pixelData.reserve( m_Width * m_Height * 3 );
 
-	for (unsigned short y = 0; y < height; y++ )
+	for (unsigned short y = 0; y < m_Height; y++ )
 	{
-		for (unsigned short x = 0; x < width; x++ )
+		for (unsigned short x = 0; x < m_Width; x++ )
 		{
-			Color& col = image[ x + y * width ];
+			Color& col = m_ImageData[ x + y * m_Width ];
 			pixelData.push_back( col.R );
 			pixelData.push_back( col.G );
 			pixelData.push_back( col.B );
@@ -487,9 +489,9 @@ void Image::SaveJPEG( const std::string& filename )
 	// Compress
 	jpeg_start_compress( &cinfo, true );
 
-	for (unsigned short y = 0; y < height; y++ )
+	for (unsigned short y = 0; y < m_Height; y++ )
 	{
-		JSAMPROW row = &pixelData[ y * width * 3 ];
+		JSAMPROW row = &pixelData[ y * m_Width * 3 ];
 		jpeg_write_scanlines( &cinfo, &row, 1 );
 	}
 
@@ -518,11 +520,11 @@ void Image::LoadPNG( ByteReader& data )
 
 	// Header
 	png_read_info( png, info );
-	if ( info->width > USHRT_MAX ) throw Exception("Bad image format!");
-	if ( info->height > USHRT_MAX ) throw Exception("Bad image format!");
+	if ( info->width > USHRT_MAX ) throw Exception("Bad m_ImageData format!");
+	if ( info->height > USHRT_MAX ) throw Exception("Bad m_ImageData format!");
 
 	// Pixel data
-	image = new Color[ info->width * info->height ];
+	m_ImageData = new Color[ info->width * info->height ];
 
 	png_uint_32 rowLength = png_get_rowbytes( png, info );
 	std::vector<unsigned char> row( rowLength );
@@ -533,16 +535,16 @@ void Image::LoadPNG( ByteReader& data )
 
 		if ( info->color_type == PNG_COLOR_TYPE_RGB )
 			for (unsigned short x = 0; x < info->width; x++ )
-				image[ x + y * info->width ] = Color( row[x*3+0], row[x*3+1], row[x*3+2] );
+				m_ImageData[ x + y * info->width ] = Color( row[x*3+0], row[x*3+1], row[x*3+2] );
 		else if ( info->color_type == PNG_COLOR_TYPE_RGBA )
 			for (unsigned short x = 0; x < info->width; x++ )
-				image[ x + y * info->width ] = Color( row[x*4+0], row[x*4+1], row[x*4+2], row[x*4+3] );
+				m_ImageData[ x + y * info->width ] = Color( row[x*4+0], row[x*4+1], row[x*4+2], row[x*4+3] );
 		else
-			throw Exception("Bad image format!");
+			throw Exception("Bad m_ImageData format!");
 	}
 
-	width = (unsigned short)info->width;
-	height = (unsigned short)info->height;
+	m_Width = (unsigned short)info->width;
+	m_Height = (unsigned short)info->height;
 
 	png_destroy_read_struct( &png, &info, NULL );
 }
@@ -550,7 +552,7 @@ void Image::LoadPNG( ByteReader& data )
 void Image::SavePNG( const std::string& filename )
 {
 	FILE* file = fopen( filename.c_str(), "wb" );
-	if ( !file ) throw Exception("Could not load image file!");
+	if ( !file ) throw Exception("Could not load m_ImageData file!");
 
 	// Initialize structures
 	png_structp png = png_create_write_struct( PNG_LIBPNG_VER_STRING, NULL, NULL, NULL );
@@ -560,18 +562,18 @@ void Image::SavePNG( const std::string& filename )
 
 	// Configure image
 	png_init_io( png, file );
-	png_set_IHDR( png, info, width, height, 8, PNG_COLOR_TYPE_RGB_ALPHA, PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_BASE, PNG_FILTER_TYPE_BASE );
+	png_set_IHDR( png, info, m_Width, m_Height, 8, PNG_COLOR_TYPE_RGB_ALPHA, PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_BASE, PNG_FILTER_TYPE_BASE );
 	png_write_info( png, info );
 
 	// Prepare pixel data
 	std::vector<unsigned char> pixelData;
-	pixelData.reserve( width * height * 4 );
+	pixelData.reserve( m_Width * m_Height * 4 );
 
-	for (unsigned short y = 0; y < height; y++ )
+	for (unsigned short y = 0; y < m_Height; y++ )
 	{
-		for (unsigned short x = 0; x < width; x++ )
+		for (unsigned short x = 0; x < m_Width; x++ )
 		{
-			Color& col = image[ x + y * width ];
+			Color& col = m_ImageData[ x + y * m_Width ];
 			pixelData.push_back( col.R );
 			pixelData.push_back( col.G );
 			pixelData.push_back( col.B );
@@ -580,8 +582,8 @@ void Image::SavePNG( const std::string& filename )
 	}
 
 	// Write rows
-	for (unsigned short y = 0; y < height; y++ )
-		png_write_row( png, &pixelData[ y * width * 4 ] );
+	for (unsigned short y = 0; y < m_Height; y++ )
+		png_write_row( png, &pixelData[ y * m_Width * 4 ] );
 
 	png_write_end( png, info );
 

@@ -1,7 +1,5 @@
 #pragma once
 
-#include <Utilities\Singleton.hpp>
-
 namespace MediaLayer
 {
 	enum class MouseButton
@@ -74,20 +72,5 @@ namespace MediaLayer
 		Left, Right, Up, Down,
 		Numpad0, Numpad1, Numpad2, Numpad3, Numpad4, Numpad5, Numpad6, Numpad7, Numpad8, Numpad9,
 		Add, Subtract, Multiply, Divide
-	};
-
-	struct Events : public Singleton<Events>
-	{
-		void Process(void);
-		void Update(void);
-		bool IsQuitRequested(void) const;
-
-	private:
-		friend Singleton<Events>;
-		Events(void) :
-			m_IsUserQuit{ false }
-		{}
-
-		bool m_IsUserQuit;
 	};
 }
