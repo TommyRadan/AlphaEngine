@@ -1,11 +1,14 @@
 #pragma once
 
 template <typename Type>
-class ISingleton
+class Singleton
 {
+	Singleton(const Singleton&);
+	Singleton& operator=(const Singleton&);
+
 protected:
-	ISingleton(void) = default;
-	virtual ~ISingleton(void) = default;
+	Singleton(void) = default;
+	virtual ~Singleton(void) = default;
 
 public:
 	static Type* GetInstance(void) {
