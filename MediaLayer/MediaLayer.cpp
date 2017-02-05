@@ -38,7 +38,7 @@ void MediaLayer::SwapBuffers(void)
 	// TODO: Implement
 }
 
-void MediaLayer::ShowDialog(const char* title, const char* text)
+void MediaLayer::ShowDialog(const std::string& title, const std::string& text)
 {
 	// To avoid warnings until implementation
 	(void) title;

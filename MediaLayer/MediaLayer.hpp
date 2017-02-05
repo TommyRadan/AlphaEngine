@@ -7,6 +7,9 @@
 // Global settings
 #include <Control/Settings.hpp>
 
+// Standard Library
+#include <string>
+
 struct MediaLayer : 
 	public Singleton<MediaLayer>,
 	public Component
@@ -15,7 +18,7 @@ struct MediaLayer :
 	void Quit(void) override;
 
 	void SwapBuffers(void);
-	void ShowDialog(const char* title, const char* text);
+	void ShowDialog(const std::string&, const std::string&);
 
 private:
 	template<typename MediaLayer>
