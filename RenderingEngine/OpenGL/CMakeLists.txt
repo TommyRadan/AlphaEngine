@@ -1,0 +1,25 @@
+cmake_minimum_required(VERSION 3.6)
+project(AlphaEngine.RenderingEngine.OpenGL)
+
+set(OPENGL_LIB_NAME OpenGL)
+
+set(OPENGL_SOURCE_FILES
+        RenderingEngine/OpenGL/Framebuffer.cpp
+        RenderingEngine/OpenGL/Framebuffer.hpp
+        RenderingEngine/OpenGL/OpenGL.cpp
+        RenderingEngine/OpenGL/OpenGL.hpp
+        RenderingEngine/OpenGL/Program.cpp
+        RenderingEngine/OpenGL/Program.hpp
+        RenderingEngine/OpenGL/Renderbuffer.cpp
+        RenderingEngine/OpenGL/Renderbuffer.hpp
+        RenderingEngine/OpenGL/Shader.cpp
+        RenderingEngine/OpenGL/Shader.hpp
+        RenderingEngine/OpenGL/Texture.cpp
+        RenderingEngine/OpenGL/Texture.hpp
+        RenderingEngine/OpenGL/Typedef.hpp
+        RenderingEngine/OpenGL/VertexArray.cpp
+        RenderingEngine/OpenGL/VertexArray.hpp
+        RenderingEngine/OpenGL/VertexBuffer.cpp
+        RenderingEngine/OpenGL/VertexBuffer.hpp)
+
+add_library(${OPENGL_LIB_NAME} STATIC ${OPENGL_SOURCE_FILES})
