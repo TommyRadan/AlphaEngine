@@ -1,7 +1,7 @@
 #pragma once
 
 #include <Mathematics/Math.hpp>
-#include <Utilities/ISingleton.hpp>
+#include <Utilities/Singleton.hpp>
 #include <Control/Settings.hpp>
 
 class Camera : public ISingleton<Camera>

@@ -3,7 +3,7 @@
 // Utilities
 #include <Utilities/Exception.hpp>
 #include <Utilities/FileToString.hpp>
-#include <Utilities/ISingleton.hpp>
+#include <Utilities/Singleton.hpp>
 
 // Base class
 #include <RenderingEngine/Renderer.hpp>

@@ -1,15 +1,15 @@
 #pragma once
 
-#include <Utilities/ISingleton.hpp>
+#include <Utilities/Singleton.hpp>
 #include <Utilities/Exception.hpp>
-#include <Utilities/IComponent.hpp>
+#include <Utilities/Component.hpp>
 
 // Global settings
 #include <Control/Settings.hpp>
 
 struct MediaLayer : 
-	public ISingleton<MediaLayer>,
-	public IComponent
+	public Singleton<MediaLayer>,
+	public Component
 {
 	void Init(void) override;
 	void Quit(void) override;
@@ -19,7 +19,7 @@ struct MediaLayer :
 
 private:
 	template<typename MediaLayer>
-	friend class ISingleton;
+	friend class Singleton;
 	MediaLayer(void);
 
 	const Settings* const m_Settings;

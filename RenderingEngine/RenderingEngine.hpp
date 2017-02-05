@@ -1,9 +1,8 @@
 #pragma once
 
-#include <Utilities/IComponent.hpp>
+#include <Utilities/Component.hpp>
+#include <Utilities/Singleton.hpp>
 #include <Utilities/Exception.hpp>
-#include <Utilities/Color.hpp>
-#include <Utilities/Mesh.hpp>
 
 // Global settings
 #include <Control/Settings.hpp>
@@ -14,15 +13,18 @@
 #include "Renderer.hpp"
 #include "Camera.hpp"
 #include "Model.hpp"
+#include "Color.hpp"
+#include "Mesh.hpp"
 
 // Specific renderers
 #include "StandardRenderer/StandardRenderer.hpp"
 
 class RenderingEngine : 
-	public IComponent,
-	public ISingleton<RenderingEngine>
+	public Component,
+	public Singleton<RenderingEngine>
 {
-	friend ISingleton<RenderingEngine>;
+	template<typename RenderingEngine>
+	friend Singleton;
 	RenderingEngine(void) : 
 		m_IsInit{ false },
 		m_GlContext{ OpenGL::Context::GetInstance() }

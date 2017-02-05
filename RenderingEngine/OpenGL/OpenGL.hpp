@@ -11,9 +11,9 @@
 #include "VertexArray.hpp"
 #include "VertexBuffer.hpp"
 
-#include <Utilities\Color.hpp>
-#include <Utilities\Exception.hpp>
-#include <Utilities\Singleton.hpp>
+#include <Utilities/Color.hpp>
+#include <Utilities/Exception.hpp>
+#include <Utilities/Singleton.hpp>
 
 namespace OpenGL
 {
