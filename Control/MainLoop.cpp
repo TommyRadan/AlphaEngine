@@ -5,6 +5,9 @@
 
 int main(int argc, char* argv[])
 {
+	(void) argc;
+	(void) argv;
+
 	try {
 		MediaLayer::GetInstance()->Init();
 		RenderingEngine::GetInstance()->Init();
