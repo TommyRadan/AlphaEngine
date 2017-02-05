@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.6)
 project(AlphaEngine.Mathematics)
 
-set(CMAKE_CXX_STANDARD 11)
+set(MATH_LIB_NAME Math)
 
 set(MATH_SOURCE_FILES
     Mathematics/Matrix3.cpp
@@ -10,5 +10,4 @@ set(MATH_SOURCE_FILES
     Mathematics/Vector3.cpp
     Mathematics/Vector4.cpp)
 
-set(LIBRARY_OUTPUT_PATH ../Binaries/)
-add_library(Math STATIC ${MATH_SOURCE_FILES})
+add_library(${MATH_LIB_NAME} STATIC ${MATH_SOURCE_FILES})

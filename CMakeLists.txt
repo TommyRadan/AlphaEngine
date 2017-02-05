@@ -1,33 +1,35 @@
+# This file defines AlphaEngine build system
+
 cmake_minimum_required(VERSION 3.6)
 project(AlphaEngine)
 
+# Use C++11 standard
 set(CMAKE_CXX_STANDARD 11)
 
+# Define different target directories based on OS
+if (WIN32)
+    set(LIBRARY_OUTPUT_PATH ${CMAKE_SOURCE_DIR}/Binaries/Windows/)
+    set(EXECUTABLE_OUTPUT_PATH ${CMAKE_SOURCE_DIR}/Binaries/Windows/)
+elseif (APPLE)
+    set(LIBRARY_OUTPUT_PATH ${CMAKE_SOURCE_DIR}/Binaries/Apple/)
+    set(EXECUTABLE_OUTPUT_PATH ${CMAKE_SOURCE_DIR}/Binaries/Apple/)
+elseif (UNIX)
+    set(LIBRARY_OUTPUT_PATH ${CMAKE_SOURCE_DIR}/Binaries/Unix/)
+    set(EXECUTABLE_OUTPUT_PATH ${CMAKE_SOURCE_DIR}/Binaries/Unix/)
+endif ()
+
+# Set top level directory to be searched for includes
+include_directories(${CMAKE_SOURCE_DIR})
+
+# Include subprojects
+include(Mathematics/CMakeLists.txt)
+include(Control/CMakeLists.txt)
+include(MediaLayer/CMakeLists.txt)
+
 set(SOURCE_FILES
-    Control/MainLoop.cpp
-    Control/Settings.hpp
-    Mathematics/Math.hpp
-    Mathematics/Matrix3.cpp
-    Mathematics/Matrix3.hpp
-    Mathematics/Matrix4.cpp
-    Mathematics/Matrix4.hpp
-    Mathematics/Util.hpp
-    Mathematics/Vector2.cpp
-    Mathematics/Vector2.hpp
-    Mathematics/Vector3.cpp
-    Mathematics/Vector3.hpp
-    Mathematics/Vector4.cpp
-    Mathematics/Vector4.hpp
-    MediaLayer/Events.cpp
-    MediaLayer/Events.hpp
-    MediaLayer/MediaLayer.cpp
-    MediaLayer/MediaLayer.hpp
-    MediaLayer/Window.cpp
-    MediaLayer/Window.hpp
-    MediaLayer/Window_Win32.cpp
-    MediaLayer/Window_X11.cpp
     RenderingEngine/OpenGL/Framebuffer.cpp
     RenderingEngine/OpenGL/Framebuffer.hpp
+    RenderingEngine/OpenGL/Extensions.hpp
     RenderingEngine/OpenGL/OpenGL.cpp
     RenderingEngine/OpenGL/OpenGL.hpp
     RenderingEngine/OpenGL/Program.cpp
@@ -148,19 +150,24 @@ set(SOURCE_FILES
     Utilities/zlib/zlib.h
     Utilities/zlib/zutil.c
     Utilities/zlib/zutil.h
-    Utilities/ByteBuffer.hpp
-    Utilities/Color.hpp
-        Utilities/IComponent.hpp
-    Utilities/Exception.hpp
-    Utilities/FileToString.hpp
     Utilities/Image.cpp
     Utilities/Image.hpp
     Utilities/Mesh.cpp
     Utilities/Mesh.hpp
     Utilities/ObjLoader.hpp
-        Utilities/ISingleton.hpp
-    Utilities/Vertex.hpp)
+    Utilities/Singleton.hpp
+    Utilities/Vertex.hpp
+    RenderingEngine/OpenGL/Extensions.cpp)
 
-include_directories(.)
+# Main shared lib
+add_library(AlphaEngine SHARED ${SOURCE_FILES})
 
-add_executable(AlphaEngine ${SOURCE_FILES})
+# Add Dependencies
+add_dependencies(AlphaEngine ${MATH_LIB_NAME})
+target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}/lib${MATH_LIB_NAME}.a)
+
+add_dependencies(AlphaEngine ${CONTROL_LIB_NAME})
+target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}/lib${CONTROL_LIB_NAME}.a)
+
+add_dependencies(AlphaEngine ${MEDIALAYER_LIB_NAME})
+target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}/lib${MEDIALAYER_LIB_NAME}.a)
