@@ -13,5 +13,5 @@ struct Vertex
 	Math::Vector3 Normal;
 };
 
-typedef std::vector<Vertex> VertexVector;
-typedef std::vector<std::pair<std::string, unsigned int> > VertexFormat;
+using VertexVector = std::vector<Vertex>;
+using VertexFormat = std::vector<std::pair<std::string, unsigned int>>;
