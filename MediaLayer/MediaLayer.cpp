@@ -1,9 +1,10 @@
 #include "MediaLayer.hpp"
 
 MediaLayer::MediaLayer(void) :
-	m_Settings{ Settings::GetInstance() },
-	m_IsInit{ false }
-{}
+	m_Settings{ Settings::GetInstance() }
+{
+	m_IsInit = false;
+}
 
 void MediaLayer::Init(void)
 {
