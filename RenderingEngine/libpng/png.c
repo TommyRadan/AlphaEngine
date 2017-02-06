@@ -679,12 +679,11 @@ png_sig_bytes(void)
 png_charp PNGAPI
 png_get_copyright(png_structp png_ptr)
 {
-   if (&png_ptr != NULL)  /* silence compiler warning about unused png_ptr */
-   return ((png_charp) "\n libpng version 1.2.8 - December 3, 2004\n\
-   Copyright (c) 1998-2004 Glenn Randers-Pehrson\n\
-   Copyright (c) 1996-1997 Andreas Dilger\n\
-   Copyright (c) 1995-1996 Guy Eric Schalnat, Group 42, Inc.\n");
-   return ((png_charp) "");
+    (void) png_ptr;
+    return ((png_charp) "\n libpng version 1.2.8 - December 3, 2004\n\
+    Copyright (c) 1998-2004 Glenn Randers-Pehrson\n\
+    Copyright (c) 1996-1997 Andreas Dilger\n\
+    Copyright (c) 1995-1996 Guy Eric Schalnat, Group 42, Inc.\n");
 }
 
 /* The following return the library version as a short string in the
@@ -699,27 +698,24 @@ png_charp PNGAPI
 png_get_libpng_ver(png_structp png_ptr)
 {
    /* Version of *.c files used when building libpng */
-   if (&png_ptr != NULL)  /* silence compiler warning about unused png_ptr */
-      return ((png_charp) PNG_LIBPNG_VER_STRING);
-   return ((png_charp) "");
+    (void) png_ptr;
+    return ((png_charp) PNG_LIBPNG_VER_STRING);
 }
 
 png_charp PNGAPI
 png_get_header_ver(png_structp png_ptr)
 {
-   /* Version of *.h files used when building libpng */
-   if (&png_ptr != NULL)  /* silence compiler warning about unused png_ptr */
-      return ((png_charp) PNG_LIBPNG_VER_STRING);
-   return ((png_charp) "");
+    /* Version of *.h files used when building libpng */
+    (void) png_ptr;
+    return ((png_charp) PNG_LIBPNG_VER_STRING);
 }
 
 png_charp PNGAPI
 png_get_header_version(png_structp png_ptr)
 {
-   /* Returns longer string containing both version and date */
-   if (&png_ptr != NULL)  /* silence compiler warning about unused png_ptr */
-      return ((png_charp) PNG_HEADER_VERSION_STRING);
-   return ((png_charp) "");
+    /* Returns longer string containing both version and date */
+    (void) png_ptr;
+    return ((png_charp) PNG_HEADER_VERSION_STRING);
 }
 
 #ifdef PNG_HANDLE_AS_UNKNOWN_SUPPORTED
