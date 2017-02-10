@@ -1,11 +1,11 @@
 #include "Geometry.hpp"
 #include "Utilities/Exception.hpp"
 
-Geometry::Geometry() :
+Geometry::Geometry(void) :
 	m_DataUploaded { false }
 {}
 
-Geometry::~Geometry()
+Geometry::~Geometry(void)
 {
 	delete m_VertexArrayObject;
 	delete m_VertexBufferObject;
