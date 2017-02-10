@@ -14,19 +14,21 @@
 #include <Utilities/Color.hpp>
 #include <Utilities/Exception.hpp>
 #include <Utilities/Singleton.hpp>
+#include <Utilities/Component.hpp>
 
 namespace OpenGL
 {
-	class Context : public Singleton<Context>
+	class Context :
+			public Singleton<Context>,
+			public Component
 	{
-		friend Singleton<Context>;
+		template <typename Context>
+		friend Singleton;
 		Context(void);
 
-		bool m_IsInit;
-
 	public:
-		void Init(void);
-		void Quit(void);
+		void Init(void) override;
+		void Quit(void) override;
 
 		void Enable(const OpenGL::Capability capability);
 		void Disable(const OpenGL::Capability capability);
