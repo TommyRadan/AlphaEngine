@@ -6,7 +6,7 @@
 
 #include "Exception.hpp"
 
-static std::string FileToString(std::string& filename)
+static std::string FileToString(const std::string& filename)
 {
 	std::ifstream file(filename);
 	if (!file.is_open()) {
