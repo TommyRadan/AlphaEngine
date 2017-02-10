@@ -13,7 +13,7 @@
 #include "Renderer.hpp"
 #include "Camera.hpp"
 #include "Model.hpp"
-#include "Color.hpp"
+#include "ImageLoading/Color.hpp"
 #include "Mesh.hpp"
 
 // Specific renderers
