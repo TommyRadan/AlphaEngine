@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.6)
 project(AlphaEngine.RenderingEngine.OpenGL)
 
+# Use C++11 standard
+set(CMAKE_CXX_STANDARD 11)
+
 set(OPENGL_LIB_NAME OpenGL)
 
 set(OPENGL_SOURCE_FILES
