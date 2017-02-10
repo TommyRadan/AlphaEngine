@@ -2,7 +2,7 @@
 
 #include <Utilities/Singleton.hpp>
 
-#include<string>
+#include <string>
 
 enum class WinType {
 	WIN_TYPE_WINDOWED,
@@ -10,7 +10,8 @@ enum class WinType {
 	WIN_TYPE_FULLSCREEN
 };
 
-class Settings : public Singleton<Settings>
+class Settings :
+		public Singleton<Settings>
 {
 	template<typename Settings>
 	friend class Singleton;
