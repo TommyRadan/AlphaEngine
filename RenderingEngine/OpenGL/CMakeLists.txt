@@ -6,6 +6,8 @@ set(CMAKE_CXX_STANDARD 11)
 
 set(OPENGL_LIB_NAME OpenGL)
 
+include(RenderingEngine/OpenGL/gl3w/CMakeLists.txt)
+
 set(OPENGL_SOURCE_FILES
         RenderingEngine/OpenGL/Framebuffer.cpp
         RenderingEngine/OpenGL/Framebuffer.hpp
@@ -26,3 +28,7 @@ set(OPENGL_SOURCE_FILES
         RenderingEngine/OpenGL/VertexBuffer.hpp)
 
 add_library(${OPENGL_LIB_NAME} STATIC ${OPENGL_SOURCE_FILES})
+
+# Add Dependencies
+add_dependencies(${OPENGL_LIB_NAME} ${GL3W_LIB_NAME})
+target_link_libraries(${OPENGL_LIB_NAME} ${LIBRARY_OUTPUT_PATH}/lib${GL3W_LIB_NAME}.a)
