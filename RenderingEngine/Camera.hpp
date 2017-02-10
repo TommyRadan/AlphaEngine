@@ -4,10 +4,11 @@
 #include <Utilities/Singleton.hpp>
 #include <Control/Settings.hpp>
 
-class Camera : public ISingleton<Camera>
+class Camera :
+		public Singleton<Camera>
 {
 	template<typename Camera>
-	friend class ISingleton;
+	friend class Singleton;
 	Camera(void)
 	{
 		m_Position = Math::Vector3(0.0f, 0.0f, 0.0f);
