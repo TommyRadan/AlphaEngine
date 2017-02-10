@@ -4,8 +4,8 @@
 #include "OpenGL/OpenGL.hpp"
 
 // Mesh container
-#include <Utilities/Vertex.hpp>
-#include <Utilities/Mesh.hpp>
+#include "Vertex.hpp"
+#include "Mesh.hpp"
 
 class Geometry
 {
