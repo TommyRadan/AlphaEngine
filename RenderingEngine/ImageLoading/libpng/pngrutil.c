@@ -544,6 +544,8 @@ png_handle_PLTE(png_structp png_ptr, png_infop info_ptr, png_uint_32 length)
 void /* PRIVATE */
 png_handle_IEND(png_structp png_ptr, png_infop info_ptr, png_uint_32 length)
 {
+   (void) info_ptr;
+
    png_debug(1, "in png_handle_IEND\n");
 
    if (!(png_ptr->mode & PNG_HAVE_IHDR) || !(png_ptr->mode & PNG_HAVE_IDAT))
@@ -557,10 +559,9 @@ png_handle_IEND(png_structp png_ptr, png_infop info_ptr, png_uint_32 length)
    {
       png_warning(png_ptr, "Incorrect IEND chunk length");
    }
-   png_crc_finish(png_ptr, length);
 
-   if (&info_ptr == NULL) /* quiet compiler warnings about unused info_ptr */
-      return;
+   png_crc_finish(png_ptr, length);
+   return;
 }
 
 #if defined(PNG_READ_gAMA_SUPPORTED)
