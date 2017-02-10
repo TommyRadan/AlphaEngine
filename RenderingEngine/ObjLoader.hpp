@@ -2,7 +2,7 @@
 
 #include <Utilities/Exception.hpp>
 #include <Mathematics/Math.hpp>
-#include <Utilities/Vertex.hpp>
+#include "Vertex.hpp"
 
 #include <fstream>
 #include <vector>
