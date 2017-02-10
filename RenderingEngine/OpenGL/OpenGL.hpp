@@ -22,6 +22,7 @@ namespace OpenGL
 			public Singleton<Context>,
 			public Component
 	{
+	private:
 		template <typename Context>
 		friend class Singleton;
 		Context(void);
