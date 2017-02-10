@@ -7,7 +7,7 @@
 #include <exception>
 #include <string>
 
-#include <Utilities\Exception.hpp>
+#include <Utilities/Exception.hpp>
 
 namespace OpenGL
 {
