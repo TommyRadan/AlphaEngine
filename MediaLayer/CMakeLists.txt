@@ -1,16 +1,17 @@
 cmake_minimum_required(VERSION 3.6)
-project(AlphaEngine.MediaLayer)
+project(MediaLayer CXX)
 
 # Use C++11 standard
 set(CMAKE_CXX_STANDARD 11)
 
-set(MEDIALAYER_LIB_NAME MediaLayer)
+set(CMAKE_VERBOSE_MAKEFILE false)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON) # -fPIC
 
 set(MEDIALAYER_SOURCE_FILES
-        MediaLayer/MediaLayer.hpp
-        MediaLayer/Window.hpp
-        MediaLayer/Events.hpp
-        MediaLayer/MediaLayer.cpp
-        MediaLayer/Window.cpp)
+        MediaLayer.hpp
+        Window.hpp
+        Events.hpp
+        MediaLayer.cpp
+        Window.cpp)
 
-add_library(${MEDIALAYER_LIB_NAME} STATIC ${MEDIALAYER_SOURCE_FILES})
+add_library(MediaLayer STATIC ${MEDIALAYER_SOURCE_FILES})

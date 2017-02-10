@@ -1,21 +1,18 @@
-cmake_minimum_required(VERSION 3.1.3 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.6)
 project(gl3w)
-
-set(GL3W_LIB_NAME gl3w)
 
 set(CMAKE_VERBOSE_MAKEFILE false)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON) # -fPIC
 
-set(SOURCE_FILES
-		RenderingEngine/OpenGL/gl3w/gl3w.c
-		RenderingEngine/OpenGL/gl3w/gl3w.h
-		RenderingEngine/OpenGL/gl3w/glcorearb.h
-)
+set(GL3W_SOURCE_FILES
+		gl3w.c
+		gl3w.h
+		glcorearb.h)
 
-# add and depend on OpenGL
+# Depend on OpenGL
 find_package(OpenGL REQUIRED)
 set(EXTERNAL_INCLUDE_DIRS ${EXTERNAL_INCLUDE_DIRS} ${OPENGL_INCLUDE_DIR})
 set(EXTERNAL_LIBRARIES ${EXTERNAL_LIBRARIES} ${OPENGL_LIBRARIES})
 
-# create gl3w target
-add_library(${CMAKE_PROJECT_NAME} STATIC ${SOURCE_FILES})
+# Add Library
+add_library(gl3w STATIC ${GL3W_SOURCE_FILES})

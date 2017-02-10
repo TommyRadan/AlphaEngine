@@ -1,13 +1,14 @@
 cmake_minimum_required(VERSION 3.6)
-project(AlphaEngine.Control)
+project(Control CXX)
 
 # Use C++11 standard
 set(CMAKE_CXX_STANDARD 11)
 
-set(CONTROL_LIB_NAME Control)
+set(CMAKE_VERBOSE_MAKEFILE false)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON) # -fPIC
 
 set(CONTROL_SOURCE_FILES
-        Control/MainLoop.cpp
-        Control/Settings.hpp)
+        MainLoop.cpp
+        Settings.hpp)
 
-add_library(${CONTROL_LIB_NAME} STATIC ${CONTROL_SOURCE_FILES})
+add_library(Control STATIC ${CONTROL_SOURCE_FILES})

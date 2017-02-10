@@ -3,9 +3,6 @@
 cmake_minimum_required(VERSION 3.6)
 project(AlphaEngine)
 
-# Use C++11 standard
-set(CMAKE_CXX_STANDARD 11)
-
 # Define different target directories based on OS
 if (WIN32)
     set(LIBRARY_OUTPUT_PATH ${CMAKE_SOURCE_DIR}/Binaries/Windows/)
@@ -22,23 +19,28 @@ endif ()
 include_directories(${CMAKE_SOURCE_DIR})
 
 # Include subprojects
-include(Mathematics/CMakeLists.txt)
-include(Control/CMakeLists.txt)
-include(MediaLayer/CMakeLists.txt)
-include(RenderingEngine/CMakeLists.txt)
+add_subdirectory(Mathematics)
+add_subdirectory(Control)
+add_subdirectory(MediaLayer)
+add_subdirectory(RenderingEngine)
 
 # Main shared lib
 add_library(AlphaEngine SHARED Control/Dummy.cpp)
 
 # Add Dependencies
-add_dependencies(AlphaEngine ${MATH_LIB_NAME})
-target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}/lib${MATH_LIB_NAME}.a)
+add_dependencies(AlphaEngine Mathematics)
+add_dependencies(AlphaEngine Control)
+add_dependencies(AlphaEngine MediaLayer)
+add_dependencies(AlphaEngine RenderingEngine)
 
-add_dependencies(AlphaEngine ${CONTROL_LIB_NAME})
-target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}/lib${CONTROL_LIB_NAME}.a)
-
-add_dependencies(AlphaEngine ${MEDIALAYER_LIB_NAME})
-target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}/lib${MEDIALAYER_LIB_NAME}.a)
-
-add_dependencies(AlphaEngine ${RENDERINGENGINE_LIB_NAME})
-target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}/lib${RENDERINGENGINE_LIB_NAME}.a)
+# Link Libraries
+target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}/libMathematics.a)
+target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}/libControl.a)
+target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}/libMediaLayer.a)
+target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}/libRenderingEngine.a)
+target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}/libImageLoading.a)
+target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}/libpng.a)
+target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}/libjpeg.a)
+target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}/zlib.a)
+target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}/libOpenGL.a)
+target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}/libgl3w.a)

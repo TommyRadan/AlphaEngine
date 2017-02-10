@@ -1,33 +1,31 @@
 cmake_minimum_required(VERSION 3.6)
-project(AlphaEngine.RenderingEngine.ImageLoading)
+project(ImageLoading)
 
-set(IMAGELOADING_LIB_NAME ImageLoading)
+add_subdirectory(libjpeg)
+add_subdirectory(libpng)
 
-include(RenderingEngine/ImageLoading/libjpeg/CMakeLists.txt)
-include(RenderingEngine/ImageLoading/libpng/CMakeLists.txt)
+set(CMAKE_VERBOSE_MAKEFILE false)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON) # -fPIC
 
 set(IMAGELOADING_SOURCE_FILES
-        RenderingEngine/ImageLoading/Image.cpp
-        RenderingEngine/ImageLoading/Image.hpp
-        RenderingEngine/ImageLoading/Exporters/BmpExporter.hpp
-        RenderingEngine/ImageLoading/Exporters/BmpExporter.cpp
-        RenderingEngine/ImageLoading/Exporters/JpegExporter.hpp
-        RenderingEngine/ImageLoading/Exporters/JpegExporter.cpp
-        RenderingEngine/ImageLoading/Exporters/PngExporter.hpp
-        RenderingEngine/ImageLoading/Exporters/PngExporter.cpp
-        RenderingEngine/ImageLoading/Importers/BmpImporter.hpp
-        RenderingEngine/ImageLoading/Importers/BmpImporter.cpp
-        RenderingEngine/ImageLoading/Importers/JpegImporter.hpp
-        RenderingEngine/ImageLoading/Importers/JpegImporter.cpp
-        RenderingEngine/ImageLoading/Importers/PngImporter.hpp
-        RenderingEngine/ImageLoading/Importers/PngImporter.cpp)
+        Image.cpp
+        Image.hpp
+        Exporters/BmpExporter.hpp
+        Exporters/BmpExporter.cpp
+        Exporters/JpegExporter.hpp
+        Exporters/JpegExporter.cpp
+        Exporters/PngExporter.hpp
+        Exporters/PngExporter.cpp
+        Importers/BmpImporter.hpp
+        Importers/BmpImporter.cpp
+        Importers/JpegImporter.hpp
+        Importers/JpegImporter.cpp
+        Importers/PngImporter.hpp
+        Importers/PngImporter.cpp)
 
 # Main lib
-add_library(${IMAGELOADING_LIB_NAME} STATIC ${IMAGELOADING_SOURCE_FILES})
+add_library(ImageLoading STATIC ${IMAGELOADING_SOURCE_FILES})
 
 # Add Dependencies
-add_dependencies(${IMAGELOADING_LIB_NAME} ${JPEG_LIB_NAME})
-target_link_libraries(${IMAGELOADING_LIB_NAME} ${LIBRARY_OUTPUT_PATH}/lib${JPEG_LIB_NAME}.a)
-
-add_dependencies(${IMAGELOADING_LIB_NAME} ${PNG_LIB_NAME})
-target_link_libraries(${IMAGELOADING_LIB_NAME} ${LIBRARY_OUTPUT_PATH}/lib${PNG_LIB_NAME}.a)
+add_dependencies(ImageLoading libjpeg)
+add_dependencies(ImageLoading libpng)
