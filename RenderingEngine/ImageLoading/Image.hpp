@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Color.hpp"
+#include <Utilities/Color.hpp>
 
 struct Image
 {

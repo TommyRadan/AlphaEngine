@@ -9,7 +9,6 @@ include(RenderingEngine/ImageLoading/libpng/CMakeLists.txt)
 set(IMAGELOADING_SOURCE_FILES
         RenderingEngine/ImageLoading/Image.cpp
         RenderingEngine/ImageLoading/Image.hpp
-        RenderingEngine/ImageLoading/Color.hpp
         RenderingEngine/ImageLoading/Exporters/BmpExporter.hpp
         RenderingEngine/ImageLoading/Exporters/BmpExporter.cpp
         RenderingEngine/ImageLoading/Exporters/JpegExporter.hpp

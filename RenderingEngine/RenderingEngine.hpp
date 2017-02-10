@@ -3,6 +3,7 @@
 #include <Utilities/Component.hpp>
 #include <Utilities/Singleton.hpp>
 #include <Utilities/Exception.hpp>
+#include <Utilities/Color.hpp>
 
 // Global settings
 #include <Control/Settings.hpp>
@@ -13,7 +14,6 @@
 #include "Renderer.hpp"
 #include "Camera.hpp"
 #include "Model.hpp"
-#include "ImageLoading/Color.hpp"
 #include "Mesh.hpp"
 
 // Specific renderers
