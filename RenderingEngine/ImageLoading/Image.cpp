@@ -65,6 +65,7 @@ const Image &Image::operator=(Image&& image)
 	image.m_Width = 0u;
 	image.m_Height = 0u;
 	image.m_ImageData = nullptr;
+	return *this;
 }
 
 const unsigned int Image::GetWidth(void) const
@@ -84,7 +85,7 @@ const Color* const Image::GetPixels(void) const
 
 Color Image::GetPixel(const unsigned int x, const unsigned int y) const
 {
-	if (x >= m_Width || y >= m_Height || x < 0u || y < 0u) return Color();
+	if (x >= m_Width || y >= m_Height) return Color();
 	return m_ImageData[x + y * m_Width];
 }
 
