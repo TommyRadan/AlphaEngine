@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include "Typedef.hpp"
 
 namespace OpenGL
@@ -10,7 +11,7 @@ namespace OpenGL
 		VertexBuffer(void);
 		~VertexBuffer(void);
 
-		const GLuint Handle(void) const;
+		const unsigned int Handle(void) const;
 
 		void Data(const void* data, const size_t length, const BufferUsage usage);
 		void SubData(const void* data, const size_t offset, const size_t length);
@@ -18,6 +19,6 @@ namespace OpenGL
 		void GetSubData(void* data, const size_t offset, const size_t length);
 
 	private:
-		GLuint m_ObjectID;
+		unsigned int m_ObjectID;
 	};
 }

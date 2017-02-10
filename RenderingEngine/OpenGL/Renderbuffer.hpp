@@ -10,11 +10,11 @@ namespace OpenGL
 		Renderbuffer(void);
 		~Renderbuffer(void);
 
-		const GLuint Handle(void) const;
+		const unsigned int Handle(void) const;
 
 		void Storage(const unsigned int width, const unsigned int height, const InternalFormat format);
 
 	private:
-		GLuint m_ObjectID;
+		unsigned int m_ObjectID;
 	};
 }

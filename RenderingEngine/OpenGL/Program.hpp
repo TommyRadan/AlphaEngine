@@ -1,13 +1,10 @@
 #pragma once
 
-// OpenGL
 #include "Typedef.hpp"
 #include "Shader.hpp"
 
-// Mathematics
-#include <Mathematics\Math.hpp>
+#include <Mathematics/Math.hpp>
 
-// Standard Library
 #include <string>
 
 namespace OpenGL
@@ -18,7 +15,7 @@ namespace OpenGL
 		Program(void);
 		~Program(void);
 
-		const GLuint Handle(void) const;
+		const unsigned int Handle(void) const;
 
 		void Start(void);
 		void Stop(void);
@@ -56,6 +53,6 @@ namespace OpenGL
 		void SetUniform(const Uniform& uniform, const Math::Matrix4& value);
 
 	private:
-		GLuint m_ObjectID;
+		unsigned int m_ObjectID;
 	};
 }

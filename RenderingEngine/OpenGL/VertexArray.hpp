@@ -10,12 +10,9 @@ namespace OpenGL
 	{
 	public:
 		VertexArray(void);
-		VertexArray(const VertexArray& other);
-
 		~VertexArray(void);
 
-		const GLuint Handle(void) const;
-		const VertexArray& operator=(const VertexArray& other);
+		const unsigned int Handle(void) const;
 
 		void BindAttribute(
 			const Attribute& attribute, 
@@ -29,7 +26,10 @@ namespace OpenGL
 		void BindElements(const VertexBuffer& elements);
 
 	private:
-		GLuint m_ObjectID;
+		VertexArray(const VertexArray& other);
+		const VertexArray& operator=(const VertexArray& other);
+
+		unsigned int m_ObjectID;
 	};
 }
 
