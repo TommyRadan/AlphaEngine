@@ -9,10 +9,11 @@
 #include <RenderingEngine/Renderer.hpp>
 
 class StandardRenderer : 
-	public ISingleton<StandardRenderer>,
+	public Singleton<StandardRenderer>,
 	public Renderer
 {
-	friend ISingleton<StandardRenderer>;
+	template<typename StandardRenderer>
+	friend class Singleton;
 	StandardRenderer(void) :
 		Renderer()
 	{}
@@ -28,8 +29,8 @@ public:
 		m_FragmentShader = new OpenGL::Shader(OpenGL::ShaderType::Fragment);
 		m_Program = new OpenGL::Program();
 
-		std::string vertexCode = FileToString(std::string("StandardShader.vs"));
-		std::string fragmentCode = FileToString(std::string("StandardShader.fs"));
+		std::string vertexCode = FileToString("StandardShader.vs");
+		std::string fragmentCode = FileToString("StandardShader.fs");
 
 		m_VertexShader->Source(vertexCode);
 		m_VertexShader->Compile();
