@@ -23,7 +23,7 @@ namespace OpenGL
 			public Component
 	{
 		template <typename Context>
-		friend Singleton;
+		friend class Singleton;
 		Context(void);
 
 	public:

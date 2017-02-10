@@ -2,9 +2,8 @@
 
 namespace OpenGL
 {
-	Context::Context(void) :
-		m_IsInit{ false }
-	{}
+	Context::Context(void)
+	{ m_IsInit = false; }
 
 	void Context::Init(void)
 	{
@@ -12,17 +11,10 @@ namespace OpenGL
 			throw Exception("Called Context::Init twice");
 		}
 
-		GLenum status = glewInit();
-		if (status != GLEW_OK) {
+		if (gl3wInit()) {
 			throw Exception("Could not gather OpenGL function pointers!");
 		}
-
-		int majorVersion = 0;
-		int minorVersion = 0;
-		glGetIntegerv(GL_MAJOR_VERSION, &majorVersion);
-		glGetIntegerv(GL_MINOR_VERSION, &minorVersion);
-
-		if (majorVersion < 3 || (majorVersion == 3 && minorVersion < 3)) {
+		if (!gl3wIsSupported(3, 3)) {
 			throw Exception("OpenGL 3.3 is the oldest version supported!");
 		}
 	}

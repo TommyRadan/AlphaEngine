@@ -24,7 +24,7 @@ class RenderingEngine :
 	public Singleton<RenderingEngine>
 {
 	template<typename RenderingEngine>
-	friend Singleton;
+	friend class Singleton;
 	RenderingEngine(void) : 
 		m_IsInit{ false },
 		m_GlContext{ OpenGL::Context::GetInstance() }
