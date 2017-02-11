@@ -44,3 +44,6 @@ target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}/libjpeg.a)
 target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}/zlib.a)
 target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}/libOpenGL.a)
 target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}/libgl3w.a)
+
+find_package(OpenGL REQUIRED)
+target_link_libraries(AlphaEngine ${OPENGL_LIBRARIES})
