@@ -15,6 +15,9 @@ elseif (UNIX)
     set(EXECUTABLE_OUTPUT_PATH ${CMAKE_SOURCE_DIR}/Binaries/Unix/)
 endif ()
 
+set(CMAKE_VERBOSE_MAKEFILE false)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
 # Set top level directory to be searched for includes
 include_directories(${CMAKE_SOURCE_DIR})
 
@@ -34,16 +37,20 @@ add_dependencies(AlphaEngine MediaLayer)
 add_dependencies(AlphaEngine RenderingEngine)
 
 # Link Libraries
-target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}/libMathematics.a)
-target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}/libControl.a)
-target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}/libMediaLayer.a)
-target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}/libRenderingEngine.a)
-target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}/libImageLoading.a)
-target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}/libpng.a)
-target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}/libjpeg.a)
-target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}/zlib.a)
-target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}/libOpenGL.a)
-target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}/libgl3w.a)
+target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}libMathematics.a)
+target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}libControl.a)
+target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}libMediaLayer.a)
+target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}libRenderingEngine.a)
+target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}libImageLoading.a)
+target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}libpng.a)
+target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}libjpeg.a)
+target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}zlib.a)
+target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}libOpenGL.a)
+target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}libgl3w.a)
 
 find_package(OpenGL REQUIRED)
 target_link_libraries(AlphaEngine ${OPENGL_LIBRARIES})
+
+if(APPLE)
+    target_link_libraries(AlphaEngine "-framework CoreFoundation")
+endif(APPLE)
