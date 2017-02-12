@@ -19,11 +19,7 @@ public:
 	}
 
 protected:
-	Singleton(void)
-	{
-		Singleton::m_Instance = static_cast<Type*>(this);
-	}
-
+	Singleton(void) = default;
 	virtual ~Singleton(void) = default;
 
 private:
