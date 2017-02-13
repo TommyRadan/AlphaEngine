@@ -3,22 +3,27 @@
 // Utilities
 #include <Utilities/Exception.hpp>
 #include <Utilities/FileToString.hpp>
-#include <Utilities/Singleton.hpp>
 
 // Base class
 #include <RenderingEngine/Renderer.hpp>
 
-class StandardRenderer : 
-	public Singleton<StandardRenderer>,
+class StandardRenderer :
 	public Renderer
 {
-	template<typename StandardRenderer>
-	friend class Singleton;
 	StandardRenderer(void) :
 		Renderer()
 	{}
 
 public:
+	static StandardRenderer* GetInstance(void)
+	{
+		static StandardRenderer* instance = nullptr;
+		if(instance == nullptr) {
+			instance = new StandardRenderer();
+		}
+		return instance;
+	}
+
 	void Init(void) override
 	{
 		if (m_IsInit) {

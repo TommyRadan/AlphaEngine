@@ -13,21 +13,26 @@
 
 #include <Utilities/Color.hpp>
 #include <Utilities/Exception.hpp>
-#include <Utilities/Singleton.hpp>
 #include <Utilities/Component.hpp>
 
 namespace OpenGL
 {
 	class Context :
-			public Singleton<Context>,
 			public Component
 	{
 	private:
-		template <typename Context>
-		friend class Singleton;
 		Context(void);
 
 	public:
+		static Context* GetInstance(void)
+		{
+			static Context* instance = nullptr;
+			if(instance == nullptr) {
+				instance = new Context();
+			}
+			return instance;
+		}
+
 		void Init(void) override;
 		void Quit(void) override;
 

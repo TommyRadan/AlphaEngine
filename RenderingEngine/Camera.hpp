@@ -1,14 +1,10 @@
 #pragma once
 
 #include <Mathematics/Math.hpp>
-#include <Utilities/Singleton.hpp>
 #include <Control/Settings.hpp>
 
-class Camera :
-		public Singleton<Camera>
+class Camera
 {
-	template<typename Camera>
-	friend class Singleton;
 	Camera(void)
 	{
 		m_Position = Math::Vector3(0.0f, 0.0f, 0.0f);
@@ -26,6 +22,15 @@ class Camera :
 	}
 
 public:
+	static Camera* GetInstance(void)
+	{
+		static Camera* instance = nullptr;
+		if(instance == nullptr) {
+			instance = new Camera();
+		}
+		return instance;
+	}
+
 	// Position
 	void SetPosition(const Math::Vector3& pos)
 	{

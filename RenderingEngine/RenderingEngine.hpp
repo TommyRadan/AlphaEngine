@@ -1,13 +1,12 @@
 #pragma once
 
 #include <Utilities/Component.hpp>
-#include <Utilities/Singleton.hpp>
 #include <Utilities/Exception.hpp>
 #include <Utilities/Color.hpp>
 
-// Global settings
 #include <Control/Settings.hpp>
 
+// TODO: Outside includer doesn't need to know about OpenGL
 #include "OpenGL/OpenGL.hpp"
 #include "Geometry.hpp"
 #include "Material.hpp"
@@ -20,17 +19,23 @@
 #include "StandardRenderer/StandardRenderer.hpp"
 
 class RenderingEngine : 
-	public Component,
-	public Singleton<RenderingEngine>
+	public Component
 {
-	template<typename RenderingEngine>
-	friend class Singleton;
 	RenderingEngine(void) : 
 		m_IsInit{ false },
 		m_GlContext{ OpenGL::Context::GetInstance() }
 	{}
 
 public:
+	static RenderingEngine* GetInstance(void)
+	{
+		static RenderingEngine* instance = nullptr;
+		if(instance == nullptr) {
+			instance = new RenderingEngine();
+		}
+		return instance;
+	}
+
 	void Init(void) override;
 	void Quit(void) override;
 

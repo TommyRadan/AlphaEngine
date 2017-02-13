@@ -1,6 +1,5 @@
 #pragma once
 
-#include <Utilities/Singleton.hpp>
 #include <Utilities/Exception.hpp>
 #include <Utilities/Component.hpp>
 
@@ -10,10 +9,18 @@
 // Standard Library
 #include <string>
 
-struct MediaLayer : 
-	public Singleton<MediaLayer>,
+struct MediaLayer :
 	public Component
 {
+	static MediaLayer* GetInstance(void)
+	{
+		static MediaLayer* instance = nullptr;
+		if(instance == nullptr) {
+			instance = new MediaLayer();
+		}
+		return instance;
+	}
+
 	void Init(void) override;
 	void Quit(void) override;
 
@@ -21,8 +28,6 @@ struct MediaLayer :
 	void ShowDialog(const std::string&, const std::string&);
 
 private:
-	template<typename MediaLayer>
-	friend class Singleton;
 	MediaLayer(void);
 
 	const Settings* const m_Settings;

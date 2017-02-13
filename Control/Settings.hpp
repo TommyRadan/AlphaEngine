@@ -1,7 +1,5 @@
 #pragma once
 
-#include <Utilities/Singleton.hpp>
-
 #include <string>
 
 enum class WinType {
@@ -10,11 +8,8 @@ enum class WinType {
 	WIN_TYPE_FULLSCREEN
 };
 
-class Settings :
-		public Singleton<Settings>
+class Settings
 {
-	template<typename Settings>
-	friend class Singleton;
 	Settings(void) {
 #ifdef _DEBUG
 		m_WindowWidth = 640;
@@ -34,6 +29,15 @@ class Settings :
 	}
 
 public:
+	static Settings* const GetInstance(void)
+	{
+		static Settings* instance = nullptr;
+		if(instance == nullptr) {
+			instance = new Settings();
+		}
+		return instance;
+	}
+
 	const unsigned int GetWindowWidth(void) const noexcept { return m_WindowWidth; }
 	const unsigned int GetWindowHeight(void) const noexcept { return m_WindowHeight; }
 	const char* GetWindowName(void) const noexcept { return m_WindowName.c_str(); }
