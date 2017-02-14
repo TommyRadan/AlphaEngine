@@ -16,8 +16,8 @@ namespace OpenGL
 		Double = GL_DOUBLE
 	};
 
-	typedef GLint Attribute;
-	typedef GLint Uniform;
+	using Attribute  = GLint;
+	using Uniform  = GLint;
 
 	enum class Buffer
 	{
