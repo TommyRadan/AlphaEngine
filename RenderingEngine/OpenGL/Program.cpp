@@ -41,6 +41,13 @@ namespace OpenGL
 		if (status != GL_TRUE) {
 			throw Exception(this->GetInfoLog());
 		}
+
+		glValidateProgram(m_ObjectID);
+		glGetProgramiv(m_ObjectID, GL_VALIDATE_STATUS, &status);
+
+		if (status != GL_TRUE) {
+			throw Exception(this->GetInfoLog());
+		}
 	}
 
 	std::string Program::GetInfoLog(void)
