@@ -7,6 +7,9 @@ namespace OpenGL
 	Shader::Shader(const ShaderType shaderType)
 	{
 		m_ObjectID = glCreateShader(GLenum(shaderType));
+		if(m_ObjectID == 0) {
+			throw Exception("Shader creation failed!");
+		}
 	}
 
 	Shader::~Shader(void)
@@ -42,12 +45,10 @@ namespace OpenGL
 		GLint res;
 		glGetShaderiv(m_ObjectID, GL_INFO_LOG_LENGTH, &res);
 
-		if (res > 0) {
-			std::string infoLog(res, 0);
-			glGetShaderInfoLog(m_ObjectID, res, &res, &infoLog[0]);
-			return infoLog;
-		} else {
-			return "";
-		}
+		if(res <= 0) return "";
+
+		std::string infoLog(res, 0);
+		glGetShaderInfoLog(m_ObjectID, res, &res, &infoLog[0]);
+		return infoLog;
 	}
 }
