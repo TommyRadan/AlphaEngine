@@ -1,6 +1,6 @@
 #pragma once
 
-#include "gl3w/gl3w.h"
+#include <GL/glew.h>
 
 namespace OpenGL
 {
