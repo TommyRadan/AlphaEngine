@@ -1,53 +1,47 @@
 #include "MediaLayer.hpp"
+#include <SDL2/SDL.h>
 
-MediaLayer::MediaLayer(void) :
+MediaLayer::Context::Context(void) :
 	m_Settings{ Settings::GetInstance() }
 {
 	m_IsInit = false;
 }
 
-void MediaLayer::Init(void)
+void MediaLayer::Context::Init(void)
 {
 	if (m_IsInit) {
 		throw Exception("Called MediaLayer::Init twice");
 	}
 
-	// TODO: Implement
+	if(SDL_Init(SDL_INIT_EVERYTHING) == SDL_TRUE) {
+        throw Exception("SDL failed to initialize");
+    }
+
+    MediaLayer::Window::GetInstance()->Init();
 
 	m_IsInit = true;
 	return;
 }
 
-void MediaLayer::Quit(void)
+void MediaLayer::Context::Quit(void)
 {
 	if (!m_IsInit) {
 		throw Exception("Called MediaLayer::Quit before Display::Init");
 	}
 
-	// TODO: Implement
+    MediaLayer::Window::GetInstance()->Quit();
+
+	SDL_Quit();
 
 	m_IsInit = false;
 	return;
 }
 
-void MediaLayer::SwapBuffers(void)
+void MediaLayer::Context::ShowDialog(const std::string& title, const std::string& text)
 {
-	if (!m_IsInit) {
-		throw Exception("Called MediaLayer::SwapBuffers before Display::Init");
-	}
-
-	// TODO: Implement
-}
-
-void MediaLayer::ShowDialog(const std::string& title, const std::string& text)
-{
-	// To avoid warnings until implementation
-	(void) title;
-	(void) text;
-
 	if (!m_IsInit) {
 		throw Exception("Called MediaLayer::ShowDialog before Display::Init");
 	}
 
-	// TODO: Implement
+	SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, title.c_str(), text.c_str(), NULL);
 }

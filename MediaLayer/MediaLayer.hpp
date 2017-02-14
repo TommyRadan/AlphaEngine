@@ -2,33 +2,34 @@
 
 #include <Utilities/Exception.hpp>
 #include <Utilities/Component.hpp>
-
-// Global settings
 #include <Control/Settings.hpp>
 
-// Standard Library
+#include "Window.hpp"
+#include "Events.hpp"
+
 #include <string>
 
-struct MediaLayer :
-	public Component
-{
-	static MediaLayer* GetInstance(void)
-	{
-		static MediaLayer* instance = nullptr;
-		if(instance == nullptr) {
-			instance = new MediaLayer();
+namespace MediaLayer {
+	struct Context :
+			public Component
+    {
+		static Context *GetInstance(void)
+        {
+			static Context *instance = nullptr;
+			if (instance == nullptr) {
+				instance = new Context();
+			}
+			return instance;
 		}
-		return instance;
-	}
 
-	void Init(void) override;
-	void Quit(void) override;
+		void Init(void) override;
+		void Quit(void) override;
 
-	void SwapBuffers(void);
-	void ShowDialog(const std::string&, const std::string&);
+		void ShowDialog(const std::string&, const std::string&);
 
-private:
-	MediaLayer(void);
+	private:
+		Context(void);
 
-	const Settings* const m_Settings;
-};
+		const Settings* const m_Settings;
+	};
+}
