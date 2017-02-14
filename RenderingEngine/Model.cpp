@@ -70,7 +70,7 @@ void Model::Render(Renderer* const renderer)
 		renderer->UploadVector4(element.first, vector);
 	}
 
-	int uploadedTextureReferences = 0;
+	uint8_t uploadedTextureReferences = 0u;
 	for (auto& element : m_Material.Textures) {
 		renderer->UploadTextureReference(element.first, uploadedTextureReferences);
 		OpenGL::Context::GetInstance()->BindTexture(*(element.second), uploadedTextureReferences);
