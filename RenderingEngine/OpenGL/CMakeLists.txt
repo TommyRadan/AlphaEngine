@@ -4,8 +4,6 @@ project(OpenGL)
 # Use C++11 standard
 set(CMAKE_CXX_STANDARD 11)
 
-add_subdirectory(gl3w)
-
 set(CMAKE_VERBOSE_MAKEFILE false)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON) # -fPIC
 
@@ -29,6 +27,3 @@ set(OPENGL_SOURCE_FILES
         VertexBuffer.hpp)
 
 add_library(OpenGL STATIC ${OPENGL_SOURCE_FILES})
-
-# Add Dependencies
-add_dependencies(OpenGL gl3w)

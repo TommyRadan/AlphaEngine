@@ -1,4 +1,5 @@
 #include "OpenGL.hpp"
+#include <stdio.h>
 
 namespace OpenGL
 {
@@ -11,11 +12,16 @@ namespace OpenGL
 			throw Exception("Called Context::Init twice");
 		}
 
-		if (!gl3wInit()) {
+		if (glewInit() != GLEW_OK) {
 			throw Exception("Could not gather OpenGL function pointers!");
 		}
-		if (!gl3wIsSupported(3, 3)) {
-			throw Exception("OpenGL 3.3 is the oldest version supported!");
+
+		int versionMajor, versionMinor;
+		glGetIntegerv(GL_MAJOR_VERSION, &versionMajor);
+		glGetIntegerv(GL_MINOR_VERSION, &versionMinor);
+
+		if(versionMajor < 3 || (versionMajor == 3 && versionMinor < 3)) {
+			throw Exception("OpenGL version 3.3 is last supported!");
 		}
 	}
 
