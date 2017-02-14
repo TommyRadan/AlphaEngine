@@ -1,15 +1,11 @@
 #pragma once
 
-// OpenGL
 #include "OpenGL/OpenGL.hpp"
+#include "MeshLoading/Mesh.hpp"
 
-// Mesh container
-#include "Vertex.hpp"
-#include "Mesh.hpp"
-
-class Geometry
+// TODO: Follow rule of five
+struct Geometry
 {
-public:
 	Geometry(void);
 	~Geometry(void);
 
@@ -17,16 +13,16 @@ public:
 	void ReleaseData(void);
 
 	void Draw(void);
-	VertexFormat GetVertexFormat(void);
 
 private:
 	Geometry(Geometry&);
+	Geometry(Geometry&&);
 	Geometry& operator=(Geometry&);
+	Geometry& operator=(Geometry&&);
 
 	bool m_DataUploaded;
 
 	OpenGL::VertexBuffer* m_VertexBufferObject;
 	OpenGL::VertexArray* m_VertexArrayObject;
-	VertexFormat m_VertexFormat;
 	unsigned int m_DrawCount;
 };
