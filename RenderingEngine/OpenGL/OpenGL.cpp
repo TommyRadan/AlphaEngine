@@ -11,7 +11,7 @@ namespace OpenGL
 			throw Exception("Called Context::Init twice");
 		}
 
-		if (gl3wInit()) {
+		if (!gl3wInit()) {
 			throw Exception("Could not gather OpenGL function pointers!");
 		}
 		if (!gl3wIsSupported(3, 3)) {
