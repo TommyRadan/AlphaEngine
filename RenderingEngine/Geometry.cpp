@@ -20,7 +20,7 @@ void Geometry::UploadMesh(const Mesh& mesh)
 	m_VertexBufferObject = new OpenGL::VertexBuffer();
 	m_VertexArrayObject = new OpenGL::VertexArray();
 
-	m_DrawCount = (unsigned)mesh.VertexCount();
+	m_DrawCount = unsigned(mesh.VertexCount());
 	m_DataUploaded = true;
 
 	// Data to the GPU
@@ -38,7 +38,6 @@ void Geometry::ReleaseData(void)
 
 	delete m_VertexArrayObject;
 	delete m_VertexBufferObject;
-	m_VertexFormat.clear();
 	m_DrawCount = 0u;
 	m_DataUploaded = false;
 }
@@ -51,9 +50,4 @@ void Geometry::Draw(void)
 
 	OpenGL::Context* context = OpenGL::Context::GetInstance();
 	context->DrawArrays(*m_VertexArrayObject, OpenGL::Primitive::Triangles, 0U, m_DrawCount);
-}
-
-VertexFormat Geometry::GetVertexFormat(void)
-{
-	return m_VertexFormat;
 }
