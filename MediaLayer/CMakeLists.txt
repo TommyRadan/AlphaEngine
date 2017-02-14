@@ -5,12 +5,13 @@ project(MediaLayer CXX)
 set(CMAKE_CXX_STANDARD 11)
 
 set(CMAKE_VERBOSE_MAKEFILE false)
-set(CMAKE_POSITION_INDEPENDENT_CODE ON) # -fPIC
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 set(MEDIALAYER_SOURCE_FILES
         MediaLayer.hpp
         Window.hpp
         Events.hpp
+        Events.cpp
         MediaLayer.cpp
         Window.cpp)
 
