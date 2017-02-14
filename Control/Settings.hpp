@@ -10,18 +10,13 @@ enum class WinType {
 
 class Settings
 {
-	Settings(void) {
-#ifdef _DEBUG
+	Settings(void)
+	{
 		m_WindowWidth = 640;
 		m_WindowHeight = 480;
 		m_WindowType = WinType::WIN_TYPE_WINDOWED;
-#else
-		m_WindowWidth = 1920;
-		m_WindowHeight = 1200;
-		m_WindowType = WinType::WIN_TYPE_FULLSCREEN;
-#endif
 
-		m_WindowName = "Alpha Engine";
+		m_WindowName = "Alpha Engine Test";
 		m_IsDoubleBuffered = true;
 		m_FieldOfView = 70.0f;
 		m_MouseSensitivity = 0.005f;
