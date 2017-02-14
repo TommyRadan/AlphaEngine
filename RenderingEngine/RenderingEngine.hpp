@@ -13,7 +13,7 @@
 #include "Renderer.hpp"
 #include "Camera.hpp"
 #include "Model.hpp"
-#include "Mesh.hpp"
+#include "MeshLoading/Mesh.hpp"
 
 // Specific renderers
 #include "StandardRenderer/StandardRenderer.hpp"

@@ -108,9 +108,9 @@ int readFace(char* buf, face& out)
 	return i;
 }
 
-VertexVector LoadOBJ(const std::string& filename)
+std::vector<Vertex> LoadOBJ(const std::string& filename)
 {
-	VertexVector vertices;
+	std::vector<Vertex> vertices;
 
 	// Read file into memory
 	std::ifstream file(filename.c_str(), std::ios::in | std::ios::ate);

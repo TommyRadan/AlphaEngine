@@ -7,13 +7,13 @@
 class Mesh
 {
 public:
-	Mesh(void);
+	Mesh(void) = default;
 
-	void UploadOBJ(const VertexVector& v);
+	void UploadOBJ(const std::vector<Vertex>& v);
 
 	const Vertex* Vertices(void) const;
 	std::size_t VertexCount(void) const;
 
 private:
-	VertexVector m_Vertices;
+	std::vector<Vertex> m_Vertices;
 };

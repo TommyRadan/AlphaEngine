@@ -14,14 +14,14 @@ set(RENDERINGENGINE_SOURCE_FILES
         Camera.hpp
         StandardRenderer/StandardRenderer.hpp
         Material.hpp
-        ObjLoader.hpp
+        MeshLoading/ObjLoader.hpp
         Renderer.hpp
         RenderingEngine.hpp
-        Vertex.hpp
+        MeshLoading/Vertex.hpp
         Geometry.cpp
         Model.cpp
         RenderingEngine.cpp
-        Mesh.cpp)
+        MeshLoading/Mesh.cpp)
 
 # Main lib
 add_library(RenderingEngine STATIC ${RENDERINGENGINE_SOURCE_FILES})

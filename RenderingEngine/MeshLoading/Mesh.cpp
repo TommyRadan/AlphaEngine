@@ -1,9 +1,6 @@
 #include "Mesh.hpp"
 
-Mesh::Mesh(void)
-{}
-
-void Mesh::UploadOBJ(const VertexVector& v)
+void Mesh::UploadOBJ(const std::vector<Vertex>& v)
 {
 	m_Vertices = std::move(v);
 }
