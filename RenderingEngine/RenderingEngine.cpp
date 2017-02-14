@@ -7,7 +7,7 @@ void RenderingEngine::Init(void)
 	}
 
 	m_GlContext->Init();
-	StandardRenderer::GetInstance()->Init();
+	//StandardRenderer::GetInstance()->Init();
 
 	m_GlContext->Enable(OpenGL::Capability::DepthTest);
 }
@@ -18,7 +18,7 @@ void RenderingEngine::Quit(void)
 		throw Exception("RenderingEngine::Quit called before RenderingEngine::Init!");
 	}
 
-	StandardRenderer::GetInstance()->Quit();
+	//StandardRenderer::GetInstance()->Quit();
 	m_GlContext->Quit();
 }
 

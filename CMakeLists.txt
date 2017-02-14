@@ -28,7 +28,8 @@ add_subdirectory(MediaLayer)
 add_subdirectory(RenderingEngine)
 
 # Main shared lib
-add_library(AlphaEngine SHARED Control/Dummy.cpp)
+#add_library(AlphaEngine SHARED Control/Dummy.cpp)
+add_executable(AlphaEngine Control/Dummy.cpp)
 
 # Add Dependencies
 add_dependencies(AlphaEngine Mathematics)
@@ -46,11 +47,18 @@ target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}libpng.a)
 target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}libjpeg.a)
 target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}zlib.a)
 target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}libOpenGL.a)
-target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}libgl3w.a)
+
+find_package(SDL2 REQUIRED)
+target_link_libraries(AlphaEngine "-lSDL2")
+include_directories(${SDL2_INCLUDE_DIR})
+
+find_package(GLEW REQUIRED)
+target_link_libraries(AlphaEngine ${GLEW_LIBRARY})
+include_directories(${GLEW_INCLUDE_DIR})
 
 find_package(OpenGL REQUIRED)
 target_link_libraries(AlphaEngine ${OPENGL_LIBRARIES})
 
 if(APPLE)
-    target_link_libraries(AlphaEngine "-framework CoreFoundation")
+    target_link_libraries(AlphaEngine "-framework CoreFoundation -framework IOKit -framework CoreVideo")
 endif(APPLE)
