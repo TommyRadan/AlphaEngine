@@ -1,5 +1,6 @@
 #include "Geometry.hpp"
 #include "Utilities/Exception.hpp"
+#include "OpenGL/OpenGL.hpp"
 
 Geometry::Geometry(void) :
 	m_DataUploaded { false }
@@ -23,13 +24,16 @@ void Geometry::UploadMesh(const Mesh& mesh)
 	m_DrawCount = unsigned(mesh.VertexCount());
 	m_DataUploaded = true;
 
+	OpenGL::VertexBuffer* vbo = (OpenGL::VertexBuffer*) m_VertexBufferObject;
+	OpenGL::VertexArray* vao = (OpenGL::VertexArray*) m_VertexArrayObject;
+
 	// Data to the GPU
-	m_VertexBufferObject->Data(mesh.Vertices(), mesh.VertexCount() * sizeof(Vertex), OpenGL::BufferUsage::StaticDraw);
+	vbo->Data(mesh.Vertices(), mesh.VertexCount() * sizeof(Vertex), OpenGL::BufferUsage::StaticDraw);
 
 	// Mapping
-	m_VertexArrayObject->BindAttribute(0, *m_VertexBufferObject, OpenGL::Type::Float, (unsigned)mesh.VertexCount(), sizeof(Vertex), 0U);
-	m_VertexArrayObject->BindAttribute(1, *m_VertexBufferObject, OpenGL::Type::Float, (unsigned)mesh.VertexCount(), sizeof(Vertex), sizeof(Math::Vector3));
-	m_VertexArrayObject->BindAttribute(2, *m_VertexBufferObject, OpenGL::Type::Float, (unsigned)mesh.VertexCount(), sizeof(Vertex), sizeof(Math::Vector3) + sizeof(Math::Vector2));
+	vao->BindAttribute(0, *vbo, OpenGL::Type::Float, (unsigned)mesh.VertexCount(), sizeof(Vertex), 0U);
+	vao->BindAttribute(1, *vbo, OpenGL::Type::Float, (unsigned)mesh.VertexCount(), sizeof(Vertex), sizeof(glm::vec3));
+	vao->BindAttribute(2, *vbo, OpenGL::Type::Float, (unsigned)mesh.VertexCount(), sizeof(Vertex), sizeof(glm::vec3) + sizeof(glm::vec2));
 }
 
 void Geometry::ReleaseData(void)
@@ -49,5 +53,6 @@ void Geometry::Draw(void)
 	}
 
 	OpenGL::Context* context = OpenGL::Context::GetInstance();
-	context->DrawArrays(*m_VertexArrayObject, OpenGL::Primitive::Triangles, 0U, m_DrawCount);
+	OpenGL::VertexArray* vao = (OpenGL::VertexArray*) m_VertexArrayObject;
+	context->DrawArrays(*vao, OpenGL::Primitive::Triangles, 0U, m_DrawCount);
 }

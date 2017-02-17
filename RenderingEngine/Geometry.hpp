@@ -1,6 +1,5 @@
 #pragma once
 
-#include "OpenGL/OpenGL.hpp"
 #include "MeshLoading/Mesh.hpp"
 
 // TODO: Follow rule of five
@@ -22,7 +21,7 @@ private:
 
 	bool m_DataUploaded;
 
-	OpenGL::VertexBuffer* m_VertexBufferObject;
-	OpenGL::VertexArray* m_VertexArrayObject;
+	void* m_VertexBufferObject;
+	void* m_VertexArrayObject;
 	unsigned int m_DrawCount;
 };
