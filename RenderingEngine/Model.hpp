@@ -8,9 +8,8 @@
 #include "Camera.hpp"
 #include "Renderer.hpp"
 
-class Model
+struct Model
 {
-public:
 	Model(void);
 
 	void SetGeometry(Geometry* const geometry);
