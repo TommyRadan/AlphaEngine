@@ -2,9 +2,9 @@
 #include "OpenGL/OpenGL.hpp"
 
 Model::Model(void) :
-	m_Position		{ Math::Vector3(0.0f, 0.0f, 0.0f) },
-	m_Rotation		{ Math::Vector3(0.0f, 0.0f, 0.0f) },
-	m_Scale			{ Math::Vector3(1.0f, 1.0f, 1.0f) },
+	m_Position		{ glm::vec3(0.0f, 0.0f, 0.0f) },
+	m_Rotation		{ glm::vec3(0.0f, 0.0f, 0.0f) },
+	m_Scale			{ glm::vec3(1.0f, 1.0f, 1.0f) },
 	m_IsModelDirty	{ true },
 	m_Geometry		{ nullptr }
 {}
@@ -24,16 +24,16 @@ Material& Model::GetMaterial(void)
 	return m_Material;
 }
 
-const Math::Matrix4 Model::GetModelMatrix(void)
+const glm::mat4 Model::GetModelMatrix(void)
 {
 	if (!m_IsModelDirty) return m_ModelMatrix;
 
-	Math::Matrix4 posMatrix = Math::Matrix4::Translate(m_Position);
-	Math::Matrix4 rotXMatrix = Math::Matrix4::RotateX(m_Rotation.X);
-	Math::Matrix4 rotYMatrix = Math::Matrix4::RotateY(m_Rotation.Y);
-	Math::Matrix4 rotZMatrix = Math::Matrix4::RotateZ(m_Rotation.Z);
-	Math::Matrix4 scaleMatrix = Math::Matrix4::Scale(m_Scale);
-	Math::Matrix4 rotMatrix = rotZMatrix * rotYMatrix * rotXMatrix;
+	glm::mat4 posMatrix = glm::translate(m_Position);
+	glm::mat4 rotXMatrix = glm::rotate(m_Rotation.x, glm::vec3(1.0f, 0.0f, 0.0f));
+	glm::mat4 rotYMatrix = glm::rotate(m_Rotation.y, glm::vec3(0.0f, 1.0f, 0.0f));
+	glm::mat4 rotZMatrix = glm::rotate(m_Rotation.z, glm::vec3(0.0f, 0.0f, 1.0f));
+	glm::mat4 scaleMatrix = glm::scale(m_Scale);
+	glm::mat4 rotMatrix = rotZMatrix * rotYMatrix * rotXMatrix;
 
 	m_ModelMatrix = posMatrix * rotMatrix * scaleMatrix;
 	m_IsModelDirty = false;
@@ -60,7 +60,7 @@ void Model::Render(Renderer* const renderer)
 	}
 
 	for (auto& element : m_Material.Colors) {
-		auto vector = Math::Vector4(
+		auto vector = glm::vec4(
 			element.second.R / 255.0f, 
 			element.second.G / 255.0f, 
 			element.second.B / 255.0f, 
@@ -73,7 +73,10 @@ void Model::Render(Renderer* const renderer)
 	uint8_t uploadedTextureReferences = 0u;
 	for (auto& element : m_Material.Textures) {
 		renderer->UploadTextureReference(element.first, uploadedTextureReferences);
-		OpenGL::Context::GetInstance()->BindTexture(*(element.second), uploadedTextureReferences);
+		OpenGL::Context::GetInstance()->BindTexture(
+				*static_cast<OpenGL::Texture*>(element.second),
+				uploadedTextureReferences
+		);
 		uploadedTextureReferences++;
 	}
 
@@ -81,34 +84,34 @@ void Model::Render(Renderer* const renderer)
 	renderer->StopRenderer();
 }
 
-const Math::Vector3 Model::GetPos(void) const
+const glm::vec3 Model::GetPos(void) const
 {
 	return m_Position;
 }
 
-void Model::SetPos(const Math::Vector3& pos)
+void Model::SetPos(const glm::vec3& pos)
 {
 	m_IsModelDirty = true;
 	m_Position = pos;
 }
 
-const Math::Vector3 Model::GetRot(void) const
+const glm::vec3 Model::GetRot(void) const
 {
 	return m_Rotation;
 }
 
-void Model::SetRot(const Math::Vector3& rot)
+void Model::SetRot(const glm::vec3& rot)
 {
 	m_IsModelDirty = true;
 	m_Rotation = rot;
 }
 
-const Math::Vector3 Model::GetScale(void) const
+const glm::vec3 Model::GetScale(void) const
 {
 	return m_Scale;
 }
 
-void Model::SetScale(const Math::Vector3& scale)
+void Model::SetScale(const glm::vec3& scale)
 {
 	m_IsModelDirty = true;
 	m_Scale = scale;

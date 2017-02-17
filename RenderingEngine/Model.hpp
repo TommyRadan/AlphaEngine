@@ -1,6 +1,6 @@
 #pragma once
 
-#include <Mathematics/Math.hpp>
+#include <Mathematics/glm.hpp>
 #include <Utilities/Exception.hpp>
 
 #include "Geometry.hpp"
@@ -18,22 +18,22 @@ public:
 
 	Material& GetMaterial(void);
 
-	const Math::Matrix4 GetModelMatrix(void);
+	const glm::mat4 GetModelMatrix(void);
 	void Render(Renderer* const renderer);
 
-	const Math::Vector3 GetPos(void) const;
-	void SetPos(const Math::Vector3& pos);
-	const Math::Vector3 GetRot(void) const;
-	void SetRot(const Math::Vector3& rot);
-	const Math::Vector3 GetScale(void) const;
-	void SetScale(const Math::Vector3& scale);
+	const glm::vec3 GetPos(void) const;
+	void SetPos(const glm::vec3& pos);
+	const glm::vec3 GetRot(void) const;
+	void SetRot(const glm::vec3& rot);
+	const glm::vec3 GetScale(void) const;
+	void SetScale(const glm::vec3& scale);
 
 private:
-	Math::Vector3 m_Position;
-	Math::Vector3 m_Rotation;
-	Math::Vector3 m_Scale;
+	glm::vec3 m_Position;
+	glm::vec3 m_Rotation;
+	glm::vec3 m_Scale;
 
-	Math::Matrix4 m_ModelMatrix;
+	glm::mat4 m_ModelMatrix;
 	bool m_IsModelDirty;
 
 	Geometry* m_Geometry;
