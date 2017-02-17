@@ -12,8 +12,8 @@ class Settings
 {
 	Settings(void)
 	{
-		m_WindowWidth = 640;
-		m_WindowHeight = 480;
+		m_WindowWidth = 800;
+		m_WindowHeight = 600;
 		m_WindowType = WinType::WIN_TYPE_WINDOWED;
 
 		m_WindowName = "Alpha Engine Test";
