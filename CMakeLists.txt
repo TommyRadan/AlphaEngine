@@ -22,7 +22,6 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 include_directories(${CMAKE_SOURCE_DIR})
 
 # Include subprojects
-add_subdirectory(Mathematics)
 add_subdirectory(Control)
 add_subdirectory(MediaLayer)
 add_subdirectory(RenderingEngine)
@@ -32,20 +31,15 @@ add_subdirectory(RenderingEngine)
 add_executable(AlphaEngine Control/Dummy.cpp)
 
 # Add Dependencies
-add_dependencies(AlphaEngine Mathematics)
 add_dependencies(AlphaEngine Control)
 add_dependencies(AlphaEngine MediaLayer)
 add_dependencies(AlphaEngine RenderingEngine)
 
 # Link Libraries
-target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}libMathematics.a)
 target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}libControl.a)
 target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}libMediaLayer.a)
 target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}libRenderingEngine.a)
 target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}libImageLoading.a)
-target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}libpng.a)
-target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}libjpeg.a)
-target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}zlib.a)
 target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}libOpenGL.a)
 
 find_package(SDL2 REQUIRED)
