@@ -1,46 +1,43 @@
 #include "Events.hpp"
-#include <iostream>
+#include <SDL2/SDL.h>
 
 void MediaLayer::Events::Process()
 {
-    while (SDL_PollEvent(&m_Events)) {
-        switch (m_Events.type) {
-            case SDL_MOUSEMOTION: {
-                float sensitivity = m_GameSettings->GetMouseSensitivity();
-                int mouseMoveX = m_Events.motion.xrel;
-                int mouseMoveY = m_Events.motion.yrel;
-
+    SDL_Event events;
+    while (SDL_PollEvent(&events)) {
+        switch (events.type) {
+            case SDL_MOUSEMOTION:
+                // Moved mouse
                 break;
-            }
             case SDL_MOUSEWHEEL:
-                std::cout << "Mouse wheel (" << m_Events.wheel.y << ")" << std::endl;
+                // Mouse wheel
                 break;
             case SDL_MOUSEBUTTONDOWN:
-                std::cout << "Mouse button down (" << int{ m_Events.button.button } << ")" << std::endl;
+                // Mouse button down
                 break;
             case SDL_MOUSEBUTTONUP:
-                std::cout << "Mouse button up (" << int{ m_Events.button.button } << ")" << std::endl;
+                // Mouse button up
                 break;
             case SDL_KEYDOWN: {
-                switch (m_Events.key.keysym.sym) {
+                // Keyboard key down
+                switch (events.key.keysym.sym) {
                     case KeyBinding::KEY_ESCAPE: {
                         m_IsUserQuit = true;
                         break;
                     }
-                    default: break;
                 }
                 break;
             }
-            case SDL_KEYUP: {
-                switch (m_Events.key.keysym.sym) {}
+            case SDL_KEYUP:
+                // Keyboard key up
                 break;
-            }
+            case SDL_QUIT:
+                m_IsUserQuit = true;
+                break;
             default: break;
         }
     }
 }
 
-void MediaLayer::Events::Update(Uint32 deltaTime)
-{
-    (void) deltaTime;
-}
+void MediaLayer::Events::Update()
+{}

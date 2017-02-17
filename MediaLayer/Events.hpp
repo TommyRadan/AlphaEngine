@@ -1,6 +1,5 @@
 #pragma once
 
-#include <SDL2/SDL.h>
 #include <Control/Settings.hpp>
 
 namespace MediaLayer
@@ -35,16 +34,15 @@ namespace MediaLayer
         }
 
         void Process(void);
-        void Update(Uint32);
+        void Update(void);
 
-        bool IsQuitRequested() const {
-            return (m_Events.type == SDL_QUIT || m_IsUserQuit);
+        bool IsQuitRequested(void) const {
+            return m_IsUserQuit;
         }
 
     private:
         bool m_IsUserQuit;
 
-        SDL_Event m_Events;
         Settings* m_GameSettings;
     };
 }
