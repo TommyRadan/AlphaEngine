@@ -1,7 +1,6 @@
 #pragma once
 
 #include <Control/Settings.hpp>
-#include <SDL2/SDL.h>
 #include <Utilities/Exception.hpp>
 
 namespace MediaLayer
@@ -24,8 +23,12 @@ namespace MediaLayer
 
     private:
         Window(void);
-        SDL_Window* m_Window;
-        SDL_GLContext m_GlContext;
         Settings* m_Settings;
+
+        // SDL_Window
+        void* m_Window;
+
+        // SDL Gl Context
+        void* m_GlContext;
     };
 }

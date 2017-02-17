@@ -1,4 +1,5 @@
 #include "Window.hpp"
+#include <SDL2/SDL.h>
 
 namespace MediaLayer
 {
@@ -9,7 +10,7 @@ namespace MediaLayer
 
     void Window::Init(void)
     {
-        Uint32 window_flags = SDL_WINDOW_OPENGL;
+        uint32_t window_flags = SDL_WINDOW_OPENGL;
 
         WinType type = m_Settings->GetWindowType();
         if(type == WinType::WIN_TYPE_BORDERLESS)
@@ -39,17 +40,20 @@ namespace MediaLayer
             throw Exception(SDL_GetError());
         }
 
-        m_GlContext = SDL_GL_CreateContext(m_Window);
+        m_GlContext = new SDL_GLContext;
+        *((SDL_GLContext*)m_GlContext) = SDL_GL_CreateContext((SDL_Window*)m_Window);
+        SDL_SetRelativeMouseMode(SDL_TRUE);
     }
 
     void Window::Quit(void)
     {
-        SDL_GL_DeleteContext(m_GlContext);
-        SDL_DestroyWindow(m_Window);
+        SDL_GL_DeleteContext(*((SDL_GLContext*)m_GlContext));
+        SDL_DestroyWindow((SDL_Window*)m_Window);
+        delete m_GlContext;
     }
 
     void Window::SwapBuffers(void)
     {
-        SDL_GL_SwapWindow(m_Window);
+        SDL_GL_SwapWindow((SDL_Window*)m_Window);
     }
 }
