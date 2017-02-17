@@ -1,10 +1,10 @@
 #pragma once
 
-#include <Mathematics/Math.hpp>
+#include <Mathematics/glm.hpp>
 
 struct Vertex
 {
-	Math::Vector3 Pos;
-	Math::Vector2 Tex;
-	Math::Vector3 Normal;
+	glm::vec3 Pos;
+	glm::vec2 Tex;
+	glm::vec3 Normal;
 };
