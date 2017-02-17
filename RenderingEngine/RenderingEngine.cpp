@@ -1,33 +1,33 @@
 #include "RenderingEngine.hpp"
+#include "StandardRenderer/StandardRenderer.hpp"
 
-void RenderingEngine::Init(void)
+RenderingEngine::Context::Context(void)
+{
+	m_IsInit = false;
+}
+
+void RenderingEngine::Context::Init(void)
 {
 	if (m_IsInit) {
 		throw Exception("RenderingEngine::Init called twice!");
 	}
 
-	m_GlContext->Init();
-	//StandardRenderer::GetInstance()->Init();
+	OpenGL::Context::GetInstance()->Init();
+	StandardRenderer::GetInstance()->Init();
 
-	m_GlContext->Enable(OpenGL::Capability::DepthTest);
+	OpenGL::Context::GetInstance()->Enable(OpenGL::Capability::DepthTest);
+
+	m_IsInit = true;
 }
 
-void RenderingEngine::Quit(void)
+void RenderingEngine::Context::Quit(void)
 {
-	if (m_IsInit) {
+	if (!m_IsInit) {
 		throw Exception("RenderingEngine::Quit called before RenderingEngine::Init!");
 	}
 
-	//StandardRenderer::GetInstance()->Quit();
-	m_GlContext->Quit();
-}
+	StandardRenderer::GetInstance()->Quit();
+	OpenGL::Context::GetInstance()->Quit();
 
-void RenderingEngine::RenderScene(void)
-{
-	OpenGL::Context::GetInstance()->ClearColor(Color(52, 152, 219, 255));
-	OpenGL::Context::GetInstance()->Clear();
-
-	for (auto& m : m_Models) {
-		m->Render(StandardRenderer::GetInstance());
-	}
+	m_IsInit = false;
 }

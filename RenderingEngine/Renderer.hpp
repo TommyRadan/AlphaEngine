@@ -4,7 +4,7 @@
 #include "OpenGL/OpenGL.hpp"
 
 // Mathematics
-#include <Mathematics/Math.hpp>
+#include <Mathematics/glm.hpp>
 
 class Renderer
 {
@@ -24,11 +24,7 @@ protected:
 private:
 	const bool CheckForBadInit(void)
 	{
-		if(m_VertexShader == nullptr) return false;
-		if(m_FragmentShader == nullptr) return false;
-		if(m_Program == nullptr) return false;
-		if(m_IsInit == false) return false;
-		return true;
+		return !(!m_VertexShader || !m_FragmentShader || !m_Program || !m_IsInit);
 	}
 
 public:
@@ -67,7 +63,7 @@ public:
 		m_Program->SetUniform(uniform, coefficient);
 	}
 
-	void UploadMatrix3(const std::string& mat3Name, const Math::Matrix3& matrix)
+	void UploadMatrix3(const std::string& mat3Name, const glm::mat3& matrix)
 	{
 		if (!CheckForBadInit()) {
 			throw Exception("Renderer::UploadMatrix3 called before proper initialization");
@@ -80,7 +76,7 @@ public:
 		m_Program->SetUniform(uniform, matrix);
 	}
 
-	void UploadMatrix4(const std::string& mat4Name, const Math::Matrix4& matrix)
+	void UploadMatrix4(const std::string& mat4Name, const glm::mat4& matrix)
 	{
 		if (!CheckForBadInit()) {
 			throw Exception("Renderer::UploadMatrix4 called before proper initialization");
@@ -93,7 +89,7 @@ public:
 		m_Program->SetUniform(uniform, matrix);
 	}
 
-	void UploadVector2(const std::string& vec2Name, const Math::Vector2& vector)
+	void UploadVector2(const std::string& vec2Name, const glm::vec2& vector)
 	{
 		if (!CheckForBadInit()) {
 			throw Exception("Renderer::UploadVector2 called before proper initialization");
@@ -106,7 +102,7 @@ public:
 		m_Program->SetUniform(uniform, vector);
 	}
 
-	void UploadVector3(const std::string& vec3Name, const Math::Vector3& vector)
+	void UploadVector3(const std::string& vec3Name, const glm::vec3& vector)
 	{
 		if (!CheckForBadInit()) {
 			throw Exception("Renderer::UploadVector3 called before proper initialization");
@@ -119,7 +115,7 @@ public:
 		m_Program->SetUniform(uniform, vector);
 	}
 
-	void UploadVector4(const std::string& vec4Name, const Math::Vector4& vector)
+	void UploadVector4(const std::string& vec4Name, const glm::vec4& vector)
 	{
 		if (!CheckForBadInit()) {
 			throw Exception("Renderer::UploadVector4 called before proper initialization");
