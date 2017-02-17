@@ -3,7 +3,7 @@
 #include "Typedef.hpp"
 #include "Shader.hpp"
 
-#include <Mathematics/Math.hpp>
+#include <Mathematics/glm.hpp>
 
 #include <string>
 
@@ -42,15 +42,15 @@ namespace OpenGL
 
 		void SetUniform(const Uniform& uniform, int value);
 		void SetUniform(const Uniform& uniform, float value);
-		void SetUniform(const Uniform& uniform, const Math::Vector2& value);
-		void SetUniform(const Uniform& uniform, const Math::Vector3& value);
-		void SetUniform(const Uniform& uniform, const Math::Vector4& value);
+		void SetUniform(const Uniform& uniform, const glm::vec2& value);
+		void SetUniform(const Uniform& uniform, const glm::vec3& value);
+		void SetUniform(const Uniform& uniform, const glm::vec4& value);
 		void SetUniform(const Uniform& uniform, const float* values, unsigned int count);
-		void SetUniform(const Uniform& uniform, const Math::Vector2* values, unsigned int count);
-		void SetUniform(const Uniform& uniform, const Math::Vector3* values, unsigned int count);
-		void SetUniform(const Uniform& uniform, const Math::Vector4* values, unsigned int count);
-		void SetUniform(const Uniform& uniform, const Math::Matrix3& value);
-		void SetUniform(const Uniform& uniform, const Math::Matrix4& value);
+		void SetUniform(const Uniform& uniform, const glm::vec2* values, unsigned int count);
+		void SetUniform(const Uniform& uniform, const glm::vec3* values, unsigned int count);
+		void SetUniform(const Uniform& uniform, const glm::vec4* values, unsigned int count);
+		void SetUniform(const Uniform& uniform, const glm::mat3& value);
+		void SetUniform(const Uniform& uniform, const glm::mat4& value);
 
 	private:
 		unsigned int m_ObjectID;

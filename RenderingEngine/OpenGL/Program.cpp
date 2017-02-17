@@ -41,13 +41,6 @@ namespace OpenGL
 		if (status != GL_TRUE) {
 			throw Exception(this->GetInfoLog());
 		}
-
-		glValidateProgram(m_ObjectID);
-		glGetProgramiv(m_ObjectID, GL_VALIDATE_STATUS, &status);
-
-		if (status != GL_TRUE) {
-			throw Exception(this->GetInfoLog());
-		}
 	}
 
 	std::string Program::GetInfoLog(void)
@@ -84,19 +77,19 @@ namespace OpenGL
 		glUniform1f(uniform, value);
 	}
 
-	void Program::SetUniform(const Uniform& uniform, const Math::Vector2& value)
+	void Program::SetUniform(const Uniform& uniform, const glm::vec2& value)
 	{
-		glUniform2f(uniform, value.X, value.Y);
+		glUniform2f(uniform, value.x, value.y);
 	}
 
-	void Program::SetUniform(const Uniform& uniform, const Math::Vector3& value)
+	void Program::SetUniform(const Uniform& uniform, const glm::vec3& value)
 	{
-		glUniform3f(uniform, value.X, value.Y, value.Z);
+		glUniform3f(uniform, value.x, value.y, value.z);
 	}
 
-	void Program::SetUniform(const Uniform& uniform, const Math::Vector4& value)
+	void Program::SetUniform(const Uniform& uniform, const glm::vec4& value)
 	{
-		glUniform4f(uniform, value.X, value.Y, value.Z, value.W);
+		glUniform4f(uniform, value.x, value.y, value.z, value.w);
 	}
 
 	void Program::SetUniform(const Uniform& uniform, const float* values, const unsigned int count)
@@ -104,28 +97,28 @@ namespace OpenGL
 		glUniform1fv(uniform, count, values);
 	}
 
-	void Program::SetUniform(const Uniform& uniform, const Math::Vector2* values, const unsigned int count)
+	void Program::SetUniform(const Uniform& uniform, const glm::vec2* values, const unsigned int count)
 	{
 		glUniform2fv(uniform, count, (float*)values);
 	}
 
-	void Program::SetUniform(const Uniform& uniform, const Math::Vector3* values, const unsigned int count)
+	void Program::SetUniform(const Uniform& uniform, const glm::vec3* values, const unsigned int count)
 	{
 		glUniform3fv(uniform, count, (float*)values);
 	}
 
-	void Program::SetUniform(const Uniform& uniform, const Math::Vector4* values, const unsigned int count)
+	void Program::SetUniform(const Uniform& uniform, const glm::vec4* values, const unsigned int count)
 	{
 		glUniform4fv(uniform, count, (float*)values);
 	}
 
-	void Program::SetUniform(const Uniform& uniform, const Math::Matrix3& value)
+	void Program::SetUniform(const Uniform& uniform, const glm::mat3& value)
 	{
-		glUniformMatrix3fv(uniform, 1, GL_FALSE, &value.m[0]);
+		glUniformMatrix3fv(uniform, 1, GL_FALSE, &value[0][0]);
 	}
 
-	void Program::SetUniform(const Uniform& uniform, const Math::Matrix4& value)
+	void Program::SetUniform(const Uniform& uniform, const glm::mat4& value)
 	{
-		glUniformMatrix4fv(uniform, 1, GL_FALSE, &value.m[0]);
+		glUniformMatrix4fv(uniform, 1, GL_FALSE, &value[0][0]);
 	}
 }
