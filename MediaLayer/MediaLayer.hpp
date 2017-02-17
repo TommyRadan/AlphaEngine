@@ -9,12 +9,12 @@
 
 #include <string>
 
-namespace MediaLayer {
+namespace MediaLayer
+{
 	struct Context :
 			public Component
-    {
-		static Context *GetInstance(void)
-        {
+	{
+		static Context *GetInstance(void) {
 			static Context *instance = nullptr;
 			if (instance == nullptr) {
 				instance = new Context();
@@ -25,11 +25,11 @@ namespace MediaLayer {
 		void Init(void) override;
 		void Quit(void) override;
 
-		void ShowDialog(const std::string&, const std::string&);
+		void ShowDialog(const std::string &title, const std::string &text);
 
 	private:
 		Context(void);
 
-		const Settings* const m_Settings;
+		const Settings *const m_Settings;
 	};
 }
