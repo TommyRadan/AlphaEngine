@@ -4,9 +4,6 @@
 #include <Utilities/Component.hpp>
 #include <Control/Settings.hpp>
 
-#include "Window.hpp"
-#include "Events.hpp"
-
 #include <string>
 
 namespace MediaLayer
