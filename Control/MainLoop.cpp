@@ -1,5 +1,7 @@
 #include <MediaLayer/MediaLayer.hpp>
 #include <RenderingEngine/RenderingEngine.hpp>
+#include <MediaLayer/Events.hpp>
+#include <MediaLayer/Window.hpp>
 
 int main(int argc, char* argv[])
 {
