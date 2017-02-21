@@ -1,5 +1,6 @@
 #include "MediaLayer.hpp"
 #include <SDL2/SDL.h>
+#include "Window.hpp"
 
 MediaLayer::Context::Context(void) :
 	m_Settings{ Settings::GetInstance() }
