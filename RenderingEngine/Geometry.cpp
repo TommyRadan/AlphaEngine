@@ -3,13 +3,15 @@
 #include "OpenGL/OpenGL.hpp"
 
 Geometry::Geometry(void) :
-	m_DataUploaded { false }
+	m_DataUploaded { false },
+	m_VertexArrayObject { nullptr },
+	m_VertexBufferObject { nullptr }
 {}
 
 Geometry::~Geometry(void)
 {
-	delete m_VertexArrayObject;
-	delete m_VertexBufferObject;
+	delete (OpenGL::VertexArray*)m_VertexArrayObject;
+	delete (OpenGL::VertexBuffer*)m_VertexBufferObject;
 }
 
 void Geometry::UploadMesh(const Mesh& mesh)
@@ -34,16 +36,6 @@ void Geometry::UploadMesh(const Mesh& mesh)
 	vao->BindAttribute(0, *vbo, OpenGL::Type::Float, (unsigned)mesh.VertexCount(), sizeof(Vertex), 0U);
 	vao->BindAttribute(1, *vbo, OpenGL::Type::Float, (unsigned)mesh.VertexCount(), sizeof(Vertex), sizeof(glm::vec3));
 	vao->BindAttribute(2, *vbo, OpenGL::Type::Float, (unsigned)mesh.VertexCount(), sizeof(Vertex), sizeof(glm::vec3) + sizeof(glm::vec2));
-}
-
-void Geometry::ReleaseData(void)
-{
-	if(!m_DataUploaded) return;
-
-	delete m_VertexArrayObject;
-	delete m_VertexBufferObject;
-	m_DrawCount = 0u;
-	m_DataUploaded = false;
 }
 
 void Geometry::Draw(void)

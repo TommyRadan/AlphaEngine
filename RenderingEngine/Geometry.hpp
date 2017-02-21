@@ -9,7 +9,6 @@ struct Geometry
 	~Geometry(void);
 
 	void UploadMesh(const Mesh& mesh);
-	void ReleaseData(void);
 
 	void Draw(void);
 
@@ -23,5 +22,5 @@ private:
 
 	void* m_VertexBufferObject;
 	void* m_VertexArrayObject;
-	unsigned int m_DrawCount;
+	uint32_t m_DrawCount;
 };
