@@ -19,7 +19,12 @@ namespace RenderingEngine
 		void Init(void) override;
 		void Quit(void) override;
 
+		void SetActiveRenderer(void* renderer);
+		void* GetActiveRenderer(void);
+
 	private:
 		Context(void);
+
+		void* m_ActiveRenderer;
 	};
 }

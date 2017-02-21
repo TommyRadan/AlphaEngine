@@ -1,5 +1,6 @@
 #include "RenderingEngine.hpp"
-#include "StandardRenderer/StandardRenderer.hpp"
+#include "Renderers/StandardRenderer/StandardRenderer.hpp"
+#include "OpenGL/OpenGL.hpp"
 
 RenderingEngine::Context::Context(void)
 {
@@ -30,4 +31,14 @@ void RenderingEngine::Context::Quit(void)
 	OpenGL::Context::GetInstance()->Quit();
 
 	m_IsInit = false;
+}
+
+void RenderingEngine::Context::SetActiveRenderer(void* renderer)
+{
+	m_ActiveRenderer = renderer;
+}
+
+void* RenderingEngine::Context::GetActiveRenderer(void)
+{
+	return m_ActiveRenderer;
 }
