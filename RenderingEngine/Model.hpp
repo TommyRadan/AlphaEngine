@@ -3,10 +3,8 @@
 #include <Mathematics/glm.hpp>
 #include <Utilities/Exception.hpp>
 
-#include "Geometry.hpp"
 #include "Material.hpp"
-#include "Camera.hpp"
-#include "Renderer.hpp"
+#include "Geometry.hpp"
 
 struct Model
 {
@@ -18,12 +16,12 @@ struct Model
 	Material& GetMaterial(void);
 
 	const glm::mat4 GetModelMatrix(void);
-	void Render(Renderer* const renderer);
+	void Render(void);
 
-	const glm::vec3 GetPos(void) const;
-	void SetPos(const glm::vec3& pos);
-	const glm::vec3 GetRot(void) const;
-	void SetRot(const glm::vec3& rot);
+	const glm::vec3 GetPosition(void) const;
+	void SetPosition(const glm::vec3& position);
+	const glm::vec3 GetRotation(void) const;
+	void SetRotation(const glm::vec3& rotation);
 	const glm::vec3 GetScale(void) const;
 	void SetScale(const glm::vec3& scale);
 
