@@ -1,12 +1,24 @@
 #include "Image.hpp"
 
-#include <cstring>
+#include <Utilities/Exception.hpp>
+
+#include "stb_image.h"
 
 Image::Image(void) :
 	m_ImageData{ nullptr },
 	m_Width{ 0u },
 	m_Height{ 0u }
 {}
+
+Image::Image(const std::string& filename)
+{
+	int numComponents;
+	m_ImageData = (Color*) stbi_load(filename.c_str(), (int*)&m_Width, (int*)&m_Height, &numComponents, 4);
+
+	if (m_ImageData == nullptr) {
+		throw Exception("Could not load image (" + filename + ")");
+	}
+}
 
 Image::Image(const Image& image) :
 	m_Width { image.m_Width },

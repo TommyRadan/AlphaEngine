@@ -1,10 +1,12 @@
 #pragma once
 
 #include <Utilities/Color.hpp>
+#include <string>
 
 struct Image
 {
 	Image(void);
+	Image(const std::string& filename);
 	Image(const Image& image);
 	Image(Image&& image);
 
