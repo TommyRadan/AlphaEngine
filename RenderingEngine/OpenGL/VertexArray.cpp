@@ -1,39 +1,35 @@
-#include "VertexArray.hpp"
+#include <RenderingEngine/OpenGL/VertexArray.hpp>
 
-namespace OpenGL
+RenderingEngine::OpenGL::VertexArray::VertexArray()
 {
-	VertexArray::VertexArray(void)
-	{
-		glGenVertexArrays(1, &m_ObjectID);
-	}
+	glGenVertexArrays(1, &m_ObjectID);
+}
 
-	VertexArray::~VertexArray(void)
-	{
-		glDeleteVertexArrays(1, &m_ObjectID);
-	}
+RenderingEngine::OpenGL::VertexArray::~VertexArray()
+{
+	glDeleteVertexArrays(1, &m_ObjectID);
+}
 
-	const GLuint VertexArray::Handle(void) const
-	{
-		return m_ObjectID;
-	}
+const GLuint RenderingEngine::OpenGL::VertexArray::Handle() const
+{
+	return m_ObjectID;
+}
 
-	void VertexArray::BindAttribute(
-		const Attribute& attribute, 
-		const VertexBuffer& buffer, 
-		Type type, 
-		unsigned int count, 
-		unsigned int stride, 
-		unsigned long long offset
-	) {
-		glBindVertexArray(m_ObjectID);
-		glBindBuffer(GL_ARRAY_BUFFER, buffer.Handle());
-		glEnableVertexAttribArray(attribute);
-		glVertexAttribPointer(attribute, count, (GLenum)type, GL_FALSE, stride, (GLvoid*)offset);
-	}
+void RenderingEngine::OpenGL::VertexArray::BindAttribute(const RenderingEngine::OpenGL::Attribute& attribute,
+								const RenderingEngine::OpenGL::VertexBuffer& buffer,
+								const RenderingEngine::OpenGL::Type type,
+								unsigned int count,
+								unsigned int stride,
+								unsigned long long offset
+) {
+	glBindVertexArray(m_ObjectID);
+	glBindBuffer(GL_ARRAY_BUFFER, buffer.Handle());
+	glEnableVertexAttribArray(attribute);
+	glVertexAttribPointer(attribute, count, (GLenum)type, GL_FALSE, stride, (GLvoid*)offset);
+}
 
-	void VertexArray::BindElements(const VertexBuffer& elements)
-	{
-		glBindVertexArray(m_ObjectID);
-		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, elements.Handle());
-	}
+void RenderingEngine::OpenGL::VertexArray::BindElements(const RenderingEngine::OpenGL::VertexBuffer& elements)
+{
+	glBindVertexArray(m_ObjectID);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, elements.Handle());
 }

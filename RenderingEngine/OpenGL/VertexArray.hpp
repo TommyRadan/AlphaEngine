@@ -1,35 +1,33 @@
 #pragma once
 
-#include "Typedef.hpp"
+#include <RenderingEngine/OpenGL/Typedef.hpp>
+#include <RenderingEngine/OpenGL/VertexBuffer.hpp>
 
-#include "VertexBuffer.hpp"
-
-namespace OpenGL
+namespace RenderingEngine
 {
-	class VertexArray
+	namespace OpenGL
 	{
-	public:
-		VertexArray(void);
-		~VertexArray(void);
+		struct VertexArray
+		{
+			VertexArray();
+			~VertexArray();
 
-		const unsigned int Handle(void) const;
+			VertexArray(const VertexArray& other) = delete;
+			const VertexArray& operator=(const VertexArray& other) = delete;
 
-		void BindAttribute(
-			const Attribute& attribute, 
-			const VertexBuffer& buffer, 
-			Type type, 
-			unsigned int count, 
-			unsigned int stride, 
-			unsigned long long offset
-		);
+			const uint32_t Handle() const;
 
-		void BindElements(const VertexBuffer& elements);
+			void BindAttribute(const Attribute& attribute,
+							   const VertexBuffer& buffer,
+							   Type type,
+							   unsigned int count,
+							   unsigned int stride,
+							   unsigned long long offset);
 
-	private:
-		VertexArray(const VertexArray& other);
-		const VertexArray& operator=(const VertexArray& other);
+			void BindElements(const VertexBuffer& elements);
 
-		unsigned int m_ObjectID;
-	};
+		private:
+			unsigned int m_ObjectID;
+		};
+	}
 }
-

@@ -1,29 +1,30 @@
 #pragma once
 
-// OpenGL
-#include "Typedef.hpp"
+#include <RenderingEngine/OpenGL/Typedef.hpp>
 
-namespace OpenGL
+namespace RenderingEngine
 {
-	class Texture
+	namespace OpenGL
 	{
-	public:
-		Texture(void);
-		~Texture(void);
+		struct Texture
+		{
+			Texture();
+			~Texture();
 
-		const unsigned int Handle(void) const;
+			const uint32_t Handle() const;
 
-		void Image2D(const void* data, const DataType type, const Format format, const unsigned int width, const unsigned int height, const InternalFormat internalFormat);
+			void Image2D(const void* data, DataType type, Format format, uint32_t width, uint32_t height, InternalFormat internalFormat);
 
-		void SetWrappingS(const Wrapping s);
-		void SetWrappingT(const Wrapping t);
-		void SetWrappingR(const Wrapping r);
+			void SetWrappingS(Wrapping s);
+			void SetWrappingT(Wrapping t);
+			void SetWrappingR(Wrapping r);
 
-		void SetFilters(const Filter min, const Filter mag);
+			void SetFilters(Filter min, Filter mag);
 
-		void GenerateMipmaps(void);
+			void GenerateMipmaps();
 
-	private:
-		unsigned int m_ObjectID;
-	};
+		private:
+			unsigned int m_ObjectID;
+		};
+	}
 }

@@ -1,44 +1,41 @@
-#include "RenderingEngine.hpp"
-#include "Renderers/StandardRenderer/StandardRenderer.hpp"
-#include "OpenGL/OpenGL.hpp"
+#include <RenderingEngine/RenderingEngine.hpp>
+#include <RenderingEngine/Window.hpp>
+#include <RenderingEngine/OpenGL/OpenGL.hpp>
 
-RenderingEngine::Context::Context(void)
+RenderingEngine::Context* RenderingEngine::Context::GetInstance()
 {
-	m_IsInit = false;
+    static Context* instance = nullptr;
+
+    if (instance == nullptr)
+    {
+        instance = new Context;
+    }
+
+    return instance;
 }
 
-void RenderingEngine::Context::Init(void)
+void RenderingEngine::Context::Init()
 {
-	if (m_IsInit) {
-		throw Exception("RenderingEngine::Init called twice!");
-	}
+    RenderingEngine::Window::GetInstance()->Init();
+    RenderingEngine::OpenGL::Context::GetInstance()->Init();
 
-	OpenGL::Context::GetInstance()->Init();
-	StandardRenderer::GetInstance()->Init();
-
-	OpenGL::Context::GetInstance()->Enable(OpenGL::Capability::DepthTest);
-
-	m_IsInit = true;
+    RenderingEngine::OpenGL::Context::GetInstance()->Enable(RenderingEngine::OpenGL::Capability::CullFace);
+    RenderingEngine::OpenGL::Context::GetInstance()->Enable(RenderingEngine::OpenGL::Capability::DepthTest);
 }
 
-void RenderingEngine::Context::Quit(void)
+void RenderingEngine::Context::Quit()
 {
-	if (!m_IsInit) {
-		throw Exception("RenderingEngine::Quit called before RenderingEngine::Init!");
-	}
-
-	StandardRenderer::GetInstance()->Quit();
-	OpenGL::Context::GetInstance()->Quit();
-
-	m_IsInit = false;
+    RenderingEngine::OpenGL::Context::GetInstance()->Quit();
+    RenderingEngine::Window::GetInstance()->Quit();
 }
 
-void RenderingEngine::Context::SetActiveRenderer(void* renderer)
+void RenderingEngine::Context::Render()
 {
-	m_ActiveRenderer = renderer;
-}
+    RenderingEngine::Window::GetInstance()->Clear();
 
-void* RenderingEngine::Context::GetActiveRenderer(void)
-{
-	return m_ActiveRenderer;
+	/*
+	 * TODO: Render!
+	 */
+
+    RenderingEngine::Window::GetInstance()->SwapBuffers();
 }

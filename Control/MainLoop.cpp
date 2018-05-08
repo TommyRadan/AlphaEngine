@@ -1,38 +1,49 @@
-#include <MediaLayer/MediaLayer.hpp>
+#include <cstdlib>
+
+#include <EventEngine/EventEngine.hpp>
+#include <Infrastructure/Exception.hpp>
+#include <EventEngine/Dispatch.hpp>
 #include <RenderingEngine/RenderingEngine.hpp>
-#include <MediaLayer/Events.hpp>
-#include <MediaLayer/Window.hpp>
+#include <RenderingEngine/Window.hpp>
 
 int main(int argc, char* argv[])
 {
-	(void) argc;
-	(void) argv;
+    (void) argc;
+    (void) argv;
 
-	try {
-		MediaLayer::Context::GetInstance()->Init();
-		RenderingEngine::Context::GetInstance()->Init();
-	} catch (Exception e) {
-		MediaLayer::Context::GetInstance()->ShowDialog("Initialization error!", e.what());
-		return 1;
-	}
 
-	try {
-		for (;;)
-		{
-			MediaLayer::Events::GetInstance()->Process();
-            MediaLayer::Events::GetInstance()->Update();
-            if(MediaLayer::Events::GetInstance()->IsQuitRequested()) break;
+    try
+    {
+        EventEngine::Context::GetInstance()->Init();
+        RenderingEngine::Context::GetInstance()->Init();
+    }
+    catch (const Exception& e)
+    {
+        RenderingEngine::Window::GetInstance()->ShowMessage("Initialization Error", e.what());
+        return EXIT_FAILURE;
+    }
 
-            // Scene should be rendered here
+	EventEngine::Dispatch::GetInstance()->DispatchOnGameStartCallback();
 
-            MediaLayer::Window::GetInstance()->SwapBuffers();
-		}
-	} catch (Exception e) {
-		MediaLayer::Context::GetInstance()->ShowDialog("Runtime error!", e.what());
-		return 1;
-	}
+    try
+    {
+        for (;;)
+        {
+            EventEngine::Dispatch::GetInstance()->HandleEvents();
+            RenderingEngine::Context::GetInstance()->Render();
 
-	RenderingEngine::Context::GetInstance()->Quit();
-	MediaLayer::Context::GetInstance()->Quit();
-    return 0;
+            if (EventEngine::Context::GetInstance()->IsQuitRequested()) break;
+        }
+    }
+    catch (const Exception& e)
+    {
+        RenderingEngine::Window::GetInstance()->ShowMessage("Error", e.what());
+        return EXIT_FAILURE;
+    }
+
+	EventEngine::Dispatch::GetInstance()->DispatchOnGameEndCallback();
+
+    RenderingEngine::Context::GetInstance()->Quit();
+    EventEngine::Context::GetInstance()->Quit();
+    return EXIT_SUCCESS;
 }

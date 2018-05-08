@@ -1,34 +1,34 @@
 #pragma once
 
-#include "Typedef.hpp"
-#include "Texture.hpp"
+#include <RenderingEngine/OpenGL/Typedef.hpp>
+#include <RenderingEngine/OpenGL/Texture.hpp>
 
-#include <Utilities/Exception.hpp>
-
-namespace OpenGL
+namespace RenderingEngine
 {
-	class Framebuffer
+	namespace OpenGL
 	{
-	public:
-		Framebuffer(
-			const unsigned int width, 
-			const unsigned int height, 
-			const unsigned char color = 32u,
-			const unsigned char depth = 24u
-		);
-		~Framebuffer(void);
+		struct Framebuffer
+		{
+			Framebuffer(
+					uint32_t width,
+					uint32_t height,
+					uint8_t color = 32u,
+					uint8_t depth = 24u
+			);
+			~Framebuffer();
 
-		const unsigned int Handle(void) const;
+			Framebuffer(const Framebuffer&) = delete;
+			const Framebuffer& operator=(const Framebuffer&) = delete;
 
-		const Texture& GetTexture(void) const;
-		const Texture& GetDepthTexture(void) const;
+			const uint32_t Handle() const;
 
-	private:
-		Framebuffer(const Framebuffer&);
-		const Framebuffer& operator=(const Framebuffer&);
+			const Texture& GetTexture() const;
+			const Texture& GetDepthTexture() const;
 
-		unsigned int m_ObjectID;
-		Texture m_ColorTexture;
-		Texture m_DepthTexture;
-	};
+		private:
+			uint32_t m_ObjectID;
+			Texture m_ColorTexture;
+			Texture m_DepthTexture;
+		};
+	}
 }

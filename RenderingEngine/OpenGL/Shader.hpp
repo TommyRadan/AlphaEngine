@@ -1,31 +1,28 @@
 #pragma once
 
-// OpenGL
-#include "Typedef.hpp"
+#include <RenderingEngine/OpenGL/Typedef.hpp>
 
-// Standard Library
 #include <exception>
 #include <string>
 
-#include <Utilities/Exception.hpp>
-
-namespace OpenGL
+namespace RenderingEngine
 {
-	class Shader
+	namespace OpenGL
 	{
-	public:
-		Shader(const ShaderType type);
-		~Shader(void);
-		
-		const GLuint Handle(void) const;
-		
-		void Source(const std::string& code);
-		void Compile(void);
+		struct Shader
+		{
+			explicit Shader(ShaderType type);
+			~Shader();
 
-		std::string GetInfoLog(void);
+			const GLuint Handle() const;
 
-	private:
-		GLuint m_ObjectID;
-	};
+			void Source(const std::string& code);
+			void Compile();
+
+			std::string GetInfoLog();
+
+		private:
+			GLuint m_ObjectID;
+		};
+	}
 }
-

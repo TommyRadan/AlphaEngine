@@ -1,37 +1,36 @@
-#include "VertexBuffer.hpp"
+#include <RenderingEngine/OpenGL/VertexBuffer.hpp>
 
-namespace OpenGL
+RenderingEngine::OpenGL::VertexBuffer::VertexBuffer()
 {
-	VertexBuffer::VertexBuffer(void)
-	{
-		glGenBuffers(1, &m_ObjectID);
-	}
+	glGenBuffers(1, &m_ObjectID);
+}
 
-	VertexBuffer::~VertexBuffer(void)
-	{
-		glDeleteBuffers(1, &m_ObjectID);
-	}
+RenderingEngine::OpenGL::VertexBuffer::~VertexBuffer()
+{
+	glDeleteBuffers(1, &m_ObjectID);
+}
 
-	const GLuint VertexBuffer::Handle(void) const
-	{
-		return m_ObjectID;
-	}
+const GLuint RenderingEngine::OpenGL::VertexBuffer::Handle() const
+{
+	return m_ObjectID;
+}
 
-	void VertexBuffer::Data(const void* data, const size_t length, const BufferUsage usage)
-	{
-		glBindBuffer(GL_ARRAY_BUFFER, m_ObjectID);
-		glBufferData(GL_ARRAY_BUFFER, length, data, (GLenum)usage);
-	}
+void RenderingEngine::OpenGL::VertexBuffer::Data(const void* data,
+												 const size_t length,
+												 const RenderingEngine::OpenGL::BufferUsage usage)
+{
+	glBindBuffer(GL_ARRAY_BUFFER, m_ObjectID);
+	glBufferData(GL_ARRAY_BUFFER, length, data, (GLenum)usage);
+}
 
-	void VertexBuffer::SubData(const void* data, const size_t offset, const size_t length)
-	{
-		glBindBuffer(GL_ARRAY_BUFFER, m_ObjectID);
-		glBufferSubData(GL_ARRAY_BUFFER, offset, length, data);
-	}
+void RenderingEngine::OpenGL::VertexBuffer::SubData(const void* data, const size_t offset, const size_t length)
+{
+	glBindBuffer(GL_ARRAY_BUFFER, m_ObjectID);
+	glBufferSubData(GL_ARRAY_BUFFER, offset, length, data);
+}
 
-	void VertexBuffer::GetSubData(void* data, const size_t offset, const size_t length)
-	{
-		glBindBuffer(GL_ARRAY_BUFFER, m_ObjectID);
-		glGetBufferSubData(GL_ARRAY_BUFFER, offset, length, data);
-	}
+void RenderingEngine::OpenGL::VertexBuffer::GetSubData(void* data, const size_t offset, const size_t length)
+{
+	glBindBuffer(GL_ARRAY_BUFFER, m_ObjectID);
+	glGetBufferSubData(GL_ARRAY_BUFFER, offset, length, data);
 }

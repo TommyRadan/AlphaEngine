@@ -1,20 +1,15 @@
 # This file defines AlphaEngine build system
 
 cmake_minimum_required(VERSION 3.6)
-project(AlphaEngine)
+project(AlphaEngine CXX)
 
-# Define different target directories based on OS
-if (WIN32)
-    set(LIBRARY_OUTPUT_PATH ${CMAKE_SOURCE_DIR}/Binaries/Windows/)
-    set(EXECUTABLE_OUTPUT_PATH ${CMAKE_SOURCE_DIR}/Binaries/Windows/)
-elseif (APPLE)
-    set(LIBRARY_OUTPUT_PATH ${CMAKE_SOURCE_DIR}/Binaries/Apple/)
-    set(EXECUTABLE_OUTPUT_PATH ${CMAKE_SOURCE_DIR}/Binaries/Apple/)
-elseif (UNIX)
-    set(LIBRARY_OUTPUT_PATH ${CMAKE_SOURCE_DIR}/Binaries/Unix/)
-    set(EXECUTABLE_OUTPUT_PATH ${CMAKE_SOURCE_DIR}/Binaries/Unix/)
-endif ()
+# Debug build or not?
+add_definitions(-D_DEBUG)
 
+# Compile options
+set(LIBRARY_OUTPUT_PATH ${CMAKE_SOURCE_DIR}/Binaries/)
+set(EXECUTABLE_OUTPUT_PATH ${CMAKE_SOURCE_DIR}/Binaries/)
+set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_VERBOSE_MAKEFILE false)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
@@ -22,26 +17,25 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 include_directories(${CMAKE_SOURCE_DIR})
 
 # Include subprojects
-add_subdirectory(Control)
-add_subdirectory(MediaLayer)
+add_subdirectory(EventEngine)
+add_subdirectory(Infrastructure)
 add_subdirectory(RenderingEngine)
 
 # Main shared lib
-#add_library(AlphaEngine SHARED Control/Dummy.cpp)
-add_executable(AlphaEngine Control/Dummy.cpp)
+#add_library(AlphaEngine SHARED Control/MainLoop.cpp)
+add_executable(AlphaEngine Control/MainLoop.cpp)
 
 # Add Dependencies
-add_dependencies(AlphaEngine Control)
-add_dependencies(AlphaEngine MediaLayer)
+add_dependencies(AlphaEngine EventEngine)
+add_dependencies(AlphaEngine Infrastructure)
 add_dependencies(AlphaEngine RenderingEngine)
 
 # Link Libraries
-target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}libControl.a)
-target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}libMediaLayer.a)
+target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}libInfrastructure.a)
+target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}libEventEngine.a)
 target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}libRenderingEngine.a)
-target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}libImageLoading.a)
-target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}libOpenGL.a)
 
+# Find and link to external dependencies
 find_package(SDL2 REQUIRED)
 target_link_libraries(AlphaEngine "-lSDL2")
 include_directories(${SDL2_INCLUDE_DIR})
