@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Mathematics/glm.hpp>
+#include <Infrastructure/Transform.hpp>
 
 namespace RenderingEngine
 {
@@ -11,15 +12,13 @@ namespace RenderingEngine
     public:
         static Camera* GetInstance();
 
-        void SetPosition(const glm::vec3& pos);
-        void SetRotation(const glm::vec3& rotation);
+        Infrastructure::Transform transform;
 
-        glm::vec3 GetPosition();
-        glm::vec3 GetRotation();
+        void InvalidateViewMatrix();
+        const glm::mat4 GetViewMatrix() const;
 
-        // Feedback
-        glm::mat4 GetViewMatrix();
-        glm::mat4 GetProjectionMatrix();
+        void InvalidateProjectionMatrix();
+        const glm::mat4 GetProjectionMatrix() const;
 
     private:
         // Settings
@@ -28,13 +27,10 @@ namespace RenderingEngine
         float m_NearClip;
         float m_FarClip;
 
-        // Feedback
-        glm::mat4 m_ViewMatrix;
-        bool m_IsViewMatrixDirty;
-
-        // Data
-        glm::vec3 m_Position;
-        glm::vec3 m_Rotation;
-        glm::mat4 m_Perspective;
+        // Matrices
+        mutable glm::mat4 m_ViewMatrix;
+        mutable bool m_IsViewMatrixDirty;
+        mutable glm::mat4 m_Perspective;
+        mutable bool m_IsPerspectiveMatrixDirty;
     };
 }
