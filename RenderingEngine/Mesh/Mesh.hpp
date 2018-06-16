@@ -8,7 +8,7 @@ namespace RenderingEngine
 {
 	struct Mesh
 	{
-		void UploadOBJ(const std::vector<Vertex> &v);
+		void UploadOBJ(const std::vector<Vertex>& v);
 
 		const Vertex* Vertices() const;
 		std::size_t VertexCount() const;
