@@ -31,7 +31,7 @@ namespace RenderingEngine
 
 		inline Buffer operator|(Buffer lft, Buffer rht)
 		{
-			return (Buffer)((int)lft | (int)rht);
+			return (Buffer)((uint32_t)lft | (uint32_t)rht);
 		}
 
 		enum class Primitive

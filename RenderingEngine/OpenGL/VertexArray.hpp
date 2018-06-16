@@ -13,7 +13,9 @@ namespace RenderingEngine
 			~VertexArray();
 
 			VertexArray(const VertexArray& other) = delete;
+			VertexArray(const VertexArray&& other) = delete;
 			const VertexArray& operator=(const VertexArray& other) = delete;
+			const VertexArray&& operator=(const VertexArray&& other) = delete;
 
 			const uint32_t Handle() const;
 

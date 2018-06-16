@@ -26,7 +26,7 @@ void RenderingEngine::OpenGL::Context::Init()
 
     if(versionMajor < 3 || (versionMajor == 3 && versionMinor < 3))
     {
-        throw Exception("The game requires at least OpenGL version 3.3");
+        throw Exception("OpenGL version error! Unsupported hardware or driver");
     }
 }
 

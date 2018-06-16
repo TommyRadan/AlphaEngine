@@ -9,16 +9,16 @@ namespace RenderingEngine
 	{
 		struct Framebuffer
 		{
-			Framebuffer(
-					uint32_t width,
-					uint32_t height,
-					uint8_t color = 32u,
-					uint8_t depth = 24u
-			);
+			Framebuffer(uint32_t width,
+						uint32_t height,
+						uint8_t color = 32u,
+						uint8_t depth = 24u);
 			~Framebuffer();
 
 			Framebuffer(const Framebuffer&) = delete;
+			Framebuffer(const Framebuffer&&) = delete;
 			const Framebuffer& operator=(const Framebuffer&) = delete;
+			const Framebuffer&& operator=(const Framebuffer&&) = delete;
 
 			const uint32_t Handle() const;
 

@@ -13,7 +13,12 @@ namespace RenderingEngine
 
 			const uint32_t Handle() const;
 
-			void Image2D(const void* data, DataType type, Format format, uint32_t width, uint32_t height, InternalFormat internalFormat);
+			void Image2D(const void* data,
+						 DataType type,
+                         Format format,
+                         uint32_t width,
+                         uint32_t height,
+                         InternalFormat internalFormat);
 
 			void SetWrappingS(Wrapping s);
 			void SetWrappingT(Wrapping t);
