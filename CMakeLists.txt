@@ -6,6 +6,11 @@ project(AlphaEngine CXX)
 # Debug build or not?
 add_definitions(-D_DEBUG)
 
+# Version
+add_definitions(-DVERSION_MAJOR=0)
+add_definitions(-DVERSION_MINOR=0)
+add_definitions(-DVERSION_PATCH=0)
+
 # Compile options
 set(LIBRARY_OUTPUT_PATH ${CMAKE_SOURCE_DIR}/Binaries/)
 set(EXECUTABLE_OUTPUT_PATH ${CMAKE_SOURCE_DIR}/Binaries/)

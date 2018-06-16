@@ -1,5 +1,6 @@
 #include <Infrastructure/Settings.hpp>
 #include <SDL2/SDL.h>
+#include <Infrastructure/Version.hpp>
 
 Settings::Settings()
 {
@@ -16,7 +17,7 @@ Settings::Settings()
 	m_WindowType = WinType::WIN_TYPE_FULLSCREEN;
 #endif
 
-    m_WindowName = "Labyrinth";
+    m_WindowName = std::string{ "AlphaEngine v" } + Infrastructure::Version::GetVersion();
     m_IsDoubleBuffered = true;
     m_FieldOfView = 70.0f;
     m_MouseSensitivity = 0.005f;
