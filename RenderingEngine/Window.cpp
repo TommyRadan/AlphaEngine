@@ -14,19 +14,21 @@ namespace RenderingEngine
 
     Window* Window::GetInstance()
     {
-        static Window* instance = nullptr;
-        if(instance == nullptr)
+        static Window* instance { nullptr };
+
+        if (instance == nullptr)
         {
             instance = new Window();
         }
+
         return instance;
     }
 
     void Window::Init()
     {
-        Settings* settings = Settings::GetInstance();
-        uint32_t window_flags = SDL_WINDOW_OPENGL;
-        WinType type = settings->GetWindowType();
+        auto settings { Settings::GetInstance() };
+        uint32_t window_flags { SDL_WINDOW_OPENGL };
+        auto type { settings->GetWindowType() };
 
         if (type == WinType::WIN_TYPE_BORDERLESS)
         {
@@ -46,7 +48,7 @@ namespace RenderingEngine
         SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE, 8);
         SDL_GL_SetAttribute(SDL_GL_BUFFER_SIZE, 32);
         SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 16);
-        SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, settings->IsDoubleBuffered()?1:0);
+        SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, settings->IsDoubleBuffered());
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
 
         m_Window = SDL_CreateWindow(
@@ -60,7 +62,7 @@ namespace RenderingEngine
 
         if (m_Window == nullptr)
         {
-            throw Exception(SDL_GetError());
+            throw Exception { SDL_GetError() };
         }
 
         m_GlContext = SDL_GL_CreateContext((SDL_Window*) m_Window);
@@ -74,18 +76,21 @@ namespace RenderingEngine
 
     void Window::Clear()
     {
-        //OpenGL::Context::GetInstance()->ClearColor(Infrastructure::Color(0, 0, 0, 255));
-        //OpenGL::Context::GetInstance()->Clear(OpenGL::Buffer::Color);
-        //OpenGL::Context::GetInstance()->Clear(OpenGL::Buffer::Depth);
+        OpenGL::Context::GetInstance()->ClearColor(Infrastructure::Color(0, 0, 0, 255));
+        OpenGL::Context::GetInstance()->Clear(OpenGL::Buffer::Color);
+        OpenGL::Context::GetInstance()->Clear(OpenGL::Buffer::Depth);
     }
 
     void Window::SwapBuffers()
     {
-        SDL_GL_SwapWindow((SDL_Window*) m_Window);
+        SDL_GL_SwapWindow(static_cast<SDL_Window*>(m_Window));
     }
 
     void Window::ShowMessage(const std::string& title, const std::string& message)
     {
-        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, title.c_str(), message.c_str(), (SDL_Window*) m_Window);
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR,
+                                 title.c_str(),
+                                 message.c_str(),
+                                 static_cast<SDL_Window*>(m_Window));
     }
 }
