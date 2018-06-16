@@ -1,7 +1,7 @@
 #pragma once
 
 #include <Infrastructure/Subsystem.hpp>
-#include <RenderingEngine/Renderables/Renderable.hpp>
+#include <RenderingEngine/Renderer.hpp>
 #include <vector>
 
 namespace RenderingEngine
@@ -17,5 +17,11 @@ namespace RenderingEngine
         void Quit() final;
 
         void Render();
+
+        Renderer* const GetCurrentRenderer();
+
+    private:
+        friend Renderer;
+        Renderer* m_CurrentRenderer;
     };
 }

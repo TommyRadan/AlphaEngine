@@ -24,8 +24,6 @@ namespace RenderingEngine
         void UploadVector3(const std::string& vec3Name, const glm::vec3& vector);
         void UploadVector4(const std::string& vec4Name, const glm::vec4& vector);
 
-        static Renderer* GetCurrentRenderer();
-
     protected:
         Renderer() = default;
 
@@ -35,7 +33,5 @@ namespace RenderingEngine
         void* m_VertexShader;
         void* m_FragmentShader;
         void* m_Program;
-
-        static Renderer* m_CurrentRenderer;
     };
 }

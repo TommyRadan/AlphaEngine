@@ -1,5 +1,4 @@
 #include <RenderingEngine/Renderers/BasicRenderer.hpp>
-#include <RenderingEngine/Camera.hpp>
 
 static std::string vertexShader = R"vs(
         #version 330
@@ -28,7 +27,8 @@ static std::string fragmentShader = R"fs(
         }
 )fs";
 
-RenderingEngine::Renderers::BasicRenderer::BasicRenderer()
+RenderingEngine::Renderers::BasicRenderer::BasicRenderer() :
+    Renderer {}
 {
     ConstructProgram(vertexShader, fragmentShader);
 }

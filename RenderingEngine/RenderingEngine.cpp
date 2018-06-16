@@ -21,10 +21,14 @@ void RenderingEngine::Context::Init()
 
     RenderingEngine::OpenGL::Context::GetInstance()->Enable(RenderingEngine::OpenGL::Capability::CullFace);
     RenderingEngine::OpenGL::Context::GetInstance()->Enable(RenderingEngine::OpenGL::Capability::DepthTest);
+
+    m_CurrentRenderer = nullptr;
 }
 
 void RenderingEngine::Context::Quit()
 {
+    m_CurrentRenderer = nullptr;
+
     RenderingEngine::OpenGL::Context::GetInstance()->Quit();
     RenderingEngine::Window::GetInstance()->Quit();
 }
@@ -38,4 +42,9 @@ void RenderingEngine::Context::Render()
 	 */
 
     RenderingEngine::Window::GetInstance()->SwapBuffers();
+}
+
+RenderingEngine::Renderer* const RenderingEngine::Context::GetCurrentRenderer()
+{
+    return m_CurrentRenderer;
 }

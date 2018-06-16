@@ -1,18 +1,17 @@
-#include <RenderingEngine/Renderers/Renderer.hpp>
+#include <RenderingEngine/Renderer.hpp>
 #include <RenderingEngine/OpenGL/OpenGL.hpp>
 #include <RenderingEngine/Camera.hpp>
-
-RenderingEngine::Renderer* RenderingEngine::Renderer::m_CurrentRenderer = nullptr;
+#include <RenderingEngine/RenderingEngine.hpp>
 
 void RenderingEngine::Renderer::StartRenderer()
 {
-    m_CurrentRenderer = this;
+    RenderingEngine::Context::GetInstance()->m_CurrentRenderer = this;
     static_cast<OpenGL::Program*>(m_Program)->Start();
 }
 
 void RenderingEngine::Renderer::StopRenderer()
 {
-    m_CurrentRenderer = nullptr;
+    RenderingEngine::Context::GetInstance()->m_CurrentRenderer = nullptr;
     static_cast<OpenGL::Program*>(m_Program)->Stop();
 }
 
@@ -97,11 +96,6 @@ void RenderingEngine::Renderer::UploadVector4(const std::string& vec4Name, const
     OpenGL::Uniform uniform = static_cast<OpenGL::Program*>(m_Program)->GetUniform(vec4Name);
     if (uniform == -1) return;
     static_cast<OpenGL::Program*>(m_Program)->SetUniform(uniform, vector);
-}
-
-RenderingEngine::Renderer* RenderingEngine::Renderer::GetCurrentRenderer()
-{
-    return m_CurrentRenderer;
 }
 
 void RenderingEngine::Renderer::ConstructProgram(const std::string& vsString, const std::string& fsString)
