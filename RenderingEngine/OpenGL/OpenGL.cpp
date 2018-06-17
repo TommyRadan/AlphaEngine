@@ -108,9 +108,9 @@ void RenderingEngine::OpenGL::Context::DrawElements(const RenderingEngine::OpenG
                                                     const RenderingEngine::OpenGL::Primitive mode,
                                                     const intptr_t offset,
                                                     const unsigned int count,
-                                                    const unsigned int type)
+                                                    const RenderingEngine::OpenGL::Type type)
 {
     glBindVertexArray(vao.Handle());
-    glDrawElements((GLenum)mode, count, type, (const GLvoid*)offset);
+    glDrawElements((GLenum)mode, count, (GLenum)type, (const GLvoid*)offset);
     glBindVertexArray(0);
 }

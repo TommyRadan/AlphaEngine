@@ -33,8 +33,16 @@ namespace RenderingEngine
             void BindFramebuffer(const OpenGL::Framebuffer& framebuffer);
             void BindFramebuffer();
 
-            void DrawArrays(const OpenGL::VertexArray& vao, OpenGL::Primitive mode, unsigned int offset, size_t vertices);
-            void DrawElements(const OpenGL::VertexArray& vao, OpenGL::Primitive mode, intptr_t offset, unsigned int count, unsigned int type);
+            void DrawArrays(const OpenGL::VertexArray& vao,
+                            OpenGL::Primitive mode,
+                            unsigned int offset,
+                            size_t vertices);
+
+            void DrawElements(const OpenGL::VertexArray& vao,
+                              OpenGL::Primitive mode,
+                              intptr_t offset,
+                              unsigned int count,
+                              RenderingEngine::OpenGL::Type type);
         };
     }
 }
