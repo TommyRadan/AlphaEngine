@@ -22,6 +22,7 @@ namespace RenderingEngine
 			std::string GetInfoLog();
 
 		private:
+			std::string m_Code;
 			GLuint m_ObjectID;
 		};
 	}

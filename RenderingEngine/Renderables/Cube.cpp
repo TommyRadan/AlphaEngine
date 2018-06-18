@@ -1,6 +1,7 @@
 #include <RenderingEngine/Renderables/Cube.hpp>
 #include <RenderingEngine/Renderer.hpp>
 #include <RenderingEngine/RenderingEngine.hpp>
+#include <Infrastructure/Log.hpp>
 
 RenderingEngine::Cube::Cube() :
         m_VertexCount { 8 }
@@ -46,6 +47,7 @@ void RenderingEngine::Cube::Render()
 
     if (!currentRenderer)
     {
+        LOG_WARN("Attampted to render without renderer attached");
         return;
     }
 

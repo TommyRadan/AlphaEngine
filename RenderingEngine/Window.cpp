@@ -4,6 +4,7 @@
 #include <Infrastructure/Settings.hpp>
 #include <Infrastructure/Exception.hpp>
 #include <Infrastructure/Color.hpp>
+#include <Infrastructure/Log.hpp>
 
 namespace RenderingEngine
 {
@@ -62,6 +63,8 @@ namespace RenderingEngine
 
         if (m_Window == nullptr)
         {
+            LOG_FATAL("Cannot create window");
+            LOG_FATAL("SDL Error: %s", SDL_GetError());
             throw Exception { SDL_GetError() };
         }
 

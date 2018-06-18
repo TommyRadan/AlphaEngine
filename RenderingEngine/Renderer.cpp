@@ -2,6 +2,7 @@
 #include <RenderingEngine/OpenGL/OpenGL.hpp>
 #include <RenderingEngine/Camera.hpp>
 #include <RenderingEngine/RenderingEngine.hpp>
+#include <Infrastructure/Log.hpp>
 
 void RenderingEngine::Renderer::StartRenderer()
 {
@@ -30,12 +31,12 @@ void RenderingEngine::Renderer::SetupOptions(const RenderOptions& options)
 
     for (auto& element : options.Colors)
     {
-        auto vector = glm::vec4(
-                (float)element.second.r / 255.0f,
-                (float)element.second.g / 255.0f,
-                (float)element.second.b / 255.0f,
-                (float)element.second.a / 255.0f
-        );
+        auto vector = glm::vec4 {
+                (float) element.second.r / 255.0f,
+                (float) element.second.g / 255.0f,
+                (float) element.second.b / 255.0f,
+                (float) element.second.a / 255.0f
+        };
 
         this->UploadVector4(element.first, vector);
     }
@@ -52,49 +53,77 @@ void RenderingEngine::Renderer::SetupOptions(const RenderOptions& options)
 void RenderingEngine::Renderer::UploadTextureReference(const std::string& textureName, const int position)
 {
     OpenGL::Uniform uniform = static_cast<OpenGL::Program*>(m_Program)->GetUniform(textureName);
-    if (uniform == -1) return;
+    if (uniform == -1)
+    {
+        LOG_WARN("Cannot find uniform: %s", textureName.c_str());
+        return;
+    }
     static_cast<OpenGL::Program*>(m_Program)->SetUniform(uniform, position);
 }
 
 void RenderingEngine::Renderer::UploadCoefficient(const std::string& coefficientName, const float coefficient)
 {
     OpenGL::Uniform uniform = static_cast<OpenGL::Program*>(m_Program)->GetUniform(coefficientName);
-    if (uniform == -1) return;
+    if (uniform == -1)
+    {
+        LOG_WARN("Cannot find uniform: %s", coefficientName.c_str());
+        return;
+    }
     static_cast<OpenGL::Program*>(m_Program)->SetUniform(uniform, coefficient);
 }
 
 void RenderingEngine::Renderer::UploadMatrix3(const std::string& mat3Name, const glm::mat3& matrix)
 {
     OpenGL::Uniform uniform = static_cast<OpenGL::Program*>(m_Program)->GetUniform(mat3Name);
-    if (uniform == -1) return;
+    if (uniform == -1)
+    {
+        LOG_WARN("Cannot find uniform: %s", mat3Name.c_str());
+        return;
+    }
     static_cast<OpenGL::Program*>(m_Program)->SetUniform(uniform, matrix);
 }
 
 void RenderingEngine::Renderer::UploadMatrix4(const std::string& mat4Name, const glm::mat4& matrix)
 {
     OpenGL::Uniform uniform = static_cast<OpenGL::Program*>(m_Program)->GetUniform(mat4Name);
-    if (uniform == -1) return;
+    if (uniform == -1)
+    {
+        LOG_WARN("Cannot find uniform: %s", mat4Name.c_str());
+        return;
+    }
     static_cast<OpenGL::Program*>(m_Program)->SetUniform(uniform, matrix);
 }
 
 void RenderingEngine::Renderer::UploadVector2(const std::string& vec2Name, const glm::vec2& vector)
 {
     OpenGL::Uniform uniform = static_cast<OpenGL::Program*>(m_Program)->GetUniform(vec2Name);
-    if (uniform == -1) return;
+    if (uniform == -1)
+    {
+        LOG_WARN("Cannot find uniform: %s", vec2Name.c_str());
+        return;
+    }
     static_cast<OpenGL::Program*>(m_Program)->SetUniform(uniform, vector);
 }
 
 void RenderingEngine::Renderer::UploadVector3(const std::string& vec3Name, const glm::vec3& vector)
 {
     OpenGL::Uniform uniform = static_cast<OpenGL::Program*>(m_Program)->GetUniform(vec3Name);
-    if (uniform == -1) return;
+    if (uniform == -1)
+    {
+        LOG_WARN("Cannot find uniform: %s", vec3Name.c_str());
+        return;
+    }
     static_cast<OpenGL::Program*>(m_Program)->SetUniform(uniform, vector);
 }
 
 void RenderingEngine::Renderer::UploadVector4(const std::string& vec4Name, const glm::vec4& vector)
 {
     OpenGL::Uniform uniform = static_cast<OpenGL::Program*>(m_Program)->GetUniform(vec4Name);
-    if (uniform == -1) return;
+    if (uniform == -1)
+    {
+        LOG_WARN("Cannot find uniform: %s", vec4Name.c_str());
+        return;
+    }
     static_cast<OpenGL::Program*>(m_Program)->SetUniform(uniform, vector);
 }
 

@@ -1,6 +1,7 @@
 #include <RenderingEngine/Renderables/Model.hpp>
 #include <RenderingEngine/Renderer.hpp>
 #include <RenderingEngine/RenderingEngine.hpp>
+#include <Infrastructure/Log.hpp>
 
 RenderingEngine::Model::Model() :
     m_VertexCount { 0 }
@@ -33,6 +34,7 @@ void RenderingEngine::Model::Render()
 
     if (!currentRenderer)
     {
+        LOG_WARN("Attampted to render without renderer attached");
         return;
     }
 

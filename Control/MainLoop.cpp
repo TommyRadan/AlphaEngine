@@ -5,14 +5,15 @@
 #include <EventEngine/Dispatch.hpp>
 #include <RenderingEngine/RenderingEngine.hpp>
 #include <RenderingEngine/Window.hpp>
+#include <Infrastructure/Log.hpp>
 
 int main(int argc, char* argv[])
 {
-    (void) argc;
-    (void) argv;
+    LOG_INIT(argc, argv);
 
     try
     {
+        Infrastructure::Log::GetInstance()->Init();
         EventEngine::Context::GetInstance()->Init();
         RenderingEngine::Context::GetInstance()->Init();
     }

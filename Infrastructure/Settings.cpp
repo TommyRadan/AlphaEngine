@@ -28,7 +28,7 @@ Settings* const Settings::GetInstance()
 {
     static Settings* instance = nullptr;
 
-    if(instance == nullptr)
+    if (instance == nullptr)
     {
         instance = new Settings();
     }

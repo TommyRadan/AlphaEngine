@@ -3,6 +3,7 @@
 #include <Infrastructure/Exception.hpp>
 #define STB_IMAGE_IMPLEMENTATION
 #include "StbImage.hpp"
+#include <Infrastructure/Log.hpp>
 
 Infrastructure::Image::Image() :
         m_ImageData { nullptr },
@@ -10,14 +11,18 @@ Infrastructure::Image::Image() :
         m_Height { 0u }
 {}
 
-Infrastructure::Image::Image(const std::string& filename)
+Infrastructure::Image::Image(const std::string& filename) :
+        m_ImageData { nullptr },
+        m_Width { 0u },
+        m_Height { 0u }
 {
     int numComponents;
     m_ImageData = (Color*) stbi_load(filename.c_str(), (int*)&m_Width, (int*)&m_Height, &numComponents, 4);
 
     if (m_ImageData == nullptr)
     {
-        throw Exception("Could not load image (" + filename + ")");
+        LOG_ERROR("Could not load image (%s)", filename.c_str());
+        return;
     }
 }
 

@@ -1,5 +1,6 @@
 #include <RenderingEngine/OpenGL/OpenGL.hpp>
 #include <Infrastructure/Exception.hpp>
+#include <Infrastructure/Log.hpp>
 
 RenderingEngine::OpenGL::Context* RenderingEngine::OpenGL::Context::GetInstance()
 {
@@ -17,6 +18,7 @@ void RenderingEngine::OpenGL::Context::Init()
 {
     if (glewInit() != GLEW_OK)
     {
+        LOG_FATAL("Could not initialize OpenGL");
         throw Exception("Could not initialize OpenGL");
     }
 
@@ -26,6 +28,7 @@ void RenderingEngine::OpenGL::Context::Init()
 
     if(versionMajor < 3 || (versionMajor == 3 && versionMinor < 3))
     {
+        LOG_FATAL("Could not initialize OpenGL, supported version is %i.%i", versionMajor, versionMinor);
         throw Exception("OpenGL version error! Unsupported hardware or driver");
     }
 }

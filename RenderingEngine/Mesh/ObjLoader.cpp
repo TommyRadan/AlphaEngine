@@ -2,6 +2,7 @@
 
 #include <Infrastructure/Exception.hpp>
 #include <Mathematics/glm.hpp>
+#include <Infrastructure/Log.hpp>
 
 #include <fstream>
 
@@ -113,6 +114,7 @@ std::vector<RenderingEngine::Vertex> RenderingEngine::LoadOBJ(const std::string&
     // Read file into memory
     std::ifstream file(filename.c_str(), std::ios::in | std::ios::ate);
     if (!file.is_open()) {
+        LOG_ERROR("Cannot load mesh (%s)", filename.c_str());
         throw Exception("Mesh loading failed (" + filename + ")");
     }
 
