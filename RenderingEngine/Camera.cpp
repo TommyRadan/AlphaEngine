@@ -36,6 +36,8 @@ RenderingEngine::Camera::Camera()
 
     m_IsViewMatrixDirty = true;
     m_IsPerspectiveMatrixDirty = true;
+
+    transform.SetRotation({1.0f, 0.0f, 0.0f});
 }
 
 RenderingEngine::Camera* RenderingEngine::Camera::GetInstance()
