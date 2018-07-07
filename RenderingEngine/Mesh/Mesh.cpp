@@ -22,12 +22,12 @@
 
 #include <RenderingEngine/Mesh/Mesh.hpp>
 
-void RenderingEngine::Mesh::UploadOBJ(const std::vector<Vertex>& v)
+void RenderingEngine::Mesh::UploadOBJ(const std::vector<VertexPositionUvNormal>& v)
 {
 	m_Vertices = v;
 }
 
-const RenderingEngine::Vertex* RenderingEngine::Mesh::Vertices() const
+const RenderingEngine::VertexPositionUvNormal* RenderingEngine::Mesh::Vertices() const
 {
 	return &m_Vertices[0];
 }

@@ -30,12 +30,12 @@ namespace RenderingEngine
 {
 	struct Mesh
 	{
-		void UploadOBJ(const std::vector<Vertex>& v);
+		void UploadOBJ(const std::vector<VertexPositionUvNormal>& v);
 
-		const Vertex* Vertices() const;
+		const VertexPositionUvNormal* Vertices() const;
 		std::size_t VertexCount() const;
 
 	private:
-		std::vector<Vertex> m_Vertices;
+		std::vector<VertexPositionUvNormal> m_Vertices;
 	};
 }

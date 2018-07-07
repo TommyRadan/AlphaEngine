@@ -26,10 +26,34 @@
 
 namespace RenderingEngine
 {
-	struct Vertex
+	struct VertexPosition
 	{
 		glm::vec3 Pos;
-		glm::vec2 Tex;
+	};
+
+	struct VertexPostionColor
+	{
+		glm::vec3 Pos;
+		glm::vec3 Color;
+	};
+
+    struct VertexPostionNormal
+    {
+        glm::vec3 Pos;
+        glm::vec3 Normal;
+    };
+
+	struct VertexPositionColorNormal
+    {
+        glm::vec3 Pos;
+        glm::vec3 Color;
+        glm::vec3 Normal;
+    };
+
+	struct VertexPositionUvNormal
+	{
+		glm::vec3 Pos;
+		glm::vec2 UV;
 		glm::vec3 Normal;
 	};
 }

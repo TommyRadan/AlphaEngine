@@ -29,5 +29,5 @@
 
 namespace RenderingEngine
 {
-    std::vector<Vertex> LoadOBJ(const std::string& filename);
+    std::vector<VertexPositionUvNormal> LoadOBJ(const std::string& filename);
 }

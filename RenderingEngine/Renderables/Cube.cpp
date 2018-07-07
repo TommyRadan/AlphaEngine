@@ -23,25 +23,25 @@
 #include <RenderingEngine/Renderables/Cube.hpp>
 #include <RenderingEngine/Renderers/Renderer.hpp>
 #include <RenderingEngine/RenderingEngine.hpp>
+#include <RenderingEngine/Mesh/Vertex.hpp>
 #include <Infrastructure/Log.hpp>
 
 RenderingEngine::Cube::Cube() :
-        m_VertexCount { 8 },
-        m_IndiciesCount { 36 }
+        m_VertexCount { 36 }
 {}
 
 void RenderingEngine::Cube::Upload()
 {
-    glm::vec3 vertices[8];
+    VertexPostionNormal vertices[8];
 
-    vertices[0] = glm::vec3 {-1.0f, -1.0f,  1.0f};
-    vertices[1] = glm::vec3 { 1.0f, -1.0f,  1.0f};
-    vertices[2] = glm::vec3 { 1.0f,  1.0f,  1.0f};
-    vertices[3] = glm::vec3 {-1.0f,  1.0f,  1.0f};
-    vertices[4] = glm::vec3 {-1.0f, -1.0f, -1.0f};
-    vertices[5] = glm::vec3 { 1.0f, -1.0f, -1.0f};
-    vertices[6] = glm::vec3 { 1.0f,  1.0f, -1.0f};
-    vertices[7] = glm::vec3 {-1.0f,  1.0f, -1.0f};
+    vertices[0].Pos = glm::vec3 {-1.0f, -1.0f,  1.0f};
+    vertices[1].Pos = glm::vec3 { 1.0f, -1.0f,  1.0f};
+    vertices[2].Pos = glm::vec3 { 1.0f,  1.0f,  1.0f};
+    vertices[3].Pos = glm::vec3 {-1.0f,  1.0f,  1.0f};
+    vertices[4].Pos = glm::vec3 {-1.0f, -1.0f, -1.0f};
+    vertices[5].Pos = glm::vec3 { 1.0f, -1.0f, -1.0f};
+    vertices[6].Pos = glm::vec3 { 1.0f,  1.0f, -1.0f};
+    vertices[7].Pos = glm::vec3 {-1.0f,  1.0f, -1.0f};
 
     uint32_t indicies[36] = {
             0, 1, 2,
@@ -58,11 +58,48 @@ void RenderingEngine::Cube::Upload()
             6, 7, 3
     };
 
-    m_Verticies.Data(vertices, sizeof(vertices), RenderingEngine::OpenGL::BufferUsage::StaticDraw);
-    m_Indicies.ElementData(indicies, sizeof(indicies), RenderingEngine::OpenGL::BufferUsage::StaticDraw);
+    VertexPostionNormal expandedVertices[36];
 
-    m_VertexArrayObject.BindAttribute(0, m_Verticies, RenderingEngine::OpenGL::Type::Float, 3, sizeof(glm::vec3), 0);
-    m_VertexArrayObject.BindElements(m_Indicies);
+    for (int i = 0; i < 36; i++)
+    {
+        expandedVertices[i].Pos = vertices[indicies[i]].Pos;
+
+        int sector = i/6;
+
+        switch (sector)
+        {
+            case 0:
+                expandedVertices[i].Normal = glm::vec3{ 0.0f, 0.0f, 1.0f};
+                break;
+            case 1:
+                expandedVertices[i].Normal = glm::vec3{ 1.0f, 0.0f, 0.0f};
+                break;
+            case 2:
+                expandedVertices[i].Normal = glm::vec3{ 0.0f, 0.0f,-1.0f};
+                break;
+            case 3:
+                expandedVertices[i].Normal = glm::vec3{-1.0f, 0.0f, 0.0f};
+                break;
+            case 4:
+                expandedVertices[i].Normal = glm::vec3{ 0.0f,-1.0f, 0.0f};
+                break;
+            case 5:
+                expandedVertices[i].Normal = glm::vec3{ 0.0f, 1.0f, 0.0f};
+                break;
+            default:
+                expandedVertices[i].Normal = glm::vec3{ 0.0f, 0.0f, 0.0f};
+        }
+    }
+
+    m_Verticies.Data(expandedVertices, sizeof(expandedVertices), RenderingEngine::OpenGL::BufferUsage::StaticDraw);
+
+    m_VertexArrayObject.BindAttribute(0, m_Verticies,
+                                      RenderingEngine::OpenGL::Type::Float,
+                                      3, sizeof(VertexPostionNormal), 0);
+
+    m_VertexArrayObject.BindAttribute(1, m_Verticies,
+                                      RenderingEngine::OpenGL::Type::Float,
+                                      3, sizeof(VertexPostionNormal), sizeof(glm::vec3));
 }
 
 void RenderingEngine::Cube::Render()
@@ -78,8 +115,7 @@ void RenderingEngine::Cube::Render()
     currentRenderer->UploadMatrix4("modelMatrix", this->transform.GetTransformMatrix());
     currentRenderer->SetupOptions(options);
 
-    RenderingEngine::OpenGL::Context::GetInstance()->DrawElements(m_VertexArrayObject,
+    RenderingEngine::OpenGL::Context::GetInstance()->DrawArrays(m_VertexArrayObject,
                                                                   RenderingEngine::OpenGL::Primitive::Triangles,
-                                                                  0, m_IndiciesCount,
-                                                                  RenderingEngine::OpenGL::Type::UnsignedInt);
+                                                                  0, m_VertexCount);
 }

@@ -34,20 +34,20 @@ void RenderingEngine::Model::UploadMesh(const RenderingEngine::Mesh& mesh)
     m_VertexCount = mesh.VertexCount();
 
     m_VertexBufferObject.Data(mesh.Vertices(),
-                              m_VertexCount * sizeof(RenderingEngine::Vertex),
+                              m_VertexCount * sizeof(RenderingEngine::VertexPositionUvNormal),
                               RenderingEngine::OpenGL::BufferUsage::StaticDraw);
 
     m_VertexArrayObject.BindAttribute(0, m_VertexBufferObject,
                                       RenderingEngine::OpenGL::Type::Float,
-                                      3, sizeof(RenderingEngine::Vertex), 0);
+                                      3, sizeof(RenderingEngine::VertexPositionUvNormal), 0);
 
     m_VertexArrayObject.BindAttribute(1, m_VertexBufferObject,
                                       RenderingEngine::OpenGL::Type::Float,
-                                      2, sizeof(RenderingEngine::Vertex), sizeof(glm::vec3));
+                                      2, sizeof(RenderingEngine::VertexPositionUvNormal), sizeof(glm::vec3));
 
     m_VertexArrayObject.BindAttribute(2, m_VertexBufferObject,
                                       RenderingEngine::OpenGL::Type::Float,
-                                      3, sizeof(RenderingEngine::Vertex), sizeof(glm::vec3) + sizeof(glm::vec2));
+                                      3, sizeof(RenderingEngine::VertexPositionUvNormal), sizeof(glm::vec3) + sizeof(glm::vec2));
 }
 
 void RenderingEngine::Model::Render()

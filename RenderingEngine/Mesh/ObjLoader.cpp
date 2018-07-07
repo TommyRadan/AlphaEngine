@@ -129,9 +129,9 @@ int readFace(char* buf, face& out)
     return i;
 }
 
-std::vector<RenderingEngine::Vertex> RenderingEngine::LoadOBJ(const std::string& filename)
+std::vector<RenderingEngine::VertexPositionUvNormal> RenderingEngine::LoadOBJ(const std::string& filename)
 {
-    std::vector <Vertex> vertices;
+    std::vector <VertexPositionUvNormal> vertices;
 
     // Read file into memory
     std::ifstream file(filename.c_str(), std::ios::in | std::ios::ate);
@@ -225,7 +225,7 @@ std::vector<RenderingEngine::Vertex> RenderingEngine::LoadOBJ(const std::string&
                 case MODE_FACE:
                     i += readFace((char *) &buf[i], f);
 
-                    Vertex vertex = {
+                    VertexPositionUvNormal vertex = {
                             vectors[f.v1 - 1],
                             hasTexcoords ? texcoords[f.t1 - 1] : glm::vec2(0.0f, 0.0f),
                             hasNormals ? normals[f.n1 - 1] : glm::vec3(0.0f, 0.0f, 0.0f)
@@ -233,12 +233,12 @@ std::vector<RenderingEngine::Vertex> RenderingEngine::LoadOBJ(const std::string&
                     vertices.push_back(vertex);
 
                     vertex.Pos = vectors[f.v2 - 1];
-                    vertex.Tex = (hasTexcoords ? texcoords[f.t2 - 1] : glm::vec2(0.0f, 0.0f));
+                    vertex.UV = (hasTexcoords ? texcoords[f.t2 - 1] : glm::vec2(0.0f, 0.0f));
                     vertex.Normal = (hasNormals ? normals[f.n2 - 1] : glm::vec3(0.0f, 0.0f, 0.0f));
                     vertices.push_back(vertex);
 
                     vertex.Pos = vectors[f.v3 - 1];
-                    vertex.Tex = (hasTexcoords ? texcoords[f.t3 - 1] : glm::vec2(0.0f, 0.0f));
+                    vertex.UV = (hasTexcoords ? texcoords[f.t3 - 1] : glm::vec2(0.0f, 0.0f));
                     vertex.Normal = (hasNormals ? normals[f.n3 - 1] : glm::vec3(0.0f, 0.0f, 0.0f));
                     vertices.push_back(vertex);
 
