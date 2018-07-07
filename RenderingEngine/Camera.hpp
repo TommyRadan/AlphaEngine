@@ -42,13 +42,13 @@ namespace RenderingEngine
         void InvalidateProjectionMatrix();
         const glm::mat4 GetProjectionMatrix() const;
 
-    private:
         // Settings
-        float m_FieldOfView;
-        float m_AspectRatio;
-        float m_NearClip;
-        float m_FarClip;
+        float fieldOfView;
+        float aspectRatio;
+        float nearClip;
+        float farClip;
 
+    private:
         // Matrices
         mutable glm::mat4 m_ViewMatrix;
         mutable bool m_IsViewMatrixDirty;

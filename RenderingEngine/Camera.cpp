@@ -29,10 +29,10 @@ RenderingEngine::Camera::Camera()
 {
     const Settings* settings = Settings::GetInstance();
 
-    m_FieldOfView = settings->GetFieldOfView();
-    m_AspectRatio = settings->GetAspectRatio();
-    m_NearClip = 0.1f;
-    m_FarClip = 10000.0f;
+    fieldOfView = settings->GetFieldOfView();
+    aspectRatio = settings->GetAspectRatio();
+    nearClip = 0.1f;
+    farClip = 10000.0f;
 
     m_IsViewMatrixDirty = true;
     m_IsPerspectiveMatrixDirty = true;
@@ -81,7 +81,7 @@ const glm::mat4 RenderingEngine::Camera::GetProjectionMatrix() const
         return m_Perspective;
     }
 
-    m_Perspective = glm::perspective(m_FieldOfView, m_AspectRatio, m_NearClip, m_FarClip);
+    m_Perspective = glm::perspective(fieldOfView, aspectRatio, nearClip, farClip);
     m_IsPerspectiveMatrixDirty = false;
     return m_Perspective;
 }
