@@ -27,8 +27,10 @@ add_subdirectory(Infrastructure)
 add_subdirectory(RenderingEngine)
 
 # Main shared lib
-#add_library(AlphaEngine SHARED Control/MainLoop.cpp)
-add_executable(AlphaEngine Control/MainLoop.cpp)
+file(GLOB GAMEMODULE_SOURCE_FILES "GameModule/*.cpp")
+
+#add_library(AlphaEngine SHARED Control/MainLoop.cpp ${GAMEMODULE_SOURCE_FILES})
+add_executable(AlphaEngine Control/MainLoop.cpp ${GAMEMODULE_SOURCE_FILES})
 
 # Add Dependencies
 add_dependencies(AlphaEngine EventEngine)
