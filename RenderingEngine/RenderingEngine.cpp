@@ -23,6 +23,10 @@
 #include <RenderingEngine/RenderingEngine.hpp>
 #include <RenderingEngine/Window.hpp>
 #include <RenderingEngine/OpenGL/OpenGL.hpp>
+#include <RenderingEngine/Renderers/BasicRenderer.hpp>
+#include <RenderingEngine/Camera.hpp>
+
+#include <Infrastructure/Log.hpp>
 
 RenderingEngine::Context* RenderingEngine::Context::GetInstance()
 {
@@ -42,11 +46,15 @@ RenderingEngine::Context::Context() :
 
 void RenderingEngine::Context::Init()
 {
+    LOG_INFO("Init Rendering Engine");
+
     RenderingEngine::Window::GetInstance()->Init();
     RenderingEngine::OpenGL::Context::GetInstance()->Init();
 
     RenderingEngine::OpenGL::Context::GetInstance()->Enable(RenderingEngine::OpenGL::Capability::CullFace);
     RenderingEngine::OpenGL::Context::GetInstance()->Enable(RenderingEngine::OpenGL::Capability::DepthTest);
+
+    RenderingEngine::Renderers::BasicRenderer::GetInstance();
 
     m_CurrentRenderer = nullptr;
 }
@@ -57,6 +65,8 @@ void RenderingEngine::Context::Quit()
 
     RenderingEngine::OpenGL::Context::GetInstance()->Quit();
     RenderingEngine::Window::GetInstance()->Quit();
+
+    LOG_INFO("Quit Rendering Engine");
 }
 
 void RenderingEngine::Context::Render()
