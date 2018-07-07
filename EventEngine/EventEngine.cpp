@@ -49,6 +49,8 @@ void EventEngine::Context::Init()
 		return;
 	}
 
+	LOG_INFO("Init Event Engine");
+
 	if (SDL_InitSubSystem(SDL_INIT_VIDEO) != 0)
     {
         LOG_FATAL("Could not initialize event system");
@@ -68,6 +70,8 @@ void EventEngine::Context::Quit()
 	}
 
 	SDL_QuitSubSystem(SDL_INIT_VIDEO);
+
+    LOG_INFO("Quit Event Engine");
 
     m_IsInitialized = false;
 }
