@@ -27,6 +27,13 @@
 
 #define GAME_MODULE() bool ModuleInit()
 #define REGISTER_CALLBACK(event, callback) EventEngine::Dispatch::GetInstance()->Register ## event ## Callback(callback);
+#define LET_EVERY_MS(time) do { \
+        static uint32_t totalTime = 0u;\
+        static uint32_t lastPass = 0u;\
+        totalTime += deltaTime; \
+        if (totalTime < lastPass + time) return; \
+        lastPass = totalTime; \
+    } while(false)
 
 static bool ModuleInit();
 
