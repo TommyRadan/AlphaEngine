@@ -45,6 +45,14 @@ void RenderingEngine::OpenGL::VertexBuffer::Data(const void* data,
 	glBufferData(GL_ARRAY_BUFFER, length, data, (GLenum)usage);
 }
 
+void RenderingEngine::OpenGL::VertexBuffer::ElementData(const void* data,
+												 		const size_t length,
+												 		const RenderingEngine::OpenGL::BufferUsage usage)
+{
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_ObjectID);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, length, data, (GLenum)usage);
+}
+
 void RenderingEngine::OpenGL::VertexBuffer::SubData(const void* data, const size_t offset, const size_t length)
 {
 	glBindBuffer(GL_ARRAY_BUFFER, m_ObjectID);
