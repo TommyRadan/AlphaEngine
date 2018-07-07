@@ -23,14 +23,14 @@
 #pragma once
 
 #include <Infrastructure/Subsystem.hpp>
-#include <RenderingEngine/Renderer.hpp>
+#include <RenderingEngine/Renderers/Renderer.hpp>
 #include <vector>
 
 namespace RenderingEngine
 {
     class Context : public Infrastructure::Subsystem
     {
-        Context() = default;
+        Context();
 
     public:
         static Context* GetInstance();

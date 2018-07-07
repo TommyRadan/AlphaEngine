@@ -25,7 +25,7 @@
 #include <Mathematics/glm.hpp>
 #include <string>
 
-#include <RenderingEngine/RenderOptions.hpp>
+#include <RenderingEngine/Renderers/RenderOptions.hpp>
 #include <Infrastructure/Subsystem.hpp>
 
 namespace RenderingEngine

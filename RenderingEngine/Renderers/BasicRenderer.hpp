@@ -22,7 +22,7 @@
 
 #pragma once
 
-#include <RenderingEngine/Renderer.hpp>
+#include <RenderingEngine/Renderers/Renderer.hpp>
 
 namespace RenderingEngine
 {

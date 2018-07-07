@@ -23,12 +23,13 @@
 #pragma once
 
 #include <Mathematics/glm.hpp>
-#include <RenderingEngine/RenderOptions.hpp>
+#include <RenderingEngine/Renderers/RenderOptions.hpp>
 
 namespace RenderingEngine
 {
     struct Renderable
     {
+        virtual void Upload() = 0;
 		virtual void Render() = 0;
 		RenderOptions options;
     };

@@ -35,7 +35,7 @@ namespace RenderingEngine
 
         Infrastructure::Transform transform;
 
-        void Upload();
+        void Upload() final;
         void Render() final;
 
     private:

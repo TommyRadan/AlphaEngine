@@ -21,7 +21,7 @@
  */
 
 #include <RenderingEngine/Renderables/Cube.hpp>
-#include <RenderingEngine/Renderer.hpp>
+#include <RenderingEngine/Renderers/Renderer.hpp>
 #include <RenderingEngine/RenderingEngine.hpp>
 #include <Infrastructure/Log.hpp>
 

@@ -36,6 +36,10 @@ RenderingEngine::Context* RenderingEngine::Context::GetInstance()
     return instance;
 }
 
+RenderingEngine::Context::Context() :
+    m_CurrentRenderer { nullptr }
+{}
+
 void RenderingEngine::Context::Init()
 {
     RenderingEngine::Window::GetInstance()->Init();
