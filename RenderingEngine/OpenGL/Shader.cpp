@@ -60,9 +60,9 @@ void RenderingEngine::OpenGL::Shader::Compile()
 
 	if (res != GL_TRUE)
 	{
-	    LOG_FATAL("Cannot compile shader");
-	    LOG_FATAL("Shader code: \n%s", m_Code.c_str());
-	    LOG_FATAL("Errors: \n%s", GetInfoLog().c_str());
+	    LOG_ERROR("Shader code: \n%s", m_Code.c_str());
+	    LOG_ERROR("Errors: \n%s", GetInfoLog().c_str());
+		LOG_FATAL("Cannot compile shader");
 		throw Exception(GetInfoLog());
 	}
 }
