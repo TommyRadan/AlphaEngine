@@ -44,5 +44,6 @@ namespace RenderingEngine
         OpenGL::VertexBuffer m_Indicies;
 
         unsigned int m_VertexCount;
+        unsigned int m_IndiciesCount;
     };
 }

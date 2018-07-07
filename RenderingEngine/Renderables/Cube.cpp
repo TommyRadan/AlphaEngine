@@ -26,7 +26,8 @@
 #include <Infrastructure/Log.hpp>
 
 RenderingEngine::Cube::Cube() :
-        m_VertexCount { 8 }
+        m_VertexCount { 8 },
+        m_IndiciesCount { 36 }
 {}
 
 void RenderingEngine::Cube::Upload()
@@ -57,8 +58,9 @@ void RenderingEngine::Cube::Upload()
             6, 7, 3
     };
 
-    m_Verticies.Data(vertices, m_VertexCount * sizeof(glm::vec3), RenderingEngine::OpenGL::BufferUsage::StaticDraw);
-    m_Indicies.Data(indicies, 36 * sizeof(uint32_t), RenderingEngine::OpenGL::BufferUsage::StaticDraw);
+    m_Verticies.Data(vertices, sizeof(vertices), RenderingEngine::OpenGL::BufferUsage::StaticDraw);
+    m_Indicies.ElementData(indicies, sizeof(indicies), RenderingEngine::OpenGL::BufferUsage::StaticDraw);
+
     m_VertexArrayObject.BindAttribute(0, m_Verticies, RenderingEngine::OpenGL::Type::Float, 3, sizeof(glm::vec3), 0);
     m_VertexArrayObject.BindElements(m_Indicies);
 }
@@ -78,6 +80,6 @@ void RenderingEngine::Cube::Render()
 
     RenderingEngine::OpenGL::Context::GetInstance()->DrawElements(m_VertexArrayObject,
                                                                   RenderingEngine::OpenGL::Primitive::Triangles,
-                                                                  0, m_VertexCount,
+                                                                  0, m_IndiciesCount,
                                                                   RenderingEngine::OpenGL::Type::UnsignedInt);
 }
