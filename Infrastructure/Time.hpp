@@ -22,12 +22,27 @@
 
 #pragma once
 
-#include <EventEngine/EventEngine.hpp>
-#include <EventEngine/Dispatch.hpp>
+#include <cstdint>
 
-#define GAME_MODULE() bool ModuleInit()
-#define REGISTER_CALLBACK(event, callback) EventEngine::Dispatch::GetInstance()->Register ## event ## Callback(callback);
+namespace Infrastructure
+{
+    class Time
+    {
+        Time();
 
-static bool ModuleInit();
+    public:
+        static Time* const GetInstance();
 
-static bool initStatus = ModuleInit();
+        void PerformTick();
+
+        const double DeltaTime() const;
+        const float TotalTime() const;
+
+        const uint32_t FrameCount() const;
+        const float CurrentFps() const;
+
+    private:
+        uint32_t m_FrameCount;
+        double m_DeltaTime;
+    };
+}

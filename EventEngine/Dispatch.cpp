@@ -106,29 +106,12 @@ void EventEngine::Dispatch::HandleEvents()
         }
     }
 
-    HandleFrame();
-}
-
-void EventEngine::Dispatch::HandleFrame()
-{
-    const uint32_t ticks = SDL_GetTicks();
-
-    static uint32_t lastTickCount = ticks;
-    uint32_t deltaTime = ticks - lastTickCount;
-    lastTickCount = ticks;
-
-    // First Update will be 0, so we ignore it
-    if (deltaTime == 0u)
-    {
-        return;
-    }
-
     for (auto& keyCode : m_PressedKeys)
     {
-        DispatchKeyPressedCallback(keyCode, deltaTime);
+        DispatchKeyPressedCallback(keyCode);
     }
 
-    DispatchOnFrameCallback(deltaTime);
+    DispatchOnFrameCallback();
 }
 
 void EventEngine::Dispatch::RegisterOnGameStartCallback(std::function<void()> callback)
@@ -141,7 +124,7 @@ void EventEngine::Dispatch::RegisterOnGameEndCallback(std::function<void()> call
 	m_OnGameEndCallbacks.push_back(callback);
 }
 
-void EventEngine::Dispatch::RegisterOnFrameCallback(std::function<void(uint32_t)> callback)
+void EventEngine::Dispatch::RegisterOnFrameCallback(std::function<void(void)> callback)
 {
     m_OnFrameCallbacks.push_back(callback);
 }
@@ -156,7 +139,7 @@ void EventEngine::Dispatch::RegisterOnKeyUpCallback(std::function<void(KeyCode)>
     m_OnKeyUpCallbacks.push_back(callback);
 }
 
-void EventEngine::Dispatch::RegisterKeyPressedCallback(std::function<void(KeyCode, uint32_t)> callback)
+void EventEngine::Dispatch::RegisterKeyPressedCallback(std::function<void(KeyCode)> callback)
 {
     m_KeyPressedCallbacks.push_back(callback);
 }
@@ -182,11 +165,11 @@ void EventEngine::Dispatch::DispatchOnGameEndCallback()
 	}
 }
 
-void EventEngine::Dispatch::DispatchOnFrameCallback(uint32_t deltaTime)
+void EventEngine::Dispatch::DispatchOnFrameCallback()
 {
     for (auto& callback : m_OnFrameCallbacks)
     {
-        callback(deltaTime);
+        callback();
     }
 }
 
@@ -211,11 +194,11 @@ void EventEngine::Dispatch::DispatchOnKeyUpCallback(KeyCode keyCode)
     }
 }
 
-void EventEngine::Dispatch::DispatchKeyPressedCallback(KeyCode keyCode, uint32_t deltaTime)
+void EventEngine::Dispatch::DispatchKeyPressedCallback(KeyCode keyCode)
 {
     for (auto& callback : m_KeyPressedCallbacks)
     {
-        callback(keyCode, deltaTime);
+        callback(keyCode);
     }
 }
 

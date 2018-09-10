@@ -20,14 +20,54 @@
  * SOFTWARE.
  */
 
-#pragma once
+#include <Infrastructure/Time.hpp>
+#include <SDL2/SDL.h>
 
-#include <EventEngine/EventEngine.hpp>
-#include <EventEngine/Dispatch.hpp>
+Infrastructure::Time* const Infrastructure::Time::GetInstance()
+{
+    static Time* instance = nullptr;
 
-#define GAME_MODULE() bool ModuleInit()
-#define REGISTER_CALLBACK(event, callback) EventEngine::Dispatch::GetInstance()->Register ## event ## Callback(callback);
+    if (instance == nullptr)
+    {
+        instance = new Time();
+    }
 
-static bool ModuleInit();
+    return instance;
+}
 
-static bool initStatus = ModuleInit();
+Infrastructure::Time::Time() :
+    m_FrameCount { 0 },
+    m_DeltaTime { 0 }
+{}
+
+void Infrastructure::Time::PerformTick()
+{
+    m_FrameCount++;
+
+    const uint64_t ticks = SDL_GetPerformanceCounter();
+
+    static uint64_t frameStartTickCount = ticks;
+    m_DeltaTime = (double)((ticks - frameStartTickCount)*1000) / SDL_GetPerformanceFrequency();
+    frameStartTickCount = ticks;
+}
+
+const double Infrastructure::Time::DeltaTime() const
+{
+    return m_DeltaTime;
+}
+
+const float Infrastructure::Time::TotalTime() const
+{
+    return (float) SDL_GetTicks();
+}
+
+const uint32_t Infrastructure::Time::FrameCount() const
+{
+    return m_FrameCount;
+}
+
+const float Infrastructure::Time::CurrentFps() const
+{
+    if (m_DeltaTime < 0.001) return 0;
+    return (float)(1000.0/m_DeltaTime);
+}

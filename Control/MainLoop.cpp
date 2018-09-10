@@ -28,6 +28,7 @@
 #include <RenderingEngine/RenderingEngine.hpp>
 #include <RenderingEngine/Window.hpp>
 #include <Infrastructure/Log.hpp>
+#include <Infrastructure/Time.hpp>
 
 int main(int argc, char* argv[])
 {
@@ -53,6 +54,7 @@ int main(int argc, char* argv[])
         {
             EventEngine::Dispatch::GetInstance()->HandleEvents();
             RenderingEngine::Context::GetInstance()->Render();
+            Infrastructure::Time::GetInstance()->PerformTick();
 
             if (EventEngine::Context::GetInstance()->IsQuitRequested()) break;
         }
