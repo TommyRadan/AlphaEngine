@@ -24,6 +24,7 @@
 #include <RenderingEngine/Window.hpp>
 #include <RenderingEngine/OpenGL/OpenGL.hpp>
 #include <RenderingEngine/Renderers/BasicRenderer.hpp>
+#include <RenderingEngine/Renderers/OverlayRenderer.hpp>
 #include <RenderingEngine/Camera.hpp>
 
 #include <Infrastructure/Log.hpp>
@@ -53,8 +54,11 @@ void RenderingEngine::Context::Init()
 
     RenderingEngine::OpenGL::Context::GetInstance()->Enable(RenderingEngine::OpenGL::Capability::CullFace);
     RenderingEngine::OpenGL::Context::GetInstance()->Enable(RenderingEngine::OpenGL::Capability::DepthTest);
+    RenderingEngine::OpenGL::Context::GetInstance()->Enable(RenderingEngine::OpenGL::Capability::Blend);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     RenderingEngine::Renderers::BasicRenderer::GetInstance();
+    RenderingEngine::Renderers::OverlayRenderer::GetInstance();
 
     m_CurrentRenderer = nullptr;
 }
@@ -73,9 +77,24 @@ void RenderingEngine::Context::Render()
 {
     RenderingEngine::Window::GetInstance()->Clear();
 
-	/*
-	 * TODO: Render!
-	 */
+    RenderingEngine::Renderers::BasicRenderer::GetInstance()->StartRenderer();
+    RenderingEngine::Renderers::BasicRenderer::GetInstance()->SetupCamera();
+
+    /*
+     * TODO: Render the scene!
+     */
+
+    RenderingEngine::Renderers::BasicRenderer::GetInstance()->StopRenderer();
+
+    RenderingEngine::OpenGL::Context::GetInstance()->Enable(RenderingEngine::OpenGL::Capability::DepthTest);
+    RenderingEngine::Renderers::OverlayRenderer::GetInstance()->StartRenderer();
+
+    /*
+     * TODO: Render the overlay!
+     */
+
+    RenderingEngine::Renderers::OverlayRenderer::GetInstance()->StopRenderer();
+    RenderingEngine::OpenGL::Context::GetInstance()->Disable(RenderingEngine::OpenGL::Capability::DepthTest);
 
     RenderingEngine::Window::GetInstance()->SwapBuffers();
 }

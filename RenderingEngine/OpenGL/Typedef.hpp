@@ -68,7 +68,8 @@ namespace RenderingEngine
 			DepthTest = GL_DEPTH_TEST,
 			StencilTest = GL_STENCIL_TEST,
 			CullFace = GL_CULL_FACE,
-			RasterizerDiscard = GL_RASTERIZER_DISCARD
+			RasterizerDiscard = GL_RASTERIZER_DISCARD,
+			Blend = GL_BLEND
 		};
 
 		enum class ShaderType
