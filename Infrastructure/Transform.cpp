@@ -22,7 +22,7 @@
 
 #include <Infrastructure/Transform.hpp>
 #define GLM_ENABLE_EXPERIMENTAL
-#include <Mathematics/gtx/transform.hpp>
+#include <gtx/transform.hpp>
 
 Infrastructure::Transform::Transform() :
         m_IsTransformMatrixDirty { true },

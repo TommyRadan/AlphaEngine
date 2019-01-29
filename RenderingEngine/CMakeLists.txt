@@ -4,6 +4,7 @@ project(RenderingEngine CXX)
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_VERBOSE_MAKEFILE false)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+set(VENDOR_ROOT ${CMAKE_SOURCE_DIR}/Vendor/)
 
 # Define target sources
 file(GLOB RENDERINGENGINE_SOURCE_FILES
@@ -14,8 +15,8 @@ file(GLOB RENDERINGENGINE_SOURCE_FILES
         "OpenGL/*.hpp" "OpenGL/*.cpp")
 
 # External dependencies
-find_package(SDL2 REQUIRED)
-include_directories(${SDL2_INCLUDE_DIR})
+include_directories(${VENDOR_ROOT}SDL2/include)
+include_directories(${VENDOR_ROOT}GLM/)
 
 find_package(GLEW REQUIRED)
 include_directories(${GLEW_INCLUDE_DIR})

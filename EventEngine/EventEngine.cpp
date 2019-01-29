@@ -21,7 +21,7 @@
  */
 
 #include <EventEngine/EventEngine.hpp>
-#include <SDL2/SDL.h>
+#include <SDL.h>
 #include <Infrastructure/Exception.hpp>
 #include <Infrastructure/Log.hpp>
 

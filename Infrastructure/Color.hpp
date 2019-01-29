@@ -23,7 +23,7 @@
 #pragma once
 
 #include <cstdint>
-#include <Mathematics/glm.hpp>
+#include <glm.hpp>
 
 namespace Infrastructure
 {

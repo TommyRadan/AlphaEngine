@@ -25,7 +25,7 @@
 #include <RenderingEngine/OpenGL/Typedef.hpp>
 #include <RenderingEngine/OpenGL/Shader.hpp>
 
-#include <Mathematics/glm.hpp>
+#include <glm.hpp>
 #include <string>
 
 namespace RenderingEngine

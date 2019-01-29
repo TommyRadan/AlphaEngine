@@ -4,13 +4,15 @@ project(Infrastructure CXX)
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_VERBOSE_MAKEFILE false)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+set(VENDOR_ROOT ${CMAKE_SOURCE_DIR}/Vendor/)
 
 # Define target sources
 file(GLOB INFRASTRUCTURE_SOURCE_FILES "*.hpp" "*.cpp")
 
 # External dependencies
-find_package(SDL2 REQUIRED)
-include_directories(${SDL2_INCLUDE_DIR})
+include_directories(${VENDOR_ROOT}SDL2/include)
+include_directories(${VENDOR_ROOT}STBI/)
+include_directories(${VENDOR_ROOT}GLM/)
 
 # Main lib
 add_library(Infrastructure STATIC ${INFRASTRUCTURE_SOURCE_FILES})

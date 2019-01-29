@@ -22,7 +22,6 @@
 
 #pragma once
 
-#include <Mathematics/glm.hpp>
 #include <RenderingEngine/Renderers/RenderOptions.hpp>
 
 namespace RenderingEngine

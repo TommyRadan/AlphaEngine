@@ -24,7 +24,7 @@
 
 #include <Infrastructure/Exception.hpp>
 #define STB_IMAGE_IMPLEMENTATION
-#include "StbImage.hpp"
+#include "stb_image.hpp"
 #include <Infrastructure/Log.hpp>
 
 Infrastructure::Image::Image() :

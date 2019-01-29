@@ -22,7 +22,7 @@
 
 #include <RenderingEngine/Camera.hpp>
 #define GLM_ENABLE_EXPERIMENTAL
-#include <Mathematics/gtx/transform.hpp>
+#include <gtx/transform.hpp>
 #include <Infrastructure/Settings.hpp>
 
 RenderingEngine::Camera::Camera()

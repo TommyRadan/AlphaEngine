@@ -21,7 +21,7 @@
  */
 
 #include <Infrastructure/Time.hpp>
-#include <SDL2/SDL.h>
+#include <SDL.h>
 
 Infrastructure::Time* const Infrastructure::Time::GetInstance()
 {

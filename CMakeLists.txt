@@ -18,6 +18,20 @@ set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_VERBOSE_MAKEFILE false)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
+# Vendor options
+set(VENDOR_ROOT ${CMAKE_SOURCE_DIR}/Vendor/)
+if (APPLE)
+    set(VENDOR_LIB lib-macos)
+    set(LIB_EXT .framework)
+elseif(WIN32)
+    set(VENDOR_LIB win)
+    set(LIB_EXT .dll)
+endif(APPLE)
+
+# Make output directory if it doesn't exist
+add_custom_target(build-time-make-directory ALL
+        COMMAND ${CMAKE_COMMAND} -E make_directory Binaries)
+
 # Set top level directory to be searched for includes
 include_directories(${CMAKE_SOURCE_DIR})
 
@@ -29,7 +43,6 @@ add_subdirectory(RenderingEngine)
 # Main shared lib
 file(GLOB GAMEMODULE_SOURCE_FILES "GameModule/*.cpp")
 
-#add_library(AlphaEngine SHARED Control/MainLoop.cpp ${GAMEMODULE_SOURCE_FILES})
 add_executable(AlphaEngine Control/MainLoop.cpp ${GAMEMODULE_SOURCE_FILES})
 
 # Add Dependencies
@@ -43,9 +56,10 @@ target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}libEventEngine.a)
 target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}libRenderingEngine.a)
 
 # Find and link to external dependencies
-find_package(SDL2 REQUIRED)
-target_link_libraries(AlphaEngine "-lSDL2")
-include_directories(${SDL2_INCLUDE_DIR})
+target_link_libraries(AlphaEngine ${VENDOR_ROOT}SDL2/${VENDOR_LIB}/SDL2.framework)
+include_directories(${VENDOR_ROOT}SDL2/include)
+
+include_directories(${VENDOR_ROOT}GLM)
 
 find_package(GLEW REQUIRED)
 target_link_libraries(AlphaEngine ${GLEW_LIBRARY})
@@ -54,6 +68,12 @@ include_directories(${GLEW_INCLUDE_DIR})
 find_package(OpenGL REQUIRED)
 target_link_libraries(AlphaEngine ${OPENGL_LIBRARIES})
 
+# Post-build
 if(APPLE)
     target_link_libraries(AlphaEngine "-framework CoreFoundation -framework IOKit -framework CoreVideo")
 endif(APPLE)
+
+add_custom_command(TARGET AlphaEngine POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy
+            "${VENDOR_ROOT}/SDL2/${VENDOR_LIB}/SDL2${LIB_EXT}"
+            "${LIBRARY_OUTPUT_PATH}/SDL2${LIB_EXT}")

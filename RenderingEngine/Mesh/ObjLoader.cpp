@@ -23,7 +23,7 @@
 #include <RenderingEngine/Mesh/ObjLoader.hpp>
 
 #include <Infrastructure/Exception.hpp>
-#include <Mathematics/glm.hpp>
+#include <glm.hpp>
 #include <Infrastructure/Log.hpp>
 
 #include <fstream>

@@ -4,13 +4,13 @@ project(EventEngine CXX)
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_VERBOSE_MAKEFILE false)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+set(VENDOR_ROOT ${CMAKE_SOURCE_DIR}/Vendor/)
 
 # Define target sources
 file(GLOB EVENTPROCESSING_SOURCE_FILES "*.hpp" "*.cpp")
 
 # External dependencies
-find_package(SDL2 REQUIRED)
-include_directories(${SDL2_INCLUDE_DIR})
+include_directories(${VENDOR_ROOT}SDL2/include)
 
 # Main lib
 add_library(EventEngine STATIC ${EVENTPROCESSING_SOURCE_FILES})

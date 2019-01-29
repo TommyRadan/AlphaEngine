@@ -22,7 +22,7 @@
 
 #include <EventEngine/Dispatch.hpp>
 #include <EventEngine/EventEngine.hpp>
-#include <SDL2/SDL.h>
+#include <SDL.h>
 #include <algorithm>
 
 EventEngine::Dispatch* EventEngine::Dispatch::GetInstance()

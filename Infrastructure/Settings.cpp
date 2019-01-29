@@ -21,7 +21,7 @@
  */
 
 #include <Infrastructure/Settings.hpp>
-#include <SDL2/SDL.h>
+#include <SDL.h>
 #include <Infrastructure/Version.hpp>
 
 Settings::Settings()
