@@ -24,13 +24,13 @@ if (APPLE)
     set(VENDOR_LIB lib-macos)
     set(LIB_EXT .framework)
 elseif(WIN32)
-    set(VENDOR_LIB win)
+    set(VENDOR_LIB lib-win)
     set(LIB_EXT .dll)
 endif(APPLE)
 
 # Make output directory if it doesn't exist
 add_custom_target(build-time-make-directory ALL
-        COMMAND ${CMAKE_COMMAND} -E make_directory Binaries)
+    COMMAND ${CMAKE_COMMAND} -E make_directory Binaries)
 
 # Set top level directory to be searched for includes
 include_directories(${CMAKE_SOURCE_DIR})
@@ -50,12 +50,23 @@ add_dependencies(AlphaEngine Infrastructure)
 add_dependencies(AlphaEngine RenderingEngine)
 
 # Link Libraries
-target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}libInfrastructure.a)
-target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}libEventEngine.a)
-target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}libRenderingEngine.a)
+if(WIN32)
+	target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}Infrastructure.lib)
+	target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}EventEngine.lib)
+	target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}RenderingEngine.lib)
+elseif(APPLE)
+	target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}libInfrastructure.a)
+	target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}libEventEngine.a)
+	target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}libRenderingEngine.a)
+endif(WIN32)
 
 # Find and link to external dependencies
-target_link_libraries(AlphaEngine ${VENDOR_ROOT}SDL2/${VENDOR_LIB}/SDL2.framework)
+if(WIN32)
+	target_link_libraries(AlphaEngine ${VENDOR_ROOT}SDL2/${VENDOR_LIB}/SDL2main.lib)
+	target_link_libraries(AlphaEngine ${VENDOR_ROOT}SDL2/${VENDOR_LIB}/SDL2.lib)
+elseif(APPLE)
+	target_link_libraries(AlphaEngine ${VENDOR_ROOT}SDL2/${VENDOR_LIB}/SDL2.framework)
+endif(WIN32)
 include_directories(${VENDOR_ROOT}SDL2/include)
 
 include_directories(${VENDOR_ROOT}GLM)
@@ -63,7 +74,6 @@ include_directories(${VENDOR_ROOT}Loguru)
 include_directories(${VENDOR_ROOT}GLEW/include)
 
 if(WIN32)
-    target_link_libraries(AlphaEngine ${VENDOR_ROOT}GLEW/${VENDOR_LIB}/glew32.dll)
     target_link_libraries(AlphaEngine ${VENDOR_ROOT}GLEW/${VENDOR_LIB}/glew32.lib)
     target_link_libraries(AlphaEngine ${VENDOR_ROOT}GLEW/${VENDOR_LIB}/glew32s.lib)
 elseif(APPLE)
@@ -80,13 +90,13 @@ if(APPLE)
 endif(APPLE)
 
 add_custom_command(TARGET AlphaEngine POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy
-            "${VENDOR_ROOT}/SDL2/${VENDOR_LIB}/SDL2${LIB_EXT}"
-            "${LIBRARY_OUTPUT_PATH}/SDL2${LIB_EXT}")
+    COMMAND ${CMAKE_COMMAND} -E copy
+        "${VENDOR_ROOT}/SDL2/${VENDOR_LIB}/SDL2${LIB_EXT}"
+        "${LIBRARY_OUTPUT_PATH}/SDL2${LIB_EXT}")
 
 if(WIN32)
     add_custom_command(TARGET AlphaEngine POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy
-            "${VENDOR_ROOT}/GLEW/${VENDOR_LIB}/glew32.dll"
-            "${LIBRARY_OUTPUT_PATH}/glew32.dll")
+        COMMAND ${CMAKE_COMMAND} -E copy
+			"${VENDOR_ROOT}/GLEW/${VENDOR_LIB}/glew32.dll"
+			"${LIBRARY_OUTPUT_PATH}/glew32.dll")
 endif(WIN32)
