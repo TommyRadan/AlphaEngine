@@ -22,7 +22,7 @@
 
 #pragma once
 
-#include <Infrastructure/Loguru.hpp>
+#include <Loguru.hpp>
 
 #define LOG_INIT(argc, argv) loguru::init(argc, argv)
 

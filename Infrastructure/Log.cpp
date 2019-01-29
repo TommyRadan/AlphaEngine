@@ -21,7 +21,7 @@
  */
 
 #define LOGURU_IMPLEMENTATION 1
-#include <Infrastructure/Loguru.hpp>
+#include <Loguru.hpp>
 #include <Infrastructure/Log.hpp>
 #include <Infrastructure/Version.hpp>
 

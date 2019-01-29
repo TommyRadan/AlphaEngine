@@ -17,6 +17,7 @@ file(GLOB RENDERINGENGINE_SOURCE_FILES
 # External dependencies
 include_directories(${VENDOR_ROOT}SDL2/include)
 include_directories(${VENDOR_ROOT}GLM/)
+include_directories(${VENDOR_ROOT}Loguru/)
 
 find_package(GLEW REQUIRED)
 include_directories(${GLEW_INCLUDE_DIR})

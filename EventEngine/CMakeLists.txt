@@ -11,6 +11,7 @@ file(GLOB EVENTPROCESSING_SOURCE_FILES "*.hpp" "*.cpp")
 
 # External dependencies
 include_directories(${VENDOR_ROOT}SDL2/include)
+include_directories(${VENDOR_ROOT}Loguru)
 
 # Main lib
 add_library(EventEngine STATIC ${EVENTPROCESSING_SOURCE_FILES})

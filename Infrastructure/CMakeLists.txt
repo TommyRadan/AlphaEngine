@@ -13,6 +13,7 @@ file(GLOB INFRASTRUCTURE_SOURCE_FILES "*.hpp" "*.cpp")
 include_directories(${VENDOR_ROOT}SDL2/include)
 include_directories(${VENDOR_ROOT}STBI/)
 include_directories(${VENDOR_ROOT}GLM/)
+include_directories(${VENDOR_ROOT}Loguru/)
 
 # Main lib
 add_library(Infrastructure STATIC ${INFRASTRUCTURE_SOURCE_FILES})

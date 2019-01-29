@@ -60,6 +60,7 @@ target_link_libraries(AlphaEngine ${VENDOR_ROOT}SDL2/${VENDOR_LIB}/SDL2.framewor
 include_directories(${VENDOR_ROOT}SDL2/include)
 
 include_directories(${VENDOR_ROOT}GLM)
+include_directories(${VENDOR_ROOT}Loguru)
 
 find_package(GLEW REQUIRED)
 target_link_libraries(AlphaEngine ${GLEW_LIBRARY})
