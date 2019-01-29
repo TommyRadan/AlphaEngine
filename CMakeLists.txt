@@ -40,9 +40,8 @@ add_subdirectory(EventEngine)
 add_subdirectory(Infrastructure)
 add_subdirectory(RenderingEngine)
 
-# Main shared lib
+# Main executable
 file(GLOB GAMEMODULE_SOURCE_FILES "GameModule/*.cpp")
-
 add_executable(AlphaEngine Control/MainLoop.cpp ${GAMEMODULE_SOURCE_FILES})
 
 # Add Dependencies
@@ -61,10 +60,16 @@ include_directories(${VENDOR_ROOT}SDL2/include)
 
 include_directories(${VENDOR_ROOT}GLM)
 include_directories(${VENDOR_ROOT}Loguru)
+include_directories(${VENDOR_ROOT}GLEW/include)
 
-find_package(GLEW REQUIRED)
-target_link_libraries(AlphaEngine ${GLEW_LIBRARY})
-include_directories(${GLEW_INCLUDE_DIR})
+if(WIN32)
+    target_link_libraries(AlphaEngine ${VENDOR_ROOT}GLEW/${VENDOR_LIB}/glew32.dll)
+    target_link_libraries(AlphaEngine ${VENDOR_ROOT}GLEW/${VENDOR_LIB}/glew32.lib)
+    target_link_libraries(AlphaEngine ${VENDOR_ROOT}GLEW/${VENDOR_LIB}/glew32s.lib)
+elseif(APPLE)
+    find_package(GLEW REQUIRED)
+    target_link_libraries(AlphaEngine ${GLEW_LIBRARY})
+endif(WIN32)
 
 find_package(OpenGL REQUIRED)
 target_link_libraries(AlphaEngine ${OPENGL_LIBRARIES})
@@ -78,3 +83,10 @@ add_custom_command(TARGET AlphaEngine POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy
             "${VENDOR_ROOT}/SDL2/${VENDOR_LIB}/SDL2${LIB_EXT}"
             "${LIBRARY_OUTPUT_PATH}/SDL2${LIB_EXT}")
+
+if(WIN32)
+    add_custom_command(TARGET AlphaEngine POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy
+            "${VENDOR_ROOT}/GLEW/${VENDOR_LIB}/glew32.dll"
+            "${LIBRARY_OUTPUT_PATH}/glew32.dll")
+endif(WIN32)

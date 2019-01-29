@@ -22,7 +22,7 @@
 
 #include <RenderingEngine/Window.hpp>
 #include <RenderingEngine/OpenGL/OpenGL.hpp>
-#include <SDL2/SDL.h>
+#include <SDL.h>
 #include <Infrastructure/Settings.hpp>
 #include <Infrastructure/Exception.hpp>
 #include <Infrastructure/Color.hpp>

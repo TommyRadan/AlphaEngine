@@ -18,9 +18,7 @@ file(GLOB RENDERINGENGINE_SOURCE_FILES
 include_directories(${VENDOR_ROOT}SDL2/include)
 include_directories(${VENDOR_ROOT}GLM/)
 include_directories(${VENDOR_ROOT}Loguru/)
-
-find_package(GLEW REQUIRED)
-include_directories(${GLEW_INCLUDE_DIR})
+include_directories(${VENDOR_ROOT}GLEW/include)
 
 # Main lib
 add_library(RenderingEngine STATIC ${RENDERINGENGINE_SOURCE_FILES})
