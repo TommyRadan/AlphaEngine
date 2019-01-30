@@ -46,6 +46,8 @@ Infrastructure::Image::Image(const std::string& filename) :
         LOG_ERROR("Could not load image (%s)", filename.c_str());
         return;
     }
+
+    LOG_INFO("Loaded image (%s)", filename.c_str());
 }
 
 Infrastructure::Image::Image(const Image& image) :
