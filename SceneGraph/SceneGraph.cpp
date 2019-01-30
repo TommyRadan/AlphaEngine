@@ -24,6 +24,12 @@
 
 #include <Infrastructure/Log.hpp>
 
+#include <json.hpp>
+#include <fstream>
+#include <string>
+
+using namespace nlohmann;
+
 SceneGraph::Context* SceneGraph::Context::GetInstance()
 {
     static Context* instance = nullptr;
@@ -44,4 +50,29 @@ void SceneGraph::Context::Init()
 void SceneGraph::Context::Quit()
 {
     LOG_INFO("Quit Scene Graph");
+}
+
+void SceneGraph::Context::LoadScene(const std::string& filename)
+{
+    std::ifstream file(filename);
+
+    std::string fileString;
+    json fileJSON;
+    try
+    {
+        file >> fileJSON;
+
+        if (fileJSON["asset"]["version"] != "2.0")
+        {
+            LOG_WARN("Loaded scene is version %s, version 2.0 is supported",
+                    fileJSON["asset"]["version"].dump().c_str());
+        }
+    }
+    catch(...)
+    {
+        LOG_ERROR("Could not load scene (%s)", filename.c_str());
+        return;
+    }
+
+    LOG_INFO("Loaded scene (%s)", filename.c_str());
 }

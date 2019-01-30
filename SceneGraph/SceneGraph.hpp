@@ -23,6 +23,7 @@
 #pragma once
 
 #include <Infrastructure/Subsystem.hpp>
+#include <string>
 
 namespace SceneGraph
 {
@@ -35,5 +36,7 @@ namespace SceneGraph
 
         void Init() final;
         void Quit() final;
+
+        void LoadScene(const std::string& filename);
     };
 }

@@ -35,6 +35,7 @@ file(GLOB SCENEGRAPH_SOURCE_FILES
 # External dependencies
 include_directories(${VENDOR_ROOT}GLM/)
 include_directories(${VENDOR_ROOT}Loguru/)
+include_directories(${VENDOR_ROOT}JSON/)
 
 # Main lib
 add_library(SceneGraph STATIC ${SCENEGRAPH_SOURCE_FILES})
