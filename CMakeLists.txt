@@ -61,6 +61,7 @@ include_directories(${CMAKE_SOURCE_DIR})
 add_subdirectory(EventEngine)
 add_subdirectory(Infrastructure)
 add_subdirectory(RenderingEngine)
+add_subdirectory(SceneGraph)
 
 # Main executable
 file(GLOB GAMEMODULE_SOURCE_FILES "GameModule/*.cpp")
@@ -70,16 +71,19 @@ add_executable(AlphaEngine Control/MainLoop.cpp ${GAMEMODULE_SOURCE_FILES})
 add_dependencies(AlphaEngine EventEngine)
 add_dependencies(AlphaEngine Infrastructure)
 add_dependencies(AlphaEngine RenderingEngine)
+add_dependencies(AlphaEngine SceneGraph)
 
 # Link Libraries
 if(WIN32)
 	target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}Infrastructure.lib)
 	target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}EventEngine.lib)
 	target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}RenderingEngine.lib)
+	target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}SceneGraph.lib)
 elseif(APPLE)
 	target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}libInfrastructure.a)
 	target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}libEventEngine.a)
 	target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}libRenderingEngine.a)
+	target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}libSceneGraph.a)
 endif(WIN32)
 
 # Find and link to external dependencies

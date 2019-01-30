@@ -29,6 +29,7 @@
 #include <RenderingEngine/Window.hpp>
 #include <Infrastructure/Log.hpp>
 #include <Infrastructure/Time.hpp>
+#include <SceneGraph/SceneGraph.hpp>
 
 int main(int argc, char* argv[])
 {
@@ -39,6 +40,7 @@ int main(int argc, char* argv[])
         Infrastructure::Log::GetInstance()->Init();
         EventEngine::Context::GetInstance()->Init();
         RenderingEngine::Context::GetInstance()->Init();
+        SceneGraph::Context::GetInstance()->Init();
     }
     catch (const Exception& e)
     {
@@ -67,6 +69,7 @@ int main(int argc, char* argv[])
 
 	EventEngine::Dispatch::GetInstance()->DispatchOnGameEndCallback();
 
+    SceneGraph::Context::GetInstance()->Quit();
     RenderingEngine::Context::GetInstance()->Quit();
     EventEngine::Context::GetInstance()->Quit();
     return EXIT_SUCCESS;
