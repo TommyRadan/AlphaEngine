@@ -20,28 +20,18 @@
  * SOFTWARE.
  */
 
-#pragma once
+#include <Infrastructure/GameModule.hpp>
+#include <Infrastructure/Log.hpp>
+#include <Infrastructure/Time.hpp>
 
-#include <RenderingEngine/Renderables/Renderable.hpp>
-
-#include <RenderingEngine/OpenGL/OpenGL.hpp>
-#include <Infrastructure/Transform.hpp>
-
-namespace RenderingEngine
+static void OnFrame()
 {
-    struct Cube : public Renderable
-    {
-        Cube();
+    //LOG_INFO("Delta time: %e ms", Infrastructure::Time::GetInstance()->DeltaTime());
+    //LOG_INFO("FPS: %f", Infrastructure::Time::GetInstance()->CurrentFps());
+}
 
-        Infrastructure::Transform transform;
-
-        void Upload() final;
-        void Render() final;
-
-    private:
-        OpenGL::VertexArray m_VertexArrayObject;
-        OpenGL::VertexBuffer m_Verticies;
-
-        unsigned int m_VertexCount;
-    };
+GAME_MODULE()
+{
+    REGISTER_CALLBACK(OnFrame, OnFrame);
+    return true;
 }

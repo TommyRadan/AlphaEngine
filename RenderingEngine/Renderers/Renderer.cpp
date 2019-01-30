@@ -22,7 +22,7 @@
 
 #include <RenderingEngine/Renderers/Renderer.hpp>
 #include <RenderingEngine/OpenGL/OpenGL.hpp>
-#include <RenderingEngine/Camera.hpp>
+#include <RenderingEngine/Cameras/Camera.hpp>
 #include <RenderingEngine/RenderingEngine.hpp>
 #include <Infrastructure/Log.hpp>
 
@@ -40,8 +40,16 @@ void RenderingEngine::Renderer::StopRenderer()
 
 void RenderingEngine::Renderer::SetupCamera()
 {
-    this->UploadMatrix4("viewMatrix", RenderingEngine::Camera::GetInstance()->GetViewMatrix());
-    this->UploadMatrix4("projectionMatrix", RenderingEngine::Camera::GetInstance()->GetProjectionMatrix());
+    Camera* currentCamera { RenderingEngine::Context::GetInstance()->GetCurrentCamera() };
+
+    if (currentCamera == nullptr)
+    {
+        LOG_WARN("Trying to setup a camera without camera attached");
+        return;
+    }
+
+    this->UploadMatrix4("viewMatrix", currentCamera->GetViewMatrix());
+    this->UploadMatrix4("projectionMatrix", currentCamera->GetProjectionMatrix());
 }
 
 void RenderingEngine::Renderer::SetupOptions(const RenderOptions& options)

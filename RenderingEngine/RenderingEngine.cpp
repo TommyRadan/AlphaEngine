@@ -25,7 +25,7 @@
 #include <RenderingEngine/OpenGL/OpenGL.hpp>
 #include <RenderingEngine/Renderers/BasicRenderer.hpp>
 #include <RenderingEngine/Renderers/OverlayRenderer.hpp>
-#include <RenderingEngine/Camera.hpp>
+#include <RenderingEngine/Cameras/Camera.hpp>
 
 #include <Infrastructure/Log.hpp>
 
@@ -61,11 +61,13 @@ void RenderingEngine::Context::Init()
     RenderingEngine::Renderers::OverlayRenderer::GetInstance();
 
     m_CurrentRenderer = nullptr;
+    m_CurrentCamera = nullptr;
 }
 
 void RenderingEngine::Context::Quit()
 {
     m_CurrentRenderer = nullptr;
+    m_CurrentCamera = nullptr;
 
     RenderingEngine::OpenGL::Context::GetInstance()->Quit();
     RenderingEngine::Window::GetInstance()->Quit();
@@ -77,14 +79,17 @@ void RenderingEngine::Context::Render()
 {
     RenderingEngine::Window::GetInstance()->Clear();
 
-    RenderingEngine::Renderers::BasicRenderer::GetInstance()->StartRenderer();
-    RenderingEngine::Renderers::BasicRenderer::GetInstance()->SetupCamera();
+    if (RenderingEngine::Context::GetInstance()->GetCurrentCamera() != nullptr)
+    {
+        RenderingEngine::Renderers::BasicRenderer::GetInstance()->StartRenderer();
+        RenderingEngine::Renderers::BasicRenderer::GetInstance()->SetupCamera();
 
-    /*
-     * TODO: Render the scene!
-     */
+        /*
+         * TODO: Render the scene!
+         */
 
-    RenderingEngine::Renderers::BasicRenderer::GetInstance()->StopRenderer();
+        RenderingEngine::Renderers::BasicRenderer::GetInstance()->StopRenderer();
+    }
 
     RenderingEngine::OpenGL::Context::GetInstance()->Enable(RenderingEngine::OpenGL::Capability::DepthTest);
     RenderingEngine::Renderers::OverlayRenderer::GetInstance()->StartRenderer();
@@ -102,4 +107,9 @@ void RenderingEngine::Context::Render()
 RenderingEngine::Renderer* const RenderingEngine::Context::GetCurrentRenderer()
 {
     return m_CurrentRenderer;
+}
+
+RenderingEngine::Camera* const RenderingEngine::Context::GetCurrentCamera()
+{
+    return m_CurrentCamera;
 }

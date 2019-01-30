@@ -22,26 +22,20 @@
 
 #pragma once
 
-#include <RenderingEngine/Renderables/Renderable.hpp>
-
-#include <RenderingEngine/OpenGL/OpenGL.hpp>
-#include <Infrastructure/Transform.hpp>
+#include <RenderingEngine/Cameras/Camera.hpp>
+#include <glm.hpp>
 
 namespace RenderingEngine
 {
-    struct Cube : public Renderable
+    struct PerspectiveCamera : public Camera
     {
-        Cube();
+        PerspectiveCamera();
 
-        Infrastructure::Transform transform;
+        const glm::mat4 GetProjectionMatrix() const final;
 
-        void Upload() final;
-        void Render() final;
-
-    private:
-        OpenGL::VertexArray m_VertexArrayObject;
-        OpenGL::VertexBuffer m_Verticies;
-
-        unsigned int m_VertexCount;
+        float fieldOfView;
+        float aspectRatio;
+        float nearClip;
+        float farClip;
     };
 }

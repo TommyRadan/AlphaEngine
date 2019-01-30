@@ -40,6 +40,9 @@ namespace RenderingEngine
         void SwapBuffers();
         void ShowMessage(const std::string& title, const std::string& message);
 
+        void ShowCursor();
+        void HideCursor();
+
     private:
         void* m_Window;
         void* m_GlContext;

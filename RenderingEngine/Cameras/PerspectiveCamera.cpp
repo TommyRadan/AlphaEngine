@@ -20,39 +20,29 @@
  * SOFTWARE.
  */
 
-#pragma once
+#include <RenderingEngine/Cameras/PerspectiveCamera.hpp>
+#define GLM_ENABLE_EXPERIMENTAL
+#include <gtx/transform.hpp>
+#include <Infrastructure/Settings.hpp>
 
-#include <glm.hpp>
-#include <Infrastructure/Transform.hpp>
-
-namespace RenderingEngine
+RenderingEngine::PerspectiveCamera::PerspectiveCamera()
 {
-    class Camera
+    const Settings* settings = Settings::GetInstance();
+
+    fieldOfView = settings->GetFieldOfView();
+    aspectRatio = settings->GetAspectRatio();
+    nearClip = 0.1f;
+    farClip = 10000.0f;
+}
+
+const glm::mat4 RenderingEngine::PerspectiveCamera::GetProjectionMatrix() const
+{
+    if (!m_IsPerspectiveMatrixDirty)
     {
-        Camera();
+        return m_Perspective;
+    }
 
-    public:
-        static Camera* GetInstance();
-
-        Infrastructure::Transform transform;
-
-        void InvalidateViewMatrix();
-        const glm::mat4 GetViewMatrix() const;
-
-        void InvalidateProjectionMatrix();
-        const glm::mat4 GetProjectionMatrix() const;
-
-        // Settings
-        float fieldOfView;
-        float aspectRatio;
-        float nearClip;
-        float farClip;
-
-    private:
-        // Matrices
-        mutable glm::mat4 m_ViewMatrix;
-        mutable bool m_IsViewMatrixDirty;
-        mutable glm::mat4 m_Perspective;
-        mutable bool m_IsPerspectiveMatrixDirty;
-    };
+    m_Perspective = glm::perspective(fieldOfView, aspectRatio, nearClip, farClip);
+    m_IsPerspectiveMatrixDirty = false;
+    return m_Perspective;
 }

@@ -20,28 +20,17 @@
  * SOFTWARE.
  */
 
-#pragma once
+#include <Infrastructure/GameModule.hpp>
+#include <Infrastructure/Log.hpp>
 
-#include <RenderingEngine/Renderables/Renderable.hpp>
-
-#include <RenderingEngine/OpenGL/OpenGL.hpp>
-#include <Infrastructure/Transform.hpp>
-
-namespace RenderingEngine
+static void OnKeyDown(EventEngine::KeyCode keyCode)
 {
-    struct Cube : public Renderable
-    {
-        Cube();
+    if (keyCode != EventEngine::KeyCode::ESCAPE) return;
+    EventEngine::Context::GetInstance()->RequestQuit();
+}
 
-        Infrastructure::Transform transform;
-
-        void Upload() final;
-        void Render() final;
-
-    private:
-        OpenGL::VertexArray m_VertexArrayObject;
-        OpenGL::VertexBuffer m_Verticies;
-
-        unsigned int m_VertexCount;
-    };
+GAME_MODULE()
+{
+    REGISTER_CALLBACK(OnKeyDown, OnKeyDown);
+    return true;
 }

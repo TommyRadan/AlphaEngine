@@ -20,19 +20,15 @@
  * SOFTWARE.
  */
 
-#include <RenderingEngine/Camera.hpp>
+#include <RenderingEngine/Cameras/Camera.hpp>
 #define GLM_ENABLE_EXPERIMENTAL
 #include <gtx/transform.hpp>
 #include <Infrastructure/Settings.hpp>
+#include <RenderingEngine/RenderingEngine.hpp>
 
 RenderingEngine::Camera::Camera()
 {
     const Settings* settings = Settings::GetInstance();
-
-    fieldOfView = settings->GetFieldOfView();
-    aspectRatio = settings->GetAspectRatio();
-    nearClip = 0.1f;
-    farClip = 10000.0f;
 
     m_IsViewMatrixDirty = true;
     m_IsPerspectiveMatrixDirty = true;
@@ -40,16 +36,14 @@ RenderingEngine::Camera::Camera()
     transform.SetRotation({1.0f, 0.0f, 0.0f});
 }
 
-RenderingEngine::Camera* RenderingEngine::Camera::GetInstance()
+void RenderingEngine::Camera::Attach()
 {
-    static Camera* instance = nullptr;
+    RenderingEngine::Context::GetInstance()->m_CurrentCamera = this;
+}
 
-    if (instance == nullptr)
-    {
-        instance = new Camera();
-    }
-
-    return instance;
+void RenderingEngine::Camera::Detach()
+{
+    RenderingEngine::Context::GetInstance()->m_CurrentCamera = nullptr;
 }
 
 void RenderingEngine::Camera::InvalidateViewMatrix()
@@ -74,16 +68,4 @@ const glm::mat4 RenderingEngine::Camera::GetViewMatrix() const
 void RenderingEngine::Camera::InvalidateProjectionMatrix()
 {
     m_IsPerspectiveMatrixDirty = true;
-}
-
-const glm::mat4 RenderingEngine::Camera::GetProjectionMatrix() const
-{
-    if (!m_IsPerspectiveMatrixDirty)
-    {
-        return m_Perspective;
-    }
-
-    m_Perspective = glm::perspective(fieldOfView, aspectRatio, nearClip, farClip);
-    m_IsPerspectiveMatrixDirty = false;
-    return m_Perspective;
 }

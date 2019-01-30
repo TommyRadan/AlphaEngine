@@ -24,6 +24,7 @@
 
 #include <Infrastructure/Subsystem.hpp>
 #include <RenderingEngine/Renderers/Renderer.hpp>
+#include <RenderingEngine/Cameras/Camera.hpp>
 #include <vector>
 
 namespace RenderingEngine
@@ -41,9 +42,13 @@ namespace RenderingEngine
         void Render();
 
         Renderer* const GetCurrentRenderer();
+        Camera* const GetCurrentCamera();
 
     private:
         friend Renderer;
         Renderer* m_CurrentRenderer;
+
+        friend Camera;
+        Camera* m_CurrentCamera;
     };
 }

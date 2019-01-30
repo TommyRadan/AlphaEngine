@@ -34,6 +34,7 @@ file(GLOB RENDERINGENGINE_SOURCE_FILES
         "Mesh/*.hpp" "Mesh/*.cpp"
         "Renderables/*.hpp" "Renderables/*.cpp"
         "Renderers/*.hpp" "Renderers/*.cpp"
+        "Cameras/*.hpp" "Cameras/*.cpp"
         "OpenGL/*.hpp" "OpenGL/*.cpp")
 
 # External dependencies

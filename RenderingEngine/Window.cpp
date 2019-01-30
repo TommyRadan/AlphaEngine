@@ -118,4 +118,16 @@ namespace RenderingEngine
                                  message.c_str(),
                                  static_cast<SDL_Window*>(m_Window));
     }
+
+    void Window::ShowCursor()
+    {
+        SDL_ShowCursor(SDL_ENABLE);
+        SDL_SetRelativeMouseMode(SDL_FALSE);
+    }
+
+    void Window::HideCursor()
+    {
+        SDL_ShowCursor(SDL_DISABLE);
+        SDL_SetRelativeMouseMode(SDL_TRUE);
+    }
 }
