@@ -44,7 +44,7 @@ Infrastructure::Image::Image(const std::string& filename) :
     if (m_ImageData == nullptr)
     {
         LOG_ERROR("Could not load image (%s)", filename.c_str());
-        return;
+        throw Exception("Could not load image (" + filename + ")");
     }
 
     LOG_INFO("Loaded image (%s)", filename.c_str());
