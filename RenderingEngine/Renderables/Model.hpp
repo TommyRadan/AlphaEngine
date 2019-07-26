@@ -24,6 +24,7 @@
 
 #include <RenderingEngine/Renderables/Renderable.hpp>
 #include <RenderingEngine/Mesh/Mesh.hpp>
+#include <Infrastructure/Transform.hpp>
 
 #include <RenderingEngine/OpenGL/OpenGL.hpp>
 
@@ -32,6 +33,8 @@ namespace RenderingEngine
     struct Model : public Renderable
     {
         Model();
+
+        Infrastructure::Transform transform;
 
         void UploadMesh(const RenderingEngine::Mesh& mesh);
 

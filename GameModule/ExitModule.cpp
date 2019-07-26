@@ -20,8 +20,8 @@
  * SOFTWARE.
  */
 
-#include <Infrastructure/GameModule.hpp>
-#include <Infrastructure/Log.hpp>
+#include <API/GameModule.hpp>
+#include <EventEngine/EventEngine.hpp>
 
 static void OnKeyDown(EventEngine::KeyCode keyCode)
 {
@@ -31,6 +31,8 @@ static void OnKeyDown(EventEngine::KeyCode keyCode)
 
 GAME_MODULE()
 {
-    REGISTER_CALLBACK(OnKeyDown, OnKeyDown);
+    struct GameModuleInfo info;
+    info.onKeyDown = OnKeyDown;
+    RegisterGameModule(info);
     return true;
 }

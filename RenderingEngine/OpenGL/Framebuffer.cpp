@@ -20,9 +20,11 @@
  * SOFTWARE.
  */
 
+#include <exception>
+
 #include <RenderingEngine/OpenGL/Framebuffer.hpp>
-#include <Infrastructure/Exception.hpp>
 #include <Infrastructure/Log.hpp>
+#include <stdexcept>
 
 #define PUSHSTATE() GLint restoreId; glGetIntegerv( GL_DRAW_FRAMEBUFFER_BINDING, &restoreId );
 #define POPSTATE() glBindFramebuffer( GL_DRAW_FRAMEBUFFER, restoreId );
@@ -80,7 +82,7 @@ RenderingEngine::OpenGL::Framebuffer::Framebuffer(const uint32_t width,
 	if (glCheckFramebufferStatus(GL_DRAW_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
 	    LOG_ERROR("Framebuffer could not be created, unknown reason (0x%X)",
                   glCheckFramebufferStatus(GL_DRAW_FRAMEBUFFER));
-		throw Exception("Framebuffer could not be created!");
+		throw std::runtime_error {"Framebuffer could not be created!"};
 	}
 
 	POPSTATE()

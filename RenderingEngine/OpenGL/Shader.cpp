@@ -20,8 +20,9 @@
  * SOFTWARE.
  */
 
+#include <exception>
+
 #include <RenderingEngine/OpenGL/Shader.hpp>
-#include <Infrastructure/Exception.hpp>
 #include <Infrastructure/Log.hpp>
 
 RenderingEngine::OpenGL::Shader::Shader(const ShaderType shaderType)
@@ -30,7 +31,7 @@ RenderingEngine::OpenGL::Shader::Shader(const ShaderType shaderType)
 	if(m_ObjectID == 0)
 	{
 		LOG_FATAL("Cannot create shader");
-		throw Exception("Shader creation failed!");
+		throw std::runtime_error{"Shader creation failed!"};
 	}
 }
 
@@ -63,7 +64,7 @@ void RenderingEngine::OpenGL::Shader::Compile()
 	    LOG_ERROR("Shader code: \n%s", m_Code.c_str());
 	    LOG_ERROR("Errors: \n%s", GetInfoLog().c_str());
 		LOG_FATAL("Cannot compile shader");
-		throw Exception(GetInfoLog());
+		throw std::runtime_error{GetInfoLog()};
 	}
 }
 

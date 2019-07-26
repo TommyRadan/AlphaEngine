@@ -22,20 +22,19 @@
 
 #pragma once
 
-#include <Infrastructure/Subsystem.hpp>
 #include <string>
 
 namespace SceneGraph
 {
-    class Context : public Infrastructure::Subsystem
+    class Context
     {
         Context() = default;
 
     public:
         static Context* GetInstance();
 
-        void Init() final;
-        void Quit() final;
+        void Init();
+        void Quit();
 
         void LoadScene(const std::string& filename);
     };

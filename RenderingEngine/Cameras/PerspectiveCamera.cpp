@@ -37,12 +37,12 @@ RenderingEngine::PerspectiveCamera::PerspectiveCamera()
 
 const glm::mat4 RenderingEngine::PerspectiveCamera::GetProjectionMatrix() const
 {
-    if (!m_IsPerspectiveMatrixDirty)
+    if (!m_IsProjectionMatrixDirty)
     {
-        return m_Perspective;
+        return m_Projection;
     }
 
-    m_Perspective = glm::perspective(fieldOfView, aspectRatio, nearClip, farClip);
-    m_IsPerspectiveMatrixDirty = false;
-    return m_Perspective;
+    m_Projection = glm::perspective(fieldOfView, aspectRatio, nearClip, farClip);
+    m_IsProjectionMatrixDirty = false;
+    return m_Projection;
 }

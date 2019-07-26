@@ -20,8 +20,9 @@
  * SOFTWARE.
  */
 
+#include <exception>
+
 #include <RenderingEngine/OpenGL/Program.hpp>
-#include <Infrastructure/Exception.hpp>
 #include <Infrastructure/Log.hpp>
 
 RenderingEngine::OpenGL::Program::Program()
@@ -64,7 +65,7 @@ void RenderingEngine::OpenGL::Program::Link()
 	{
 		LOG_FATAL("Cannot link program");
 		LOG_FATAL("%s", this->GetInfoLog().c_str());
-		throw Exception(this->GetInfoLog());
+		throw std::runtime_error { this->GetInfoLog() };
 	}
 }
 

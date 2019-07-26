@@ -20,12 +20,28 @@
  * SOFTWARE.
  */
 
-#pragma once
+#include <RenderingEngine/Cameras/OrthographicCamera.hpp>
+#define GLM_ENABLE_EXPERIMENTAL
+#include <gtx/transform.hpp>
 
-#include <stdexcept>
-#include <string>
-
-struct Exception : std::runtime_error
+RenderingEngine::OrthographicCamera::OrthographicCamera()
 {
-    explicit Exception(const std::string& m) : std::runtime_error { m.c_str() } {}
-};
+    const Settings* settings = Settings::GetInstance();
+
+    xMagnification = 1.0f;
+    yMagnification = 1.0f;
+    nearClip = 0.1f;
+    farClip = 10000.0f;
+}
+
+const glm::mat4 RenderingEngine::OrthographicCamera::GetProjectionMatrix() const
+{
+    if (!m_IsProjectionMatrixDirty)
+    {
+        return m_Projection;
+    }
+
+    m_Projection = glm::ortho(-xMagnification, xMagnification, -yMagnification, yMagnification, nearClip, farClip);
+    m_IsProjectionMatrixDirty = false;
+    return m_Projection;
+}

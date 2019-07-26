@@ -30,6 +30,7 @@ namespace RenderingEngine
     struct Camera
     {
         Camera();
+        virtual ~Camera() = default;
 
         void Attach();
         void Detach();
@@ -45,7 +46,7 @@ namespace RenderingEngine
     protected:
         mutable glm::mat4 m_ViewMatrix;
         mutable bool m_IsViewMatrixDirty;
-        mutable glm::mat4 m_Perspective;
-        mutable bool m_IsPerspectiveMatrixDirty;
+        mutable glm::mat4 m_Projection;
+        mutable bool m_IsProjectionMatrixDirty;
     };
 }

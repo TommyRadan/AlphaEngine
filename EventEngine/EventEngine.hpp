@@ -22,19 +22,17 @@
 
 #pragma once
 
-#include <Infrastructure/Subsystem.hpp>
-
 namespace EventEngine
 {
-	class Context : public Infrastructure::Subsystem
+	class Context
 	{
 		Context();
 
 	public:
 		static Context* GetInstance();
 
-		void Init() final;
-		void Quit() final;
+		void Init();
+		void Quit();
 
 		void RequestQuit();
 		const bool IsQuitRequested() const;

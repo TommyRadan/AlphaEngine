@@ -22,18 +22,30 @@
 
 #pragma once
 
-namespace Infrastructure
+#include <EventEngine/Dispatch.hpp>
+#include <string>
+
+struct GameModuleInfo
 {
-    struct Subsystem
-    {
-        Subsystem();
+    std::function<void(void)> onFrame;
+    std::function<void(EventEngine::KeyCode)> onKeyDown;
+    std::function<void(EventEngine::KeyCode)> onKeyUp;
+    std::function<void(EventEngine::KeyCode)> keyPressed;
+    std::function<void(int32_t, int32_t)> onMouseMove;
 
-        virtual void Init() = 0;
-        virtual void Quit() = 0;
+    GameModuleInfo() :
+        onFrame { nullptr },
+        onKeyDown { nullptr },
+        onKeyUp { nullptr },
+        keyPressed { nullptr },
+        onMouseMove { nullptr }
+    {}
+};
 
-        const bool IsInitialized() const;
+void RegisterGameModule(struct GameModuleInfo &info);
 
-    protected:
-        bool m_IsInitialized;
-    };
-}
+#ifndef INTERNAL_GAMEMODULE_IMPLEMENTATION
+#define GAME_MODULE() bool ModuleInit()
+static bool ModuleInit();
+static bool initStatus = ModuleInit();
+#endif

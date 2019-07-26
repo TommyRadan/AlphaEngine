@@ -65,7 +65,8 @@ add_subdirectory(SceneGraph)
 
 # Main executable
 file(GLOB GAMEMODULE_SOURCE_FILES "GameModule/*.cpp")
-add_executable(AlphaEngine Control/MainLoop.cpp ${GAMEMODULE_SOURCE_FILES})
+file(GLOB API_FILES "API/*.hpp" "API/*.cpp")
+add_executable(AlphaEngine Control/MainLoop.cpp ${GAMEMODULE_SOURCE_FILES} ${API_FILES})
 
 # Add Dependencies
 add_dependencies(AlphaEngine EventEngine)

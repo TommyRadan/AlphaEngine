@@ -22,7 +22,8 @@
 
 #include "Image.hpp"
 
-#include <Infrastructure/Exception.hpp>
+#include <exception>
+
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.hpp"
 #include <Infrastructure/Log.hpp>
@@ -44,7 +45,7 @@ Infrastructure::Image::Image(const std::string& filename) :
     if (m_ImageData == nullptr)
     {
         LOG_ERROR("Could not load image (%s)", filename.c_str());
-        throw Exception("Could not load image (" + filename + ")");
+        throw std::runtime_error{"Could not load image (" + filename + ")"};
     }
 
     LOG_INFO("Loaded image (%s)", filename.c_str());

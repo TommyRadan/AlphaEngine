@@ -31,7 +31,7 @@ RenderingEngine::Camera::Camera()
     const Settings* settings = Settings::GetInstance();
 
     m_IsViewMatrixDirty = true;
-    m_IsPerspectiveMatrixDirty = true;
+    m_IsProjectionMatrixDirty = true;
 
     transform.SetRotation({1.0f, 0.0f, 0.0f});
 }
@@ -67,5 +67,5 @@ const glm::mat4 RenderingEngine::Camera::GetViewMatrix() const
 
 void RenderingEngine::Camera::InvalidateProjectionMatrix()
 {
-    m_IsPerspectiveMatrixDirty = true;
+    m_IsProjectionMatrixDirty = true;
 }

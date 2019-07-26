@@ -20,13 +20,32 @@
  * SOFTWARE.
  */
 
-#include <Infrastructure/Subsystem.hpp>
+#pragma once
 
-Infrastructure::Subsystem::Subsystem() :
-    m_IsInitialized { false }
-{}
+using CameraId = int;
 
-const bool Infrastructure::Subsystem::IsInitialized() const
+enum class CameraType
 {
-    return m_IsInitialized;
-}
+    Unknown,
+    Orthographic,
+    Perspective
+};
+
+CameraId CreateCamera(CameraType type);
+void DestroyCamera(CameraId id);
+
+CameraType GetCameraType(CameraId id);
+
+void SetCameraPos(CameraId id, float px, float py, float pz);
+void GetCameraPos(CameraId id, float *px, float *py, float *pz);
+
+void SetCameraRot(CameraId id, float rx, float ry, float rz);
+void GetCameraRot(CameraId id, float *rx, float *ry, float *rz);
+
+void DestroyAllCameras();
+int GetNumberOfCameras();
+
+void AttachCamera(CameraId id);
+void DetachCamera();
+bool IsCameraAttached(CameraId id);
+bool IsAnyCameraAttached();

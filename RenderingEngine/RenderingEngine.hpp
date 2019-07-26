@@ -22,22 +22,21 @@
 
 #pragma once
 
-#include <Infrastructure/Subsystem.hpp>
 #include <RenderingEngine/Renderers/Renderer.hpp>
 #include <RenderingEngine/Cameras/Camera.hpp>
 #include <vector>
 
 namespace RenderingEngine
 {
-    class Context : public Infrastructure::Subsystem
+    class Context
     {
         Context();
 
     public:
         static Context* GetInstance();
 
-        void Init() final;
-        void Quit() final;
+        void Init();
+        void Quit();
 
         void Render();
 

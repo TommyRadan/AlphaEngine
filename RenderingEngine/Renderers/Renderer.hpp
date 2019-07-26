@@ -26,7 +26,6 @@
 #include <string>
 
 #include <RenderingEngine/Renderers/RenderOptions.hpp>
-#include <Infrastructure/Subsystem.hpp>
 
 namespace RenderingEngine
 {

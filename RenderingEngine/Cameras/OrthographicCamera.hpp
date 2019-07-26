@@ -22,12 +22,20 @@
 
 #pragma once
 
-#include <EventEngine/EventEngine.hpp>
-#include <EventEngine/Dispatch.hpp>
+#include <RenderingEngine/Cameras/Camera.hpp>
+#include <glm.hpp>
 
-#define GAME_MODULE() bool ModuleInit()
-#define REGISTER_CALLBACK(event, callback) EventEngine::Dispatch::GetInstance()->Register ## event ## Callback(callback)
+namespace RenderingEngine
+{
+    struct OrthographicCamera : public Camera
+    {
+        OrthographicCamera();
 
-static bool ModuleInit();
+        const glm::mat4 GetProjectionMatrix() const final;
 
-static bool initStatus = ModuleInit();
+        float xMagnification;
+        float yMagnification;
+        float nearClip;
+        float farClip;
+    };
+}

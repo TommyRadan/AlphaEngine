@@ -21,9 +21,9 @@
  */
 
 #include <cstdlib>
+#include <exception>
 
 #include <EventEngine/EventEngine.hpp>
-#include <Infrastructure/Exception.hpp>
 #include <EventEngine/Dispatch.hpp>
 #include <RenderingEngine/RenderingEngine.hpp>
 #include <RenderingEngine/Window.hpp>
@@ -42,7 +42,7 @@ int main(int argc, char* argv[])
         RenderingEngine::Context::GetInstance()->Init();
         SceneGraph::Context::GetInstance()->Init();
     }
-    catch (const Exception& e)
+    catch (const std::exception& e)
     {
         RenderingEngine::Window::GetInstance()->ShowMessage("Initialization Error", e.what());
         return EXIT_FAILURE;
@@ -61,7 +61,7 @@ int main(int argc, char* argv[])
             if (EventEngine::Context::GetInstance()->IsQuitRequested()) break;
         }
     }
-    catch (const Exception& e)
+    catch (const std::exception& e)
     {
         RenderingEngine::Window::GetInstance()->ShowMessage("Error", e.what());
         return EXIT_FAILURE;

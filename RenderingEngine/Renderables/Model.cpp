@@ -60,7 +60,7 @@ void RenderingEngine::Model::Render()
         return;
     }
 
-    //currentRederer->UploadMatrix4("modelMatrix", this->GetModelMatrix());
+    currentRenderer->UploadMatrix4("modelMatrix", transform.GetTransformMatrix());
 	currentRenderer->SetupOptions(options);
 
     RenderingEngine::OpenGL::Context::GetInstance()->DrawArrays(m_VertexArrayObject,

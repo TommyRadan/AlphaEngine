@@ -20,55 +20,35 @@
  * SOFTWARE.
  */
 
-#include <exception>
+#define INTERNAL_GAMEMODULE_IMPLEMENTATION
+#include <API/GameModule.hpp>
+#undef INTERNAL_GAMEMODULE_IMPLEMENTATION
+#include <EventEngine/Dispatch.hpp>
 
-#include <EventEngine/EventEngine.hpp>
-#include <SDL.h>
-#include <Infrastructure/Log.hpp>
-#include <stdexcept>
-
-EventEngine::Context::Context() :
-    m_IsQuitRequested { false }
-{}
-
-EventEngine::Context* EventEngine::Context::GetInstance()
+void RegisterGameModule(struct GameModuleInfo &info)
 {
-    static Context* instance { nullptr };
-
-    if (instance == nullptr)
+    if (info.onFrame)
     {
-        instance = new Context();
+        EventEngine::Dispatch::GetInstance()->RegisterOnFrameCallback(info.onFrame);
     }
 
-    return instance;
-}
-
-void EventEngine::Context::Init()
-{
-	LOG_INFO("Init Event Engine");
-
-	if (SDL_InitSubSystem(SDL_INIT_VIDEO) != 0)
+    if (info.onKeyDown)
     {
-        LOG_FATAL("Could not initialize event system");
-        LOG_FATAL("SDL_Error: %s", SDL_GetError());
-        throw std::runtime_error {"Could not initialize event system"};
+        EventEngine::Dispatch::GetInstance()->RegisterOnKeyDownCallback(info.onKeyDown);
     }
-}
 
-void EventEngine::Context::Quit()
-{
-	SDL_QuitSubSystem(SDL_INIT_VIDEO);
+    if (info.onKeyUp)
+    {
+        EventEngine::Dispatch::GetInstance()->RegisterOnKeyUpCallback(info.onKeyUp);
+    }
 
-    LOG_INFO("Quit Event Engine");
-}
+    if (info.keyPressed)
+    {
+        EventEngine::Dispatch::GetInstance()->RegisterKeyPressedCallback(info.keyPressed);
+    }
 
-void EventEngine::Context::RequestQuit()
-{
-    LOG_INFO("Quit has been requested");
-    m_IsQuitRequested = true;
-}
-
-const bool EventEngine::Context::IsQuitRequested() const
-{
-    return m_IsQuitRequested;
+    if (info.onMouseMove)
+    {
+        EventEngine::Dispatch::GetInstance()->RegisterOnMouseMoveCallback(info.onMouseMove);
+    }
 }

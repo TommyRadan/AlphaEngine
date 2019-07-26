@@ -20,7 +20,7 @@
  * SOFTWARE.
  */
 
-#include <Infrastructure/GameModule.hpp>
+#include <API/GameModule.hpp>
 #include <RenderingEngine/RenderingEngine.hpp>
 #include <RenderingEngine/Cameras/Camera.hpp>
 #include <Infrastructure/Settings.hpp>
@@ -168,7 +168,9 @@ static void OnMouseMove(int32_t deltaX, int32_t deltaY)
 
 GAME_MODULE()
 {
-    REGISTER_CALLBACK(KeyPressed, OnKeyPressed);
-    REGISTER_CALLBACK(OnMouseMove, OnMouseMove);
+    struct GameModuleInfo info;
+    info.keyPressed = OnKeyPressed;
+    info.onMouseMove = OnMouseMove;
+    RegisterGameModule(info);
     return true;
 }

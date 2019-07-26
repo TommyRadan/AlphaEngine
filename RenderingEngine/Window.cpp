@@ -20,11 +20,12 @@
  * SOFTWARE.
  */
 
+#include <exception>
+
 #include <RenderingEngine/Window.hpp>
 #include <RenderingEngine/OpenGL/OpenGL.hpp>
 #include <SDL.h>
 #include <Infrastructure/Settings.hpp>
-#include <Infrastructure/Exception.hpp>
 #include <Infrastructure/Color.hpp>
 #include <Infrastructure/Log.hpp>
 
@@ -87,7 +88,7 @@ namespace RenderingEngine
         {
             LOG_FATAL("Cannot create window");
             LOG_FATAL("SDL Error: %s", SDL_GetError());
-            throw Exception { SDL_GetError() };
+            throw std::runtime_error { SDL_GetError() };
         }
 
         m_GlContext = SDL_GL_CreateContext((SDL_Window*) m_Window);

@@ -31,18 +31,16 @@
 #include <RenderingEngine/OpenGL/VertexBuffer.hpp>
 #include <Infrastructure/Color.hpp>
 
-#include <Infrastructure/Subsystem.hpp>
-
 namespace RenderingEngine
 {
     namespace OpenGL
     {
-        struct Context : public Infrastructure::Subsystem
+        struct Context
         {
             static Context* GetInstance();
 
-            void Init() final;
-            void Quit() final;
+            void Init();
+            void Quit();
 
             void Enable(OpenGL::Capability capability);
             void Disable(OpenGL::Capability capability);

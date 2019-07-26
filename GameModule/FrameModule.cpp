@@ -20,7 +20,7 @@
  * SOFTWARE.
  */
 
-#include <Infrastructure/GameModule.hpp>
+#include <API/GameModule.hpp>
 #include <Infrastructure/Log.hpp>
 #include <Infrastructure/Time.hpp>
 
@@ -32,6 +32,8 @@ static void OnFrame()
 
 GAME_MODULE()
 {
-    REGISTER_CALLBACK(OnFrame, OnFrame);
+    struct GameModuleInfo info;
+    info.onFrame = OnFrame;
+    RegisterGameModule(info);
     return true;
 }
