@@ -104,7 +104,7 @@ void RenderingEngine::Cube::Upload()
 
 void RenderingEngine::Cube::Render()
 {
-    Renderer* currentRenderer { RenderingEngine::Context::GetInstance()->GetCurrentRenderer() };
+    Renderer* currentRenderer { RenderingEngine::Renderer::GetCurrentRenderer() };
 
     if (!currentRenderer)
     {

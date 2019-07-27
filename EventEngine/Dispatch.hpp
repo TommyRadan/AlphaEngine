@@ -53,31 +53,22 @@ namespace EventEngine
 
         void HandleEvents();
 
-		void RegisterOnGameStartCallback(std::function<void(void)> callback);
-		void RegisterOnGameEndCallback(std::function<void(void)> callback);
         void RegisterOnFrameCallback(std::function<void(void)> callback);
         void RegisterOnKeyDownCallback(std::function<void(KeyCode)> callback);
         void RegisterOnKeyUpCallback(std::function<void(KeyCode)> callback);
-        void RegisterKeyPressedCallback(std::function<void(KeyCode)> callback);
         void RegisterOnMouseMoveCallback(std::function<void(int32_t, int32_t)> callback);
 
-		void DispatchOnGameStartCallback();
-		void DispatchOnGameEndCallback();
         void DispatchOnFrameCallback();
         void DispatchOnKeyDownCallback(KeyCode keyCode);
         void DispatchOnKeyUpCallback(KeyCode keyCode);
-        void DispatchKeyPressedCallback(KeyCode keyCode);
         void DispatchOnMouseMoveCallback(int32_t deltaX, int32_t deltaY);
 
         bool IsKeyPressed(KeyCode keyCode);
 
     private:
-		std::vector<std::function<void(void)>> m_OnGameStartCallbacks;
-		std::vector<std::function<void(void)>> m_OnGameEndCallbacks;
         std::vector<std::function<void(void)>> m_OnFrameCallbacks;
         std::vector<std::function<void(KeyCode)>> m_OnKeyDownCallbacks;
         std::vector<std::function<void(KeyCode)>> m_OnKeyUpCallbacks;
-        std::vector<std::function<void(KeyCode)>> m_KeyPressedCallbacks;
         std::vector<KeyCode> m_PressedKeys;
         std::vector<std::function<void(int32_t, int32_t)>> m_OnMouseMoveCallbacks;
     };

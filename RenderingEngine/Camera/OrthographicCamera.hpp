@@ -22,19 +22,19 @@
 
 #pragma once
 
-#include <RenderingEngine/Cameras/Camera.hpp>
+#include <RenderingEngine/Camera/Camera.hpp>
 #include <glm.hpp>
 
 namespace RenderingEngine
 {
-    struct PerspectiveCamera : public Camera
+    struct OrthographicCamera : public Camera
     {
-        PerspectiveCamera();
+        OrthographicCamera();
 
         const glm::mat4 GetProjectionMatrix() const final;
 
-        float fieldOfView;
-        float aspectRatio;
+        float xMagnification;
+        float yMagnification;
         float nearClip;
         float farClip;
     };

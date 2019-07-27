@@ -42,11 +42,6 @@ void RegisterGameModule(struct GameModuleInfo &info)
         EventEngine::Dispatch::GetInstance()->RegisterOnKeyUpCallback(info.onKeyUp);
     }
 
-    if (info.keyPressed)
-    {
-        EventEngine::Dispatch::GetInstance()->RegisterKeyPressedCallback(info.keyPressed);
-    }
-
     if (info.onMouseMove)
     {
         EventEngine::Dispatch::GetInstance()->RegisterOnMouseMoveCallback(info.onMouseMove);

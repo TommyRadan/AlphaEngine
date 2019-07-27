@@ -20,16 +20,16 @@
  * SOFTWARE.
  */
 
-#include <RenderingEngine/Cameras/Camera.hpp>
+#include <RenderingEngine/Camera/Camera.hpp>
 #define GLM_ENABLE_EXPERIMENTAL
 #include <gtx/transform.hpp>
 #include <Infrastructure/Settings.hpp>
 #include <RenderingEngine/RenderingEngine.hpp>
 
+RenderingEngine::Camera *RenderingEngine::Camera::m_CurrentCamera = nullptr;
+
 RenderingEngine::Camera::Camera()
 {
-    const Settings* settings = Settings::GetInstance();
-
     m_IsViewMatrixDirty = true;
     m_IsProjectionMatrixDirty = true;
 
@@ -38,12 +38,17 @@ RenderingEngine::Camera::Camera()
 
 void RenderingEngine::Camera::Attach()
 {
-    RenderingEngine::Context::GetInstance()->m_CurrentCamera = this;
+    RenderingEngine::Camera::m_CurrentCamera = this;
 }
 
 void RenderingEngine::Camera::Detach()
 {
-    RenderingEngine::Context::GetInstance()->m_CurrentCamera = nullptr;
+    RenderingEngine::Camera::m_CurrentCamera = nullptr;
+}
+
+RenderingEngine::Camera *RenderingEngine::Camera::GetCurrentCamera()
+{
+    return RenderingEngine::Camera::m_CurrentCamera;
 }
 
 void RenderingEngine::Camera::InvalidateViewMatrix()

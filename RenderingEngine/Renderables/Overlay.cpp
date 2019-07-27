@@ -50,7 +50,7 @@ void RenderingEngine::Overlay::Upload()
 
 void RenderingEngine::Overlay::Render()
 {
-    Renderer* currentRenderer { RenderingEngine::Context::GetInstance()->GetCurrentRenderer() };
+    Renderer* currentRenderer { RenderingEngine::Renderer::GetCurrentRenderer() };
 
     if (!currentRenderer)
     {

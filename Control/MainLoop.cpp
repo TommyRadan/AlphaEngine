@@ -20,7 +20,6 @@
  * SOFTWARE.
  */
 
-#include <cstdlib>
 #include <exception>
 
 #include <EventEngine/EventEngine.hpp>
@@ -48,14 +47,13 @@ int main(int argc, char* argv[])
         return EXIT_FAILURE;
     }
 
-	EventEngine::Dispatch::GetInstance()->DispatchOnGameStartCallback();
-
     try
     {
         for (;;)
         {
             EventEngine::Dispatch::GetInstance()->HandleEvents();
             RenderingEngine::Context::GetInstance()->Render();
+            RenderingEngine::Window::GetInstance()->SwapBuffers();
             Infrastructure::Time::GetInstance()->PerformTick();
 
             if (EventEngine::Context::GetInstance()->IsQuitRequested()) break;
@@ -66,8 +64,6 @@ int main(int argc, char* argv[])
         RenderingEngine::Window::GetInstance()->ShowMessage("Error", e.what());
         return EXIT_FAILURE;
     }
-
-	EventEngine::Dispatch::GetInstance()->DispatchOnGameEndCallback();
 
     SceneGraph::Context::GetInstance()->Quit();
     RenderingEngine::Context::GetInstance()->Quit();

@@ -25,7 +25,7 @@
 #include <RenderingEngine/OpenGL/OpenGL.hpp>
 #include <RenderingEngine/Renderers/BasicRenderer.hpp>
 #include <RenderingEngine/Renderers/OverlayRenderer.hpp>
-#include <RenderingEngine/Cameras/Camera.hpp>
+#include <RenderingEngine/Camera/Camera.hpp>
 
 #include <Infrastructure/Log.hpp>
 
@@ -41,10 +41,6 @@ RenderingEngine::Context* RenderingEngine::Context::GetInstance()
     return instance;
 }
 
-RenderingEngine::Context::Context() :
-    m_CurrentRenderer { nullptr }
-{}
-
 void RenderingEngine::Context::Init()
 {
     LOG_INFO("Init Rendering Engine");
@@ -59,16 +55,10 @@ void RenderingEngine::Context::Init()
 
     RenderingEngine::Renderers::BasicRenderer::GetInstance();
     RenderingEngine::Renderers::OverlayRenderer::GetInstance();
-
-    m_CurrentRenderer = nullptr;
-    m_CurrentCamera = nullptr;
 }
 
 void RenderingEngine::Context::Quit()
 {
-    m_CurrentRenderer = nullptr;
-    m_CurrentCamera = nullptr;
-
     RenderingEngine::OpenGL::Context::GetInstance()->Quit();
     RenderingEngine::Window::GetInstance()->Quit();
 
@@ -79,7 +69,7 @@ void RenderingEngine::Context::Render()
 {
     RenderingEngine::Window::GetInstance()->Clear();
 
-    if (RenderingEngine::Context::GetInstance()->GetCurrentCamera() != nullptr)
+    if (RenderingEngine::Camera::GetCurrentCamera() != nullptr)
     {
         RenderingEngine::Renderers::BasicRenderer::GetInstance()->StartRenderer();
         RenderingEngine::Renderers::BasicRenderer::GetInstance()->SetupCamera();
@@ -100,16 +90,4 @@ void RenderingEngine::Context::Render()
 
     RenderingEngine::Renderers::OverlayRenderer::GetInstance()->StopRenderer();
     RenderingEngine::OpenGL::Context::GetInstance()->Disable(RenderingEngine::OpenGL::Capability::DepthTest);
-
-    RenderingEngine::Window::GetInstance()->SwapBuffers();
-}
-
-RenderingEngine::Renderer* const RenderingEngine::Context::GetCurrentRenderer()
-{
-    return m_CurrentRenderer;
-}
-
-RenderingEngine::Camera* const RenderingEngine::Context::GetCurrentCamera()
-{
-    return m_CurrentCamera;
 }

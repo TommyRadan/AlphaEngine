@@ -22,15 +22,14 @@
 
 #pragma once
 
-#include <RenderingEngine/Renderers/Renderer.hpp>
-#include <RenderingEngine/Cameras/Camera.hpp>
+#include <RenderingEngine/Camera/Camera.hpp>
 #include <vector>
 
 namespace RenderingEngine
 {
     class Context
     {
-        Context();
+        Context() = default;
 
     public:
         static Context* GetInstance();
@@ -39,15 +38,5 @@ namespace RenderingEngine
         void Quit();
 
         void Render();
-
-        Renderer* const GetCurrentRenderer();
-        Camera* const GetCurrentCamera();
-
-    private:
-        friend Renderer;
-        Renderer* m_CurrentRenderer;
-
-        friend Camera;
-        Camera* m_CurrentCamera;
     };
 }

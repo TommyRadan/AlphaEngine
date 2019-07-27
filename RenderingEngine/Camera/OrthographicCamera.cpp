@@ -20,21 +20,26 @@
  * SOFTWARE.
  */
 
-#include <API/GameModule.hpp>
-#include <API/Time.hpp>
+#include <RenderingEngine/Camera/OrthographicCamera.hpp>
+#define GLM_ENABLE_EXPERIMENTAL
+#include <gtx/transform.hpp>
 
-#include <Infrastructure/Log.hpp>
-
-static void OnFrame()
+RenderingEngine::OrthographicCamera::OrthographicCamera()
 {
-    //LOG_INFO("Delta time: %e ms", GetDeltaTime());
-    //LOG_INFO("FPS: %f", GetCurrentFps());
+    xMagnification = 1.0f;
+    yMagnification = 1.0f;
+    nearClip = 0.1f;
+    farClip = 10000.0f;
 }
 
-GAME_MODULE()
+const glm::mat4 RenderingEngine::OrthographicCamera::GetProjectionMatrix() const
 {
-    struct GameModuleInfo info;
-    info.onFrame = OnFrame;
-    RegisterGameModule(info);
-    return true;
+    if (!m_IsProjectionMatrixDirty)
+    {
+        return m_Projection;
+    }
+
+    m_Projection = glm::ortho(-xMagnification, xMagnification, -yMagnification, yMagnification, nearClip, farClip);
+    m_IsProjectionMatrixDirty = false;
+    return m_Projection;
 }

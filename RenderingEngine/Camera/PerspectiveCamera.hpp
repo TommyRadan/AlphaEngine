@@ -20,29 +20,22 @@
  * SOFTWARE.
  */
 
-#include <RenderingEngine/Cameras/PerspectiveCamera.hpp>
-#define GLM_ENABLE_EXPERIMENTAL
-#include <gtx/transform.hpp>
-#include <Infrastructure/Settings.hpp>
+#pragma once
 
-RenderingEngine::PerspectiveCamera::PerspectiveCamera()
+#include <RenderingEngine/Camera/Camera.hpp>
+#include <glm.hpp>
+
+namespace RenderingEngine
 {
-    const Settings* settings = Settings::GetInstance();
-
-    fieldOfView = settings->GetFieldOfView();
-    aspectRatio = settings->GetAspectRatio();
-    nearClip = 0.1f;
-    farClip = 10000.0f;
-}
-
-const glm::mat4 RenderingEngine::PerspectiveCamera::GetProjectionMatrix() const
-{
-    if (!m_IsProjectionMatrixDirty)
+    struct PerspectiveCamera : public Camera
     {
-        return m_Projection;
-    }
+        PerspectiveCamera();
 
-    m_Projection = glm::perspective(fieldOfView, aspectRatio, nearClip, farClip);
-    m_IsProjectionMatrixDirty = false;
-    return m_Projection;
+        const glm::mat4 GetProjectionMatrix() const final;
+
+        float fieldOfView;
+        float aspectRatio;
+        float nearClip;
+        float farClip;
+    };
 }

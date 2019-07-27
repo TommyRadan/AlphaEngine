@@ -20,22 +20,29 @@
  * SOFTWARE.
  */
 
-#pragma once
+#include <RenderingEngine/Camera/PerspectiveCamera.hpp>
+#define GLM_ENABLE_EXPERIMENTAL
+#include <gtx/transform.hpp>
+#include <Infrastructure/Settings.hpp>
 
-#include <RenderingEngine/Cameras/Camera.hpp>
-#include <glm.hpp>
-
-namespace RenderingEngine
+RenderingEngine::PerspectiveCamera::PerspectiveCamera()
 {
-    struct OrthographicCamera : public Camera
+    const Settings* settings = Settings::GetInstance();
+
+    fieldOfView = settings->GetFieldOfView();
+    aspectRatio = settings->GetAspectRatio();
+    nearClip = 0.1f;
+    farClip = 10000.0f;
+}
+
+const glm::mat4 RenderingEngine::PerspectiveCamera::GetProjectionMatrix() const
+{
+    if (!m_IsProjectionMatrixDirty)
     {
-        OrthographicCamera();
+        return m_Projection;
+    }
 
-        const glm::mat4 GetProjectionMatrix() const final;
-
-        float xMagnification;
-        float yMagnification;
-        float nearClip;
-        float farClip;
-    };
+    m_Projection = glm::perspective(fieldOfView, aspectRatio, nearClip, farClip);
+    m_IsProjectionMatrixDirty = false;
+    return m_Projection;
 }

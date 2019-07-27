@@ -20,28 +20,37 @@
  * SOFTWARE.
  */
 
-#include <RenderingEngine/Cameras/OrthographicCamera.hpp>
-#define GLM_ENABLE_EXPERIMENTAL
-#include <gtx/transform.hpp>
+#pragma once
 
-RenderingEngine::OrthographicCamera::OrthographicCamera()
+#include <glm.hpp>
+#include <Infrastructure/Transform.hpp>
+
+namespace RenderingEngine
 {
-    const Settings* settings = Settings::GetInstance();
-
-    xMagnification = 1.0f;
-    yMagnification = 1.0f;
-    nearClip = 0.1f;
-    farClip = 10000.0f;
-}
-
-const glm::mat4 RenderingEngine::OrthographicCamera::GetProjectionMatrix() const
-{
-    if (!m_IsProjectionMatrixDirty)
+    struct Camera
     {
-        return m_Projection;
-    }
+        Camera();
+        virtual ~Camera() = default;
 
-    m_Projection = glm::ortho(-xMagnification, xMagnification, -yMagnification, yMagnification, nearClip, farClip);
-    m_IsProjectionMatrixDirty = false;
-    return m_Projection;
+        void Attach();
+        void Detach();
+
+        static Camera *GetCurrentCamera();
+
+        Infrastructure::Transform transform;
+
+        void InvalidateViewMatrix();
+        const glm::mat4 GetViewMatrix() const;
+
+        void InvalidateProjectionMatrix();
+        virtual const glm::mat4 GetProjectionMatrix() const = 0;
+
+    protected:
+        mutable glm::mat4 m_ViewMatrix;
+        mutable bool m_IsViewMatrixDirty;
+        mutable glm::mat4 m_Projection;
+        mutable bool m_IsProjectionMatrixDirty;
+
+        static Camera *m_CurrentCamera;
+    };
 }

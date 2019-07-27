@@ -52,11 +52,11 @@ void RenderingEngine::Model::UploadMesh(const RenderingEngine::Mesh& mesh)
 
 void RenderingEngine::Model::Render()
 {
-    Renderer* currentRenderer { RenderingEngine::Context::GetInstance()->GetCurrentRenderer() };
+    Renderer* currentRenderer { RenderingEngine::Renderer::GetCurrentRenderer() };
 
     if (!currentRenderer)
     {
-        LOG_WARN("Attampted to render without renderer attached");
+        LOG_WARN("Attempted to render without renderer attached");
         return;
     }
 

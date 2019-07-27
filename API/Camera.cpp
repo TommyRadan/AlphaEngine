@@ -22,7 +22,7 @@
 
 #include <API/Camera.hpp>
 #include <RenderingEngine/RenderingEngine.hpp>
-#include <RenderingEngine/Cameras/PerspectiveCamera.hpp>
+#include <RenderingEngine/Camera/PerspectiveCamera.hpp>
 
 #include <vector>
 #include <utility>
@@ -176,7 +176,7 @@ void AttachCamera(CameraId id)
 
 void DetachCamera()
 {
-    auto currentCamera = RenderingEngine::Context::GetInstance()->GetCurrentCamera();
+    auto currentCamera = RenderingEngine::Camera::GetCurrentCamera();
 
     if (currentCamera == nullptr) return;
 
@@ -189,10 +189,10 @@ bool IsCameraAttached(CameraId id)
 
     if (cameraInfo == nullptr) return false;
 
-    return (RenderingEngine::Context::GetInstance()->GetCurrentCamera()== cameraInfo->handle);
+    return (RenderingEngine::Camera::GetCurrentCamera()== cameraInfo->handle);
 }
 
 bool IsAnyCameraAttached()
 {
-    return (RenderingEngine::Context::GetInstance()->GetCurrentCamera() != nullptr);
+    return (RenderingEngine::Camera::GetCurrentCamera() != nullptr);
 }

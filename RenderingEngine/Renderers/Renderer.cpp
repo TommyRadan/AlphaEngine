@@ -22,25 +22,32 @@
 
 #include <RenderingEngine/Renderers/Renderer.hpp>
 #include <RenderingEngine/OpenGL/OpenGL.hpp>
-#include <RenderingEngine/Cameras/Camera.hpp>
+#include <RenderingEngine/Camera/Camera.hpp>
 #include <RenderingEngine/RenderingEngine.hpp>
 #include <Infrastructure/Log.hpp>
 
+RenderingEngine::Renderer *RenderingEngine::Renderer::m_CurrentRenderer = nullptr;
+
 void RenderingEngine::Renderer::StartRenderer()
 {
-    RenderingEngine::Context::GetInstance()->m_CurrentRenderer = this;
+    m_CurrentRenderer = this;
     static_cast<OpenGL::Program*>(m_Program)->Start();
 }
 
 void RenderingEngine::Renderer::StopRenderer()
 {
-    RenderingEngine::Context::GetInstance()->m_CurrentRenderer = nullptr;
+    m_CurrentRenderer = nullptr;
     static_cast<OpenGL::Program*>(m_Program)->Stop();
+}
+
+RenderingEngine::Renderer *RenderingEngine::Renderer::GetCurrentRenderer()
+{
+    return m_CurrentRenderer;
 }
 
 void RenderingEngine::Renderer::SetupCamera()
 {
-    Camera* currentCamera { RenderingEngine::Context::GetInstance()->GetCurrentCamera() };
+    Camera* currentCamera { RenderingEngine::Camera::GetCurrentCamera() };
 
     if (currentCamera == nullptr)
     {

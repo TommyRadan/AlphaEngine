@@ -20,33 +20,25 @@
  * SOFTWARE.
  */
 
-#pragma once
+#include <API/Time.hpp>
+#include <Infrastructure/Time.hpp>
 
-#include <glm.hpp>
-#include <Infrastructure/Transform.hpp>
-
-namespace RenderingEngine
+float GetCurrentFPS()
 {
-    struct Camera
-    {
-        Camera();
-        virtual ~Camera() = default;
+    return Infrastructure::Time::GetInstance()->CurrentFps();
+}
 
-        void Attach();
-        void Detach();
+int GetFrameCount()
+{
+    return Infrastructure::Time::GetInstance()->FrameCount();
+}
 
-        Infrastructure::Transform transform;
+double GetDeltaTime()
+{
+    return Infrastructure::Time::GetInstance()->DeltaTime();
+}
 
-        void InvalidateViewMatrix();
-        const glm::mat4 GetViewMatrix() const;
-
-        void InvalidateProjectionMatrix();
-        virtual const glm::mat4 GetProjectionMatrix() const = 0;
-
-    protected:
-        mutable glm::mat4 m_ViewMatrix;
-        mutable bool m_IsViewMatrixDirty;
-        mutable glm::mat4 m_Projection;
-        mutable bool m_IsProjectionMatrixDirty;
-    };
+float GetTotalTime()
+{
+    return Infrastructure::Time::GetInstance()->TotalTime();
 }

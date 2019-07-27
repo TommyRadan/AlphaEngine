@@ -34,6 +34,8 @@ namespace RenderingEngine
         void StartRenderer();
         void StopRenderer();
 
+        static Renderer *GetCurrentRenderer();
+
         void SetupCamera();
         void SetupOptions(const RenderOptions& options);
 
@@ -54,5 +56,7 @@ namespace RenderingEngine
         void* m_VertexShader;
         void* m_FragmentShader;
         void* m_Program;
+
+        static Renderer *m_CurrentRenderer;
     };
 }

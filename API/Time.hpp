@@ -20,21 +20,9 @@
  * SOFTWARE.
  */
 
-#include <API/GameModule.hpp>
-#include <API/Time.hpp>
+#pragma once
 
-#include <Infrastructure/Log.hpp>
-
-static void OnFrame()
-{
-    //LOG_INFO("Delta time: %e ms", GetDeltaTime());
-    //LOG_INFO("FPS: %f", GetCurrentFps());
-}
-
-GAME_MODULE()
-{
-    struct GameModuleInfo info;
-    info.onFrame = OnFrame;
-    RegisterGameModule(info);
-    return true;
-}
+float GetCurrentFPS();
+int GetFrameCount();
+double GetDeltaTime();
+float GetTotalTime();

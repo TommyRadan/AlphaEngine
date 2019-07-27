@@ -106,22 +106,7 @@ void EventEngine::Dispatch::HandleEvents()
         }
     }
 
-    for (auto& keyCode : m_PressedKeys)
-    {
-        DispatchKeyPressedCallback(keyCode);
-    }
-
     DispatchOnFrameCallback();
-}
-
-void EventEngine::Dispatch::RegisterOnGameStartCallback(std::function<void()> callback)
-{
-	m_OnGameStartCallbacks.push_back(callback);
-}
-
-void EventEngine::Dispatch::RegisterOnGameEndCallback(std::function<void()> callback)
-{
-	m_OnGameEndCallbacks.push_back(callback);
 }
 
 void EventEngine::Dispatch::RegisterOnFrameCallback(std::function<void(void)> callback)
@@ -139,30 +124,9 @@ void EventEngine::Dispatch::RegisterOnKeyUpCallback(std::function<void(KeyCode)>
     m_OnKeyUpCallbacks.push_back(callback);
 }
 
-void EventEngine::Dispatch::RegisterKeyPressedCallback(std::function<void(KeyCode)> callback)
-{
-    m_KeyPressedCallbacks.push_back(callback);
-}
-
 void EventEngine::Dispatch::RegisterOnMouseMoveCallback(std::function<void(int32_t, int32_t)> callback)
 {
     m_OnMouseMoveCallbacks.push_back(callback);
-}
-
-void EventEngine::Dispatch::DispatchOnGameStartCallback()
-{
-	for (auto& callback : m_OnGameStartCallbacks)
-	{
-		callback();
-	}
-}
-
-void EventEngine::Dispatch::DispatchOnGameEndCallback()
-{
-	for (auto& callback : m_OnGameEndCallbacks)
-	{
-		callback();
-	}
 }
 
 void EventEngine::Dispatch::DispatchOnFrameCallback()
@@ -189,14 +153,6 @@ void EventEngine::Dispatch::DispatchOnKeyUpCallback(KeyCode keyCode)
     m_PressedKeys.erase(std::remove(m_PressedKeys.begin(), m_PressedKeys.end(), keyCode), m_PressedKeys.end());
 
     for (auto& callback : m_OnKeyUpCallbacks)
-    {
-        callback(keyCode);
-    }
-}
-
-void EventEngine::Dispatch::DispatchKeyPressedCallback(KeyCode keyCode)
-{
-    for (auto& callback : m_KeyPressedCallbacks)
     {
         callback(keyCode);
     }

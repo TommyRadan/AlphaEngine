@@ -21,22 +21,21 @@
  */
 
 #include <API/GameModule.hpp>
+#include <API/Time.hpp>
+
 #include <RenderingEngine/RenderingEngine.hpp>
-#include <RenderingEngine/Cameras/Camera.hpp>
+#include <RenderingEngine/Camera/Camera.hpp>
 #include <Infrastructure/Settings.hpp>
-#include <Infrastructure/Time.hpp>
 #define GLM_ENABLE_EXPERIMENTAL
 #include <gtx/vector_angle.hpp>
 #include <Infrastructure/Log.hpp>
 
-#ifdef _DEBUG
-static void OnKeyPressed(EventEngine::KeyCode keyCode)
+static void OnFrame()
 {
-    RenderingEngine::Camera* currentCamera { RenderingEngine::Context::GetInstance()->GetCurrentCamera() };
+    RenderingEngine::Camera* currentCamera { RenderingEngine::Camera::GetCurrentCamera() };
 
     if (currentCamera == nullptr)
     {
-        LOG_ERROR("Trying to setup a camera without camera attached");
         return;
     }
 
@@ -47,85 +46,41 @@ static void OnKeyPressed(EventEngine::KeyCode keyCode)
     {
         speed = 30.0f;
     }
-    float distance = speed * ((float)Infrastructure::Time::GetInstance()->DeltaTime() / 1000);
+    float distance = speed * ((float)GetDeltaTime() / 1000);
     glm::vec3 upVector {0.0f, 0.0f, 1.0f};
 
-    switch (keyCode)
+    if (EventEngine::Dispatch::GetInstance()->IsKeyPressed(EventEngine::KeyCode::W))
     {
-        case EventEngine::KeyCode::W:
-            currentCamera->transform.SetPosition(position + rotation * distance);
-            break;
+        currentCamera->transform.SetPosition(position + rotation * distance);
+    }
 
-        case EventEngine::KeyCode::A:
-            currentCamera->transform.SetPosition(position - glm::cross(rotation, upVector) * distance);
-            break;
+    if (EventEngine::Dispatch::GetInstance()->IsKeyPressed(EventEngine::KeyCode::A))
+    {
+        currentCamera->transform.SetPosition(position - glm::cross(rotation, upVector) * distance);
+    }
 
-        case EventEngine::KeyCode::S:
-            currentCamera->transform.SetPosition(position - rotation * distance);
-            break;
+    if (EventEngine::Dispatch::GetInstance()->IsKeyPressed(EventEngine::KeyCode::S))
+    {
+        currentCamera->transform.SetPosition(position - rotation * distance);
+    }
 
-        case EventEngine::KeyCode::D:
-            currentCamera->transform.SetPosition(position + glm::cross(rotation, upVector) * distance);
-            break;
+    if (EventEngine::Dispatch::GetInstance()->IsKeyPressed(EventEngine::KeyCode::D))
+    {
+        currentCamera->transform.SetPosition(position + glm::cross(rotation, upVector) * distance);
+    }
 
-        case EventEngine::KeyCode::SPACE:
-            currentCamera->transform.SetPosition({position.x, position.y, position.z + distance});
-            break;
+    if (EventEngine::Dispatch::GetInstance()->IsKeyPressed(EventEngine::KeyCode::SPACE))
+    {
+        currentCamera->transform.SetPosition({position.x, position.y, position.z + distance});
+    }
 
-        case EventEngine::KeyCode::CTRL:
-            currentCamera->transform.SetPosition({position.x, position.y, position.z - distance});
-            break;
-
-        default:
-            break;
+    if (EventEngine::Dispatch::GetInstance()->IsKeyPressed(EventEngine::KeyCode::CTRL))
+    {
+        currentCamera->transform.SetPosition({position.x, position.y, position.z - distance});
     }
 
     currentCamera->InvalidateViewMatrix();
 }
-#else
-static void OnKeyPressed(EventProcessing::KeyCode keyCode, uint32_t deltaTime)
-{
-    RenderingEngine::Camera* currentCamera { RenderingEngine::Context::GetInstance()->GetCurrentCamera() };
-
-    if (currentCamera == nullptr)
-    {
-        LOG_ERROR("Trying to setup a camera without camera attached");
-        return;
-    }
-
-	glm::vec3 position = currentCamera->GetPosition();
-	glm::vec3 rotation = currentCamera->GetRotation();
-	float speed = 3.0f;
-	if (EventProcessing::EventHandler::GetInstance()->IsKeyPressed(EventProcessing::KeyCode::SHIFT))
-	{
-		speed = 6.0f;
-	}
-	float distance = speed * ((float)deltaTime / 1000);
-	glm::vec3 upVector{ 0.0f, 0.0f, 1.0f };
-
-	switch (keyCode)
-	{
-	case EventProcessing::KeyCode::W:
-		currentCamera->SetPosition(position + glm::vec3{rotation.x, rotation.y, 0.0f} * distance);
-		break;
-
-	case EventProcessing::KeyCode::A:
-		currentCamera->SetPosition(position - glm::cross(rotation, upVector) * distance);
-		break;
-
-	case EventProcessing::KeyCode::S:
-		currentCamera->SetPosition(position - glm::vec3{ rotation.x, rotation.y, 0.0f } * distance);
-		break;
-
-	case EventProcessing::KeyCode::D:
-		currentCamera->SetPosition(position + glm::cross(rotation, upVector) * distance);
-		break;
-
-	default:
-		break;
-	}
-}
-#endif
 
 static void OnMouseMove(int32_t deltaX, int32_t deltaY)
 {
@@ -136,18 +91,17 @@ static void OnMouseMove(int32_t deltaX, int32_t deltaY)
     }
 #endif
 
-    RenderingEngine::Camera* currentCamera { RenderingEngine::Context::GetInstance()->GetCurrentCamera() };
+    RenderingEngine::Camera* currentCamera { RenderingEngine::Camera::GetCurrentCamera() };
 
     if (currentCamera == nullptr)
     {
-        LOG_ERROR("Trying to setup a camera without camera attached");
         return;
     }
 
-    glm::vec3 rotation = currentCamera->transform.GetRotation();
-    glm::vec3 rotationAxis {0.0f, 0.0f, 1.0f};
-    glm::vec3 upVector {0.0f, 0.0f, 1.0f};
-    glm::vec3 pitchAxis = glm::cross(glm::normalize(glm::vec3 {rotation.x, rotation.y, 0.0f}), upVector);
+    glm::vec3 rotation { currentCamera->transform.GetRotation() };
+    glm::vec3 rotationAxis { 0.0f, 0.0f, 1.0f };
+    glm::vec3 upVector { 0.0f, 0.0f, 1.0f };
+    glm::vec3 pitchAxis { glm::cross(glm::normalize(glm::vec3 {rotation.x, rotation.y, 0.0f}), upVector) };
 
     float sensitivity = Settings::GetInstance()->GetMouseSensitivity();
     int pitchMultiplier = Settings::GetInstance()->IsMouseReversed() ? -1 : 1;
@@ -169,7 +123,7 @@ static void OnMouseMove(int32_t deltaX, int32_t deltaY)
 GAME_MODULE()
 {
     struct GameModuleInfo info;
-    info.keyPressed = OnKeyPressed;
+    info.onFrame = OnFrame;
     info.onMouseMove = OnMouseMove;
     RegisterGameModule(info);
     return true;
