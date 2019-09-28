@@ -20,30 +20,22 @@
  * SOFTWARE.
  */
 
-#pragma once
+#include <ModuleEngine/API/GameModule.hpp>
+#include <ModuleEngine/API/Time.hpp>
+#include <ModuleEngine/API/Log.hpp>
 
-#include <RenderingEngine/Renderables/Renderable.hpp>
-#include <RenderingEngine/Mesh/Mesh.hpp>
-#include <Infrastructure/Transform.hpp>
+#include <string>
 
-#include <RenderingEngine/OpenGL/OpenGL.hpp>
-
-namespace RenderingEngine
+static void OnFrame()
 {
-    struct Model : public Renderable
-    {
-        Model();
+    //PrintInfo(std::string{"Delta time: "} + std::to_string(GetDeltaTime()) + " ms");
+    //PrintInfo(std::string{"FPS: "} + std::to_string(GetCurrentFPS()));
+}
 
-        Infrastructure::Transform transform;
-
-        void UploadMesh(const RenderingEngine::Mesh& mesh);
-
-        void Render() final;
-
-    private:
-        OpenGL::VertexArray m_VertexArrayObject;
-        OpenGL::VertexBuffer m_VertexBufferObject;
-
-        size_t m_VertexCount;
-    };
+GAME_MODULE()
+{
+    struct GameModuleInfo info;
+    info.onFrame = OnFrame;
+    RegisterGameModule(info);
+    return true;
 }

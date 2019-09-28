@@ -21,7 +21,7 @@
 #
 
 cmake_minimum_required(VERSION 3.6)
-project(Infrastructure CXX)
+project(ModuleEngine CXX)
 
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_VERBOSE_MAKEFILE false)
@@ -29,14 +29,15 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(VENDOR_ROOT ${CMAKE_SOURCE_DIR}/Vendor/)
 
 # Define target sources
-file(GLOB INFRASTRUCTURE_SOURCE_FILES "*.hpp" "*.cpp")
+file(GLOB MODULEENGINE_SOURCE_FILES
+        "*.hpp" "*.cpp"
+        "Module/*.cpp"
+        "API/*.cpp" "API/*.cpp")
 
 # External dependencies
-include_directories(${VENDOR_ROOT}SDL2/include)
-include_directories(${VENDOR_ROOT}STB/)
-include_directories(${VENDOR_ROOT}GLM/)
-include_directories(${VENDOR_ROOT}Loguru/)
+include_directories(${VENDOR_ROOT}Loguru)
+include_directories(${VENDOR_ROOT}GLM)
 
 # Main lib
-add_library(Infrastructure STATIC ${INFRASTRUCTURE_SOURCE_FILES})
-set_target_properties(Infrastructure PROPERTIES LINKER_LANGUAGE CXX)
+add_library(ModuleEngine STATIC ${MODULEENGINE_SOURCE_FILES})
+set_target_properties(ModuleEngine PROPERTIES LINKER_LANGUAGE CXX)

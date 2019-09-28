@@ -20,30 +20,26 @@
  * SOFTWARE.
  */
 
-#define INTERNAL_GAMEMODULE_IMPLEMENTATION
-#include <API/GameModule.hpp>
-#undef INTERNAL_GAMEMODULE_IMPLEMENTATION
-#include <EventEngine/Dispatch.hpp>
+#pragma once
 
-void RegisterGameModule(struct GameModuleInfo &info)
+namespace RenderingEngine
 {
-    if (info.onFrame)
+    namespace UserInterface
     {
-        EventEngine::Dispatch::GetInstance()->RegisterOnFrameCallback(info.onFrame);
-    }
+        class Context
+        {
+            Context() = default;
 
-    if (info.onKeyDown)
-    {
-        EventEngine::Dispatch::GetInstance()->RegisterOnKeyDownCallback(info.onKeyDown);
-    }
+        public:
+            static Context* GetInstance();
 
-    if (info.onKeyUp)
-    {
-        EventEngine::Dispatch::GetInstance()->RegisterOnKeyUpCallback(info.onKeyUp);
-    }
+            void Init();
+            void Quit();
 
-    if (info.onMouseMove)
-    {
-        EventEngine::Dispatch::GetInstance()->RegisterOnMouseMoveCallback(info.onMouseMove);
+            void Render();
+
+        private:
+            // void *m_NvgContext;
+        };
     }
 }

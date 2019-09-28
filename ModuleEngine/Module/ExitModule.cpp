@@ -20,26 +20,19 @@
  * SOFTWARE.
  */
 
-#pragma once
+#include <ModuleEngine/API/GameModule.hpp>
+#include <EventEngine/EventEngine.hpp>
 
-#include <RenderingEngine/Renderables/Renderable.hpp>
-
-#include <RenderingEngine/OpenGL/OpenGL.hpp>
-#include <Infrastructure/Transform.hpp>
-
-namespace RenderingEngine
+static void OnKeyDown(EventEngine::KeyCode keyCode)
 {
-    struct Overlay : public Renderable
-    {
-        Overlay();
+    if (keyCode != EventEngine::KeyCode::ESCAPE) return;
+    EventEngine::Context::GetInstance()->RequestQuit();
+}
 
-        void Upload() final;
-        void Render() final;
-
-    private:
-        OpenGL::VertexArray m_VertexArrayObject;
-        OpenGL::VertexBuffer m_VertexBufferObject;
-
-        unsigned int m_VertexCount;
-    };
+GAME_MODULE()
+{
+    struct GameModuleInfo info;
+    info.onKeyDown = OnKeyDown;
+    RegisterGameModule(info);
+    return true;
 }

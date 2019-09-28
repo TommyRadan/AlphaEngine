@@ -22,28 +22,16 @@
 
 #pragma once
 
-#include <RenderingEngine/Renderables/Renderable.hpp>
-#include <RenderingEngine/Mesh/Mesh.hpp>
-#include <Infrastructure/Transform.hpp>
-
-#include <RenderingEngine/OpenGL/OpenGL.hpp>
-
-namespace RenderingEngine
+namespace ModuleEngine
 {
-    struct Model : public Renderable
+    class Context
     {
-        Model();
+        Context() = default;
 
-        Infrastructure::Transform transform;
+    public:
+        static Context* GetInstance();
 
-        void UploadMesh(const RenderingEngine::Mesh& mesh);
-
-        void Render() final;
-
-    private:
-        OpenGL::VertexArray m_VertexArrayObject;
-        OpenGL::VertexBuffer m_VertexBufferObject;
-
-        size_t m_VertexCount;
+        void Init();
+        void Quit();
     };
 }

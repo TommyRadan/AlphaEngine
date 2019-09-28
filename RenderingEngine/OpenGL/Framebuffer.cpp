@@ -20,8 +20,6 @@
  * SOFTWARE.
  */
 
-#include <exception>
-
 #include <RenderingEngine/OpenGL/Framebuffer.hpp>
 #include <Infrastructure/Log.hpp>
 #include <stdexcept>

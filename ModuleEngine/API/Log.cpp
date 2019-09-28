@@ -20,30 +20,20 @@
  * SOFTWARE.
  */
 
-#pragma once
+#include <ModuleEngine/API/Log.hpp>
+#include <Infrastructure/Log.hpp>
 
-#include <RenderingEngine/Renderables/Renderable.hpp>
-#include <RenderingEngine/Mesh/Mesh.hpp>
-#include <Infrastructure/Transform.hpp>
-
-#include <RenderingEngine/OpenGL/OpenGL.hpp>
-
-namespace RenderingEngine
+void PrintInfo(const std::string &message)
 {
-    struct Model : public Renderable
-    {
-        Model();
+    LOG_INFO("%s", message.c_str());
+}
 
-        Infrastructure::Transform transform;
+void PrintWarning(const std::string &message)
+{
+    LOG_WARN("%s", message.c_str());
+}
 
-        void UploadMesh(const RenderingEngine::Mesh& mesh);
-
-        void Render() final;
-
-    private:
-        OpenGL::VertexArray m_VertexArrayObject;
-        OpenGL::VertexBuffer m_VertexBufferObject;
-
-        size_t m_VertexCount;
-    };
+void PrintError(const std::string &message)
+{
+    LOG_ERROR("%s", message.c_str());
 }

@@ -23,8 +23,9 @@
 #include <RenderingEngine/RenderingEngine.hpp>
 #include <RenderingEngine/Window.hpp>
 #include <RenderingEngine/OpenGL/OpenGL.hpp>
+#include <RenderingEngine/UserInterface/UserInterface.hpp>
+
 #include <RenderingEngine/Renderers/BasicRenderer.hpp>
-#include <RenderingEngine/Renderers/OverlayRenderer.hpp>
 #include <RenderingEngine/Camera/Camera.hpp>
 
 #include <Infrastructure/Log.hpp>
@@ -47,6 +48,7 @@ void RenderingEngine::Context::Init()
 
     RenderingEngine::Window::GetInstance()->Init();
     RenderingEngine::OpenGL::Context::GetInstance()->Init();
+    RenderingEngine::UserInterface::Context::GetInstance()->Init();
 
     RenderingEngine::OpenGL::Context::GetInstance()->Enable(RenderingEngine::OpenGL::Capability::CullFace);
     RenderingEngine::OpenGL::Context::GetInstance()->Enable(RenderingEngine::OpenGL::Capability::DepthTest);
@@ -54,11 +56,11 @@ void RenderingEngine::Context::Init()
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     RenderingEngine::Renderers::BasicRenderer::GetInstance();
-    RenderingEngine::Renderers::OverlayRenderer::GetInstance();
 }
 
 void RenderingEngine::Context::Quit()
 {
+    RenderingEngine::UserInterface::Context::GetInstance()->Quit();
     RenderingEngine::OpenGL::Context::GetInstance()->Quit();
     RenderingEngine::Window::GetInstance()->Quit();
 
@@ -82,12 +84,10 @@ void RenderingEngine::Context::Render()
     }
 
     RenderingEngine::OpenGL::Context::GetInstance()->Enable(RenderingEngine::OpenGL::Capability::DepthTest);
-    RenderingEngine::Renderers::OverlayRenderer::GetInstance()->StartRenderer();
 
     /*
-     * TODO: Render the overlay!
+     * TODO: Render the GUI!
      */
 
-    RenderingEngine::Renderers::OverlayRenderer::GetInstance()->StopRenderer();
     RenderingEngine::OpenGL::Context::GetInstance()->Disable(RenderingEngine::OpenGL::Capability::DepthTest);
 }

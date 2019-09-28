@@ -20,7 +20,7 @@
  * SOFTWARE.
  */
 
-#include <API/Camera.hpp>
+#include <ModuleEngine/API/Camera.hpp>
 #include <RenderingEngine/RenderingEngine.hpp>
 #include <RenderingEngine/Camera/PerspectiveCamera.hpp>
 

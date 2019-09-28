@@ -20,21 +20,30 @@
  * SOFTWARE.
  */
 
-#include <API/GameModule.hpp>
-#include <API/Time.hpp>
+#define INTERNAL_GAMEMODULE_IMPLEMENTATION
+#include <ModuleEngine/API/GameModule.hpp>
+#undef INTERNAL_GAMEMODULE_IMPLEMENTATION
+#include <EventEngine/Dispatch.hpp>
 
-#include <Infrastructure/Log.hpp>
-
-static void OnFrame()
+void RegisterGameModule(struct GameModuleInfo &info)
 {
-    //LOG_INFO("Delta time: %e ms", GetDeltaTime());
-    //LOG_INFO("FPS: %f", GetCurrentFps());
-}
+    if (info.onFrame)
+    {
+        EventEngine::Dispatch::GetInstance()->RegisterOnFrameCallback(info.onFrame);
+    }
 
-GAME_MODULE()
-{
-    struct GameModuleInfo info;
-    info.onFrame = OnFrame;
-    RegisterGameModule(info);
-    return true;
+    if (info.onKeyDown)
+    {
+        EventEngine::Dispatch::GetInstance()->RegisterOnKeyDownCallback(info.onKeyDown);
+    }
+
+    if (info.onKeyUp)
+    {
+        EventEngine::Dispatch::GetInstance()->RegisterOnKeyUpCallback(info.onKeyUp);
+    }
+
+    if (info.onMouseMove)
+    {
+        EventEngine::Dispatch::GetInstance()->RegisterOnMouseMoveCallback(info.onMouseMove);
+    }
 }

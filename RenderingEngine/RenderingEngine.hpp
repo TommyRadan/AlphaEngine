@@ -22,7 +22,6 @@
 
 #pragma once
 
-#include <RenderingEngine/Camera/Camera.hpp>
 #include <vector>
 
 namespace RenderingEngine

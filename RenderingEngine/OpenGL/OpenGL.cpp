@@ -39,6 +39,8 @@ RenderingEngine::OpenGL::Context* RenderingEngine::OpenGL::Context::GetInstance(
 
 void RenderingEngine::OpenGL::Context::Init()
 {
+    LOG_INFO("Init RenderingEngine::OpenGL");
+
     if (glewInit() != GLEW_OK)
     {
         LOG_FATAL("Could not initialize OpenGL");
@@ -57,7 +59,9 @@ void RenderingEngine::OpenGL::Context::Init()
 }
 
 void RenderingEngine::OpenGL::Context::Quit()
-{}
+{
+    LOG_INFO("Quit RenderingEngine::OpenGL");
+}
 
 void RenderingEngine::OpenGL::Context::Enable(const RenderingEngine::OpenGL::Capability capability)
 {

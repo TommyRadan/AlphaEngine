@@ -50,6 +50,8 @@ namespace RenderingEngine
 
     void Window::Init()
     {
+        LOG_INFO("Init RenderingEngine::Window");
+
         auto settings { Settings::GetInstance() };
         uint32_t window_flags { SDL_WINDOW_OPENGL };
         auto type { settings->GetWindowType() };
@@ -98,6 +100,8 @@ namespace RenderingEngine
     {
         SDL_GL_DeleteContext(m_GlContext);
         SDL_DestroyWindow((SDL_Window*) m_Window);
+
+        LOG_INFO("Quit RenderingEngine::Window");
     }
 
     void Window::Clear()

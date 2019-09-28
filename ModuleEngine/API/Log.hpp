@@ -20,25 +20,10 @@
  * SOFTWARE.
  */
 
-#include <API/Time.hpp>
-#include <Infrastructure/Time.hpp>
+#pragma once
 
-float GetCurrentFPS()
-{
-    return Infrastructure::Time::GetInstance()->CurrentFps();
-}
+#include <string>
 
-int GetFrameCount()
-{
-    return Infrastructure::Time::GetInstance()->FrameCount();
-}
-
-double GetDeltaTime()
-{
-    return Infrastructure::Time::GetInstance()->DeltaTime();
-}
-
-float GetTotalTime()
-{
-    return Infrastructure::Time::GetInstance()->TotalTime();
-}
+void PrintInfo(const std::string &message);
+void PrintWarning(const std::string &message);
+void PrintError(const std::string &message);

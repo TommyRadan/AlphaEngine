@@ -20,22 +20,35 @@
  * SOFTWARE.
  */
 
-#pragma once
+#include <RenderingEngine/UserInterface/UserInterface.hpp>
+#include <Infrastructure/Log.hpp>
 
-#include <RenderingEngine/Renderers/Renderer.hpp>
-
-namespace RenderingEngine
+RenderingEngine::UserInterface::Context* RenderingEngine::UserInterface::Context::GetInstance()
 {
-    namespace Renderers
+    static Context* instance = nullptr;
+
+    if (instance == nullptr)
     {
-        class OverlayRenderer : public Renderer
-        {
-            OverlayRenderer();
-
-        public:
-            static OverlayRenderer* GetInstance();
-
-            ~OverlayRenderer();
-        };
+        instance = new Context;
     }
+
+    return instance;
+}
+
+void RenderingEngine::UserInterface::Context::Init()
+{
+    LOG_INFO("Init RenderingEngine::UserInterface");
+
+    // m_NvgContext = nvgCreateGL3(NVG_ANTIALIAS | NVG_STENCIL_STROKES | NVG_DEBUG);
+}
+
+void RenderingEngine::UserInterface::Context::Quit()
+{
+    // nvgDeleteGL3(static_cast<NVGcontext *>(m_NvgContext));
+
+    LOG_INFO("Quit RenderingEngine::UserInterface");
+}
+
+void RenderingEngine::UserInterface::Context::Render()
+{
 }

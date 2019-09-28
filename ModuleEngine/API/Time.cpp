@@ -20,19 +20,25 @@
  * SOFTWARE.
  */
 
-#include <API/GameModule.hpp>
-#include <EventEngine/EventEngine.hpp>
+#include <ModuleEngine/API/Time.hpp>
+#include <Infrastructure/Time.hpp>
 
-static void OnKeyDown(EventEngine::KeyCode keyCode)
+float GetCurrentFPS()
 {
-    if (keyCode != EventEngine::KeyCode::ESCAPE) return;
-    EventEngine::Context::GetInstance()->RequestQuit();
+    return Infrastructure::Time::GetInstance()->CurrentFps();
 }
 
-GAME_MODULE()
+int GetFrameCount()
 {
-    struct GameModuleInfo info;
-    info.onKeyDown = OnKeyDown;
-    RegisterGameModule(info);
-    return true;
+    return Infrastructure::Time::GetInstance()->FrameCount();
+}
+
+double GetDeltaTime()
+{
+    return Infrastructure::Time::GetInstance()->DeltaTime();
+}
+
+float GetTotalTime()
+{
+    return Infrastructure::Time::GetInstance()->TotalTime();
 }

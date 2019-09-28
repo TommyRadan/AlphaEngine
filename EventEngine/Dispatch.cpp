@@ -105,8 +105,6 @@ void EventEngine::Dispatch::HandleEvents()
                 break;
         }
     }
-
-    DispatchOnFrameCallback();
 }
 
 void EventEngine::Dispatch::RegisterOnFrameCallback(std::function<void(void)> callback)

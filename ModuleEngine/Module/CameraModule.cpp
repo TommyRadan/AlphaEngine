@@ -20,8 +20,8 @@
  * SOFTWARE.
  */
 
-#include <API/GameModule.hpp>
-#include <API/Time.hpp>
+#include <ModuleEngine/API/GameModule.hpp>
+#include <ModuleEngine/API/Time.hpp>
 
 #include <RenderingEngine/RenderingEngine.hpp>
 #include <RenderingEngine/Camera/Camera.hpp>

@@ -62,17 +62,18 @@ add_subdirectory(EventEngine)
 add_subdirectory(Infrastructure)
 add_subdirectory(RenderingEngine)
 add_subdirectory(SceneGraph)
+add_subdirectory(ModuleEngine)
 
 # Main executable
-file(GLOB GAMEMODULE_SOURCE_FILES "GameModule/*.cpp")
 file(GLOB API_FILES "API/*.hpp" "API/*.cpp")
-add_executable(AlphaEngine Control/MainLoop.cpp ${GAMEMODULE_SOURCE_FILES} ${API_FILES})
+add_executable(AlphaEngine Control/MainLoop.cpp ${API_FILES} Vendor/NanoVG/nanovg.c)
 
 # Add Dependencies
 add_dependencies(AlphaEngine EventEngine)
 add_dependencies(AlphaEngine Infrastructure)
 add_dependencies(AlphaEngine RenderingEngine)
 add_dependencies(AlphaEngine SceneGraph)
+add_dependencies(AlphaEngine ModuleEngine)
 
 # Link Libraries
 if(WIN32)
@@ -80,11 +81,13 @@ if(WIN32)
 	target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}EventEngine.lib)
 	target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}RenderingEngine.lib)
 	target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}SceneGraph.lib)
+	target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}ModuleEngine.lib)
 elseif(APPLE)
 	target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}libInfrastructure.a)
 	target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}libEventEngine.a)
 	target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}libRenderingEngine.a)
 	target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}libSceneGraph.a)
+	target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}libModuleEngine.a)
 endif(WIN32)
 
 # Find and link to external dependencies
@@ -99,6 +102,7 @@ include_directories(${VENDOR_ROOT}SDL2/include)
 include_directories(${VENDOR_ROOT}GLM)
 include_directories(${VENDOR_ROOT}Loguru)
 include_directories(${VENDOR_ROOT}GLEW/include)
+include_directories(${VENDOR_ROOT}NanoVG)
 
 if(WIN32)
     target_link_libraries(AlphaEngine ${VENDOR_ROOT}GLEW/${VENDOR_LIB}/glew32.lib)

@@ -31,8 +31,6 @@
 #define LOG_ERROR(...) LOG_F(ERROR, __VA_ARGS__)
 #define LOG_FATAL(...) LOG_F(FATAL, __VA_ARGS__)
 
-#define LOG_FUNCTION() LOG_SCOPE_FUNCTION(INFO)
-
 namespace Infrastructure
 {
     class Log

@@ -34,6 +34,7 @@ file(GLOB RENDERINGENGINE_SOURCE_FILES
         "Mesh/*.hpp" "Mesh/*.cpp"
         "Renderables/*.hpp" "Renderables/*.cpp"
         "Renderers/*.hpp" "Renderers/*.cpp"
+        "UserInterface/*.hpp" "UserInterface/*.cpp"
         "Camera/*.hpp" "Camera/*.cpp"
         "OpenGL/*.hpp" "OpenGL/*.cpp")
 
@@ -42,6 +43,7 @@ include_directories(${VENDOR_ROOT}SDL2/include)
 include_directories(${VENDOR_ROOT}GLM/)
 include_directories(${VENDOR_ROOT}Loguru/)
 include_directories(${VENDOR_ROOT}GLEW/include)
+include_directories(${VENDOR_ROOT}NanoVG)
 
 # Main lib
 add_library(RenderingEngine STATIC ${RENDERINGENGINE_SOURCE_FILES})

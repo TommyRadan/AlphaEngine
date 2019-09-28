@@ -20,55 +20,35 @@
  * SOFTWARE.
  */
 
-#include <RenderingEngine/Renderers/OverlayRenderer.hpp>
+#include <ModuleEngine/ModuleEngine.hpp>
+#include <Infrastructure/Log.hpp>
 
-static std::string vertexShader = R"vs(
-        #version 330
-
-        layout(location=0) in vec2 position;
-
-        out vec2 uv;
-
-        void main()
-        {
-            gl_Position = vec4(position, 0.0, 1.0);
-            uv = vec2(position.x / 2 + 0.5, position.y / 2 + 0.5);
-        }
-)vs";
-
-static std::string fragmentShader = R"fs(
-        #version 330
-
-        out vec4 fragColor;
-        in vec2 uv;
-
-        uniform sampler2D overlay;
-
-        void main()
-        {
-            fragColor = texture(overlay, uv);
-        }
-)fs";
-
-RenderingEngine::Renderers::OverlayRenderer::OverlayRenderer() :
-        Renderer {}
+ModuleEngine::Context* ModuleEngine::Context::GetInstance()
 {
-    ConstructProgram(vertexShader, fragmentShader);
-}
-
-RenderingEngine::Renderers::OverlayRenderer* RenderingEngine::Renderers::OverlayRenderer::GetInstance()
-{
-    static OverlayRenderer* instance = nullptr;
+    static Context* instance { nullptr };
 
     if (instance == nullptr)
     {
-        instance = new OverlayRenderer;
+        instance = new Context();
     }
 
     return instance;
 }
 
-RenderingEngine::Renderers::OverlayRenderer::~OverlayRenderer()
+void ModuleEngine::Context::Init()
 {
-    DestructProgram();
+    LOG_INFO("Init Module Engine");
+
+    /*
+     * TODO: Initialize Module Engine
+     */
+}
+
+void ModuleEngine::Context::Quit()
+{
+    /*
+     * TODO: Uninitialize Module Engine
+     */
+
+    LOG_INFO("Quit Module Engine");
 }
