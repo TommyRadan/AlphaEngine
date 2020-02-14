@@ -20,26 +20,51 @@
  * SOFTWARE.
  */
 
-#pragma once
+#include <RenderingEngine/Renderers/OverlayRenderer.hpp>
 
-namespace EventEngine
+static std::string vertexShader = R"vs(
+        #version 330
+
+        layout(location=0) in vec3 position;
+
+        void main()
+        {
+            gl_Position = vec4(position, 1.0);
+        }
+)vs";
+
+static std::string fragmentShader = R"fs(
+        #version 330
+
+        out vec4 fragColor;
+
+        uniform vec4 color;
+
+        void main()
+        {
+            fragColor = color;
+        }
+)fs";
+
+RenderingEngine::Renderers::OverlayRenderer::OverlayRenderer() :
+    Renderer {}
 {
-	class Context
-	{
-		Context();
+    ConstructProgram(vertexShader, fragmentShader);
+}
 
-	public:
-		static Context* GetInstance();
+RenderingEngine::Renderers::OverlayRenderer* RenderingEngine::Renderers::OverlayRenderer::GetInstance()
+{
+    static OverlayRenderer* instance = nullptr;
 
-		void Init();
-		void Quit();
+    if (instance == nullptr)
+    {
+        instance = new OverlayRenderer;
+    }
 
-		void RequestQuit();
-		const bool IsQuitRequested() const;
+    return instance;
+}
 
-        void HandleEvents();
-
-	private:
-		bool m_IsQuitRequested;
-	};
+RenderingEngine::Renderers::OverlayRenderer::~OverlayRenderer()
+{
+    DestructProgram();
 }

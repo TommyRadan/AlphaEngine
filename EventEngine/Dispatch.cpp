@@ -37,79 +37,29 @@ EventEngine::Dispatch* EventEngine::Dispatch::GetInstance()
     return instance;
 }
 
-void EventEngine::Dispatch::HandleEvents()
+void EventEngine::Dispatch::RegisterOnEngineStartCallback(std::function<void(void)> callback)
 {
-    SDL_Event events = { 0 };
+    m_OnEngineStartCallbacks.push_back(callback);
+}
 
-    while (SDL_PollEvent(&events))
-    {
-        switch (events.type)
-        {
-            case SDL_KEYDOWN:
-                DispatchOnKeyDownCallback((KeyCode) events.key.keysym.sym);
-                break;
-
-            case SDL_KEYUP:
-                DispatchOnKeyUpCallback((KeyCode) events.key.keysym.sym);
-                break;
-
-            case SDL_MOUSEBUTTONDOWN:
-                switch(events.button.button)
-                {
-                    case SDL_BUTTON_LEFT:
-                        DispatchOnKeyDownCallback(KeyCode::MOUSE_LEFT);
-                        break;
-
-                    case SDL_BUTTON_RIGHT:
-                        DispatchOnKeyDownCallback(KeyCode::MOUSE_RIGHT);
-                        break;
-
-                    case SDL_BUTTON_MIDDLE:
-                        DispatchOnKeyDownCallback(KeyCode::MOUSE_MIDDLE);
-                        break;
-
-                    default:
-                        break;
-                }
-                break;
-
-            case SDL_MOUSEBUTTONUP:
-                switch(events.button.button)
-                {
-                    case SDL_BUTTON_LEFT:
-                        DispatchOnKeyUpCallback(KeyCode::MOUSE_LEFT);
-                        break;
-
-                    case SDL_BUTTON_RIGHT:
-                        DispatchOnKeyUpCallback(KeyCode::MOUSE_RIGHT);
-                        break;
-
-                    case SDL_BUTTON_MIDDLE:
-                        DispatchOnKeyUpCallback(KeyCode::MOUSE_MIDDLE);
-                        break;
-
-                    default:
-                        break;
-                }
-                break;
-
-            case SDL_MOUSEMOTION:
-                DispatchOnMouseMoveCallback(events.motion.xrel, events.motion.yrel);
-                break;
-
-            case SDL_QUIT:
-                EventEngine::Context::GetInstance()->RequestQuit();
-                break;
-
-            default:
-                break;
-        }
-    }
+void EventEngine::Dispatch::RegisterOnEngineStopCallback(std::function<void(void)> callback)
+{
+    m_OnEngineStopCallbacks.push_back(callback);
 }
 
 void EventEngine::Dispatch::RegisterOnFrameCallback(std::function<void(void)> callback)
 {
     m_OnFrameCallbacks.push_back(callback);
+}
+
+void EventEngine::Dispatch::RegisterOnRenderSceneCallback(std::function<void(void)> callback)
+{
+    m_OnRenderSceneCallbacks.push_back(callback);
+}
+
+void EventEngine::Dispatch::RegisterOnRenderUiCallback(std::function<void(void)> callback)
+{
+    m_OnRenderUiCallbacks.push_back(callback);
 }
 
 void EventEngine::Dispatch::RegisterOnKeyDownCallback(std::function<void(KeyCode)> callback)
@@ -127,9 +77,41 @@ void EventEngine::Dispatch::RegisterOnMouseMoveCallback(std::function<void(int32
     m_OnMouseMoveCallbacks.push_back(callback);
 }
 
+void EventEngine::Dispatch::DispatchOnEngineStartCallback()
+{
+    for (auto& callback : m_OnEngineStartCallbacks)
+    {
+        callback();
+    }
+}
+
+void EventEngine::Dispatch::DispatchOnEngineStopCallback()
+{
+    for (auto& callback : m_OnEngineStopCallbacks)
+    {
+        callback();
+    }
+}
+
 void EventEngine::Dispatch::DispatchOnFrameCallback()
 {
     for (auto& callback : m_OnFrameCallbacks)
+    {
+        callback();
+    }
+}
+
+void EventEngine::Dispatch::DispatchOnRenderSceneCallback()
+{
+    for (auto& callback : m_OnRenderSceneCallbacks)
+    {
+        callback();
+    }
+}
+
+void EventEngine::Dispatch::DispatchOnRenderUiCallback()
+{
+    for (auto& callback : m_OnRenderUiCallbacks)
     {
         callback();
     }

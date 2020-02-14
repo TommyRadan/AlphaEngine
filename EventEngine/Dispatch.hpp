@@ -51,14 +51,20 @@ namespace EventEngine
     public:
         static Dispatch* GetInstance();
 
-        void HandleEvents();
-
+        void RegisterOnEngineStartCallback(std::function<void(void)> callback);
+        void RegisterOnEngineStopCallback(std::function<void(void)> callback);
         void RegisterOnFrameCallback(std::function<void(void)> callback);
+        void RegisterOnRenderSceneCallback(std::function<void(void)> callback);
+        void RegisterOnRenderUiCallback(std::function<void(void)> callback);
         void RegisterOnKeyDownCallback(std::function<void(KeyCode)> callback);
         void RegisterOnKeyUpCallback(std::function<void(KeyCode)> callback);
         void RegisterOnMouseMoveCallback(std::function<void(int32_t, int32_t)> callback);
 
+        void DispatchOnEngineStartCallback();
+        void DispatchOnEngineStopCallback();
         void DispatchOnFrameCallback();
+        void DispatchOnRenderSceneCallback();
+        void DispatchOnRenderUiCallback();
         void DispatchOnKeyDownCallback(KeyCode keyCode);
         void DispatchOnKeyUpCallback(KeyCode keyCode);
         void DispatchOnMouseMoveCallback(int32_t deltaX, int32_t deltaY);
@@ -66,7 +72,11 @@ namespace EventEngine
         bool IsKeyPressed(KeyCode keyCode);
 
     private:
+        std::vector<std::function<void(void)>> m_OnEngineStartCallbacks;
+        std::vector<std::function<void(void)>> m_OnEngineStopCallbacks;
         std::vector<std::function<void(void)>> m_OnFrameCallbacks;
+        std::vector<std::function<void(void)>> m_OnRenderSceneCallbacks;
+        std::vector<std::function<void(void)>> m_OnRenderUiCallbacks;
         std::vector<std::function<void(KeyCode)>> m_OnKeyDownCallbacks;
         std::vector<std::function<void(KeyCode)>> m_OnKeyUpCallbacks;
         std::vector<KeyCode> m_PressedKeys;

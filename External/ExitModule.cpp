@@ -20,26 +20,20 @@
  * SOFTWARE.
  */
 
-#pragma once
+#include "API/GameModule.hpp"
+#include "API/Log.hpp"
+#include <EventEngine/EventEngine.hpp>
 
-namespace EventEngine
+static void OnKeyDown(EventEngine::KeyCode keyCode)
 {
-	class Context
-	{
-		Context();
+    if (keyCode != EventEngine::KeyCode::ESCAPE) return;
+    EventEngine::Context::GetInstance()->RequestQuit();
+}
 
-	public:
-		static Context* GetInstance();
-
-		void Init();
-		void Quit();
-
-		void RequestQuit();
-		const bool IsQuitRequested() const;
-
-        void HandleEvents();
-
-	private:
-		bool m_IsQuitRequested;
-	};
+GAME_MODULE()
+{
+    struct GameModuleInfo info;
+    info.onKeyDown = OnKeyDown;
+    RegisterGameModule(info);
+    return true;
 }

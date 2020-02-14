@@ -27,16 +27,24 @@
 
 #include <glm.hpp>
 #include <string>
+#include <map>
 
 namespace RenderingEngine
 {
 	namespace OpenGL
 	{
-		struct Program
+		class Program
 		{
+			friend class Context;
 			Program();
 			~Program();
 
+			Program(const Program&) = delete;
+			Program(const Program&&) = delete;
+			const Program& operator=(const Program&) = delete;
+			const Program&& operator=(const Program&&) = delete;
+
+		public:
 			const uint32_t Handle() const;
 
 			void Start();
@@ -76,6 +84,8 @@ namespace RenderingEngine
 
 		private:
 			unsigned int m_ObjectID;
+			std::map<std::string, Uniform> m_Uniforms;
+			std::map<std::string, Attribute> m_Attributes;
 		};
 	}
 }

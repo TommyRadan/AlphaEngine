@@ -42,6 +42,20 @@ namespace RenderingEngine
             void Init();
             void Quit();
 
+            OpenGL::Framebuffer* CreateFramebuffer(uint32_t, uint32_t, uint8_t, uint8_t);
+            OpenGL::Program* CreateProgram();
+            OpenGL::Shader* CreateShader(ShaderType);
+            OpenGL::Texture* CreateTexture();
+            OpenGL::VertexArray* CreateVAO();
+            OpenGL::VertexBuffer* CreateVBO();
+
+            void DeleteFramebuffer(const OpenGL::Framebuffer*);
+            void DeleteProgram(const OpenGL::Program*);
+            void DeleteShader(const OpenGL::Shader*);
+            void DeleteTexture(const OpenGL::Texture*);
+            void DeleteVAB(const OpenGL::VertexArray*);
+            void DeleteVBO(const OpenGL::VertexBuffer*);
+
             void Enable(OpenGL::Capability capability);
             void Disable(OpenGL::Capability capability);
 
@@ -49,7 +63,7 @@ namespace RenderingEngine
             void Clear(OpenGL::Buffer buffers);
             void DepthMask(bool writeEnabled);
 
-            void BindTexture(const OpenGL::Texture& texture, uint8_t unit);
+            void BindTexture(const OpenGL::Texture& texture, const unsigned char unit);
             void BindFramebuffer(const OpenGL::Framebuffer& framebuffer);
             void BindFramebuffer();
 

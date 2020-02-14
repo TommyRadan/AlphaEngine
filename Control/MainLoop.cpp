@@ -29,7 +29,6 @@
 #include <Infrastructure/Log.hpp>
 #include <Infrastructure/Time.hpp>
 #include <SceneGraph/SceneGraph.hpp>
-#include <ModuleEngine/ModuleEngine.hpp>
 
 int main(int argc, char* argv[])
 {
@@ -41,7 +40,6 @@ int main(int argc, char* argv[])
         EventEngine::Context::GetInstance()->Init();
         RenderingEngine::Context::GetInstance()->Init();
         SceneGraph::Context::GetInstance()->Init();
-        ModuleEngine::Context::GetInstance()->Init();
     }
     catch (const std::exception& e)
     {
@@ -51,16 +49,19 @@ int main(int argc, char* argv[])
 
     try
     {
+        EventEngine::Dispatch::GetInstance()->DispatchOnEngineStartCallback();
+
         for (;;)
         {
-            EventEngine::Dispatch::GetInstance()->HandleEvents();
-            EventEngine::Dispatch::GetInstance()->DispatchOnFrameCallback();
+            EventEngine::Context::GetInstance()->HandleEvents();
             RenderingEngine::Context::GetInstance()->Render();
             RenderingEngine::Window::GetInstance()->SwapBuffers();
             Infrastructure::Time::GetInstance()->PerformTick();
 
             if (EventEngine::Context::GetInstance()->IsQuitRequested()) break;
         }
+
+        EventEngine::Dispatch::GetInstance()->DispatchOnEngineStopCallback();
     }
     catch (const std::exception& e)
     {
@@ -68,7 +69,6 @@ int main(int argc, char* argv[])
         return EXIT_FAILURE;
     }
 
-    ModuleEngine::Context::GetInstance()->Quit();
     SceneGraph::Context::GetInstance()->Quit();
     RenderingEngine::Context::GetInstance()->Quit();
     EventEngine::Context::GetInstance()->Quit();

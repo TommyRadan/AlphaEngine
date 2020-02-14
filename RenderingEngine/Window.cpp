@@ -21,6 +21,7 @@
  */
 
 #include <exception>
+#include <stdexcept>
 
 #include <RenderingEngine/Window.hpp>
 #include <RenderingEngine/OpenGL/OpenGL.hpp>

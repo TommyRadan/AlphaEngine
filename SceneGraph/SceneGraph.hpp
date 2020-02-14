@@ -35,7 +35,5 @@ namespace SceneGraph
 
         void Init();
         void Quit();
-
-        void LoadScene(const std::string& filename);
     };
 }

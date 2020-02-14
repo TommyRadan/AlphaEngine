@@ -21,6 +21,7 @@
  */
 
 #include <exception>
+#include <stdexcept>
 
 #include <RenderingEngine/OpenGL/Program.hpp>
 #include <Infrastructure/Log.hpp>
@@ -88,12 +89,30 @@ std::string RenderingEngine::OpenGL::Program::GetInfoLog()
 
 RenderingEngine::OpenGL::Attribute RenderingEngine::OpenGL::Program::GetAttribute(const std::string& name)
 {
-	return glGetAttribLocation(m_ObjectID, name.c_str());
+	std::map<std::string, Uniform>::iterator it;
+
+	it = this->m_Attributes.find(name);
+	if (it != this->m_Attributes.end()) {
+		return it->second;
+	}
+
+	Uniform location = glGetAttribLocation(m_ObjectID, name.c_str());;
+	this->m_Attributes[name] = location;
+	return location;
 }
 
 RenderingEngine::OpenGL::Uniform RenderingEngine::OpenGL::Program::GetUniform(const std::string& name)
 {
-	return glGetUniformLocation(m_ObjectID, name.c_str());
+	std::map<std::string, Uniform>::iterator it;
+
+	it = this->m_Uniforms.find(name);
+	if (it != this->m_Uniforms.end()) {
+		return it->second;
+	}
+
+	Uniform location = glGetUniformLocation(m_ObjectID, name.c_str());;
+	this->m_Uniforms[name] = location;
+	return location;
 }
 
 void RenderingEngine::OpenGL::Program::SetUniform(const Uniform& uniform, const int value)

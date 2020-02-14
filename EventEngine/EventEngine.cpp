@@ -23,6 +23,7 @@
 #include <exception>
 
 #include <EventEngine/EventEngine.hpp>
+#include <EventEngine/Dispatch.hpp>
 #include <SDL.h>
 #include <Infrastructure/Log.hpp>
 #include <stdexcept>
@@ -71,4 +72,78 @@ void EventEngine::Context::RequestQuit()
 const bool EventEngine::Context::IsQuitRequested() const
 {
     return m_IsQuitRequested;
+}
+
+void EventEngine::Context::HandleEvents()
+{
+    SDL_Event events = { 0 };
+    Dispatch *dispatch = Dispatch::GetInstance();
+
+    dispatch->DispatchOnFrameCallback();
+
+    SDL_PumpEvents();
+    while (SDL_PollEvent(&events))
+    {
+        switch (events.type)
+        {
+        case SDL_KEYDOWN:
+            dispatch->DispatchOnKeyDownCallback((KeyCode)events.key.keysym.sym);
+            break;
+
+        case SDL_KEYUP:
+            dispatch->DispatchOnKeyUpCallback((KeyCode)events.key.keysym.sym);
+            break;
+
+        case SDL_MOUSEBUTTONDOWN:
+            switch (events.button.button)
+            {
+            case SDL_BUTTON_LEFT:
+                dispatch->DispatchOnKeyDownCallback(KeyCode::MOUSE_LEFT);
+                break;
+
+            case SDL_BUTTON_RIGHT:
+                dispatch->DispatchOnKeyDownCallback(KeyCode::MOUSE_RIGHT);
+                break;
+
+            case SDL_BUTTON_MIDDLE:
+                dispatch->DispatchOnKeyDownCallback(KeyCode::MOUSE_MIDDLE);
+                break;
+
+            default:
+                break;
+            }
+            break;
+
+        case SDL_MOUSEBUTTONUP:
+            switch (events.button.button)
+            {
+            case SDL_BUTTON_LEFT:
+                dispatch->DispatchOnKeyUpCallback(KeyCode::MOUSE_LEFT);
+                break;
+
+            case SDL_BUTTON_RIGHT:
+                dispatch->DispatchOnKeyUpCallback(KeyCode::MOUSE_RIGHT);
+                break;
+
+            case SDL_BUTTON_MIDDLE:
+                dispatch->DispatchOnKeyUpCallback(KeyCode::MOUSE_MIDDLE);
+                break;
+
+            default:
+                break;
+            }
+            break;
+
+        case SDL_MOUSEMOTION:
+            dispatch->DispatchOnMouseMoveCallback(events.motion.xrel, events.motion.yrel);
+            break;
+
+        case SDL_QUIT:
+            this->m_IsQuitRequested = true;
+            break;
+
+        default:
+            break;
+        }
+    }
 }

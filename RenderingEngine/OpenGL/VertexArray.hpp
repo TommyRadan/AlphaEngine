@@ -29,8 +29,9 @@ namespace RenderingEngine
 {
 	namespace OpenGL
 	{
-		struct VertexArray
+		class VertexArray
 		{
+			friend class Context;
 			VertexArray();
 			~VertexArray();
 
@@ -39,6 +40,7 @@ namespace RenderingEngine
 			const VertexArray& operator=(const VertexArray& other) = delete;
 			const VertexArray&& operator=(const VertexArray&& other) = delete;
 
+		public:
 			const uint32_t Handle() const;
 
 			void BindAttribute(const Attribute& attribute,

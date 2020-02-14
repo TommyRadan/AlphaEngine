@@ -166,9 +166,9 @@ void RenderingEngine::Renderer::UploadVector4(const std::string& vec4Name, const
 
 void RenderingEngine::Renderer::ConstructProgram(const std::string& vsString, const std::string& fsString)
 {
-    m_VertexShader = new OpenGL::Shader(OpenGL::ShaderType::Vertex);
-    m_FragmentShader = new OpenGL::Shader(OpenGL::ShaderType::Fragment);
-    m_Program = new OpenGL::Program();
+    m_VertexShader = OpenGL::Context::GetInstance()->CreateShader(OpenGL::ShaderType::Vertex);
+    m_FragmentShader = OpenGL::Context::GetInstance()->CreateShader(OpenGL::ShaderType::Fragment);
+    m_Program = OpenGL::Context::GetInstance()->CreateProgram();
 
     auto vs = (OpenGL::Shader*) m_VertexShader;
     auto fs = (OpenGL::Shader*) m_FragmentShader;
@@ -187,7 +187,7 @@ void RenderingEngine::Renderer::ConstructProgram(const std::string& vsString, co
 
 void RenderingEngine::Renderer::DestructProgram()
 {
-    delete static_cast<OpenGL::Shader*>(m_VertexShader);
-    delete static_cast<OpenGL::Shader*>(m_FragmentShader);
-    delete static_cast<OpenGL::Program*>(m_Program);
+    OpenGL::Context::GetInstance()->DeleteShader((OpenGL::Shader*) m_VertexShader);
+    OpenGL::Context::GetInstance()->DeleteShader((OpenGL::Shader*) m_FragmentShader);
+    OpenGL::Context::GetInstance()->DeleteProgram((OpenGL::Program*) m_Program);
 }

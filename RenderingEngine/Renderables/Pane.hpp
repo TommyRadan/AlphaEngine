@@ -22,24 +22,30 @@
 
 #pragma once
 
-namespace EventEngine
+#include <RenderingEngine/Renderables/Renderable.hpp>
+
+#include <RenderingEngine/OpenGL/OpenGL.hpp>
+#include <Infrastructure/Transform.hpp>
+
+namespace RenderingEngine
 {
-	class Context
-	{
-		Context();
+    struct Pane : public Renderable
+    {
+        Pane(const glm::vec2& size, const Infrastructure::Color& color);
 
-	public:
-		static Context* GetInstance();
+        Infrastructure::Transform transform;
 
-		void Init();
-		void Quit();
+        void Upload() final;
+        void Render() final;
 
-		void RequestQuit();
-		const bool IsQuitRequested() const;
+    private:
+        OpenGL::VertexArray* m_VertexArrayObject;
+        OpenGL::VertexBuffer* m_VertexBuffer;
+        OpenGL::VertexBuffer* m_IndiciesBuffer;
 
-        void HandleEvents();
+        unsigned int m_VertexCount;
 
-	private:
-		bool m_IsQuitRequested;
-	};
+        glm::vec2 m_Size;
+        Infrastructure::Color m_Color;
+    };
 }

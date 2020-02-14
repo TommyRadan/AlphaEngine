@@ -20,26 +20,25 @@
  * SOFTWARE.
  */
 
-#pragma once
+#include "Time.hpp"
+#include <Infrastructure/Time.hpp>
 
-namespace EventEngine
+float GetCurrentFPS()
 {
-	class Context
-	{
-		Context();
+    return Infrastructure::Time::GetInstance()->CurrentFps();
+}
 
-	public:
-		static Context* GetInstance();
+int GetFrameCount()
+{
+    return Infrastructure::Time::GetInstance()->FrameCount();
+}
 
-		void Init();
-		void Quit();
+double GetDeltaTime()
+{
+    return Infrastructure::Time::GetInstance()->DeltaTime();
+}
 
-		void RequestQuit();
-		const bool IsQuitRequested() const;
-
-        void HandleEvents();
-
-	private:
-		bool m_IsQuitRequested;
-	};
+float GetTotalTime()
+{
+    return Infrastructure::Time::GetInstance()->TotalTime();
 }

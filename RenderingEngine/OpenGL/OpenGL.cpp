@@ -21,6 +21,7 @@
  */
 
 #include <exception>
+#include <stdexcept>
 
 #include <RenderingEngine/OpenGL/OpenGL.hpp>
 #include <Infrastructure/Log.hpp>
@@ -61,6 +62,69 @@ void RenderingEngine::OpenGL::Context::Init()
 void RenderingEngine::OpenGL::Context::Quit()
 {
     LOG_INFO("Quit RenderingEngine::OpenGL");
+}
+
+RenderingEngine::OpenGL::Framebuffer*
+RenderingEngine::OpenGL::Context::CreateFramebuffer(
+    uint32_t width, uint32_t height,
+    uint8_t color, uint8_t depth)
+{
+	return new RenderingEngine::OpenGL::Framebuffer(width, height, color, depth);
+}
+
+RenderingEngine::OpenGL::Program* RenderingEngine::OpenGL::Context::CreateProgram()
+{
+    return new OpenGL::Program();
+}
+
+RenderingEngine::OpenGL::Shader* RenderingEngine::OpenGL::Context::CreateShader(ShaderType type)
+{
+    return new OpenGL::Shader(type);
+}
+
+RenderingEngine::OpenGL::Texture* RenderingEngine::OpenGL::Context::CreateTexture()
+{
+    return new OpenGL::Texture();
+}
+
+RenderingEngine::OpenGL::VertexArray* RenderingEngine::OpenGL::Context::CreateVAO()
+{
+    return new OpenGL::VertexArray();
+}
+
+RenderingEngine::OpenGL::VertexBuffer* RenderingEngine::OpenGL::Context::CreateVBO()
+{
+    return new OpenGL::VertexBuffer();
+}
+
+void RenderingEngine::OpenGL::Context::DeleteFramebuffer(const OpenGL::Framebuffer* fb)
+{
+    delete fb;
+}
+
+void RenderingEngine::OpenGL::Context::DeleteProgram(const OpenGL::Program* program)
+{
+    delete program;
+}
+
+void RenderingEngine::OpenGL::Context::DeleteShader(const OpenGL::Shader* shader)
+{
+    delete shader;
+}
+
+void RenderingEngine::OpenGL::Context::DeleteTexture(const OpenGL::Texture* texture)
+{
+    delete texture;
+}
+
+void RenderingEngine::OpenGL::Context::DeleteVAB(const OpenGL::VertexArray* vao)
+{
+    delete vao;
+}
+
+void RenderingEngine::OpenGL::Context::DeleteVBO(const OpenGL::VertexBuffer* vbo)
+{
+    delete vbo;
 }
 
 void RenderingEngine::OpenGL::Context::Enable(const RenderingEngine::OpenGL::Capability capability)

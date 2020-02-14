@@ -22,24 +22,38 @@
 
 #pragma once
 
-namespace EventEngine
+#include <EventEngine/Dispatch.hpp>
+#include <string>
+
+struct GameModuleInfo
 {
-	class Context
-	{
-		Context();
+    std::function<void(void)> onEngineStart;
+    std::function<void(void)> onEngineStop;
+    std::function<void(void)> onFrame;
+    std::function<void(void)> onRenderScene;
+    std::function<void(void)> onRenderUi;
+    std::function<void(EventEngine::KeyCode)> onKeyDown;
+    std::function<void(EventEngine::KeyCode)> onKeyUp;
+    std::function<void(EventEngine::KeyCode)> keyPressed;
+    std::function<void(int32_t, int32_t)> onMouseMove;
 
-	public:
-		static Context* GetInstance();
+    GameModuleInfo() :
+        onEngineStart { nullptr },
+        onEngineStop { nullptr },
+        onFrame { nullptr },
+        onRenderScene { nullptr },
+        onRenderUi { nullptr },
+        onKeyDown { nullptr },
+        onKeyUp { nullptr },
+        keyPressed { nullptr },
+        onMouseMove { nullptr }
+    {}
+};
 
-		void Init();
-		void Quit();
+void RegisterGameModule(struct GameModuleInfo &info);
 
-		void RequestQuit();
-		const bool IsQuitRequested() const;
-
-        void HandleEvents();
-
-	private:
-		bool m_IsQuitRequested;
-	};
-}
+#ifndef INTERNAL_GAMEMODULE_IMPLEMENTATION
+#define GAME_MODULE() bool ModuleInit()
+static bool ModuleInit();
+static bool initStatus = ModuleInit();
+#endif

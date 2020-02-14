@@ -30,8 +30,9 @@ namespace RenderingEngine
 {
 	namespace OpenGL
 	{
-		struct VertexBuffer
+		class VertexBuffer
 		{
+            friend class Context;
 			VertexBuffer();
 			~VertexBuffer();
 
@@ -40,6 +41,7 @@ namespace RenderingEngine
             const VertexBuffer& operator=(const VertexBuffer& other) = delete;
             const VertexBuffer&& operator=(const VertexBuffer&& other) = delete;
 
+        public:
 			const unsigned int Handle() const;
 
 			void Data(const void* data, size_t length, BufferUsage usage);

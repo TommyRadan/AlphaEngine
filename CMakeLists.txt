@@ -39,6 +39,7 @@ set(EXECUTABLE_OUTPUT_PATH ${CMAKE_SOURCE_DIR}/Binaries/)
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_VERBOSE_MAKEFILE false)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+set(CMAKE_CXX_FLAGS "/O2")
 
 # Vendor options
 set(VENDOR_ROOT ${CMAKE_SOURCE_DIR}/Vendor/)
@@ -57,38 +58,27 @@ add_custom_target(build-time-make-directory ALL
 # Set top level directory to be searched for includes
 include_directories(${CMAKE_SOURCE_DIR})
 
-# Include subprojects
-add_subdirectory(EventEngine)
-add_subdirectory(Infrastructure)
-add_subdirectory(RenderingEngine)
-add_subdirectory(SceneGraph)
-add_subdirectory(ModuleEngine)
-
 # Main executable
-file(GLOB API_FILES "API/*.hpp" "API/*.cpp")
-add_executable(AlphaEngine Control/MainLoop.cpp ${API_FILES} Vendor/NanoVG/nanovg.c)
-
-# Add Dependencies
-add_dependencies(AlphaEngine EventEngine)
-add_dependencies(AlphaEngine Infrastructure)
-add_dependencies(AlphaEngine RenderingEngine)
-add_dependencies(AlphaEngine SceneGraph)
-add_dependencies(AlphaEngine ModuleEngine)
-
-# Link Libraries
-if(WIN32)
-	target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}Infrastructure.lib)
-	target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}EventEngine.lib)
-	target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}RenderingEngine.lib)
-	target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}SceneGraph.lib)
-	target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}ModuleEngine.lib)
-elseif(APPLE)
-	target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}libInfrastructure.a)
-	target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}libEventEngine.a)
-	target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}libRenderingEngine.a)
-	target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}libSceneGraph.a)
-	target_link_libraries(AlphaEngine ${LIBRARY_OUTPUT_PATH}libModuleEngine.a)
-endif(WIN32)
+file(GLOB EVENT_ENGINE_FILES "EventEngine/*.hpp" "EventEngine/*.cpp")
+file(GLOB INFRASTRUCTURE_FILES "Infrastructure/*.hpp" "Infrastructure/*.cpp")
+file(GLOB SCENE_GRAPH_FILES "SceneGraph/*.hpp" "SceneGraph/*.cpp")
+file(GLOB RENDERING_ENGINE_FILES
+        "RenderingEngine/*.hpp" "RenderingEngine/*.cpp"
+        "RenderingEngine/Mesh/*.hpp" "RenderingEngine/Mesh/*.cpp"
+        "RenderingEngine/Renderables/*.hpp" "RenderingEngine/Renderables/*.cpp"
+        "RenderingEngine/Renderers/*.hpp" "RenderingEngine/Renderers/*.cpp"
+        "RenderingEngine/Camera/*.hpp" "RenderingEngine/Camera/*.cpp"
+        "RenderingEngine/OpenGL/*.hpp" "RenderingEngine/OpenGL/*.cpp")
+file(GLOB EXTERNAL_FILES
+        "External/*.hpp" "External/*.cpp"
+        "External/API/*.hpp" "External/API/*.cpp")
+add_executable(AlphaEngine 
+    Control/MainLoop.cpp
+    ${EXTERNAL_FILES}
+    ${EVENT_ENGINE_FILES}
+    ${INFRASTRUCTURE_FILES}
+    ${SCENE_GRAPH_FILES}
+    ${RENDERING_ENGINE_FILES})
 
 # Find and link to external dependencies
 if(WIN32)
@@ -102,7 +92,8 @@ include_directories(${VENDOR_ROOT}SDL2/include)
 include_directories(${VENDOR_ROOT}GLM)
 include_directories(${VENDOR_ROOT}Loguru)
 include_directories(${VENDOR_ROOT}GLEW/include)
-include_directories(${VENDOR_ROOT}NanoVG)
+include_directories(${VENDOR_ROOT}SDL2/include)
+include_directories(${VENDOR_ROOT}STB/)
 
 if(WIN32)
     target_link_libraries(AlphaEngine ${VENDOR_ROOT}GLEW/${VENDOR_LIB}/glew32.lib)

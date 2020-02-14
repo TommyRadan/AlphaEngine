@@ -31,11 +31,18 @@ namespace RenderingEngine
 {
 	namespace OpenGL
 	{
-		struct Shader
+		class Shader
 		{
+            friend class Context;
 			explicit Shader(ShaderType type);
 			~Shader();
 
+            Shader(const Shader&) = delete;
+            Shader(const Shader&&) = delete;
+            const Shader& operator=(const Shader&) = delete;
+            const Shader&& operator=(const Shader&&) = delete;
+
+        public:
 			const GLuint Handle() const;
 
 			void Source(const std::string& code);

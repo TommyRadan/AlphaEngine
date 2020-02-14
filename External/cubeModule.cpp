@@ -20,26 +20,54 @@
  * SOFTWARE.
  */
 
-#pragma once
+#include "API/GameModule.hpp"
+#include "API/Log.hpp"
+#include "API/Time.hpp"
 
-namespace EventEngine
+#include <RenderingEngine/Renderables/Pane.hpp>
+#include <RenderingEngine/Renderables/Cube.hpp>
+
+#include <SDL.h>
+
+static RenderingEngine::Pane *pane;
+static RenderingEngine::Cube *cube;
+
+float rotation = 0.f;
+float rotationSpeed = 3.14f / 2;
+
+static void OnEngineStart()
 {
-	class Context
-	{
-		Context();
+    pane = new RenderingEngine::Pane(glm::vec2{ 0.6f, 0.1f }, Infrastructure::Color{ 41, 128, 185, 255 });
+    pane->transform.SetPosition(glm::vec3 { -0.3f, 0.95f, 0.0f });
+    cube = new RenderingEngine::Cube();
 
-	public:
-		static Context* GetInstance();
+    pane->Upload();
+    cube->Upload();
+}
 
-		void Init();
-		void Quit();
+static void OnFrame()
+{
+    rotation += rotationSpeed * (GetDeltaTime() / 1000);
+    cube->transform.SetRotation(glm::vec3{ 0.f, 0.f, rotation });
+}
 
-		void RequestQuit();
-		const bool IsQuitRequested() const;
+static void OnRenderScene()
+{
+    cube->Render();
+}
 
-        void HandleEvents();
+static void OnRenderUi()
+{
+    pane->Render();
+}
 
-	private:
-		bool m_IsQuitRequested;
-	};
+GAME_MODULE()
+{
+    struct GameModuleInfo info;
+    info.onEngineStart = OnEngineStart;
+    info.onRenderScene = OnRenderScene;
+    info.onFrame = OnFrame;
+    info.onRenderUi = OnRenderUi;
+    RegisterGameModule(info);
+    return true;
 }

@@ -28,11 +28,19 @@ namespace RenderingEngine
 {
 	namespace OpenGL
 	{
-		struct Texture
+		class Texture
 		{
+            friend class Context;
+            friend class Framebuffer;
 			Texture();
 			~Texture();
 
+            Texture(const Texture&) = delete;
+            Texture(const Texture&&) = delete;
+            const Texture& operator=(const Texture&) = delete;
+            const Texture&& operator=(const Texture&&) = delete;
+
+        public:
 			const uint32_t Handle() const;
 
 			void Image2D(const void* data,

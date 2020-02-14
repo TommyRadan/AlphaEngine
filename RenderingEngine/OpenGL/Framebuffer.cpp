@@ -30,7 +30,8 @@
 RenderingEngine::OpenGL::Framebuffer::Framebuffer(const uint32_t width,
 												  const uint32_t height,
 												  const uint8_t color,
-												  const uint8_t depth)
+												  const uint8_t depth) :
+	m_ObjectID { 0 }
 {
 	PUSHSTATE()
 

@@ -40,8 +40,8 @@ Infrastructure::Log* const Infrastructure::Log::GetInstance()
 void Infrastructure::Log::Init()
 {
 #ifdef _DEBUG
-    loguru::add_file("everything.log", loguru::Append, loguru::Verbosity_MAX);
-    loguru::add_file("latest_readable.log", loguru::Truncate, loguru::Verbosity_INFO);
+    //loguru::add_file("everything.log", loguru::Append, loguru::Verbosity_MAX);
+    //loguru::add_file("latest_readable.log", loguru::Truncate, loguru::Verbosity_INFO);
 #else
     loguru::g_stderr_verbosity = loguru::Verbosity_OFF;
     loguru::g_colorlogtostderr = false;

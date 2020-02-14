@@ -24,22 +24,28 @@
 
 namespace EventEngine
 {
-	class Context
-	{
-		Context();
+    enum class EventType
+    {
+        NO_TYPE,
 
-	public:
-		static Context* GetInstance();
+        ENGINE_START,
+        ENGINE_STOP,
 
-		void Init();
-		void Quit();
+        SCRIPT_START,
+        SCRIPT_STOP,
 
-		void RequestQuit();
-		const bool IsQuitRequested() const;
+        FRAME,
 
-        void HandleEvents();
+        KEY_UP,
+        KEY_DOWN,
+        MOUSE_MOVE
+    };
 
-	private:
-		bool m_IsQuitRequested;
-	};
+    class Event
+    {
+        Event(EventType type) : m_type{ type } {}
+
+    protected:
+        EventType m_type;
+    };
 }

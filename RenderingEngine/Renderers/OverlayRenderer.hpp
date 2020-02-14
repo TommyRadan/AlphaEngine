@@ -22,24 +22,20 @@
 
 #pragma once
 
-namespace EventEngine
+#include <RenderingEngine/Renderers/Renderer.hpp>
+
+namespace RenderingEngine
 {
-	class Context
+	namespace Renderers
 	{
-		Context();
+		class OverlayRenderer : public Renderer
+		{
+            OverlayRenderer();
 
-	public:
-		static Context* GetInstance();
+		public:
+			static OverlayRenderer* GetInstance();
 
-		void Init();
-		void Quit();
-
-		void RequestQuit();
-		const bool IsQuitRequested() const;
-
-        void HandleEvents();
-
-	private:
-		bool m_IsQuitRequested;
-	};
+			~OverlayRenderer();
+		};
+	}
 }

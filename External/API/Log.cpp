@@ -20,26 +20,20 @@
  * SOFTWARE.
  */
 
-#pragma once
+#include "Log.hpp"
+#include <Infrastructure/Log.hpp>
 
-namespace EventEngine
+void PrintInfo(const std::string &message)
 {
-	class Context
-	{
-		Context();
+    LOG_INFO("%s", message.c_str());
+}
 
-	public:
-		static Context* GetInstance();
+void PrintWarning(const std::string &message)
+{
+    LOG_WARN("%s", message.c_str());
+}
 
-		void Init();
-		void Quit();
-
-		void RequestQuit();
-		const bool IsQuitRequested() const;
-
-        void HandleEvents();
-
-	private:
-		bool m_IsQuitRequested;
-	};
+void PrintError(const std::string &message)
+{
+    LOG_ERROR("%s", message.c_str());
 }

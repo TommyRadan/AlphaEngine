@@ -20,26 +20,22 @@
  * SOFTWARE.
  */
 
-#pragma once
+#include "API/GameModule.hpp"
+#include "API/Time.hpp"
+#include "API/Log.hpp"
 
-namespace EventEngine
+#include <string>
+
+static void OnFrame()
 {
-	class Context
-	{
-		Context();
+    //PrintInfo(std::string{"Delta time: "} + std::to_string(GetDeltaTime()) + " ms");
+    //PrintInfo(std::string{"FPS: "} + std::to_string(GetCurrentFPS()));
+}
 
-	public:
-		static Context* GetInstance();
-
-		void Init();
-		void Quit();
-
-		void RequestQuit();
-		const bool IsQuitRequested() const;
-
-        void HandleEvents();
-
-	private:
-		bool m_IsQuitRequested;
-	};
+GAME_MODULE()
+{
+    struct GameModuleInfo info;
+    info.onFrame = OnFrame;
+    RegisterGameModule(info);
+    return true;
 }

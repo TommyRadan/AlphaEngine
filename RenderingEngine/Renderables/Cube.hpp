@@ -39,8 +39,8 @@ namespace RenderingEngine
         void Render() final;
 
     private:
-        OpenGL::VertexArray m_VertexArrayObject;
-        OpenGL::VertexBuffer m_Verticies;
+        OpenGL::VertexArray *m_VertexArrayObject;
+        OpenGL::VertexBuffer *m_VertexBufferObject;
 
         unsigned int m_VertexCount;
     };

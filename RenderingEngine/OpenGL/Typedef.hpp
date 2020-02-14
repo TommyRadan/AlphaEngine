@@ -41,8 +41,8 @@ namespace RenderingEngine
 			Double = GL_DOUBLE
 		};
 
-		using Attribute  = GLint;
-		using Uniform  = GLint;
+		using Attribute = GLint;
+		using Uniform = GLint;
 
 		enum class Buffer
 		{
