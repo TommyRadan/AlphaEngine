@@ -26,9 +26,13 @@ static std::string vertexShader = R"vs(
         #version 330
 
         layout(location=0) in vec3 position;
+        layout(location=1) in vec2 uv;
+
+        out vec2 texCoord;
 
         void main()
         {
+            texCoord = uv;
             gl_Position = vec4(position, 1.0);
         }
 )vs";
@@ -37,12 +41,15 @@ static std::string fragmentShader = R"fs(
         #version 330
 
         out vec4 fragColor;
+        in vec2 texCoord;
 
+        uniform float useTexture = 0.0;
         uniform vec4 color;
+        uniform sampler2D tex;
 
         void main()
         {
-            fragColor = color;
+            fragColor = (useTexture != 0.0) ? texture(tex, vec2(texCoord.x, 1.0 - texCoord.y)) : color;
         }
 )fs";
 

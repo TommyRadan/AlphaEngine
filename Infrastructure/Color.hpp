@@ -23,9 +23,15 @@
 #pragma once
 
 #include <cstdint>
-#include <glm.hpp>
+#include <cstdint>
 
 namespace Infrastructure
 {
-	using Color = glm::lowp_uvec4;
+    struct alignas(1) Color
+    {
+        uint8_t r;
+        uint8_t g;
+        uint8_t b;
+        uint8_t a;
+    };
 }

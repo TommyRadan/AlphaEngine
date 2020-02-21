@@ -36,6 +36,8 @@ static void OnEngineStart()
 {
     cameraId = CreateCamera(CameraType::Perspective);
     AttachCamera(cameraId);
+
+    SetCameraPos(cameraId, -5.0, 0.0, 0.0);
 }
 
 static void OnEngineStop()

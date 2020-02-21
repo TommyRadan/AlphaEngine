@@ -22,44 +22,28 @@
 
 #pragma once
 
-#include <glm.hpp>
+#include <RenderingEngine/Renderables/Renderable.hpp>
+#include <RenderingEngine/Renderables/Premade2D/Pane.hpp>
+
+#include <RenderingEngine/OpenGL/OpenGL.hpp>
+#include <Infrastructure/Transform.hpp>
+#include <Infrastructure/Image.hpp>
+#include <Infrastructure/Font.hpp>
 
 namespace RenderingEngine
 {
-	struct VertexPosition
-	{
-		glm::vec3 Pos;
-	};
-
-	struct VertexPostionColor
-	{
-		glm::vec3 Pos;
-		glm::vec3 Color;
-	};
-
-    struct VertexPositionUv
+    struct Label : public Renderable
     {
-        glm::vec3 Pos;
-        glm::vec2 UV;
-    };
+        Label(Infrastructure::Font *font, float size, const std::string& text);
 
-    struct VertexPostionNormal
-    {
-        glm::vec3 Pos;
-        glm::vec3 Normal;
-    };
+        Infrastructure::Transform transform;
 
-	struct VertexPositionColorNormal
-    {
-        glm::vec3 Pos;
-        glm::vec3 Color;
-        glm::vec3 Normal;
-    };
+        void Upload() final;
+        void Render() final;
 
-	struct VertexPositionUvNormal
-	{
-		glm::vec3 Pos;
-		glm::vec2 UV;
-		glm::vec3 Normal;
-	};
+    private:
+        Infrastructure::Font* m_Font;
+        std::string m_Text;
+        std::vector<RenderingEngine::Pane *> m_Panes;
+    };
 }

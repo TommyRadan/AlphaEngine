@@ -30,7 +30,7 @@
 #include <RenderingEngine/Camera/Camera.hpp>
 
 #include <Infrastructure/Log.hpp>
-#include <RenderingEngine/Renderables/Cube.hpp>
+#include <RenderingEngine/Renderables/Premade3D/Cube.hpp>
 
 RenderingEngine::Context* RenderingEngine::Context::GetInstance()
 {
@@ -80,9 +80,9 @@ void RenderingEngine::Context::Render()
         RenderingEngine::Renderers::BasicRenderer::GetInstance()->StopRenderer();
     }
 
-    //RenderingEngine::OpenGL::Context::GetInstance()->Enable(RenderingEngine::OpenGL::Capability::DepthTest);
+    RenderingEngine::OpenGL::Context::GetInstance()->Disable(RenderingEngine::OpenGL::Capability::DepthTest);
     RenderingEngine::Renderers::OverlayRenderer::GetInstance()->StartRenderer();
     EventEngine::Dispatch::GetInstance()->DispatchOnRenderUiCallback();
     RenderingEngine::Renderers::OverlayRenderer::GetInstance()->StopRenderer();
-    //RenderingEngine::OpenGL::Context::GetInstance()->Disable(RenderingEngine::OpenGL::Capability::DepthTest);
+    RenderingEngine::OpenGL::Context::GetInstance()->Enable(RenderingEngine::OpenGL::Capability::DepthTest);
 }

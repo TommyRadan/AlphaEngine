@@ -26,12 +26,16 @@
 
 #include <RenderingEngine/OpenGL/OpenGL.hpp>
 #include <Infrastructure/Transform.hpp>
+#include <Infrastructure/Image.hpp>
 
 namespace RenderingEngine
 {
     struct Pane : public Renderable
     {
-        Pane(const glm::vec2& size, const Infrastructure::Color& color);
+        Pane(const glm::vec2& size);
+
+        void SetColor(const Infrastructure::Color& color);
+        void SetImage(const Infrastructure::Image& image);
 
         Infrastructure::Transform transform;
 
@@ -47,5 +51,6 @@ namespace RenderingEngine
 
         glm::vec2 m_Size;
         Infrastructure::Color m_Color;
+        RenderingEngine::OpenGL::Texture* m_Texture;
     };
 }

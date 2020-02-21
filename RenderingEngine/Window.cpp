@@ -95,6 +95,7 @@ namespace RenderingEngine
         }
 
         m_GlContext = SDL_GL_CreateContext((SDL_Window*) m_Window);
+        SDL_GL_SetSwapInterval(0);
     }
 
     void Window::Quit()
@@ -107,7 +108,7 @@ namespace RenderingEngine
 
     void Window::Clear()
     {
-        OpenGL::Context::GetInstance()->ClearColor(Infrastructure::Color(0, 0, 0, 255));
+        OpenGL::Context::GetInstance()->ClearColor(Infrastructure::Color{ 0, 0, 0, 255 });
         OpenGL::Context::GetInstance()->Clear(OpenGL::Buffer::Color);
         OpenGL::Context::GetInstance()->Clear(OpenGL::Buffer::Depth);
     }

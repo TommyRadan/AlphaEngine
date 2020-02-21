@@ -22,44 +22,25 @@
 
 #pragma once
 
-#include <glm.hpp>
+#include <string>
+#include <map>
+#include <vector>
 
-namespace RenderingEngine
+#include <Infrastructure/Image.hpp>
+#include <stb_truetype.hpp>
+
+namespace Infrastructure
 {
-	struct VertexPosition
-	{
-		glm::vec3 Pos;
-	};
-
-	struct VertexPostionColor
-	{
-		glm::vec3 Pos;
-		glm::vec3 Color;
-	};
-
-    struct VertexPositionUv
+    struct Font
     {
-        glm::vec3 Pos;
-        glm::vec2 UV;
-    };
+        Font(const std::string& filename, float fontSize);
 
-    struct VertexPostionNormal
-    {
-        glm::vec3 Pos;
-        glm::vec3 Normal;
-    };
+        const Infrastructure::Image* GetImage(char letter, int* x0, int* y0, int* x1, int* y1);
 
-	struct VertexPositionColorNormal
-    {
-        glm::vec3 Pos;
-        glm::vec3 Color;
-        glm::vec3 Normal;
+    private:
+        std::map<char, Infrastructure::Image *> m_Images;
+        std::vector<unsigned char> m_Buffer;
+        stbtt_fontinfo m_Font;
+        float m_Scale;
     };
-
-	struct VertexPositionUvNormal
-	{
-		glm::vec3 Pos;
-		glm::vec2 UV;
-		glm::vec3 Normal;
-	};
 }

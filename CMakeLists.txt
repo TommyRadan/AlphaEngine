@@ -26,7 +26,7 @@ cmake_minimum_required(VERSION 3.6)
 project(AlphaEngine CXX)
 
 # Debug build or not?
-add_definitions(-D_DEBUG)
+# add_definitions(-D_DEBUG)
 
 # Version
 add_definitions(-DVERSION_MAJOR=0)
@@ -66,6 +66,8 @@ file(GLOB RENDERING_ENGINE_FILES
         "RenderingEngine/*.hpp" "RenderingEngine/*.cpp"
         "RenderingEngine/Mesh/*.hpp" "RenderingEngine/Mesh/*.cpp"
         "RenderingEngine/Renderables/*.hpp" "RenderingEngine/Renderables/*.cpp"
+        "RenderingEngine/Renderables/Premade2D/*.hpp" "RenderingEngine/Renderables/Premade2D/*.cpp"
+        "RenderingEngine/Renderables/Premade3D/*.hpp" "RenderingEngine/Renderables/Premade3D/*.cpp"
         "RenderingEngine/Renderers/*.hpp" "RenderingEngine/Renderers/*.cpp"
         "RenderingEngine/Camera/*.hpp" "RenderingEngine/Camera/*.cpp"
         "RenderingEngine/OpenGL/*.hpp" "RenderingEngine/OpenGL/*.cpp")

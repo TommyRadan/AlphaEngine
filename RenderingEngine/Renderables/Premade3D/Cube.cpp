@@ -20,7 +20,7 @@
  * SOFTWARE.
  */
 
-#include <RenderingEngine/Renderables/Cube.hpp>
+#include <RenderingEngine/Renderables/Premade3D/Cube.hpp>
 #include <RenderingEngine/Renderers/Renderer.hpp>
 #include <RenderingEngine/RenderingEngine.hpp>
 #include <RenderingEngine/Mesh/Vertex.hpp>
