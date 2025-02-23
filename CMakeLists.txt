@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2015-2019 Tomislav Radanovic
+# Copyright (c) 2015-2025 Tomislav Radanovic
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -22,34 +22,49 @@
 
 # This file defines AlphaEngine build system
 
-cmake_minimum_required(VERSION 3.6)
+cmake_minimum_required(VERSION 3.16)
 project(AlphaEngine CXX)
 
-# Debug build or not?
-# add_definitions(-D_DEBUG)
+# Set build type to Debug if not specified
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Debug)
+endif()
+
+# Add debug definitions and flags
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    add_definitions(-D_DEBUG)
+    if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /Zi /Od")
+    else()
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -O0")
+    endif()
+endif()
+
+# Set cmake module directory
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 
 # Version
 add_definitions(-DVERSION_MAJOR=0)
 add_definitions(-DVERSION_MINOR=0)
-add_definitions(-DVERSION_PATCH=0)
+add_definitions(-DVERSION_PATCH=1)
+
+# Set the macOS SDK path
+if(APPLE)
+    execute_process(COMMAND 
+        xcrun --show-sdk-path OUTPUT_VARIABLE MACOS_SDK_PATH 
+        OUTPUT_STRIP_TRAILING_WHITESPACE)
+    set(CMAKE_OSX_SYSROOT ${MACOS_SDK_PATH})
+endif(APPLE)
 
 # Compile options
 set(LIBRARY_OUTPUT_PATH ${CMAKE_SOURCE_DIR}/Binaries/)
 set(EXECUTABLE_OUTPUT_PATH ${CMAKE_SOURCE_DIR}/Binaries/)
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_VERBOSE_MAKEFILE false)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-set(CMAKE_CXX_FLAGS "/O2")
 
 # Vendor options
 set(VENDOR_ROOT ${CMAKE_SOURCE_DIR}/Vendor/)
-if (APPLE)
-    set(VENDOR_LIB lib-macos)
-    set(LIB_EXT .framework)
-elseif(WIN32)
-    set(VENDOR_LIB lib-win)
-    set(LIB_EXT .dll)
-endif(APPLE)
 
 # Make output directory if it doesn't exist
 add_custom_target(build-time-make-directory ALL
@@ -82,28 +97,27 @@ add_executable(AlphaEngine
     ${SCENE_GRAPH_FILES}
     ${RENDERING_ENGINE_FILES})
 
+# Use C++ standard library
+target_compile_options(AlphaEngine PRIVATE -stdlib=libc++)
+
 # Find and link to external dependencies
-if(WIN32)
-	target_link_libraries(AlphaEngine ${VENDOR_ROOT}SDL2/${VENDOR_LIB}/SDL2main.lib)
-	target_link_libraries(AlphaEngine ${VENDOR_ROOT}SDL2/${VENDOR_LIB}/SDL2.lib)
-elseif(APPLE)
-	target_link_libraries(AlphaEngine ${VENDOR_ROOT}SDL2/${VENDOR_LIB}/SDL2.framework)
-endif(WIN32)
-include_directories(${VENDOR_ROOT}SDL2/include)
+find_package(SDL2 REQUIRED)
+message(STATUS "SDL2_INCLUDE_DIRS: ${SDL2_INCLUDE_DIRS}")
+message(STATUS "SDL2_LIBRARIES: ${SDL2_LIBRARIES}")
+target_link_libraries(AlphaEngine SDL2::SDL2)
+target_include_directories(AlphaEngine PRIVATE ${SDL2_INCLUDE_DIRS})
 
-include_directories(${VENDOR_ROOT}GLM)
-include_directories(${VENDOR_ROOT}Loguru)
-include_directories(${VENDOR_ROOT}GLEW/include)
-include_directories(${VENDOR_ROOT}SDL2/include)
-include_directories(${VENDOR_ROOT}STB/)
+find_package(GLM REQUIRED)
+target_include_directories(AlphaEngine PRIVATE ${GLM_INCLUDE_DIR})
 
-if(WIN32)
-    target_link_libraries(AlphaEngine ${VENDOR_ROOT}GLEW/${VENDOR_LIB}/glew32.lib)
-    target_link_libraries(AlphaEngine ${VENDOR_ROOT}GLEW/${VENDOR_LIB}/glew32s.lib)
-elseif(APPLE)
-    find_package(GLEW REQUIRED)
-    target_link_libraries(AlphaEngine ${GLEW_LIBRARY})
-endif(WIN32)
+target_include_directories(AlphaEngine PRIVATE ${VENDOR_ROOT}Loguru)
+target_include_directories(AlphaEngine PRIVATE ${VENDOR_ROOT}STB/)
+
+find_package(GLEW REQUIRED)
+message(STATUS "GLEW_INCLUDE_DIRS: ${GLEW_INCLUDE_DIRS}")
+message(STATUS "GLEW_LIBRARIES: ${GLEW_LIBRARIES}")
+target_link_libraries(AlphaEngine GLEW::GLEW)
+#target_include_directories(AlphaEngine PRIVATE ${GLEW_INCLUDE_DIRS})
 
 find_package(OpenGL REQUIRED)
 target_link_libraries(AlphaEngine ${OPENGL_LIBRARIES})
@@ -113,14 +127,8 @@ if(APPLE)
     target_link_libraries(AlphaEngine "-framework CoreFoundation -framework IOKit -framework CoreVideo")
 endif(APPLE)
 
-add_custom_command(TARGET AlphaEngine POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy
-        "${VENDOR_ROOT}/SDL2/${VENDOR_LIB}/SDL2${LIB_EXT}"
-        "${LIBRARY_OUTPUT_PATH}/SDL2${LIB_EXT}")
-
-if(WIN32)
-    add_custom_command(TARGET AlphaEngine POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy
-			"${VENDOR_ROOT}/GLEW/${VENDOR_LIB}/glew32.dll"
-			"${LIBRARY_OUTPUT_PATH}/glew32.dll")
-endif(WIN32)
+#if(APPLE)
+#    add_custom_command(TARGET AlphaEngine POST_BUILD
+#        COMMAND ${CMAKE_COMMAND} -E copy ${SDL2_LIBRARIES} ${LIBRARY_OUTPUT_PATH}
+#        COMMAND ${CMAKE_COMMAND} -E copy ${OPENGL_LIBRARIES} ${LIBRARY_OUTPUT_PATH})
+#endif(APPLE)
