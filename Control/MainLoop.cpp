@@ -20,7 +20,7 @@
  * SOFTWARE.
  */
 
-#include <exception>
+#include <stdexcept>
 
 #include <EventEngine/EventEngine.hpp>
 #include <EventEngine/Dispatch.hpp>

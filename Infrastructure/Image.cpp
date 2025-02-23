@@ -22,7 +22,6 @@
 
 #include "Image.hpp"
 
-#include <exception>
 #include <stdexcept>
 
 #define STB_IMAGE_IMPLEMENTATION

@@ -20,7 +20,6 @@
  * SOFTWARE.
  */
 
-#include <exception>
 #include <stdexcept>
 
 #include <RenderingEngine/OpenGL/OpenGL.hpp>
