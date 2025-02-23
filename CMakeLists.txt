@@ -102,8 +102,6 @@ target_compile_options(AlphaEngine PRIVATE -stdlib=libc++)
 
 # Find and link to external dependencies
 find_package(SDL2 REQUIRED)
-message(STATUS "SDL2_INCLUDE_DIRS: ${SDL2_INCLUDE_DIRS}")
-message(STATUS "SDL2_LIBRARIES: ${SDL2_LIBRARIES}")
 target_link_libraries(AlphaEngine SDL2::SDL2)
 target_include_directories(AlphaEngine PRIVATE ${SDL2_INCLUDE_DIRS})
 
@@ -114,8 +112,6 @@ target_include_directories(AlphaEngine PRIVATE ${VENDOR_ROOT}Loguru)
 target_include_directories(AlphaEngine PRIVATE ${VENDOR_ROOT}STB/)
 
 find_package(GLEW REQUIRED)
-message(STATUS "GLEW_INCLUDE_DIRS: ${GLEW_INCLUDE_DIRS}")
-message(STATUS "GLEW_LIBRARIES: ${GLEW_LIBRARIES}")
 target_link_libraries(AlphaEngine GLEW::GLEW)
 #target_include_directories(AlphaEngine PRIVATE ${GLEW_INCLUDE_DIRS})
 
