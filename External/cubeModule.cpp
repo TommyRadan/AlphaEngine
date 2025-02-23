@@ -24,15 +24,10 @@
 #include "API/Log.hpp"
 #include "API/Time.hpp"
 
-#include <RenderingEngine/Renderables/Premade2D/Label.hpp>
 #include <RenderingEngine/Renderables/Premade3D/Cube.hpp>
 
 #include <RenderingEngine/OpenGL/OpenGL.hpp>
 
-#include <Infrastructure/Font.hpp>
-
-static RenderingEngine::Label *label;
-static RenderingEngine::Pane *pane;
 static RenderingEngine::Cube *cube;
 
 float rotation = 0.0f;
@@ -40,11 +35,8 @@ float rotationSpeed = 3.14f / 2;
 
 static void OnEngineStart()
 {
-    auto font = new Infrastructure::Font("Roboto-Medium.ttf", 200.0f);
-    label = new RenderingEngine::Label(font, 0.1f, "Hello world!");
     cube = new RenderingEngine::Cube();
 
-    label->Upload();
     cube->Upload();
 }
 
@@ -59,18 +51,12 @@ static void OnRenderScene()
     cube->Render();
 }
 
-static void OnRenderUi()
-{
-    label->Render();
-}
-
 GAME_MODULE()
 {
     struct GameModuleInfo info;
     info.onEngineStart = OnEngineStart;
     info.onRenderScene = OnRenderScene;
     info.onFrame = OnFrame;
-    info.onRenderUi = OnRenderUi;
     RegisterGameModule(info);
     return true;
 }

@@ -24,7 +24,6 @@
 
 #include <RenderingEngine/OpenGL/Typedef.hpp>
 
-#include <exception>
 #include <string>
 
 namespace RenderingEngine

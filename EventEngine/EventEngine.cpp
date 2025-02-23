@@ -20,13 +20,12 @@
  * SOFTWARE.
  */
 
-#include <exception>
+#include <stdexcept>
 
 #include <EventEngine/EventEngine.hpp>
 #include <EventEngine/Dispatch.hpp>
 #include <SDL.h>
 #include <Infrastructure/Log.hpp>
-#include <stdexcept>
 
 EventEngine::Context::Context() :
     m_IsQuitRequested { false }
