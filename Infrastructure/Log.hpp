@@ -22,24 +22,41 @@
 
 #pragma once
 
-#include <Loguru.hpp>
+#define LOG_INIT(argc, argv) infrastructure::log::init(argc, argv)
 
-#define LOG_INIT(argc, argv) loguru::init(argc, argv)
+#define LOG_INFO(...) infrastructure::log::message(infrastructure::verbosity::INFO, __VA_ARGS__)
+#define LOG_WARN(...) infrastructure::log::message(infrastructure::verbosity::WARN, __VA_ARGS__)
+#define LOG_ERROR(...) infrastructure::log::message(infrastructure::verbosity::ERROR, __VA_ARGS__)
+#define LOG_FATAL(...) infrastructure::log::message(infrastructure::verbosity::FATAL, __VA_ARGS__)
 
-#define LOG_INFO(...) LOG_F(INFO, __VA_ARGS__)
-#define LOG_WARN(...) LOG_F(WARNING, __VA_ARGS__)
-#define LOG_ERROR(...) LOG_F(ERROR, __VA_ARGS__)
-#define LOG_FATAL(...) LOG_F(FATAL, __VA_ARGS__)
-
-namespace Infrastructure
+namespace infrastructure
 {
-    class Log
+    enum class verbosity
     {
-        Log() = default;
+        INFO,
+        WARN,
+        ERROR,
+        FATAL
+    };
 
-    public:
-        static Log* const GetInstance();
+    /**
+     * @brief The logging system
+     */
+    struct log
+    {
+        /**
+         * @brief Initializes the logging system
+         * @param argc The number of arguments
+         * @param argv The arguments
+         */
+        static void init(int argc, char* argv[]);
 
-        void Init();
+        /**
+         * @brief Logs an info message
+         * @param verbosity The verbosity of the message (INFO, WARN, ERROR, FATAL)
+         * @param format The format of the message
+         * @param ... The arguments
+         */
+        static void message(enum verbosity verbosity, const char* format, ...);
     };
 }

@@ -25,20 +25,27 @@
 #include <Infrastructure/Log.hpp>
 #include <Infrastructure/Version.hpp>
 
-Infrastructure::Log* const Infrastructure::Log::GetInstance()
+static int verbosity_to_loguru(infrastructure::verbosity verbosity)
 {
-    static Log* instance = nullptr;
-
-    if (instance == nullptr)
+    switch (verbosity)
     {
-        instance = new Log();
+    case infrastructure::verbosity::INFO:
+        return loguru::Verbosity_INFO;
+    case infrastructure::verbosity::WARN:
+        return loguru::Verbosity_WARNING;
+    case infrastructure::verbosity::ERROR:
+        return loguru::Verbosity_ERROR;
+    case infrastructure::verbosity::FATAL:
+        return loguru::Verbosity_FATAL;
+    default:
+        return loguru::Verbosity_OFF;
     }
-
-    return instance;
 }
 
-void Infrastructure::Log::Init()
+void infrastructure::log::init(int argc, char* argv[])
 {
+    loguru::init(argc, argv);
+
 #ifdef _DEBUG
     //loguru::add_file("everything.log", loguru::Append, loguru::Verbosity_MAX);
     //loguru::add_file("latest_readable.log", loguru::Truncate, loguru::Verbosity_INFO);
@@ -48,4 +55,12 @@ void Infrastructure::Log::Init()
 #endif
 
     LOG_INFO("AlphaEngine v%s starting ...", Infrastructure::Version::GetVersion().c_str());
+}
+
+void infrastructure::log::message(enum verbosity verbosity, const char* format, ...)
+{
+    va_list args;
+    va_start(args, format);
+    VLOG_F(verbosity_to_loguru(verbosity), format, args);
+    va_end(args);
 }

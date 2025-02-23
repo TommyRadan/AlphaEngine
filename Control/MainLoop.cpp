@@ -36,7 +36,6 @@ int main(int argc, char* argv[])
 
     try
     {
-        Infrastructure::Log::GetInstance()->Init();
         EventEngine::Context::GetInstance()->Init();
         RenderingEngine::Context::GetInstance()->Init();
         SceneGraph::Context::GetInstance()->Init();
