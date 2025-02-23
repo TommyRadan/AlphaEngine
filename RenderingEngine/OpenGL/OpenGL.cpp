@@ -136,7 +136,7 @@ void RenderingEngine::OpenGL::Context::Disable(const RenderingEngine::OpenGL::Ca
     glDisable((GLenum)capability);
 }
 
-void RenderingEngine::OpenGL::Context::ClearColor(const Infrastructure::Color& color)
+void RenderingEngine::OpenGL::Context::ClearColor(const RenderingEngine::Util::Color& color)
 {
     glClearColor(color.r / 255.0f, color.g / 255.0f, color.b / 255.0f, color.a / 255.0f);
 }

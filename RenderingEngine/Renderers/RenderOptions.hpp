@@ -25,7 +25,7 @@
 #include <string>
 #include <map>
 
-#include <Infrastructure/Color.hpp>
+#include <RenderingEngine/Util/Color.hpp>
 #include <RenderingEngine/OpenGL/Texture.hpp>
 
 namespace RenderingEngine
@@ -34,6 +34,6 @@ namespace RenderingEngine
     {
         std::map<std::string, float> Coefficients;
         std::map<std::string, OpenGL::Texture*> Textures;
-        std::map<std::string, Infrastructure::Color> Colors;
+        std::map<std::string, RenderingEngine::Util::Color> Colors;
     };
 }

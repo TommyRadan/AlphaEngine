@@ -29,7 +29,7 @@
 #include <RenderingEngine/OpenGL/Typedef.hpp>
 #include <RenderingEngine/OpenGL/VertexArray.hpp>
 #include <RenderingEngine/OpenGL/VertexBuffer.hpp>
-#include <Infrastructure/Color.hpp>
+#include <RenderingEngine/Util/Color.hpp>
 
 namespace RenderingEngine
 {
@@ -59,7 +59,7 @@ namespace RenderingEngine
             void Enable(OpenGL::Capability capability);
             void Disable(OpenGL::Capability capability);
 
-            void ClearColor(const Infrastructure::Color& color);
+            void ClearColor(const RenderingEngine::Util::Color& color);
             void Clear(OpenGL::Buffer buffers);
             void DepthMask(bool writeEnabled);
 

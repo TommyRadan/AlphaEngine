@@ -22,25 +22,35 @@
 
 #pragma once
 
+#include <RenderingEngine/Util/Color.hpp>
 #include <string>
-#include <map>
-#include <vector>
 
-#include <Infrastructure/Image.hpp>
-#include <stb_truetype.hpp>
-
-namespace Infrastructure
+namespace RenderingEngine::Util
 {
-    struct Font
+    struct Image
     {
-        Font(const std::string& filename, float fontSize);
+        Image();
+        explicit Image(const std::string& filename);
+        Image(const Image& image);
+        Image(Image&& image) noexcept;
 
-        const Infrastructure::Image* GetImage(char letter, int* x0, int* y0, int* x1, int* y1);
+        Image(uint32_t width, uint32_t height, const Color& background);
+        Image(uint32_t width, uint32_t height, Color* data);
+
+        virtual ~Image();
+
+        Image& operator=(const Image& image);
+        Image& operator=(Image&& image) noexcept;
+
+        const uint32_t GetWidth() const;
+        const uint32_t GetHeight() const;
+        const Color* const GetPixels() const;
+
+        Color GetPixel(uint32_t x, uint32_t y) const;
+        void SetPixel(uint32_t x, uint32_t y, const Color& color);
 
     private:
-        std::map<char, Infrastructure::Image *> m_Images;
-        std::vector<unsigned char> m_Buffer;
-        stbtt_fontinfo m_Font;
-        float m_Scale;
+        Color* m_ImageData;
+        uint32_t m_Width, m_Height;
     };
 }

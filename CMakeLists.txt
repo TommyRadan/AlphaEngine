@@ -85,7 +85,8 @@ file(GLOB RENDERING_ENGINE_FILES
         "RenderingEngine/Renderables/Premade3D/*.hpp" "RenderingEngine/Renderables/Premade3D/*.cpp"
         "RenderingEngine/Renderers/*.hpp" "RenderingEngine/Renderers/*.cpp"
         "RenderingEngine/Camera/*.hpp" "RenderingEngine/Camera/*.cpp"
-        "RenderingEngine/OpenGL/*.hpp" "RenderingEngine/OpenGL/*.cpp")
+        "RenderingEngine/OpenGL/*.hpp" "RenderingEngine/OpenGL/*.cpp"
+        "RenderingEngine/Util/*.hpp" "RenderingEngine/Util/*.cpp")
 file(GLOB EXTERNAL_FILES
         "External/*.hpp" "External/*.cpp"
         "External/API/*.hpp" "External/API/*.cpp")

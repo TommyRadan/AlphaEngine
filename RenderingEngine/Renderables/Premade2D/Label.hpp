@@ -26,23 +26,23 @@
 #include <RenderingEngine/Renderables/Premade2D/Pane.hpp>
 
 #include <RenderingEngine/OpenGL/OpenGL.hpp>
-#include <Infrastructure/Transform.hpp>
-#include <Infrastructure/Image.hpp>
-#include <Infrastructure/Font.hpp>
+#include <RenderingEngine/Util/Transform.hpp>
+#include <RenderingEngine/Util/Image.hpp>
+#include <RenderingEngine/Util/Font.hpp>
 
 namespace RenderingEngine
 {
     struct Label : public Renderable
     {
-        Label(Infrastructure::Font *font, float size, const std::string& text);
+        Label(RenderingEngine::Util::Font *font, float size, const std::string& text);
 
-        Infrastructure::Transform transform;
+        RenderingEngine::Util::Transform transform;
 
         void Upload() final;
         void Render() final;
 
     private:
-        Infrastructure::Font* m_Font;
+        RenderingEngine::Util::Font* m_Font;
         std::string m_Text;
         std::vector<RenderingEngine::Pane *> m_Panes;
     };

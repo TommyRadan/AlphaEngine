@@ -26,7 +26,7 @@
 #include <RenderingEngine/OpenGL/OpenGL.hpp>
 #include <SDL.h>
 #include <Infrastructure/Settings.hpp>
-#include <Infrastructure/Color.hpp>
+#include <RenderingEngine/Util/Color.hpp>
 #include <Infrastructure/Log.hpp>
 
 namespace RenderingEngine
@@ -107,7 +107,7 @@ namespace RenderingEngine
 
     void Window::Clear()
     {
-        OpenGL::Context::GetInstance()->ClearColor(Infrastructure::Color{ 0, 0, 0, 255 });
+        OpenGL::Context::GetInstance()->ClearColor(RenderingEngine::Util::Color{ 0, 0, 0, 255 });
         OpenGL::Context::GetInstance()->Clear(OpenGL::Buffer::Color);
         OpenGL::Context::GetInstance()->Clear(OpenGL::Buffer::Depth);
     }

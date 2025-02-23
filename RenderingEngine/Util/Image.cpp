@@ -28,13 +28,13 @@
 #include "stb_image.hpp"
 #include <Infrastructure/Log.hpp>
 
-Infrastructure::Image::Image() :
+RenderingEngine::Util::Image::Image() :
         m_ImageData { nullptr },
         m_Width { 0u },
         m_Height { 0u }
 {}
 
-Infrastructure::Image::Image(const std::string& filename) :
+RenderingEngine::Util::Image::Image(const std::string& filename) :
         m_ImageData { nullptr },
         m_Width { 0u },
         m_Height { 0u }
@@ -51,7 +51,7 @@ Infrastructure::Image::Image(const std::string& filename) :
     LOG_INFO("Loaded image (%s)", filename.c_str());
 }
 
-Infrastructure::Image::Image(const Image& image) :
+RenderingEngine::Util::Image::Image(const Image& image) :
         m_Width { image.m_Width },
         m_Height { image.m_Height },
         m_ImageData { new Color[image.m_Width * image.m_Height] }
@@ -59,7 +59,7 @@ Infrastructure::Image::Image(const Image& image) :
     memcpy(m_ImageData, image.m_ImageData, m_Width * m_Height * sizeof(Color));
 }
 
-Infrastructure::Image::Image(Image&& image) noexcept :
+RenderingEngine::Util::Image::Image(Image&& image) noexcept :
         m_Width { image.m_Width },
         m_Height { image.m_Height },
         m_ImageData { image.m_ImageData }
@@ -69,7 +69,7 @@ Infrastructure::Image::Image(Image&& image) noexcept :
     image.m_ImageData = nullptr;
 }
 
-Infrastructure::Image::Image(uint32_t width, uint32_t height, const Color& background) :
+RenderingEngine::Util::Image::Image(uint32_t width, uint32_t height, const Color& background) :
         m_ImageData { new Color[width * height] },
         m_Width { width },
         m_Height { height }
@@ -80,19 +80,19 @@ Infrastructure::Image::Image(uint32_t width, uint32_t height, const Color& backg
     }
 }
 
-Infrastructure::Image::Image(uint32_t width, uint32_t height, Color* data) :
+RenderingEngine::Util::Image::Image(uint32_t width, uint32_t height, Color* data) :
         m_ImageData { data },
         m_Width { width },
         m_Height { height }
 {}
 
-Infrastructure::Image::~Image()
+RenderingEngine::Util::Image::~Image()
 {
     if (m_ImageData == nullptr) return;
     delete[] m_ImageData;
 }
 
-Infrastructure::Image& Infrastructure::Image::operator=(const Infrastructure::Image& image)
+RenderingEngine::Util::Image& RenderingEngine::Util::Image::operator=(const RenderingEngine::Util::Image& image)
 {
     m_Width = image.m_Width;
     m_Height = image.m_Height;
@@ -100,7 +100,7 @@ Infrastructure::Image& Infrastructure::Image::operator=(const Infrastructure::Im
     return *this;
 }
 
-Infrastructure::Image& Infrastructure::Image::operator=(Image&& image) noexcept
+RenderingEngine::Util::Image& RenderingEngine::Util::Image::operator=(Image&& image) noexcept
 {
     m_Width = image.m_Width;
     m_Height = image.m_Height;
@@ -112,28 +112,28 @@ Infrastructure::Image& Infrastructure::Image::operator=(Image&& image) noexcept
     return *this;
 }
 
-const unsigned int Infrastructure::Image::GetWidth() const
+const unsigned int RenderingEngine::Util::Image::GetWidth() const
 {
     return m_Width;
 }
 
-const unsigned int Infrastructure::Image::GetHeight() const
+const unsigned int RenderingEngine::Util::Image::GetHeight() const
 {
     return m_Height;
 }
 
-const Infrastructure::Color* const Infrastructure::Image::GetPixels() const
+const RenderingEngine::Util::Color* const RenderingEngine::Util::Image::GetPixels() const
 {
     return m_ImageData;
 }
 
-Infrastructure::Color Infrastructure::Image::GetPixel(uint32_t x, uint32_t y) const
+RenderingEngine::Util::Color RenderingEngine::Util::Image::GetPixel(uint32_t x, uint32_t y) const
 {
     if (x >= m_Width || y >= m_Height) return Color();
     return m_ImageData[x + y * m_Width];
 }
 
-void Infrastructure::Image::SetPixel(uint32_t x, uint32_t y, const Color& color)
+void RenderingEngine::Util::Image::SetPixel(uint32_t x, uint32_t y, const Color& color)
 {
     if (x >= m_Width || y >= m_Height) return;
     m_ImageData[x + y * m_Width] = color;

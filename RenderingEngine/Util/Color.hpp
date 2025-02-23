@@ -25,7 +25,7 @@
 #include <cstdint>
 #include <cstdint>
 
-namespace Infrastructure
+namespace RenderingEngine::Util
 {
     struct alignas(1) Color
     {
