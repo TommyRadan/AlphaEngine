@@ -22,35 +22,30 @@
 
 #pragma once
 
-#include <Infrastructure/Color.hpp>
-#include <string>
+#include <glm.hpp>
 
-namespace Infrastructure
+namespace RenderingEngine::Util
 {
-    struct Image
+    struct Transform
     {
-        Image();
-        explicit Image(const std::string& filename);
-        Image(const Image& image);
-        Image(Image&& image) noexcept;
+        Transform();
 
-        Image(uint32_t width, uint32_t height, const Color& background);
-        Image(uint32_t width, uint32_t height, Color* data);
+        void SetPosition(const glm::vec3& position);
+        void SetRotation(const glm::vec3& rotation);
+        void SetScale(const glm::vec3& scale);
 
-        virtual ~Image();
+        glm::vec3 GetPosition() const;
+        glm::vec3 GetRotation() const;
+        glm::vec3 GetScale() const;
 
-        Image& operator=(const Image& image);
-        Image& operator=(Image&& image) noexcept;
-
-        const uint32_t GetWidth() const;
-        const uint32_t GetHeight() const;
-        const Color* const GetPixels() const;
-
-        Color GetPixel(uint32_t x, uint32_t y) const;
-        void SetPixel(uint32_t x, uint32_t y, const Color& color);
+        glm::mat4 GetTransformMatrix() const;
 
     private:
-        Color* m_ImageData;
-        uint32_t m_Width, m_Height;
+        mutable glm::mat4 m_TransformMatrix;
+        mutable bool m_IsTransformMatrixDirty;
+
+        glm::vec3 m_Position;
+        glm::vec3 m_Rotation;
+        glm::vec3 m_Scale;
     };
 }

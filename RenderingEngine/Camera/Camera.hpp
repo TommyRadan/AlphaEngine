@@ -23,7 +23,7 @@
 #pragma once
 
 #include <glm.hpp>
-#include <Infrastructure/Transform.hpp>
+#include <RenderingEngine/Util/Transform.hpp>
 
 namespace RenderingEngine
 {
@@ -37,7 +37,7 @@ namespace RenderingEngine
 
         static Camera *GetCurrentCamera();
 
-        Infrastructure::Transform transform;
+        RenderingEngine::Util::Transform transform;
 
         void InvalidateViewMatrix();
         const glm::mat4 GetViewMatrix() const;

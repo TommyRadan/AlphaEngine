@@ -36,12 +36,12 @@ RenderingEngine::Pane::Pane(const glm::vec2& size) :
     m_Texture { nullptr }
 {}
 
-void RenderingEngine::Pane::SetColor(const Infrastructure::Color& color)
+void RenderingEngine::Pane::SetColor(const RenderingEngine::Util::Color& color)
 {
     m_Color = color;
 }
 
-void RenderingEngine::Pane::SetImage(const Infrastructure::Image& image)
+void RenderingEngine::Pane::SetImage(const RenderingEngine::Util::Image& image)
 {
     m_Texture = RenderingEngine::OpenGL::Context::GetInstance()->CreateTexture();
     m_Texture->Image2D(

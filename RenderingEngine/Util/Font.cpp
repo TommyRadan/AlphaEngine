@@ -21,13 +21,13 @@
  */
 
 #define STB_TRUETYPE_IMPLEMENTATION
-#include <Infrastructure/Font.hpp>
+#include <RenderingEngine/Util/Font.hpp>
 #include <Infrastructure/Log.hpp>
 
 #include <vector>
 #include <fstream>
 
-Infrastructure::Font::Font(const std::string& filename, float fontSize)
+RenderingEngine::Util::Font::Font(const std::string& filename, float fontSize)
 {
     std::ifstream file(filename, std::ios::binary | std::ios::ate);
     std::streamsize size = file.tellg();
@@ -60,7 +60,7 @@ Infrastructure::Font::Font(const std::string& filename, float fontSize)
     LOG_INFO("Loaded font \"%s\"", filename.c_str());
 }
 
-const Infrastructure::Image* Infrastructure::Font::GetImage(char letter, int *x0, int *y0, int* x1, int* y1)
+const RenderingEngine::Util::Image* RenderingEngine::Util::Font::GetImage(char letter, int *x0, int *y0, int* x1, int* y1)
 {
     stbtt_GetCodepointBitmapBoxSubpixel(&m_Font, letter, m_Scale, m_Scale, 0, 0, x0, y0, x1, y1);
     return m_Images[letter];

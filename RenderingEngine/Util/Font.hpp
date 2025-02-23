@@ -22,30 +22,25 @@
 
 #pragma once
 
-#include <glm.hpp>
+#include <string>
+#include <map>
+#include <vector>
 
-namespace Infrastructure
+#include <RenderingEngine/Util/Image.hpp>
+#include <stb_truetype.hpp>
+
+namespace RenderingEngine::Util
 {
-    struct Transform
+    struct Font
     {
-        Transform();
+        Font(const std::string& filename, float fontSize);
 
-        void SetPosition(const glm::vec3& position);
-        void SetRotation(const glm::vec3& rotation);
-        void SetScale(const glm::vec3& scale);
-
-        glm::vec3 GetPosition() const;
-        glm::vec3 GetRotation() const;
-        glm::vec3 GetScale() const;
-
-        glm::mat4 GetTransformMatrix() const;
+        const RenderingEngine::Util::Image* GetImage(char letter, int* x0, int* y0, int* x1, int* y1);
 
     private:
-        mutable glm::mat4 m_TransformMatrix;
-        mutable bool m_IsTransformMatrixDirty;
-
-        glm::vec3 m_Position;
-        glm::vec3 m_Rotation;
-        glm::vec3 m_Scale;
+        std::map<char, RenderingEngine::Util::Image *> m_Images;
+        std::vector<unsigned char> m_Buffer;
+        stbtt_fontinfo m_Font;
+        float m_Scale;
     };
 }

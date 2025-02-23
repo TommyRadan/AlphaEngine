@@ -20,51 +20,51 @@
  * SOFTWARE.
  */
 
-#include <Infrastructure/Transform.hpp>
+#include <RenderingEngine/Util/Transform.hpp>
 #define GLM_ENABLE_EXPERIMENTAL
 #include <gtx/transform.hpp>
 
-Infrastructure::Transform::Transform() :
+RenderingEngine::Util::Transform::Transform() :
         m_IsTransformMatrixDirty { true },
         m_Position { 0.0f, 0.0f, 0.0f },
         m_Rotation { 0.0f, 0.0f, 0.0f },
         m_Scale { 1.0f, 1.0f, 1.0f }
 {}
 
-void Infrastructure::Transform::SetPosition(const glm::vec3& position)
+void RenderingEngine::Util::Transform::SetPosition(const glm::vec3& position)
 {
     m_Position = position;
     m_IsTransformMatrixDirty = true;
 }
 
-void Infrastructure::Transform::SetRotation(const glm::vec3& rotation)
+void RenderingEngine::Util::Transform::SetRotation(const glm::vec3& rotation)
 {
     m_Rotation = rotation;
     m_IsTransformMatrixDirty = true;
 }
 
-void Infrastructure::Transform::SetScale(const glm::vec3& scale)
+void RenderingEngine::Util::Transform::SetScale(const glm::vec3& scale)
 {
     m_Scale = scale;
     m_IsTransformMatrixDirty = true;
 }
 
-glm::vec3 Infrastructure::Transform::GetPosition() const
+glm::vec3 RenderingEngine::Util::Transform::GetPosition() const
 {
     return m_Position;
 }
 
-glm::vec3 Infrastructure::Transform::GetRotation() const
+glm::vec3 RenderingEngine::Util::Transform::GetRotation() const
 {
     return m_Rotation;
 }
 
-glm::vec3 Infrastructure::Transform::GetScale() const
+glm::vec3 RenderingEngine::Util::Transform::GetScale() const
 {
     return m_Scale;
 }
 
-glm::mat4 Infrastructure::Transform::GetTransformMatrix() const
+glm::mat4 RenderingEngine::Util::Transform::GetTransformMatrix() const
 {
     if (!m_IsTransformMatrixDirty)
     {

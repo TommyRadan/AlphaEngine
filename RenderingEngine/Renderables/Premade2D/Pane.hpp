@@ -25,8 +25,8 @@
 #include <RenderingEngine/Renderables/Renderable.hpp>
 
 #include <RenderingEngine/OpenGL/OpenGL.hpp>
-#include <Infrastructure/Transform.hpp>
-#include <Infrastructure/Image.hpp>
+#include <RenderingEngine/Util/Transform.hpp>
+#include <RenderingEngine/Util/Image.hpp>
 
 namespace RenderingEngine
 {
@@ -34,10 +34,10 @@ namespace RenderingEngine
     {
         Pane(const glm::vec2& size);
 
-        void SetColor(const Infrastructure::Color& color);
-        void SetImage(const Infrastructure::Image& image);
+        void SetColor(const RenderingEngine::Util::Color& color);
+        void SetImage(const RenderingEngine::Util::Image& image);
 
-        Infrastructure::Transform transform;
+        RenderingEngine::Util::Transform transform;
 
         void Upload() final;
         void Render() final;
@@ -50,7 +50,7 @@ namespace RenderingEngine
         unsigned int m_VertexCount;
 
         glm::vec2 m_Size;
-        Infrastructure::Color m_Color;
+        RenderingEngine::Util::Color m_Color;
         RenderingEngine::OpenGL::Texture* m_Texture;
     };
 }

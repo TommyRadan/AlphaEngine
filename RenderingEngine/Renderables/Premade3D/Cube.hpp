@@ -25,7 +25,7 @@
 #include <RenderingEngine/Renderables/Renderable.hpp>
 
 #include <RenderingEngine/OpenGL/OpenGL.hpp>
-#include <Infrastructure/Transform.hpp>
+#include <RenderingEngine/Util/Transform.hpp>
 
 namespace RenderingEngine
 {
@@ -33,7 +33,7 @@ namespace RenderingEngine
     {
         Cube();
 
-        Infrastructure::Transform transform;
+        RenderingEngine::Util::Transform transform;
 
         void Upload() final;
         void Render() final;
