@@ -31,18 +31,6 @@ EventEngine::Context::Context() :
     m_IsQuitRequested { false }
 {}
 
-EventEngine::Context* EventEngine::Context::GetInstance()
-{
-    static Context* instance { nullptr };
-
-    if (instance == nullptr)
-    {
-        instance = new Context();
-    }
-
-    return instance;
-}
-
 void EventEngine::Context::Init()
 {
 	LOG_INFO("Init Event Engine");
@@ -76,9 +64,9 @@ const bool EventEngine::Context::IsQuitRequested() const
 void EventEngine::Context::HandleEvents()
 {
     SDL_Event events = { 0 };
-    Dispatch *dispatch = Dispatch::GetInstance();
+    Dispatch& dispatch = Dispatch::get_instance();
 
-    dispatch->DispatchOnFrameCallback();
+    dispatch.DispatchOnFrameCallback();
 
     SDL_PumpEvents();
     while (SDL_PollEvent(&events))
@@ -86,26 +74,26 @@ void EventEngine::Context::HandleEvents()
         switch (events.type)
         {
         case SDL_KEYDOWN:
-            dispatch->DispatchOnKeyDownCallback((KeyCode)events.key.keysym.sym);
+            dispatch.DispatchOnKeyDownCallback((KeyCode)events.key.keysym.sym);
             break;
 
         case SDL_KEYUP:
-            dispatch->DispatchOnKeyUpCallback((KeyCode)events.key.keysym.sym);
+            dispatch.DispatchOnKeyUpCallback((KeyCode)events.key.keysym.sym);
             break;
 
         case SDL_MOUSEBUTTONDOWN:
             switch (events.button.button)
             {
             case SDL_BUTTON_LEFT:
-                dispatch->DispatchOnKeyDownCallback(KeyCode::MOUSE_LEFT);
+                dispatch.DispatchOnKeyDownCallback(KeyCode::MOUSE_LEFT);
                 break;
 
             case SDL_BUTTON_RIGHT:
-                dispatch->DispatchOnKeyDownCallback(KeyCode::MOUSE_RIGHT);
+                dispatch.DispatchOnKeyDownCallback(KeyCode::MOUSE_RIGHT);
                 break;
 
             case SDL_BUTTON_MIDDLE:
-                dispatch->DispatchOnKeyDownCallback(KeyCode::MOUSE_MIDDLE);
+                dispatch.DispatchOnKeyDownCallback(KeyCode::MOUSE_MIDDLE);
                 break;
 
             default:
@@ -117,15 +105,15 @@ void EventEngine::Context::HandleEvents()
             switch (events.button.button)
             {
             case SDL_BUTTON_LEFT:
-                dispatch->DispatchOnKeyUpCallback(KeyCode::MOUSE_LEFT);
+                dispatch.DispatchOnKeyUpCallback(KeyCode::MOUSE_LEFT);
                 break;
 
             case SDL_BUTTON_RIGHT:
-                dispatch->DispatchOnKeyUpCallback(KeyCode::MOUSE_RIGHT);
+                dispatch.DispatchOnKeyUpCallback(KeyCode::MOUSE_RIGHT);
                 break;
 
             case SDL_BUTTON_MIDDLE:
-                dispatch->DispatchOnKeyUpCallback(KeyCode::MOUSE_MIDDLE);
+                dispatch.DispatchOnKeyUpCallback(KeyCode::MOUSE_MIDDLE);
                 break;
 
             default:
@@ -134,7 +122,7 @@ void EventEngine::Context::HandleEvents()
             break;
 
         case SDL_MOUSEMOTION:
-            dispatch->DispatchOnMouseMoveCallback(events.motion.xrel, events.motion.yrel);
+            dispatch.DispatchOnMouseMoveCallback(events.motion.xrel, events.motion.yrel);
             break;
 
         case SDL_QUIT:

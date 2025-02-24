@@ -46,18 +46,6 @@ Settings::Settings()
     m_IsMouseReversed = false;
 }
 
-Settings* const Settings::GetInstance()
-{
-    static Settings* instance = nullptr;
-
-    if (instance == nullptr)
-    {
-        instance = new Settings();
-    }
-
-    return instance;
-}
-
 const unsigned int Settings::GetWindowWidth() const noexcept
 {
     return m_WindowWidth;

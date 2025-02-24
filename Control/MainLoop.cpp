@@ -36,40 +36,40 @@ int main(int argc, char* argv[])
 
     try
     {
-        EventEngine::Context::GetInstance()->Init();
-        RenderingEngine::Context::GetInstance()->Init();
-        SceneGraph::Context::GetInstance()->Init();
+        EventEngine::Context::get_instance().Init();
+        RenderingEngine::Context::get_instance().Init();
+        SceneGraph::Context::get_instance().Init();
     }
     catch (const std::exception& e)
     {
-        RenderingEngine::Window::GetInstance()->ShowMessage("Initialization Error", e.what());
+        RenderingEngine::Window::get_instance().ShowMessage("Initialization Error", e.what());
         return EXIT_FAILURE;
     }
 
     try
     {
-        EventEngine::Dispatch::GetInstance()->DispatchOnEngineStartCallback();
+        EventEngine::Dispatch::get_instance().DispatchOnEngineStartCallback();
 
         for (;;)
         {
-            EventEngine::Context::GetInstance()->HandleEvents();
-            RenderingEngine::Context::GetInstance()->Render();
-            RenderingEngine::Window::GetInstance()->SwapBuffers();
-            Infrastructure::Time::GetInstance()->PerformTick();
+            EventEngine::Context::get_instance().HandleEvents();
+            RenderingEngine::Context::get_instance().Render();
+            RenderingEngine::Window::get_instance().SwapBuffers();
+            Infrastructure::Time::get_instance().PerformTick();
 
-            if (EventEngine::Context::GetInstance()->IsQuitRequested()) break;
+            if (EventEngine::Context::get_instance().IsQuitRequested()) break;
         }
 
-        EventEngine::Dispatch::GetInstance()->DispatchOnEngineStopCallback();
+        EventEngine::Dispatch::get_instance().DispatchOnEngineStopCallback();
     }
     catch (const std::exception& e)
     {
-        RenderingEngine::Window::GetInstance()->ShowMessage("Error", e.what());
+        RenderingEngine::Window::get_instance().ShowMessage("Error", e.what());
         return EXIT_FAILURE;
     }
 
-    SceneGraph::Context::GetInstance()->Quit();
-    RenderingEngine::Context::GetInstance()->Quit();
-    EventEngine::Context::GetInstance()->Quit();
+    SceneGraph::Context::get_instance().Quit();
+    RenderingEngine::Context::get_instance().Quit();
+    EventEngine::Context::get_instance().Quit();
     return EXIT_SUCCESS;
 }

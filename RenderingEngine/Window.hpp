@@ -24,14 +24,13 @@
 
 #include <string>
 
+#include <Infrastructure/singleton.hpp>
+
 namespace RenderingEngine
 {
-    class Window
+    struct Window : public singleton<Window>
     {
         Window();
-
-    public:
-        static Window* GetInstance();
 
         void Init();
         void Quit();

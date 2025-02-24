@@ -36,25 +36,13 @@ namespace RenderingEngine
             m_GlContext { nullptr }
     {}
 
-    Window* Window::GetInstance()
-    {
-        static Window* instance { nullptr };
-
-        if (instance == nullptr)
-        {
-            instance = new Window();
-        }
-
-        return instance;
-    }
-
     void Window::Init()
     {
         LOG_INFO("Init RenderingEngine::Window");
 
-        auto settings { Settings::GetInstance() };
+        Settings& settings { Settings::get_instance() };
         uint32_t window_flags { SDL_WINDOW_OPENGL };
-        auto type { settings->GetWindowType() };
+        auto type { settings.GetWindowType() };
 
         if (type == WinType::WIN_TYPE_BORDERLESS)
         {
@@ -74,15 +62,15 @@ namespace RenderingEngine
         SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE, 8);
         SDL_GL_SetAttribute(SDL_GL_BUFFER_SIZE, 32);
         SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 16);
-        SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, settings->IsDoubleBuffered());
+        SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, settings.IsDoubleBuffered());
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
 
         m_Window = SDL_CreateWindow(
-                settings->GetWindowName(),
+                settings.GetWindowName(),
                 SDL_WINDOWPOS_CENTERED,
                 SDL_WINDOWPOS_CENTERED,
-                settings->GetWindowWidth(),
-                settings->GetWindowHeight(),
+                settings.GetWindowWidth(),
+                settings.GetWindowHeight(),
                 window_flags
         );
 
@@ -107,9 +95,9 @@ namespace RenderingEngine
 
     void Window::Clear()
     {
-        OpenGL::Context::GetInstance()->ClearColor(RenderingEngine::Util::Color{ 0, 0, 0, 255 });
-        OpenGL::Context::GetInstance()->Clear(OpenGL::Buffer::Color);
-        OpenGL::Context::GetInstance()->Clear(OpenGL::Buffer::Depth);
+        OpenGL::Context::get_instance().ClearColor(RenderingEngine::Util::Color{ 0, 0, 0, 255 });
+        OpenGL::Context::get_instance().Clear(OpenGL::Buffer::Color);
+        OpenGL::Context::get_instance().Clear(OpenGL::Buffer::Depth);
     }
 
     void Window::SwapBuffers()

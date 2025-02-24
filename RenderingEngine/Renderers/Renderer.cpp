@@ -82,7 +82,7 @@ void RenderingEngine::Renderer::SetupOptions(const RenderOptions& options)
     for (auto& element : options.Textures)
     {
         this->UploadTextureReference(element.first, uploadedTextureReferences);
-        OpenGL::Context::GetInstance()->BindTexture(*element.second, uploadedTextureReferences);
+        OpenGL::Context::get_instance().BindTexture(*element.second, uploadedTextureReferences);
         uploadedTextureReferences++;
     }
 }
@@ -166,9 +166,9 @@ void RenderingEngine::Renderer::UploadVector4(const std::string& vec4Name, const
 
 void RenderingEngine::Renderer::ConstructProgram(const std::string& vsString, const std::string& fsString)
 {
-    m_VertexShader = OpenGL::Context::GetInstance()->CreateShader(OpenGL::ShaderType::Vertex);
-    m_FragmentShader = OpenGL::Context::GetInstance()->CreateShader(OpenGL::ShaderType::Fragment);
-    m_Program = OpenGL::Context::GetInstance()->CreateProgram();
+    m_VertexShader = OpenGL::Context::get_instance().CreateShader(OpenGL::ShaderType::Vertex);
+    m_FragmentShader = OpenGL::Context::get_instance().CreateShader(OpenGL::ShaderType::Fragment);
+    m_Program = OpenGL::Context::get_instance().CreateProgram();
 
     auto vs = (OpenGL::Shader*) m_VertexShader;
     auto fs = (OpenGL::Shader*) m_FragmentShader;
@@ -187,7 +187,7 @@ void RenderingEngine::Renderer::ConstructProgram(const std::string& vsString, co
 
 void RenderingEngine::Renderer::DestructProgram()
 {
-    OpenGL::Context::GetInstance()->DeleteShader((OpenGL::Shader*) m_VertexShader);
-    OpenGL::Context::GetInstance()->DeleteShader((OpenGL::Shader*) m_FragmentShader);
-    OpenGL::Context::GetInstance()->DeleteProgram((OpenGL::Program*) m_Program);
+    OpenGL::Context::get_instance().DeleteShader((OpenGL::Shader*) m_VertexShader);
+    OpenGL::Context::get_instance().DeleteShader((OpenGL::Shader*) m_FragmentShader);
+    OpenGL::Context::get_instance().DeleteProgram((OpenGL::Program*) m_Program);
 }

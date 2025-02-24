@@ -29,41 +29,41 @@ void RegisterGameModule(struct GameModuleInfo &info)
 {
     if (info.onEngineStart)
     {
-        EventEngine::Dispatch::GetInstance()->RegisterOnEngineStartCallback(info.onEngineStart);
+        EventEngine::Dispatch::get_instance().RegisterOnEngineStartCallback(info.onEngineStart);
     }
 
     if (info.onEngineStop)
     {
-        EventEngine::Dispatch::GetInstance()->RegisterOnEngineStopCallback(info.onEngineStop);
+        EventEngine::Dispatch::get_instance().RegisterOnEngineStopCallback(info.onEngineStop);
     }
 
     if (info.onFrame)
     {
-        EventEngine::Dispatch::GetInstance()->RegisterOnFrameCallback(info.onFrame);
+        EventEngine::Dispatch::get_instance().RegisterOnFrameCallback(info.onFrame);
     }
 
     if (info.onRenderScene)
     {
-        EventEngine::Dispatch::GetInstance()->RegisterOnRenderSceneCallback(info.onRenderScene);
+        EventEngine::Dispatch::get_instance().RegisterOnRenderSceneCallback(info.onRenderScene);
     }
 
     if (info.onRenderUi)
     {
-        EventEngine::Dispatch::GetInstance()->RegisterOnRenderUiCallback(info.onRenderUi);
+        EventEngine::Dispatch::get_instance().RegisterOnRenderUiCallback(info.onRenderUi);
     }
 
     if (info.onKeyDown)
     {
-        EventEngine::Dispatch::GetInstance()->RegisterOnKeyDownCallback(info.onKeyDown);
+        EventEngine::Dispatch::get_instance().RegisterOnKeyDownCallback(info.onKeyDown);
     }
 
     if (info.onKeyUp)
     {
-        EventEngine::Dispatch::GetInstance()->RegisterOnKeyUpCallback(info.onKeyUp);
+        EventEngine::Dispatch::get_instance().RegisterOnKeyUpCallback(info.onKeyUp);
     }
 
     if (info.onMouseMove)
     {
-        EventEngine::Dispatch::GetInstance()->RegisterOnMouseMoveCallback(info.onMouseMove);
+        EventEngine::Dispatch::get_instance().RegisterOnMouseMoveCallback(info.onMouseMove);
     }
 }

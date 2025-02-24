@@ -25,6 +25,8 @@
 #include <functional>
 #include <vector>
 
+#include <Infrastructure/singleton.hpp>
+
 namespace EventEngine
 {
     enum class KeyCode
@@ -44,13 +46,8 @@ namespace EventEngine
         MOUSE_MIDDLE = 141883
     };
 
-    class Dispatch
+    struct Dispatch : public singleton<Dispatch>
     {
-		Dispatch() = default;
-
-    public:
-        static Dispatch* GetInstance();
-
         void RegisterOnEngineStartCallback(std::function<void(void)> callback);
         void RegisterOnEngineStopCallback(std::function<void(void)> callback);
         void RegisterOnFrameCallback(std::function<void(void)> callback);

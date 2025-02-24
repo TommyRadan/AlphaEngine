@@ -57,18 +57,6 @@ RenderingEngine::Renderers::BasicRenderer::BasicRenderer() :
     ConstructProgram(vertexShader, fragmentShader);
 }
 
-RenderingEngine::Renderers::BasicRenderer* RenderingEngine::Renderers::BasicRenderer::GetInstance()
-{
-    static BasicRenderer* instance = nullptr;
-
-    if (instance == nullptr)
-    {
-        instance = new BasicRenderer;
-    }
-
-    return instance;
-}
-
 RenderingEngine::Renderers::BasicRenderer::~BasicRenderer()
 {
     DestructProgram();

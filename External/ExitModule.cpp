@@ -27,7 +27,7 @@
 static void OnKeyDown(EventEngine::KeyCode keyCode)
 {
     if (keyCode != EventEngine::KeyCode::ESCAPE) return;
-    EventEngine::Context::GetInstance()->RequestQuit();
+    EventEngine::Context::get_instance().RequestQuit();
 }
 
 GAME_MODULE()

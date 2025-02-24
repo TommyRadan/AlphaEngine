@@ -22,14 +22,13 @@
 
 #pragma once
 
+#include <Infrastructure/singleton.hpp>
+
 namespace EventEngine
 {
-	class Context
+	struct Context : public singleton<Context>
 	{
 		Context();
-
-	public:
-		static Context* GetInstance();
 
 		void Init();
 		void Quit();

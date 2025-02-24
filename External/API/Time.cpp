@@ -25,20 +25,20 @@
 
 float GetCurrentFPS()
 {
-    return Infrastructure::Time::GetInstance()->CurrentFps();
+    return Infrastructure::Time::get_instance().CurrentFps();
 }
 
 int GetFrameCount()
 {
-    return Infrastructure::Time::GetInstance()->FrameCount();
+    return Infrastructure::Time::get_instance().FrameCount();
 }
 
 double GetDeltaTime()
 {
-    return Infrastructure::Time::GetInstance()->DeltaTime();
+    return Infrastructure::Time::get_instance().DeltaTime();
 }
 
 float GetTotalTime()
 {
-    return Infrastructure::Time::GetInstance()->TotalTime();
+    return Infrastructure::Time::get_instance().TotalTime();
 }

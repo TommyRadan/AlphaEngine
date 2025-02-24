@@ -43,7 +43,7 @@ void RenderingEngine::Pane::SetColor(const RenderingEngine::Util::Color& color)
 
 void RenderingEngine::Pane::SetImage(const RenderingEngine::Util::Image& image)
 {
-    m_Texture = RenderingEngine::OpenGL::Context::GetInstance()->CreateTexture();
+    m_Texture = RenderingEngine::OpenGL::Context::get_instance().CreateTexture();
     m_Texture->Image2D(
         image.GetPixels(),
         RenderingEngine::OpenGL::DataType::UnsignedByte,
@@ -77,13 +77,13 @@ void RenderingEngine::Pane::Upload()
 
     uint32_t indicies[6] = { 3, 0, 1, 3, 1, 2 };
 
-    m_VertexBuffer = OpenGL::Context::GetInstance()->CreateVBO();
+    m_VertexBuffer = OpenGL::Context::get_instance().CreateVBO();
     m_VertexBuffer->Data(vertex, sizeof(vertex), RenderingEngine::OpenGL::BufferUsage::StaticDraw);
 
-    m_IndiciesBuffer = OpenGL::Context::GetInstance()->CreateVBO();
+    m_IndiciesBuffer = OpenGL::Context::get_instance().CreateVBO();
     m_IndiciesBuffer->ElementData(indicies, sizeof(indicies), RenderingEngine::OpenGL::BufferUsage::StaticDraw);
 
-    m_VertexArrayObject = OpenGL::Context::GetInstance()->CreateVAO();
+    m_VertexArrayObject = OpenGL::Context::get_instance().CreateVAO();
     m_VertexArrayObject->BindAttribute(0, *m_VertexBuffer, RenderingEngine::OpenGL::Type::Float, 3, sizeof(VertexPositionUv), 0);
     m_VertexArrayObject->BindAttribute(1, *m_VertexBuffer, RenderingEngine::OpenGL::Type::Float, 2, sizeof(VertexPositionUv), sizeof(glm::vec3));
     m_VertexArrayObject->BindElements(*m_IndiciesBuffer);
@@ -111,7 +111,7 @@ void RenderingEngine::Pane::Render()
     }
     currentRenderer->SetupOptions(options);
 
-    RenderingEngine::OpenGL::Context::GetInstance()->DrawElements(
+    RenderingEngine::OpenGL::Context::get_instance().DrawElements(
         *m_VertexArrayObject, RenderingEngine::OpenGL::Primitive::Triangles,
         0, m_VertexCount, RenderingEngine::OpenGL::Type::UnsignedInt);
 }

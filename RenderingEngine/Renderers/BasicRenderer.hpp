@@ -23,17 +23,15 @@
 #pragma once
 
 #include <RenderingEngine/Renderers/Renderer.hpp>
+#include <Infrastructure/singleton.hpp>
 
 namespace RenderingEngine
 {
 	namespace Renderers
 	{
-		class BasicRenderer : public Renderer
+		struct BasicRenderer : public Renderer, public singleton<BasicRenderer>
 		{
 			BasicRenderer();
-
-		public:
-			static BasicRenderer* GetInstance();
 
 			~BasicRenderer();
 		};

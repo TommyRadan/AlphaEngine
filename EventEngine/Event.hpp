@@ -24,28 +24,57 @@
 
 namespace EventEngine
 {
-    enum class EventType
+    struct engine_start : public Event
     {
-        NO_TYPE,
-
-        ENGINE_START,
-        ENGINE_STOP,
-
-        SCRIPT_START,
-        SCRIPT_STOP,
-
-        FRAME,
-
-        KEY_UP,
-        KEY_DOWN,
-        MOUSE_MOVE
+        engine_start() {}
     };
 
-    class Event
+    struct engine_stop : public Event
     {
-        Event(EventType type) : m_type{ type } {}
+        engine_stop() {}
+    };
 
-    protected:
-        EventType m_type;
+    struct script_start : public Event
+    {
+        script_start() {}
+    };
+
+    struct script_stop : public Event
+    {
+        script_stop() {}
+    };
+
+    struct frame : public Event
+    {
+        frame() {}
+
+        float m_deltaTime;
+    };
+
+    struct key_up : public Event
+    {
+        key_up() {}
+
+        int m_keyCode;
+    };
+
+    struct key_down : public Event
+    {
+        key_down() {}
+
+        int m_keyCode;
+    };
+
+    struct mouse_move : public Event
+    {
+        mouse_move() {}
+
+        int m_x;
+        int m_y;
+    };
+
+    struct event
+    {
+        event() = default;
     };
 }

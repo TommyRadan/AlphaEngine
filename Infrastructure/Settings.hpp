@@ -24,6 +24,8 @@
 
 #include <string>
 
+#include <Infrastructure/singleton.hpp>
+
 enum class WinType
 {
 	WIN_TYPE_WINDOWED,
@@ -31,12 +33,9 @@ enum class WinType
 	WIN_TYPE_FULLSCREEN
 };
 
-class Settings
+struct Settings : public singleton<Settings>
 {
 	Settings();
-
-public:
-	static Settings* const GetInstance();
 
 	const unsigned int GetWindowWidth() const noexcept;
 	const unsigned int GetWindowHeight() const noexcept;
