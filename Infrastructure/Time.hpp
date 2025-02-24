@@ -24,14 +24,13 @@
 
 #include <cstdint>
 
+#include "singleton.hpp"
+
 namespace Infrastructure
 {
-    class Time
+    struct Time : public singleton<Time>
     {
         Time();
-
-    public:
-        static Time* const GetInstance();
 
         void PerformTick();
 

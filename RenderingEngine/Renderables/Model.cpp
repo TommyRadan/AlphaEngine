@@ -35,13 +35,13 @@ void RenderingEngine::Model::UploadMesh(const RenderingEngine::Mesh& mesh)
 {
     m_VertexCount = mesh.VertexCount();
 
-    m_VertexBufferObject = OpenGL::Context::GetInstance()->CreateVBO();
+    m_VertexBufferObject = OpenGL::Context::get_instance().CreateVBO();
 
     m_VertexBufferObject->Data(mesh.Vertices(),
                                m_VertexCount * sizeof(RenderingEngine::VertexPositionUvNormal),
                                RenderingEngine::OpenGL::BufferUsage::StaticDraw);
 
-    m_VertexArrayObject = OpenGL::Context::GetInstance()->CreateVAO();
+    m_VertexArrayObject = OpenGL::Context::get_instance().CreateVAO();
 
     m_VertexArrayObject->BindAttribute(0, *m_VertexBufferObject,
                                        RenderingEngine::OpenGL::Type::Float,
@@ -69,7 +69,7 @@ void RenderingEngine::Model::Render()
     currentRenderer->UploadMatrix4("modelMatrix", transform.GetTransformMatrix());
 	currentRenderer->SetupOptions(options);
 
-    RenderingEngine::OpenGL::Context::GetInstance()->DrawArrays(*m_VertexArrayObject,
+    RenderingEngine::OpenGL::Context::get_instance().DrawArrays(*m_VertexArrayObject,
                                                                 RenderingEngine::OpenGL::Primitive::Triangles,
                                                                 0, m_VertexCount);
 }

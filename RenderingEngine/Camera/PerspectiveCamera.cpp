@@ -27,10 +27,10 @@
 
 RenderingEngine::PerspectiveCamera::PerspectiveCamera()
 {
-    const Settings* settings = Settings::GetInstance();
+    const Settings& settings = Settings::get_instance();
 
-    fieldOfView = settings->GetFieldOfView();
-    aspectRatio = settings->GetAspectRatio();
+    fieldOfView = settings.GetFieldOfView();
+    aspectRatio = settings.GetAspectRatio();
     nearClip = 0.1f;
     farClip = 10000.0f;
 }

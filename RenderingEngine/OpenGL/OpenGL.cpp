@@ -25,18 +25,6 @@
 #include <RenderingEngine/OpenGL/OpenGL.hpp>
 #include <Infrastructure/Log.hpp>
 
-RenderingEngine::OpenGL::Context* RenderingEngine::OpenGL::Context::GetInstance()
-{
-    static Context *instance { nullptr };
-
-    if (instance == nullptr)
-    {
-        instance = new Context();
-    }
-
-    return instance;
-}
-
 void RenderingEngine::OpenGL::Context::Init()
 {
     LOG_INFO("Init RenderingEngine::OpenGL");

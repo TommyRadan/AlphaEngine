@@ -30,15 +30,14 @@
 #include <RenderingEngine/OpenGL/VertexArray.hpp>
 #include <RenderingEngine/OpenGL/VertexBuffer.hpp>
 #include <RenderingEngine/Util/Color.hpp>
+#include <Infrastructure/singleton.hpp>
 
 namespace RenderingEngine
 {
     namespace OpenGL
     {
-        struct Context
+        struct Context : public singleton<Context>
         {
-            static Context* GetInstance();
-
             void Init();
             void Quit();
 

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2015-2019 Tomislav Radanovic
+ * Copyright (c) 2015-2025 Tomislav Radanovic
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -20,19 +20,28 @@
  * SOFTWARE.
  */
 
-#include <SceneGraph/SceneGraph.hpp>
+#pragma once
 
-#include <Infrastructure/Log.hpp>
+/**
+ * @brief A generic singleton class
+ * @tparam T The class that will be a singleton
+ */
+template <typename T>
+class singleton {
+public:
+    /**
+     * @brief Returns the instance of the singleton
+     * @return The instance of the singleton
+     */
+    static T& get_instance() {
+        static T instance;
+        return instance;
+    }
 
-#include <string>
+    singleton(const singleton&) = delete;
+    singleton& operator=(const singleton&) = delete;
 
-
-void SceneGraph::Context::Init()
-{
-    LOG_INFO("Init Scene Graph");
-}
-
-void SceneGraph::Context::Quit()
-{
-    LOG_INFO("Quit Scene Graph");
-}
+protected:
+    singleton() {}
+    virtual ~singleton() {}
+};

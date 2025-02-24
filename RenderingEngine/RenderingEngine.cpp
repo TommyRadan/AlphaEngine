@@ -32,57 +32,45 @@
 #include <Infrastructure/Log.hpp>
 #include <RenderingEngine/Renderables/Premade3D/Cube.hpp>
 
-RenderingEngine::Context* RenderingEngine::Context::GetInstance()
-{
-    static Context* instance = nullptr;
-
-    if (instance == nullptr)
-    {
-        instance = new Context;
-    }
-
-    return instance;
-}
-
 void RenderingEngine::Context::Init()
 {
     LOG_INFO("Init Rendering Engine");
 
-    RenderingEngine::Window::GetInstance()->Init();
-    RenderingEngine::OpenGL::Context::GetInstance()->Init();
+    RenderingEngine::Window::get_instance().Init();
+    RenderingEngine::OpenGL::Context::get_instance().Init();
 
-    RenderingEngine::OpenGL::Context::GetInstance()->Enable(RenderingEngine::OpenGL::Capability::CullFace);
-    RenderingEngine::OpenGL::Context::GetInstance()->Enable(RenderingEngine::OpenGL::Capability::DepthTest);
-    RenderingEngine::OpenGL::Context::GetInstance()->Enable(RenderingEngine::OpenGL::Capability::Blend);
+    RenderingEngine::OpenGL::Context::get_instance().Enable(RenderingEngine::OpenGL::Capability::CullFace);
+    RenderingEngine::OpenGL::Context::get_instance().Enable(RenderingEngine::OpenGL::Capability::DepthTest);
+    RenderingEngine::OpenGL::Context::get_instance().Enable(RenderingEngine::OpenGL::Capability::Blend);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    RenderingEngine::Renderers::BasicRenderer::GetInstance();
-    RenderingEngine::Renderers::OverlayRenderer::GetInstance();
+    RenderingEngine::Renderers::BasicRenderer::get_instance();
+    RenderingEngine::Renderers::OverlayRenderer::get_instance();
 }
 
 void RenderingEngine::Context::Quit()
 {
-    RenderingEngine::OpenGL::Context::GetInstance()->Quit();
-    RenderingEngine::Window::GetInstance()->Quit();
+    RenderingEngine::OpenGL::Context::get_instance().Quit();
+    RenderingEngine::Window::get_instance().Quit();
 
     LOG_INFO("Quit Rendering Engine");
 }
 
 void RenderingEngine::Context::Render()
 {
-    RenderingEngine::Window::GetInstance()->Clear();
+    RenderingEngine::Window::get_instance().Clear();
 
     if (RenderingEngine::Camera::GetCurrentCamera() != nullptr)
     {
-        RenderingEngine::Renderers::BasicRenderer::GetInstance()->StartRenderer();
-        RenderingEngine::Renderers::BasicRenderer::GetInstance()->SetupCamera();
-        EventEngine::Dispatch::GetInstance()->DispatchOnRenderSceneCallback();
-        RenderingEngine::Renderers::BasicRenderer::GetInstance()->StopRenderer();
+        RenderingEngine::Renderers::BasicRenderer::get_instance().StartRenderer();
+        RenderingEngine::Renderers::BasicRenderer::get_instance().SetupCamera();
+        EventEngine::Dispatch::get_instance().DispatchOnRenderSceneCallback();
+        RenderingEngine::Renderers::BasicRenderer::get_instance().StopRenderer();
     }
 
-    RenderingEngine::OpenGL::Context::GetInstance()->Disable(RenderingEngine::OpenGL::Capability::DepthTest);
-    RenderingEngine::Renderers::OverlayRenderer::GetInstance()->StartRenderer();
-    EventEngine::Dispatch::GetInstance()->DispatchOnRenderUiCallback();
-    RenderingEngine::Renderers::OverlayRenderer::GetInstance()->StopRenderer();
-    RenderingEngine::OpenGL::Context::GetInstance()->Enable(RenderingEngine::OpenGL::Capability::DepthTest);
+    RenderingEngine::OpenGL::Context::get_instance().Disable(RenderingEngine::OpenGL::Capability::DepthTest);
+    RenderingEngine::Renderers::OverlayRenderer::get_instance().StartRenderer();
+    EventEngine::Dispatch::get_instance().DispatchOnRenderUiCallback();
+    RenderingEngine::Renderers::OverlayRenderer::get_instance().StopRenderer();
+    RenderingEngine::OpenGL::Context::get_instance().Enable(RenderingEngine::OpenGL::Capability::DepthTest);
 }

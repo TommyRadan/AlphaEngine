@@ -59,18 +59,6 @@ RenderingEngine::Renderers::OverlayRenderer::OverlayRenderer() :
     ConstructProgram(vertexShader, fragmentShader);
 }
 
-RenderingEngine::Renderers::OverlayRenderer* RenderingEngine::Renderers::OverlayRenderer::GetInstance()
-{
-    static OverlayRenderer* instance = nullptr;
-
-    if (instance == nullptr)
-    {
-        instance = new OverlayRenderer;
-    }
-
-    return instance;
-}
-
 RenderingEngine::Renderers::OverlayRenderer::~OverlayRenderer()
 {
     DestructProgram();

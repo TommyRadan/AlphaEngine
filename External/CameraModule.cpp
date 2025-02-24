@@ -59,7 +59,7 @@ static void OnFrame()
     GetCameraRot(cameraId, &rotation.x, &rotation.y, &rotation.z);
 
     float speed = 3.0f;
-    if (EventEngine::Dispatch::GetInstance()->IsKeyPressed(EventEngine::KeyCode::SHIFT))
+    if (EventEngine::Dispatch::get_instance().IsKeyPressed(EventEngine::KeyCode::SHIFT))
     {
         speed = 30.0f;
     }
@@ -68,32 +68,32 @@ static void OnFrame()
     glm::vec3 upVector {0.0f, 0.0f, 1.0f};
     glm::vec3 newPosition = position;
 
-    if (EventEngine::Dispatch::GetInstance()->IsKeyPressed(EventEngine::KeyCode::W))
+    if (EventEngine::Dispatch::get_instance().IsKeyPressed(EventEngine::KeyCode::W))
     {
         newPosition += rotation * distance;
     }
 
-    if (EventEngine::Dispatch::GetInstance()->IsKeyPressed(EventEngine::KeyCode::A))
+    if (EventEngine::Dispatch::get_instance().IsKeyPressed(EventEngine::KeyCode::A))
     {
         newPosition -= glm::cross(rotation, upVector) * distance;
     }
 
-    if (EventEngine::Dispatch::GetInstance()->IsKeyPressed(EventEngine::KeyCode::S))
+    if (EventEngine::Dispatch::get_instance().IsKeyPressed(EventEngine::KeyCode::S))
     {
         newPosition -= rotation * distance;
     }
 
-    if (EventEngine::Dispatch::GetInstance()->IsKeyPressed(EventEngine::KeyCode::D))
+    if (EventEngine::Dispatch::get_instance().IsKeyPressed(EventEngine::KeyCode::D))
     {
         newPosition += glm::cross(rotation, upVector) * distance;
     }
 
-    if (EventEngine::Dispatch::GetInstance()->IsKeyPressed(EventEngine::KeyCode::SPACE))
+    if (EventEngine::Dispatch::get_instance().IsKeyPressed(EventEngine::KeyCode::SPACE))
     {
         newPosition += upVector * distance;
     }
 
-    if (EventEngine::Dispatch::GetInstance()->IsKeyPressed(EventEngine::KeyCode::CTRL))
+    if (EventEngine::Dispatch::get_instance().IsKeyPressed(EventEngine::KeyCode::CTRL))
     {
         newPosition -= upVector * distance;
     }
@@ -104,7 +104,7 @@ static void OnFrame()
 static void OnMouseMove(int32_t deltaX, int32_t deltaY)
 {
 #if _DEBUG
-    if (!EventEngine::Dispatch::GetInstance()->IsKeyPressed(EventEngine::KeyCode::MOUSE_LEFT))
+    if (!EventEngine::Dispatch::get_instance().IsKeyPressed(EventEngine::KeyCode::MOUSE_LEFT))
     {
         return;
     }
@@ -121,8 +121,8 @@ static void OnMouseMove(int32_t deltaX, int32_t deltaY)
     glm::vec3 upVector { 0.0f, 0.0f, 1.0f };
     glm::vec3 pitchAxis { glm::cross(glm::normalize(glm::vec3 {rotation.x, rotation.y, 0.0f}), upVector) };
 
-    float sensitivity = Settings::GetInstance()->GetMouseSensitivity();
-    int pitchMultiplier = Settings::GetInstance()->IsMouseReversed() ? -1 : 1;
+    float sensitivity = Settings::get_instance().GetMouseSensitivity();
+    int pitchMultiplier = Settings::get_instance().IsMouseReversed() ? -1 : 1;
 
     rotation = glm::vec4(rotation, 0.0f) * glm::rotate(sensitivity * deltaX, rotationAxis);
 

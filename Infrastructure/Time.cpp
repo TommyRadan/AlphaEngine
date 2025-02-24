@@ -23,18 +23,6 @@
 #include <Infrastructure/Time.hpp>
 #include <SDL.h>
 
-Infrastructure::Time* const Infrastructure::Time::GetInstance()
-{
-    static Time* instance = nullptr;
-
-    if (instance == nullptr)
-    {
-        instance = new Time();
-    }
-
-    return instance;
-}
-
 Infrastructure::Time::Time() :
     m_FrameCount { 0 },
     m_DeltaTime { 0 }

@@ -23,17 +23,15 @@
 #pragma once
 
 #include <RenderingEngine/Renderers/Renderer.hpp>
+#include <Infrastructure/singleton.hpp>
 
 namespace RenderingEngine
 {
 	namespace Renderers
 	{
-		class OverlayRenderer : public Renderer
+		struct OverlayRenderer : public Renderer, public singleton<OverlayRenderer>
 		{
             OverlayRenderer();
-
-		public:
-			static OverlayRenderer* GetInstance();
 
 			~OverlayRenderer();
 		};

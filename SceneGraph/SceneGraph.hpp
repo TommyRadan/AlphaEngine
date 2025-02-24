@@ -24,15 +24,12 @@
 
 #include <string>
 
+#include <Infrastructure/singleton.hpp>
+
 namespace SceneGraph
 {
-    class Context
+    struct Context : public singleton<Context>
     {
-        Context() = default;
-
-    public:
-        static Context* GetInstance();
-
         void Init();
         void Quit();
     };

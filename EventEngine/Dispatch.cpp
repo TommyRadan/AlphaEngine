@@ -25,18 +25,6 @@
 #include <SDL.h>
 #include <algorithm>
 
-EventEngine::Dispatch* EventEngine::Dispatch::GetInstance()
-{
-    static Dispatch* instance = nullptr;
-
-    if (instance == nullptr)
-    {
-        instance = new Dispatch;
-    }
-
-    return instance;
-}
-
 void EventEngine::Dispatch::RegisterOnEngineStartCallback(std::function<void(void)> callback)
 {
     m_OnEngineStartCallbacks.push_back(callback);
