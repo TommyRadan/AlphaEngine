@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2015-2019 Tomislav Radanovic
+ * Copyright (c) 2015-2025 Tomislav Radanovic
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -22,20 +22,21 @@
 
 #pragma once
 
-#include <EventEngine/Dispatch.hpp>
+#include <event_engine/event_engine.hpp>
 #include <string>
 
 struct GameModuleInfo
 {
-    std::function<void(void)> onEngineStart;
-    std::function<void(void)> onEngineStop;
-    std::function<void(void)> onFrame;
-    std::function<void(void)> onRenderScene;
-    std::function<void(void)> onRenderUi;
-    std::function<void(EventEngine::KeyCode)> onKeyDown;
-    std::function<void(EventEngine::KeyCode)> onKeyUp;
-    std::function<void(EventEngine::KeyCode)> keyPressed;
-    std::function<void(int32_t, int32_t)> onMouseMove;
+    std::function<void(const event_engine::event&)> onEngineStart;
+    std::function<void(const event_engine::event&)> onEngineStop;
+    std::function<void(const event_engine::event&)> onFrame;
+    std::function<void(const event_engine::event&)> onRenderScene;
+    std::function<void(const event_engine::event&)> onRenderUi;
+    std::function<void(const event_engine::event&)> onKeyDown;
+    std::function<void(const event_engine::event&)> onKeyUp;
+    std::function<void(const event_engine::event&)> onMouseKeyDown;
+    std::function<void(const event_engine::event&)> onMouseKeyUp;
+    std::function<void(const event_engine::event&)> onMouseMove;
 
     GameModuleInfo() :
         onEngineStart { nullptr },
@@ -45,7 +46,8 @@ struct GameModuleInfo
         onRenderUi { nullptr },
         onKeyDown { nullptr },
         onKeyUp { nullptr },
-        keyPressed { nullptr },
+        onMouseKeyDown { nullptr },
+        onMouseKeyUp { nullptr },
         onMouseMove { nullptr }
     {}
 };

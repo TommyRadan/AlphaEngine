@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2015-2019 Tomislav Radanovic
+ * Copyright (c) 2015-2025 Tomislav Radanovic
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -22,10 +22,12 @@
 
 #include <stdexcept>
 
+#include <event_engine/event_engine.hpp>
 #include <RenderingEngine/Window.hpp>
 #include <RenderingEngine/OpenGL/OpenGL.hpp>
 #include <SDL.h>
 #include <Infrastructure/Settings.hpp>
+#include <Infrastructure/Time.hpp>
 #include <RenderingEngine/Util/Color.hpp>
 #include <Infrastructure/Log.hpp>
 
@@ -39,6 +41,13 @@ namespace RenderingEngine
     void Window::Init()
     {
         LOG_INFO("Init RenderingEngine::Window");
+
+        if (SDL_InitSubSystem(SDL_INIT_VIDEO) != 0)
+        {
+            LOG_FATAL("Could not initialize video system");
+            LOG_FATAL("SDL_Error: %s", SDL_GetError());
+            throw std::runtime_error {"Could not initialize video system"};
+        }
 
         Settings& settings { Settings::get_instance() };
         uint32_t window_flags { SDL_WINDOW_OPENGL };
@@ -90,6 +99,8 @@ namespace RenderingEngine
         SDL_GL_DeleteContext(m_GlContext);
         SDL_DestroyWindow((SDL_Window*) m_Window);
 
+        SDL_QuitSubSystem(SDL_INIT_VIDEO);
+
         LOG_INFO("Quit RenderingEngine::Window");
     }
 
@@ -123,5 +134,97 @@ namespace RenderingEngine
     {
         SDL_ShowCursor(SDL_DISABLE);
         SDL_SetRelativeMouseMode(SDL_TRUE);
+    }
+
+    void Window::Tick()
+    {
+        SDL_Event events = { 0 };
+
+        event_engine::frame frame;
+        frame.m_delta_time = Infrastructure::Time::get_instance().DeltaTime();
+        event_engine::context::get_instance().broadcast(frame);
+
+        SDL_PumpEvents();
+        while (SDL_PollEvent(&events))
+        {
+            switch (events.type)
+            {
+            case SDL_KEYDOWN: {
+                event_engine::key_down key_down;
+                key_down.m_key_code = (event_engine::key_code) events.key.keysym.sym;
+                event_engine::context::get_instance().broadcast(key_down);
+                break;
+            }
+
+            case SDL_KEYUP: {
+                event_engine::key_up key_up;
+                key_up.m_key_code = (event_engine::key_code) events.key.keysym.sym;
+                event_engine::context::get_instance().broadcast(key_up);
+                break;
+            }
+
+            case SDL_MOUSEBUTTONDOWN: {
+                event_engine::mouse_key_down mouse_key_down;
+                switch (events.button.button)
+                {
+                case SDL_BUTTON_LEFT:
+                    mouse_key_down.m_key_code = event_engine::mouse_key_code::LEFT;
+                    break;
+
+                case SDL_BUTTON_RIGHT:
+                    mouse_key_down.m_key_code = event_engine::mouse_key_code::RIGHT;
+                    break;
+
+                case SDL_BUTTON_MIDDLE:
+                    mouse_key_down.m_key_code = event_engine::mouse_key_code::MIDDLE;
+                    break;
+
+                default:
+                    break;
+                }
+                event_engine::context::get_instance().broadcast(mouse_key_down);
+                break;
+            }
+
+            case SDL_MOUSEBUTTONUP: {
+                event_engine::mouse_key_up mouse_key_up;
+                mouse_key_up.m_key_code = event_engine::mouse_key_code::LEFT;
+                switch (events.button.button)
+                {
+                case SDL_BUTTON_LEFT:
+                mouse_key_up.m_key_code = event_engine::mouse_key_code::LEFT;
+                    break;
+
+                case SDL_BUTTON_RIGHT:
+                    mouse_key_up.m_key_code = event_engine::mouse_key_code::RIGHT;
+                    break;
+
+                case SDL_BUTTON_MIDDLE:
+                    mouse_key_up.m_key_code = event_engine::mouse_key_code::MIDDLE;
+                    break;
+
+                default:
+                    break;
+                }
+                event_engine::context::get_instance().broadcast(mouse_key_up);
+                break;
+            }
+
+            case SDL_MOUSEMOTION: {
+                event_engine::mouse_move mouse_move;
+                mouse_move.m_x = events.motion.x;
+                mouse_move.m_y = events.motion.y;
+                event_engine::context::get_instance().broadcast(mouse_move);
+                break;
+            }
+
+            case SDL_QUIT:
+                event_engine::context::get_instance().broadcast(event_engine::quit_requested());
+                break;
+
+            default:
+                break;
+            }
+        }
     }
 }

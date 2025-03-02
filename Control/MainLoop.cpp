@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2015-2019 Tomislav Radanovic
+ * Copyright (c) 2015-2025 Tomislav Radanovic
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -22,13 +22,19 @@
 
 #include <stdexcept>
 
-#include <EventEngine/EventEngine.hpp>
-#include <EventEngine/Dispatch.hpp>
+#include <event_engine/event_engine.hpp>
 #include <RenderingEngine/RenderingEngine.hpp>
 #include <RenderingEngine/Window.hpp>
 #include <Infrastructure/Log.hpp>
 #include <Infrastructure/Time.hpp>
 #include <SceneGraph/SceneGraph.hpp>
+
+bool is_quit_requested = false;
+
+void quit_request_listener(const event_engine::event& event)
+{
+    is_quit_requested = true;
+}
 
 int main(int argc, char* argv[])
 {
@@ -36,7 +42,7 @@ int main(int argc, char* argv[])
 
     try
     {
-        EventEngine::Context::get_instance().Init();
+        event_engine::context::get_instance().init();
         RenderingEngine::Context::get_instance().Init();
         SceneGraph::Context::get_instance().Init();
     }
@@ -48,19 +54,20 @@ int main(int argc, char* argv[])
 
     try
     {
-        EventEngine::Dispatch::get_instance().DispatchOnEngineStartCallback();
+        event_engine::context::get_instance().register_listener(event_engine::event_type::quit_requested, quit_request_listener);
+        event_engine::context::get_instance().broadcast(event_engine::engine_start());
 
         for (;;)
         {
-            EventEngine::Context::get_instance().HandleEvents();
+            RenderingEngine::Window::get_instance().Tick();
             RenderingEngine::Context::get_instance().Render();
             RenderingEngine::Window::get_instance().SwapBuffers();
             Infrastructure::Time::get_instance().PerformTick();
 
-            if (EventEngine::Context::get_instance().IsQuitRequested()) break;
+            if (is_quit_requested) break;
         }
 
-        EventEngine::Dispatch::get_instance().DispatchOnEngineStopCallback();
+        event_engine::context::get_instance().broadcast(event_engine::engine_stop());
     }
     catch (const std::exception& e)
     {
@@ -70,6 +77,6 @@ int main(int argc, char* argv[])
 
     SceneGraph::Context::get_instance().Quit();
     RenderingEngine::Context::get_instance().Quit();
-    EventEngine::Context::get_instance().Quit();
+    event_engine::context::get_instance().quit();
     return EXIT_SUCCESS;
 }

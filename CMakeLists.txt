@@ -74,7 +74,7 @@ add_custom_target(build-time-make-directory ALL
 include_directories(${CMAKE_SOURCE_DIR})
 
 # Main executable
-file(GLOB EVENT_ENGINE_FILES "EventEngine/*.hpp" "EventEngine/*.cpp")
+file(GLOB EVENT_ENGINE_FILES "event_engine/*.hpp" "event_engine/*.cpp")
 file(GLOB INFRASTRUCTURE_FILES "Infrastructure/*.hpp" "Infrastructure/*.cpp")
 file(GLOB SCENE_GRAPH_FILES "SceneGraph/*.hpp" "SceneGraph/*.cpp")
 file(GLOB RENDERING_ENGINE_FILES

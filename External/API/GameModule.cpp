@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2015-2019 Tomislav Radanovic
+ * Copyright (c) 2015-2025 Tomislav Radanovic
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -23,47 +23,57 @@
 #define INTERNAL_GAMEMODULE_IMPLEMENTATION
 #include "GameModule.hpp"
 #undef INTERNAL_GAMEMODULE_IMPLEMENTATION
-#include <EventEngine/Dispatch.hpp>
+#include <event_engine/event_engine.hpp>
 
 void RegisterGameModule(struct GameModuleInfo &info)
 {
     if (info.onEngineStart)
     {
-        EventEngine::Dispatch::get_instance().RegisterOnEngineStartCallback(info.onEngineStart);
+        event_engine::context::get_instance().register_listener(event_engine::event_type::engine_start, info.onEngineStart);
     }
 
     if (info.onEngineStop)
     {
-        EventEngine::Dispatch::get_instance().RegisterOnEngineStopCallback(info.onEngineStop);
+        event_engine::context::get_instance().register_listener(event_engine::event_type::engine_stop, info.onEngineStop);
     }
 
     if (info.onFrame)
     {
-        EventEngine::Dispatch::get_instance().RegisterOnFrameCallback(info.onFrame);
+        event_engine::context::get_instance().register_listener(event_engine::event_type::frame, info.onFrame);
     }
 
     if (info.onRenderScene)
     {
-        EventEngine::Dispatch::get_instance().RegisterOnRenderSceneCallback(info.onRenderScene);
+        event_engine::context::get_instance().register_listener(event_engine::event_type::render_scene, info.onRenderScene);
     }
 
     if (info.onRenderUi)
     {
-        EventEngine::Dispatch::get_instance().RegisterOnRenderUiCallback(info.onRenderUi);
+        event_engine::context::get_instance().register_listener(event_engine::event_type::render_ui, info.onRenderScene);
+    }
+
+    if (info.onMouseKeyDown)
+    {
+        event_engine::context::get_instance().register_listener(event_engine::event_type::mouse_key_down, info.onMouseKeyDown);
+    }
+
+    if (info.onMouseKeyUp)
+    {
+        event_engine::context::get_instance().register_listener(event_engine::event_type::mouse_key_up, info.onMouseKeyUp);
     }
 
     if (info.onKeyDown)
     {
-        EventEngine::Dispatch::get_instance().RegisterOnKeyDownCallback(info.onKeyDown);
+        event_engine::context::get_instance().register_listener(event_engine::event_type::key_down, info.onKeyDown);
     }
 
     if (info.onKeyUp)
     {
-        EventEngine::Dispatch::get_instance().RegisterOnKeyUpCallback(info.onKeyUp);
+        event_engine::context::get_instance().register_listener(event_engine::event_type::key_up, info.onKeyUp);
     }
 
     if (info.onMouseMove)
     {
-        EventEngine::Dispatch::get_instance().RegisterOnMouseMoveCallback(info.onMouseMove);
+        event_engine::context::get_instance().register_listener(event_engine::event_type::mouse_move, info.onMouseMove);
     }
 }

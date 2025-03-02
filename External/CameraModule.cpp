@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2015-2019 Tomislav Radanovic
+ * Copyright (c) 2015-2025 Tomislav Radanovic
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -20,6 +20,8 @@
  * SOFTWARE.
  */
 
+#include <map>
+
 #include "API/GameModule.hpp"
 #include "API/Time.hpp"
 #include "API/Log.hpp"
@@ -31,8 +33,10 @@
 #include <gtx/vector_angle.hpp>
 
 CameraId cameraId = 0;
+std::map<event_engine::key_code, bool> keys;
+std::map<event_engine::mouse_key_code, bool> mouse_keys;
 
-static void OnEngineStart()
+static void OnEngineStart(const event_engine::event& event)
 {
     cameraId = CreateCamera(CameraType::Perspective);
     AttachCamera(cameraId);
@@ -40,12 +44,36 @@ static void OnEngineStart()
     SetCameraPos(cameraId, -5.0, 0.0, 0.0);
 }
 
-static void OnEngineStop()
+static void OnEngineStop(const event_engine::event& event)
 {
     DestroyCamera(cameraId);
 }
 
-static void OnFrame()
+static void OnKeyDown(const event_engine::event& event)
+{
+    auto key_event = dynamic_cast<const event_engine::key_down*>(&event);
+    keys[key_event->m_key_code] = true;
+}
+
+static void OnKeyUp(const event_engine::event& event)
+{
+    auto key_event = dynamic_cast<const event_engine::key_up*>(&event);
+    keys[key_event->m_key_code] = false;
+}
+
+static void OnMouseKeyDown(const event_engine::event& event)
+{
+    auto mouse_event = dynamic_cast<const event_engine::mouse_key_down*>(&event);
+    mouse_keys[mouse_event->m_key_code] = true;
+}
+
+static void OnMouseKeyUp(const event_engine::event& event)
+{
+    auto mouse_event = dynamic_cast<const event_engine::mouse_key_up*>(&event);
+    mouse_keys[mouse_event->m_key_code] = false;
+}
+
+static void OnFrame(const event_engine::event& event)
 {
     if (cameraId == 0)
     {
@@ -59,7 +87,7 @@ static void OnFrame()
     GetCameraRot(cameraId, &rotation.x, &rotation.y, &rotation.z);
 
     float speed = 3.0f;
-    if (EventEngine::Dispatch::get_instance().IsKeyPressed(EventEngine::KeyCode::SHIFT))
+    if (keys[event_engine::key_code::SHIFT])
     {
         speed = 30.0f;
     }
@@ -68,32 +96,32 @@ static void OnFrame()
     glm::vec3 upVector {0.0f, 0.0f, 1.0f};
     glm::vec3 newPosition = position;
 
-    if (EventEngine::Dispatch::get_instance().IsKeyPressed(EventEngine::KeyCode::W))
+    if (keys[event_engine::key_code::W])
     {
         newPosition += rotation * distance;
     }
 
-    if (EventEngine::Dispatch::get_instance().IsKeyPressed(EventEngine::KeyCode::A))
+    if (keys[event_engine::key_code::A])
     {
         newPosition -= glm::cross(rotation, upVector) * distance;
     }
 
-    if (EventEngine::Dispatch::get_instance().IsKeyPressed(EventEngine::KeyCode::S))
+    if (keys[event_engine::key_code::S])
     {
         newPosition -= rotation * distance;
     }
 
-    if (EventEngine::Dispatch::get_instance().IsKeyPressed(EventEngine::KeyCode::D))
+    if (keys[event_engine::key_code::D])
     {
         newPosition += glm::cross(rotation, upVector) * distance;
     }
 
-    if (EventEngine::Dispatch::get_instance().IsKeyPressed(EventEngine::KeyCode::SPACE))
+    if (keys[event_engine::key_code::SPACE])
     {
         newPosition += upVector * distance;
     }
 
-    if (EventEngine::Dispatch::get_instance().IsKeyPressed(EventEngine::KeyCode::CTRL))
+    if (keys[event_engine::key_code::CTRL])
     {
         newPosition -= upVector * distance;
     }
@@ -101,10 +129,14 @@ static void OnFrame()
     SetCameraPos(cameraId, newPosition.x, newPosition.y, newPosition.z);
 }
 
-static void OnMouseMove(int32_t deltaX, int32_t deltaY)
+static void OnMouseMove(const event_engine::event& event)
 {
+    auto move_event = dynamic_cast<const event_engine::mouse_move*>(&event);
+    int32_t deltaX = move_event->m_x;
+    int32_t deltaY = move_event->m_y;
+
 #if _DEBUG
-    if (!EventEngine::Dispatch::get_instance().IsKeyPressed(EventEngine::KeyCode::MOUSE_LEFT))
+    if (!mouse_keys[event_engine::mouse_key_code::LEFT])
     {
         return;
     }
@@ -139,10 +171,14 @@ static void OnMouseMove(int32_t deltaX, int32_t deltaY)
 
 GAME_MODULE()
 {
-    struct GameModuleInfo info;
+    struct GameModuleInfo info = {};
     info.onFrame = OnFrame;
     info.onEngineStart = OnEngineStart;
     info.onEngineStop = OnEngineStop;
+    info.onKeyDown = OnKeyDown;
+    info.onKeyUp = OnKeyUp;
+    info.onMouseKeyDown = OnMouseKeyDown;
+    info.onMouseKeyUp = OnMouseKeyUp;
     info.onMouseMove = OnMouseMove;
     RegisterGameModule(info);
     return true;
