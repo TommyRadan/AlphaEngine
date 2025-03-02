@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2015-2019 Tomislav Radanovic
+ * Copyright (c) 2015-2025 Tomislav Radanovic
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -26,7 +26,7 @@
 
 #include <string>
 
-static void OnFrame()
+static void OnFrame(const event_engine::event& event)
 {
     //PrintInfo(std::string{"Delta time: "} + std::to_string(GetDeltaTime()) + " ms");
     //PrintInfo(std::string{"FPS: "} + std::to_string(GetCurrentFPS()));

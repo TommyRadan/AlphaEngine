@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2015-2019 Tomislav Radanovic
+ * Copyright (c) 2015-2025 Tomislav Radanovic
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -23,11 +23,12 @@
 #include <RenderingEngine/RenderingEngine.hpp>
 #include <RenderingEngine/Window.hpp>
 #include <RenderingEngine/OpenGL/OpenGL.hpp>
-#include <EventEngine/Dispatch.hpp>
 
 #include <RenderingEngine/Renderers/BasicRenderer.hpp>
 #include <RenderingEngine/Renderers/OverlayRenderer.hpp>
 #include <RenderingEngine/Camera/Camera.hpp>
+
+#include <event_engine/event_engine.hpp>
 
 #include <Infrastructure/Log.hpp>
 #include <RenderingEngine/Renderables/Premade3D/Cube.hpp>
@@ -64,13 +65,13 @@ void RenderingEngine::Context::Render()
     {
         RenderingEngine::Renderers::BasicRenderer::get_instance().StartRenderer();
         RenderingEngine::Renderers::BasicRenderer::get_instance().SetupCamera();
-        EventEngine::Dispatch::get_instance().DispatchOnRenderSceneCallback();
+        event_engine::context::get_instance().broadcast(event_engine::render_scene());
         RenderingEngine::Renderers::BasicRenderer::get_instance().StopRenderer();
     }
 
     RenderingEngine::OpenGL::Context::get_instance().Disable(RenderingEngine::OpenGL::Capability::DepthTest);
     RenderingEngine::Renderers::OverlayRenderer::get_instance().StartRenderer();
-    EventEngine::Dispatch::get_instance().DispatchOnRenderUiCallback();
+    event_engine::context::get_instance().broadcast(event_engine::render_ui());
     RenderingEngine::Renderers::OverlayRenderer::get_instance().StopRenderer();
     RenderingEngine::OpenGL::Context::get_instance().Enable(RenderingEngine::OpenGL::Capability::DepthTest);
 }

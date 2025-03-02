@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2015-2019 Tomislav Radanovic
+ * Copyright (c) 2015-2025 Tomislav Radanovic
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -33,20 +33,20 @@ static RenderingEngine::Cube *cube;
 float rotation = 0.0f;
 float rotationSpeed = 3.14f / 2;
 
-static void OnEngineStart()
+static void OnEngineStart(const event_engine::event& event)
 {
     cube = new RenderingEngine::Cube();
 
     cube->Upload();
 }
 
-static void OnFrame()
+static void OnFrame(const event_engine::event& event)
 {
     rotation += rotationSpeed * (GetDeltaTime() / 1000);
     cube->transform.SetRotation(glm::vec3{ 0.f, 0.f, rotation });
 }
 
-static void OnRenderScene()
+static void OnRenderScene(const event_engine::event& event)
 {
     cube->Render();
 }

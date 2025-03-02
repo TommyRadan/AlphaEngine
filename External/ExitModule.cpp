@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2015-2019 Tomislav Radanovic
+ * Copyright (c) 2015-2025 Tomislav Radanovic
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -22,12 +22,15 @@
 
 #include "API/GameModule.hpp"
 #include "API/Log.hpp"
-#include <EventEngine/EventEngine.hpp>
+#include <event_engine/event_engine.hpp>
 
-static void OnKeyDown(EventEngine::KeyCode keyCode)
+static void OnKeyDown(const event_engine::event& event)
 {
-    if (keyCode != EventEngine::KeyCode::ESCAPE) return;
-    EventEngine::Context::get_instance().RequestQuit();
+    auto key_down_event = dynamic_cast<const event_engine::key_down*>(&event);
+    auto keyCode = key_down_event->m_key_code;
+    if (keyCode != event_engine::key_code::ESCAPE) return;
+    event_engine::context::
+    get_instance().broadcast(event_engine::quit_requested());
 }
 
 GAME_MODULE()

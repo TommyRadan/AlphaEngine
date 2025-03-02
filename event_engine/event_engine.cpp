@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2015-2019 Tomislav Radanovic
+ * Copyright (c) 2015-2025 Tomislav Radanovic
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -20,25 +20,30 @@
  * SOFTWARE.
  */
 
-#pragma once
+#include <stdexcept>
 
-#include <Infrastructure/singleton.hpp>
+#include <event_engine/event_engine.hpp>
+#include <Infrastructure/Log.hpp>
 
-namespace EventEngine
+void event_engine::context::init()
 {
-	struct Context : public singleton<Context>
-	{
-		Context();
+	LOG_INFO("Init Event Engine");
+}
 
-		void Init();
-		void Quit();
+void event_engine::context::quit()
+{
+    LOG_INFO("Quit Event Engine");
+}
 
-		void RequestQuit();
-		const bool IsQuitRequested() const;
+void event_engine::context::broadcast(const event& event)
+{
+    for (const auto& listener : m_listeners[event.m_type])
+    {
+        listener(event);
+    }
+}
 
-        void HandleEvents();
-
-	private:
-		bool m_IsQuitRequested;
-	};
+void event_engine::context::register_listener(const event_type type, const std::function<void(const event&)>& listener)
+{
+    m_listeners[type].push_back(listener);
 }

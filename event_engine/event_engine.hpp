@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2015-2019 Tomislav Radanovic
+ * Copyright (c) 2015-2025 Tomislav Radanovic
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -22,59 +22,26 @@
 
 #pragma once
 
-namespace EventEngine
+#include <vector>
+#include <unordered_map>
+#include <functional>
+
+#include <Infrastructure/singleton.hpp>
+#include <event_engine/event.hpp>
+
+namespace event_engine
 {
-    struct engine_start : public Event
-    {
-        engine_start() {}
-    };
+	struct context : public singleton<context>
+	{
+		context() = default;
 
-    struct engine_stop : public Event
-    {
-        engine_stop() {}
-    };
+		void init();
+		void quit();
 
-    struct script_start : public Event
-    {
-        script_start() {}
-    };
+		void broadcast(const event& event);
+		void register_listener(const event_type type, const std::function<void(const event&)>& listener);
 
-    struct script_stop : public Event
-    {
-        script_stop() {}
-    };
-
-    struct frame : public Event
-    {
-        frame() {}
-
-        float m_deltaTime;
-    };
-
-    struct key_up : public Event
-    {
-        key_up() {}
-
-        int m_keyCode;
-    };
-
-    struct key_down : public Event
-    {
-        key_down() {}
-
-        int m_keyCode;
-    };
-
-    struct mouse_move : public Event
-    {
-        mouse_move() {}
-
-        int m_x;
-        int m_y;
-    };
-
-    struct event
-    {
-        event() = default;
-    };
+	private:
+		std::unordered_map<event_type, std::vector<std::function<void(const event&)>>> m_listeners;
+	};
 }
