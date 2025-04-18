@@ -149,24 +149,36 @@ static void OnMouseMove(const event_engine::event& event)
 
     glm::vec3 rotation;
     GetCameraRot(cameraId, &rotation.x, &rotation.y, &rotation.z);
-    glm::vec3 rotationAxis { 0.0f, 0.0f, 1.0f };
     glm::vec3 upVector { 0.0f, 0.0f, 1.0f };
-    glm::vec3 pitchAxis { glm::cross(glm::normalize(glm::vec3 {rotation.x, rotation.y, 0.0f}), upVector) };
+    
+    // Normalize the rotation vector to get the forward direction
+    glm::vec3 forward = glm::normalize(rotation);
+    
+    // Calculate the right vector (perpendicular to forward and up)
+    glm::vec3 right = glm::normalize(glm::cross(forward, upVector));
 
     float sensitivity = Settings::get_instance().GetMouseSensitivity();
     int pitchMultiplier = Settings::get_instance().IsMouseReversed() ? -1 : 1;
 
-    rotation = glm::vec4(rotation, 0.0f) * glm::rotate(sensitivity * deltaX, rotationAxis);
+    // Calculate rotation angles in radians
+    float yawAngle = deltaX * sensitivity;
+    float pitchAngle = deltaY * sensitivity * pitchMultiplier;
 
-    glm::vec3 tempRotation = rotation;
-    rotation = glm::vec4(rotation, 0.0f) * glm::rotate(pitchMultiplier * sensitivity * deltaY, pitchAxis);
+    // Create rotation matrices
+    glm::mat4 yawRotation = glm::rotate(yawAngle, upVector);
+    glm::mat4 pitchRotation = glm::rotate(pitchAngle, right);
 
-    if (glm::abs(glm::dot(glm::normalize(rotation), upVector)) > 0.9)
+    // Apply rotations
+    glm::vec4 rotated = glm::vec4(forward, 0.0f) * yawRotation * pitchRotation;
+    glm::vec3 newRotation = glm::vec3(rotated.x, rotated.y, rotated.z);
+
+    // Prevent looking too far up or down
+    if (glm::abs(newRotation.z) > 0.99f)
     {
-        rotation = tempRotation;
+        newRotation = forward;
     }
 
-    SetCameraRot(cameraId, rotation.x, rotation.y, rotation.z);
+    SetCameraRot(cameraId, newRotation.x, newRotation.y, newRotation.z);
 }
 
 GAME_MODULE()
