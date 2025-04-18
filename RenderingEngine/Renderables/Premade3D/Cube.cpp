@@ -24,7 +24,7 @@
 #include <RenderingEngine/Renderers/Renderer.hpp>
 #include <RenderingEngine/RenderingEngine.hpp>
 #include <RenderingEngine/Mesh/Vertex.hpp>
-#include <Infrastructure/Log.hpp>
+#include <Infrastructure/log.hpp>
 
 RenderingEngine::Cube::Cube() :
     m_VertexCount { 0 },
@@ -114,7 +114,7 @@ void RenderingEngine::Cube::Render()
 
     if (!currentRenderer)
     {
-        LOG_WARN("Attampted to render without renderer attached");
+        LOG_WRN("Attempted to render without renderer attached");
         return;
     }
 

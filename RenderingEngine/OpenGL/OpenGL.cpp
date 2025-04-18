@@ -23,15 +23,15 @@
 #include <stdexcept>
 
 #include <RenderingEngine/OpenGL/OpenGL.hpp>
-#include <Infrastructure/Log.hpp>
+#include <Infrastructure/log.hpp>
 
 void RenderingEngine::OpenGL::Context::Init()
 {
-    LOG_INFO("Init RenderingEngine::OpenGL");
+    LOG_INF("Init RenderingEngine::OpenGL");
 
     if (glewInit() != GLEW_OK)
     {
-        LOG_FATAL("Could not initialize OpenGL");
+        LOG_FTL("Could not initialize OpenGL");
         throw std::runtime_error{"Could not initialize OpenGL"};
     }
 
@@ -41,14 +41,14 @@ void RenderingEngine::OpenGL::Context::Init()
 
     if(versionMajor < 3 || (versionMajor == 3 && versionMinor < 3))
     {
-        LOG_FATAL("Could not initialize OpenGL, supported version is %i.%i", versionMajor, versionMinor);
+        LOG_FTL("Could not initialize OpenGL, supported version is %i.%i", versionMajor, versionMinor);
         throw std::runtime_error{"OpenGL version error! Unsupported hardware or driver"};
     }
 }
 
 void RenderingEngine::OpenGL::Context::Quit()
 {
-    LOG_INFO("Quit RenderingEngine::OpenGL");
+    LOG_INF("Quit RenderingEngine::OpenGL");
 }
 
 RenderingEngine::OpenGL::Framebuffer*

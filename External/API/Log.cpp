@@ -21,19 +21,19 @@
  */
 
 #include "Log.hpp"
-#include <Infrastructure/Log.hpp>
+#include <Infrastructure/log.hpp>
 
 void PrintInfo(const std::string &message)
 {
-    LOG_INFO("%s", message.c_str());
+    LOG_INF("%s", message.c_str());
 }
 
 void PrintWarning(const std::string &message)
 {
-    LOG_WARN("%s", message.c_str());
+    LOG_WRN("%s", message.c_str());
 }
 
 void PrintError(const std::string &message)
 {
-    LOG_ERROR("%s", message.c_str());
+    LOG_ERR("%s", message.c_str());
 }

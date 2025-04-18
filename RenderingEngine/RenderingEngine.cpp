@@ -30,12 +30,12 @@
 
 #include <event_engine/event_engine.hpp>
 
-#include <Infrastructure/Log.hpp>
+#include <Infrastructure/log.hpp>
 #include <RenderingEngine/Renderables/Premade3D/Cube.hpp>
 
 void RenderingEngine::Context::Init()
 {
-    LOG_INFO("Init Rendering Engine");
+    LOG_INF("Init Rendering Engine");
 
     RenderingEngine::Window::get_instance().Init();
     RenderingEngine::OpenGL::Context::get_instance().Init();
@@ -54,7 +54,7 @@ void RenderingEngine::Context::Quit()
     RenderingEngine::OpenGL::Context::get_instance().Quit();
     RenderingEngine::Window::get_instance().Quit();
 
-    LOG_INFO("Quit Rendering Engine");
+    LOG_INF("Quit Rendering Engine");
 }
 
 void RenderingEngine::Context::Render()

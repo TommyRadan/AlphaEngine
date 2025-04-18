@@ -29,7 +29,7 @@
 #include <Infrastructure/Settings.hpp>
 #include <Infrastructure/Time.hpp>
 #include <RenderingEngine/Util/Color.hpp>
-#include <Infrastructure/Log.hpp>
+#include <Infrastructure/log.hpp>
 
 namespace RenderingEngine
 {
@@ -40,12 +40,12 @@ namespace RenderingEngine
 
     void Window::Init()
     {
-        LOG_INFO("Init RenderingEngine::Window");
+        LOG_INF("Init RenderingEngine::Window");
 
         if (SDL_InitSubSystem(SDL_INIT_VIDEO) != 0)
         {
-            LOG_FATAL("Could not initialize video system");
-            LOG_FATAL("SDL_Error: %s", SDL_GetError());
+            LOG_FTL("Could not initialize video system");
+            LOG_FTL("SDL_Error: %s", SDL_GetError());
             throw std::runtime_error {"Could not initialize video system"};
         }
 
@@ -85,8 +85,8 @@ namespace RenderingEngine
 
         if (m_Window == nullptr)
         {
-            LOG_FATAL("Cannot create window");
-            LOG_FATAL("SDL Error: %s", SDL_GetError());
+            LOG_FTL("Cannot create window");
+            LOG_FTL("SDL Error: %s", SDL_GetError());
             throw std::runtime_error { SDL_GetError() };
         }
 
@@ -101,7 +101,7 @@ namespace RenderingEngine
 
         SDL_QuitSubSystem(SDL_INIT_VIDEO);
 
-        LOG_INFO("Quit RenderingEngine::Window");
+        LOG_INF("Quit RenderingEngine::Window");
     }
 
     void Window::Clear()

@@ -21,7 +21,7 @@
  */
 
 #include <RenderingEngine/OpenGL/Framebuffer.hpp>
-#include <Infrastructure/Log.hpp>
+#include <Infrastructure/log.hpp>
 #include <stdexcept>
 
 #define PUSHSTATE() GLint restoreId; glGetIntegerv( GL_DRAW_FRAMEBUFFER_BINDING, &restoreId );
@@ -40,7 +40,7 @@ RenderingEngine::OpenGL::Framebuffer::Framebuffer(const uint32_t width,
 	if (color == 24) colorFormat = InternalFormat::RGB;
 	else if (color == 32) colorFormat = InternalFormat::RGBA;
 	else {
-        LOG_ERROR("Framebuffer could not be created, color size not supported (%u)", color);
+        LOG_ERR("Framebuffer could not be created, color size not supported (%u)", color);
         POPSTATE()
         return;
 	}
@@ -51,7 +51,7 @@ RenderingEngine::OpenGL::Framebuffer::Framebuffer(const uint32_t width,
 	else if (depth == 24) depthFormat = InternalFormat::DepthComponent24;
 	else if (depth == 32) depthFormat = InternalFormat::DepthComponent32F;
 	else {
-        LOG_ERROR("Framebuffer could not be created, depth size not supported (%u)", depth);
+        LOG_ERR("Framebuffer could not be created, depth size not supported (%u)", depth);
         POPSTATE()
         return;
     }
@@ -79,7 +79,7 @@ RenderingEngine::OpenGL::Framebuffer::Framebuffer(const uint32_t width,
 
 	// Check
 	if (glCheckFramebufferStatus(GL_DRAW_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-	    LOG_ERROR("Framebuffer could not be created, unknown reason (0x%X)",
+	    LOG_ERR("Framebuffer could not be created, unknown reason (0x%X)",
                   glCheckFramebufferStatus(GL_DRAW_FRAMEBUFFER));
 		throw std::runtime_error {"Framebuffer could not be created!"};
 	}

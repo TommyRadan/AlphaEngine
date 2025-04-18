@@ -23,7 +23,7 @@
 #include <stdexcept>
 
 #include <RenderingEngine/OpenGL/Program.hpp>
-#include <Infrastructure/Log.hpp>
+#include <Infrastructure/log.hpp>
 
 RenderingEngine::OpenGL::Program::Program()
 {
@@ -63,8 +63,8 @@ void RenderingEngine::OpenGL::Program::Link()
 
 	if (status != GL_TRUE)
 	{
-		LOG_FATAL("Cannot link program");
-		LOG_FATAL("%s", this->GetInfoLog().c_str());
+		LOG_FTL("Cannot link program");
+		LOG_FTL("%s", this->GetInfoLog().c_str());
 		throw std::runtime_error { this->GetInfoLog() };
 	}
 }

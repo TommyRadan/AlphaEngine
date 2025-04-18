@@ -24,7 +24,7 @@
 #include <RenderingEngine/Renderers/Renderer.hpp>
 #include <RenderingEngine/RenderingEngine.hpp>
 #include <RenderingEngine/Mesh/Vertex.hpp>
-#include <Infrastructure/Log.hpp>
+#include <Infrastructure/log.hpp>
 
 RenderingEngine::Pane::Pane(const glm::vec2& size) :
     m_VertexCount{ 0 },
@@ -95,7 +95,7 @@ void RenderingEngine::Pane::Render()
 
     if (!currentRenderer)
     {
-        LOG_WARN("Attampted to render without renderer attached");
+        LOG_WRN("Attempted to render without renderer attached");
         return;
     }
 

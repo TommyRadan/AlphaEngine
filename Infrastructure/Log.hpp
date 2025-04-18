@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2015-2019 Tomislav Radanovic
+ * Copyright (c) 2015-2025 Tomislav Radanovic
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -22,41 +22,41 @@
 
 #pragma once
 
-#define LOG_INIT(argc, argv) infrastructure::log::init(argc, argv)
+#define LOG_INIT(argc, argv) infrastructure::logging::init(argc, argv)
 
-#define LOG_INFO(...) infrastructure::log::message(infrastructure::verbosity::INFO, __VA_ARGS__)
-#define LOG_WARN(...) infrastructure::log::message(infrastructure::verbosity::WARN, __VA_ARGS__)
-#define LOG_ERROR(...) infrastructure::log::message(infrastructure::verbosity::ERROR, __VA_ARGS__)
-#define LOG_FATAL(...) infrastructure::log::message(infrastructure::verbosity::FATAL, __VA_ARGS__)
+#define LOG_INF(...) infrastructure::logging::message(infrastructure::logging::verbosity::INFO, __VA_ARGS__)
+#define LOG_WRN(...) infrastructure::logging::message(infrastructure::logging::verbosity::WARN, __VA_ARGS__)
+#define LOG_ERR(...) infrastructure::logging::message(infrastructure::logging::verbosity::ERROR, __VA_ARGS__)
+#define LOG_FTL(...) infrastructure::logging::message(infrastructure::logging::verbosity::FATAL, __VA_ARGS__)
 
 namespace infrastructure
 {
-    enum class verbosity
-    {
-        INFO,
-        WARN,
-        ERROR,
-        FATAL
-    };
-
     /**
      * @brief The logging system
      */
-    struct log
+    namespace logging
     {
+        enum class verbosity
+        {
+            INFO,
+            WARN,
+            ERROR,
+            FATAL
+        };
+        
         /**
          * @brief Initializes the logging system
          * @param argc The number of arguments
          * @param argv The arguments
          */
-        static void init(int argc, char* argv[]);
+        void init(int argc, char* argv[]);
 
         /**
-         * @brief Logs an info message
+         * @brief Logs a message
          * @param verbosity The verbosity of the message (INFO, WARN, ERROR, FATAL)
          * @param format The format of the message
          * @param ... The arguments
          */
-        static void message(enum verbosity verbosity, const char* format, ...);
+        void message(enum verbosity verbosity, const char* format, ...);
     };
 }

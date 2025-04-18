@@ -24,7 +24,7 @@
 #include <RenderingEngine/Renderers/Renderer.hpp>
 #include <RenderingEngine/RenderingEngine.hpp>
 #include <RenderingEngine/Mesh/Vertex.hpp>
-#include <Infrastructure/Log.hpp>
+#include <Infrastructure/log.hpp>
 #include <RenderingEngine/Util/Image.hpp>
 
 RenderingEngine::Label::Label(RenderingEngine::Util::Font* font, float size, const std::string& text) :
@@ -43,7 +43,7 @@ RenderingEngine::Label::Label(RenderingEngine::Util::Font* font, float size, con
 
         int x0, y0, x1, y1;
         const RenderingEngine::Util::Image* image = font->GetImage(c, &x0, &y0, &x1, &y1);
-        LOG_INFO("%c - %i %i %i %i", c, x0, y0, x1, y1);
+        LOG_INF("%c - %i %i %i %i", c, x0, y0, x1, y1);
         const float width = ((float)image->GetWidth() / image->GetHeight()) * size;
         RenderingEngine::Pane *pane = new RenderingEngine::Pane(glm::vec2{ width, size });
         pane->SetImage(*image);

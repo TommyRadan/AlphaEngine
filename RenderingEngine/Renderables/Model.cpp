@@ -23,7 +23,7 @@
 #include <RenderingEngine/Renderables/Model.hpp>
 #include <RenderingEngine/Renderers/Renderer.hpp>
 #include <RenderingEngine/RenderingEngine.hpp>
-#include <Infrastructure/Log.hpp>
+#include <Infrastructure/log.hpp>
 
 RenderingEngine::Model::Model() :
     m_VertexCount { 0 },
@@ -62,7 +62,7 @@ void RenderingEngine::Model::Render()
 
     if (!currentRenderer)
     {
-        LOG_WARN("Attempted to render without renderer attached");
+        LOG_WRN("Attempted to render without renderer attached");
         return;
     }
 
