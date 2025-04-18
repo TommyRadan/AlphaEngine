@@ -23,16 +23,16 @@
 #include <stdexcept>
 
 #include <event_engine/event_engine.hpp>
-#include <Infrastructure/Log.hpp>
+#include <Infrastructure/log.hpp>
 
 void event_engine::context::init()
 {
-	LOG_INFO("Init Event Engine");
+	LOG_INF("Init Event Engine");
 }
 
 void event_engine::context::quit()
 {
-    LOG_INFO("Quit Event Engine");
+    LOG_INF("Quit Event Engine");
 }
 
 void event_engine::context::broadcast(const event& event)

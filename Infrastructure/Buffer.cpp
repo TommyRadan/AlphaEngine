@@ -23,7 +23,7 @@
 #include <Infrastructure/Buffer.hpp>
 #include <fstream>
 
-#include <Infrastructure/Log.hpp>
+#include <Infrastructure/log.hpp>
 
 Infrastructure::Buffer::Buffer(const std::string& filename)
 {
@@ -31,7 +31,7 @@ Infrastructure::Buffer::Buffer(const std::string& filename)
 
     if (!in)
     {
-        LOG_ERROR("Could not load buffer (%s)", filename.c_str());
+        LOG_ERR("Could not load buffer (%s)", filename.c_str());
         return;
     }
 
@@ -43,7 +43,7 @@ Infrastructure::Buffer::Buffer(const std::string& filename)
 
     in.close();
 
-    LOG_INFO("Loaded buffer (%s)", filename.c_str());
+    LOG_INF("Loaded buffer (%s)", filename.c_str());
 }
 
 const uint8_t* Infrastructure::Buffer::GetData() const

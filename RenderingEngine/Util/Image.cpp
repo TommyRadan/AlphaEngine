@@ -26,7 +26,7 @@
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.hpp"
-#include <Infrastructure/Log.hpp>
+#include <Infrastructure/log.hpp>
 
 RenderingEngine::Util::Image::Image() :
         m_ImageData { nullptr },
@@ -44,11 +44,11 @@ RenderingEngine::Util::Image::Image(const std::string& filename) :
 
     if (m_ImageData == nullptr)
     {
-        LOG_ERROR("Could not load image (%s)", filename.c_str());
+        LOG_ERR("Could not load image (%s)", filename.c_str());
         throw std::runtime_error{"Could not load image (" + filename + ")"};
     }
 
-    LOG_INFO("Loaded image (%s)", filename.c_str());
+    LOG_INF("Loaded image (%s)", filename.c_str());
 }
 
 RenderingEngine::Util::Image::Image(const Image& image) :

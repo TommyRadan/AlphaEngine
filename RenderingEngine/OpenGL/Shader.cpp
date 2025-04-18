@@ -23,14 +23,14 @@
 #include <stdexcept>
 
 #include <RenderingEngine/OpenGL/Shader.hpp>
-#include <Infrastructure/Log.hpp>
+#include <Infrastructure/log.hpp>
 
 RenderingEngine::OpenGL::Shader::Shader(const ShaderType shaderType)
 {
 	m_ObjectID = glCreateShader(GLenum(shaderType));
 	if(m_ObjectID == 0)
 	{
-		LOG_FATAL("Cannot create shader");
+		LOG_FTL("Cannot create shader");
 		throw std::runtime_error{"Shader creation failed!"};
 	}
 }
@@ -61,9 +61,9 @@ void RenderingEngine::OpenGL::Shader::Compile()
 
 	if (res != GL_TRUE)
 	{
-	    LOG_ERROR("Shader code: \n%s", m_Code.c_str());
-	    LOG_ERROR("Errors: \n%s", GetInfoLog().c_str());
-		LOG_FATAL("Cannot compile shader");
+	    LOG_ERR("Shader code: \n%s", m_Code.c_str());
+	    LOG_ERR("Errors: \n%s", GetInfoLog().c_str());
+		LOG_FTL("Cannot compile shader");
 		throw std::runtime_error{GetInfoLog()};
 	}
 }

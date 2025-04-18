@@ -22,7 +22,7 @@
 
 #define STB_TRUETYPE_IMPLEMENTATION
 #include <RenderingEngine/Util/Font.hpp>
-#include <Infrastructure/Log.hpp>
+#include <Infrastructure/log.hpp>
 
 #include <vector>
 #include <fstream>
@@ -57,7 +57,7 @@ RenderingEngine::Util::Font::Font(const std::string& filename, float fontSize)
         m_Images[c] = image;
     }
 
-    LOG_INFO("Loaded font \"%s\"", filename.c_str());
+    LOG_INF("Loaded font \"%s\"", filename.c_str());
 }
 
 const RenderingEngine::Util::Image* RenderingEngine::Util::Font::GetImage(char letter, int *x0, int *y0, int* x1, int* y1)

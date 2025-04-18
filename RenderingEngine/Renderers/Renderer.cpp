@@ -24,7 +24,7 @@
 #include <RenderingEngine/OpenGL/OpenGL.hpp>
 #include <RenderingEngine/Camera/Camera.hpp>
 #include <RenderingEngine/RenderingEngine.hpp>
-#include <Infrastructure/Log.hpp>
+#include <Infrastructure/log.hpp>
 
 RenderingEngine::Renderer *RenderingEngine::Renderer::m_CurrentRenderer = nullptr;
 
@@ -51,7 +51,7 @@ void RenderingEngine::Renderer::SetupCamera()
 
     if (currentCamera == nullptr)
     {
-        LOG_WARN("Trying to setup a camera without camera attached");
+        LOG_WRN("Trying to setup a camera without camera attached");
         return;
     }
 
@@ -92,7 +92,7 @@ void RenderingEngine::Renderer::UploadTextureReference(const std::string& textur
     OpenGL::Uniform uniform = static_cast<OpenGL::Program*>(m_Program)->GetUniform(textureName);
     if (uniform == -1)
     {
-        LOG_WARN("Cannot find uniform: %s", textureName.c_str());
+        LOG_WRN("Cannot find uniform: %s", textureName.c_str());
         return;
     }
     static_cast<OpenGL::Program*>(m_Program)->SetUniform(uniform, position);
@@ -103,7 +103,7 @@ void RenderingEngine::Renderer::UploadCoefficient(const std::string& coefficient
     OpenGL::Uniform uniform = static_cast<OpenGL::Program*>(m_Program)->GetUniform(coefficientName);
     if (uniform == -1)
     {
-        LOG_WARN("Cannot find uniform: %s", coefficientName.c_str());
+        LOG_WRN("Cannot find uniform: %s", coefficientName.c_str());
         return;
     }
     static_cast<OpenGL::Program*>(m_Program)->SetUniform(uniform, coefficient);
@@ -114,7 +114,7 @@ void RenderingEngine::Renderer::UploadMatrix3(const std::string& mat3Name, const
     OpenGL::Uniform uniform = static_cast<OpenGL::Program*>(m_Program)->GetUniform(mat3Name);
     if (uniform == -1)
     {
-        LOG_WARN("Cannot find uniform: %s", mat3Name.c_str());
+        LOG_WRN("Cannot find uniform: %s", mat3Name.c_str());
         return;
     }
     static_cast<OpenGL::Program*>(m_Program)->SetUniform(uniform, matrix);
@@ -125,7 +125,7 @@ void RenderingEngine::Renderer::UploadMatrix4(const std::string& mat4Name, const
     OpenGL::Uniform uniform = static_cast<OpenGL::Program*>(m_Program)->GetUniform(mat4Name);
     if (uniform == -1)
     {
-        LOG_WARN("Cannot find uniform: %s", mat4Name.c_str());
+        LOG_WRN("Cannot find uniform: %s", mat4Name.c_str());
         return;
     }
     static_cast<OpenGL::Program*>(m_Program)->SetUniform(uniform, matrix);
@@ -136,7 +136,7 @@ void RenderingEngine::Renderer::UploadVector2(const std::string& vec2Name, const
     OpenGL::Uniform uniform = static_cast<OpenGL::Program*>(m_Program)->GetUniform(vec2Name);
     if (uniform == -1)
     {
-        LOG_WARN("Cannot find uniform: %s", vec2Name.c_str());
+        LOG_WRN("Cannot find uniform: %s", vec2Name.c_str());
         return;
     }
     static_cast<OpenGL::Program*>(m_Program)->SetUniform(uniform, vector);
@@ -147,7 +147,7 @@ void RenderingEngine::Renderer::UploadVector3(const std::string& vec3Name, const
     OpenGL::Uniform uniform = static_cast<OpenGL::Program*>(m_Program)->GetUniform(vec3Name);
     if (uniform == -1)
     {
-        LOG_WARN("Cannot find uniform: %s", vec3Name.c_str());
+        LOG_WRN("Cannot find uniform: %s", vec3Name.c_str());
         return;
     }
     static_cast<OpenGL::Program*>(m_Program)->SetUniform(uniform, vector);
@@ -158,7 +158,7 @@ void RenderingEngine::Renderer::UploadVector4(const std::string& vec4Name, const
     OpenGL::Uniform uniform = static_cast<OpenGL::Program*>(m_Program)->GetUniform(vec4Name);
     if (uniform == -1)
     {
-        LOG_WARN("Cannot find uniform: %s", vec4Name.c_str());
+        LOG_WRN("Cannot find uniform: %s", vec4Name.c_str());
         return;
     }
     static_cast<OpenGL::Program*>(m_Program)->SetUniform(uniform, vector);

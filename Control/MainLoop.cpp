@@ -25,7 +25,7 @@
 #include <event_engine/event_engine.hpp>
 #include <RenderingEngine/RenderingEngine.hpp>
 #include <RenderingEngine/Window.hpp>
-#include <Infrastructure/Log.hpp>
+#include <Infrastructure/log.hpp>
 #include <Infrastructure/Time.hpp>
 #include <SceneGraph/SceneGraph.hpp>
 

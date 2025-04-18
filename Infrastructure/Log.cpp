@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2015-2019 Tomislav Radanovic
+ * Copyright (c) 2015-2025 Tomislav Radanovic
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -22,7 +22,7 @@
 
 #define LOGURU_IMPLEMENTATION 1
 #include <Loguru.hpp>
-#include <Infrastructure/Log.hpp>
+#include <Infrastructure/log.hpp>
 #include <Infrastructure/Version.hpp>
 
 static int verbosity_to_loguru(infrastructure::verbosity verbosity)
@@ -42,7 +42,7 @@ static int verbosity_to_loguru(infrastructure::verbosity verbosity)
     }
 }
 
-void infrastructure::log::init(int argc, char* argv[])
+void infrastructure::logging::init(int argc, char* argv[])
 {
     loguru::init(argc, argv);
 
@@ -54,10 +54,10 @@ void infrastructure::log::init(int argc, char* argv[])
     loguru::g_colorlogtostderr = false;
 #endif
 
-    LOG_INFO("AlphaEngine v%s starting ...", Infrastructure::Version::GetVersion().c_str());
+    LOG_INF("AlphaEngine v%s starting ...", Infrastructure::Version::GetVersion().c_str());
 }
 
-void infrastructure::log::message(enum verbosity verbosity, const char* format, ...)
+void infrastructure::logging::message(enum verbosity verbosity, const char* format, ...)
 {
     va_list args;
     va_start(args, format);

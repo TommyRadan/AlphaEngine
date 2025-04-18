@@ -22,17 +22,17 @@
 
 #include <SceneGraph/SceneGraph.hpp>
 
-#include <Infrastructure/Log.hpp>
+#include <Infrastructure/log.hpp>
 
 #include <string>
 
 
 void SceneGraph::Context::Init()
 {
-    LOG_INFO("Init Scene Graph");
+    LOG_INF("Init Scene Graph");
 }
 
 void SceneGraph::Context::Quit()
 {
-    LOG_INFO("Quit Scene Graph");
+    LOG_INF("Quit Scene Graph");
 }
