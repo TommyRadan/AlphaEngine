@@ -212,8 +212,8 @@ namespace RenderingEngine
 
             case SDL_MOUSEMOTION: {
                 event_engine::mouse_move mouse_move;
-                mouse_move.m_x = events.motion.x;
-                mouse_move.m_y = events.motion.y;
+                mouse_move.m_x = events.motion.xrel;
+                mouse_move.m_y = events.motion.yrel;
                 event_engine::context::get_instance().broadcast(mouse_move);
                 break;
             }
