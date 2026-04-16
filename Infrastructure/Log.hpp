@@ -22,6 +22,12 @@
 
 #pragma once
 
+// wingdi.h (pulled in by windows.h) defines ERROR as a preprocessor macro,
+// which collides with the verbosity::ERROR enumerator below.
+#ifdef ERROR
+#undef ERROR
+#endif
+
 #define LOG_INIT(argc, argv) infrastructure::logging::init(argc, argv)
 
 #define LOG_INF(...) infrastructure::logging::message(infrastructure::logging::verbosity::INFO, __VA_ARGS__)
