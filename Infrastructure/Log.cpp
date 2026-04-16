@@ -25,17 +25,17 @@
 #include <Infrastructure/log.hpp>
 #include <Infrastructure/Version.hpp>
 
-static int verbosity_to_loguru(infrastructure::verbosity verbosity)
+static int verbosity_to_loguru(infrastructure::logging::verbosity verbosity)
 {
     switch (verbosity)
     {
-    case infrastructure::verbosity::INFO:
+    case infrastructure::logging::verbosity::INFO:
         return loguru::Verbosity_INFO;
-    case infrastructure::verbosity::WARN:
+    case infrastructure::logging::verbosity::WARN:
         return loguru::Verbosity_WARNING;
-    case infrastructure::verbosity::ERROR:
+    case infrastructure::logging::verbosity::ERROR:
         return loguru::Verbosity_ERROR;
-    case infrastructure::verbosity::FATAL:
+    case infrastructure::logging::verbosity::FATAL:
         return loguru::Verbosity_FATAL;
     default:
         return loguru::Verbosity_OFF;
