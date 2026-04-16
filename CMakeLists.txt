@@ -30,14 +30,14 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Debug)
 endif()
 
-# Add debug definitions and flags
-if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    add_definitions(-D_DEBUG)
-    if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /Zi /Od")
-    else()
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -O0")
-    endif()
+# Add debug definitions and flags. Use generator expressions so this works
+# correctly with multi-config generators (e.g. Visual Studio) where
+# CMAKE_BUILD_TYPE is empty at configure time.
+add_compile_definitions($<$<CONFIG:Debug>:_DEBUG>)
+if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+    add_compile_options($<$<CONFIG:Debug>:/Zi> $<$<CONFIG:Debug>:/Od>)
+else()
+    add_compile_options($<$<CONFIG:Debug>:-g> $<$<CONFIG:Debug>:-O0>)
 endif()
 
 # Set cmake module directory
@@ -99,7 +99,9 @@ add_executable(AlphaEngine
     ${RENDERING_ENGINE_FILES})
 
 # Use C++ standard library
-target_compile_options(AlphaEngine PRIVATE -stdlib=libc++)
+if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
+    target_compile_options(AlphaEngine PRIVATE -stdlib=libc++)
+endif()
 
 # Find and link to external dependencies
 find_package(SDL2 REQUIRED)
