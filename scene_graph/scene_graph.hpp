@@ -20,6 +20,11 @@
  * SOFTWARE.
  */
 
+/**
+ * @file scene_graph.hpp
+ * @brief Scene graph subsystem entry point.
+ */
+
 #pragma once
 
 #include <string>
@@ -28,9 +33,19 @@
 
 namespace scene_graph
 {
+    /**
+     * @brief Lifetime owner of the scene graph subsystem.
+     *
+     * Process-wide singleton. Currently a lifecycle stub that matches
+     * the shape of the other engine subsystems — @ref init is called
+     * at startup and @ref quit at shutdown.
+     */
     struct context : public singleton<context>
     {
+        /** @brief Initializes the scene graph subsystem. */
         void init();
+
+        /** @brief Shuts down the scene graph subsystem. */
         void quit();
     };
-} // namespace SceneGraph
+} // namespace scene_graph

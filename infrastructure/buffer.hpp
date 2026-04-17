@@ -20,6 +20,11 @@
  * SOFTWARE.
  */
 
+/**
+ * @file buffer.hpp
+ * @brief In-memory byte buffer loaded from a file.
+ */
+
 #pragma once
 
 #include <cstdint>
@@ -28,13 +33,30 @@
 
 namespace infrastructure
 {
+    /**
+     * @brief Owns the raw bytes of a file read from disk.
+     *
+     * The contents are read in full during construction and owned by
+     * the @c std::vector member — the pointer returned by @ref get_data
+     * is valid for the lifetime of the @ref buffer instance.
+     */
     struct buffer
     {
+        /**
+         * @brief Reads @p filename in binary mode into memory.
+         *        On failure the buffer is left empty and an error is logged
+         *        (the constructor does not throw).
+         * @param filename Path to the file to load.
+         */
         buffer(const std::string& filename);
 
+        /**
+         * @brief Pointer to the loaded bytes, or to empty storage if the
+         *        load failed. Valid until the @ref buffer is destroyed.
+         */
         const uint8_t* get_data() const;
 
     private:
         std::vector<uint8_t> m_data;
     };
-} // namespace Infrastructure
+} // namespace infrastructure

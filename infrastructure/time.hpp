@@ -20,6 +20,11 @@
  * SOFTWARE.
  */
 
+/**
+ * @file time.hpp
+ * @brief Frame timing utilities (delta time, frame count, FPS).
+ */
+
 #pragma once
 
 #include <cstdint>
@@ -28,20 +33,41 @@
 
 namespace infrastructure
 {
+    /**
+     * @brief Process-wide frame clock.
+     *
+     * Backed by SDL's high-resolution performance counter. Call
+     * @ref perform_tick once per frame to advance the clock; the other
+     * accessors report values from the most recent tick. Not thread-safe.
+     */
     struct time : public singleton<time>
     {
         time();
 
+        /**
+         * @brief Advances the clock by one frame, updating the delta
+         *        time and incrementing the frame counter. Call exactly
+         *        once per main-loop iteration.
+         */
         void perform_tick();
 
+        /** @brief Time between the last two ticks, in milliseconds. */
         const double delta_time() const;
+
+        /** @brief Milliseconds since SDL was initialized. */
         const float total_time() const;
 
+        /** @brief Number of ticks (frames) since startup. */
         const uint32_t frame_count() const;
+
+        /**
+         * @brief Instantaneous FPS derived from the most recent delta.
+         * @return Frames per second, or 0 when the delta is below 1us.
+         */
         const float current_fps() const;
 
     private:
         uint32_t m_frame_count;
         double m_delta_time;
     };
-} // namespace Infrastructure
+} // namespace infrastructure
