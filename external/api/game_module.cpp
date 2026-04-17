@@ -53,7 +53,7 @@ void register_game_module(struct game_module_info& info)
     if (info.on_render_ui)
     {
         event_engine::context::get_instance().register_listener(event_engine::event_type::render_ui,
-                                                                info.on_render_scene);
+                                                                info.on_render_ui);
     }
 
     if (info.on_mouse_key_down)
