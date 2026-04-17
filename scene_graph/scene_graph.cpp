@@ -29,6 +29,8 @@
 void scene_graph::context::init()
 {
     LOG_INF("Init Scene Graph");
+    // Node add/remove and traversal diagnostics are expected to be logged from
+    // here by scene_graph API calls once they exist. See docs/logging.md.
 }
 
 void scene_graph::context::quit()

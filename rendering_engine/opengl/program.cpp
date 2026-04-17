@@ -28,6 +28,14 @@
 rendering_engine::opengl::program::program()
 {
     m_object_id = glCreateProgram();
+    if (m_object_id == 0)
+    {
+        LOG_ERR("glCreateProgram returned 0 (program creation failed)");
+    }
+    else
+    {
+        LOG_INF("Created GL program id=%u", m_object_id);
+    }
 }
 
 rendering_engine::opengl::program::~program()
@@ -63,10 +71,13 @@ void rendering_engine::opengl::program::link()
 
     if (status != GL_TRUE)
     {
+        LOG_ERR("Program link failed (id=%u)", m_object_id);
+        LOG_ERR("Info log: \n%s", this->get_info_log().c_str());
         LOG_FTL("Cannot link program");
-        LOG_FTL("%s", this->get_info_log().c_str());
         throw std::runtime_error{this->get_info_log()};
     }
+
+    LOG_INF("GL program linked successfully (id=%u)", m_object_id);
 }
 
 std::string rendering_engine::opengl::program::get_info_log()

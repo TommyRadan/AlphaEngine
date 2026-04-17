@@ -44,9 +44,11 @@ void rendering_engine::context::init()
     rendering_engine::opengl::context::get_instance().enable(rendering_engine::opengl::capability::depth_test);
     rendering_engine::opengl::context::get_instance().enable(rendering_engine::opengl::capability::blend);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    LOG_INF("Rendering Engine: enabled cull_face, depth_test, blend (SRC_ALPHA / ONE_MINUS_SRC_ALPHA)");
 
     rendering_engine::renderers::basic_renderer::get_instance();
     rendering_engine::renderers::overlay_renderer::get_instance();
+    LOG_INF("Rendering Engine: basic_renderer and overlay_renderer constructed");
 }
 
 void rendering_engine::context::quit()

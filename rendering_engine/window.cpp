@@ -66,9 +66,11 @@ namespace rendering_engine
         uint32_t window_flags{SDL_WINDOW_OPENGL};
         auto type{s.get_window_type()};
 
+        const char* type_name = "windowed";
         if (type == win_type::win_type_borderless)
         {
             window_flags |= SDL_WINDOW_BORDERLESS;
+            type_name = "borderless";
         }
 
         if (type == win_type::win_type_fullscreen)
@@ -76,7 +78,15 @@ namespace rendering_engine
             window_flags |= SDL_WINDOW_FULLSCREEN;
             SDL_ShowCursor(SDL_DISABLE);
             SDL_SetRelativeMouseMode(SDL_TRUE);
+            type_name = "fullscreen";
         }
+
+        LOG_INF("Creating window: name='%s' size=%ux%u mode=%s double_buffered=%s",
+                s.get_window_name(),
+                s.get_window_width(),
+                s.get_window_height(),
+                type_name,
+                s.is_double_buffered() ? "true" : "false");
 
         SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 8);
         SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 8);
@@ -104,6 +114,12 @@ namespace rendering_engine
         }
 
         m_gl_context.reset(SDL_GL_CreateContext(m_window.get()));
+        if (m_gl_context == nullptr)
+        {
+            LOG_FTL("Could not create SDL GL context: %s", SDL_GetError());
+            throw std::runtime_error{SDL_GetError()};
+        }
+        LOG_INF("SDL window and GL context created successfully");
         SDL_GL_SetSwapInterval(0);
     }
 
