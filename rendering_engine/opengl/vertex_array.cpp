@@ -38,11 +38,11 @@ const uint32_t rendering_engine::opengl::vertex_array::handle() const
 }
 
 void rendering_engine::opengl::vertex_array::bind_attribute(const rendering_engine::opengl::attribute& attribute,
-                                                         const rendering_engine::opengl::vertex_buffer& buffer,
-                                                         const rendering_engine::opengl::type type,
-                                                         unsigned int count,
-                                                         unsigned int stride,
-                                                         unsigned long long offset)
+                                                            const rendering_engine::opengl::vertex_buffer& buffer,
+                                                            const rendering_engine::opengl::type type,
+                                                            unsigned int count,
+                                                            unsigned int stride,
+                                                            unsigned long long offset)
 {
     glBindVertexArray(m_object_id);
     glBindBuffer(GL_ARRAY_BUFFER, buffer.handle());

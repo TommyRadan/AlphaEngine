@@ -70,10 +70,10 @@ namespace rendering_engine
             draw_arrays(const opengl::vertex_array& vao, opengl::primitive mode, unsigned int offset, size_t vertices);
 
             void draw_elements(const opengl::vertex_array& vao,
-                              opengl::primitive mode,
-                              intptr_t offset,
-                              unsigned int count,
-                              rendering_engine::opengl::type type);
+                               opengl::primitive mode,
+                               intptr_t offset,
+                               unsigned int count,
+                               rendering_engine::opengl::type type);
         };
     } // namespace opengl
 } // namespace rendering_engine

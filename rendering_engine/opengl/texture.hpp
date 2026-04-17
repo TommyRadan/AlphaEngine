@@ -44,11 +44,11 @@ namespace rendering_engine
             const uint32_t handle() const;
 
             void image2_d(const void* data,
-                         data_type type,
-                         format format,
-                         uint32_t width,
-                         uint32_t height,
-                         internal_format internal_format);
+                          data_type type,
+                          format format,
+                          uint32_t width,
+                          uint32_t height,
+                          internal_format internal_format);
 
             void set_wrapping_s(wrapping s);
             void set_wrapping_t(wrapping t);

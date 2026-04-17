@@ -147,8 +147,7 @@ namespace rendering_engine
 
     void window::show_message(const std::string& title, const std::string& message)
     {
-        SDL_ShowSimpleMessageBox(
-            SDL_MESSAGEBOX_ERROR, title.c_str(), message.c_str(), m_window.get());
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, title.c_str(), message.c_str(), m_window.get());
     }
 
     void window::show_cursor()

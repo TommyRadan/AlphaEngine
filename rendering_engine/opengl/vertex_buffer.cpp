@@ -38,16 +38,16 @@ const unsigned int rendering_engine::opengl::vertex_buffer::handle() const
 }
 
 void rendering_engine::opengl::vertex_buffer::data(const void* data,
-                                                 const size_t length,
-                                                 const rendering_engine::opengl::buffer_usage usage)
+                                                   const size_t length,
+                                                   const rendering_engine::opengl::buffer_usage usage)
 {
     glBindBuffer(GL_ARRAY_BUFFER, m_object_id);
     glBufferData(GL_ARRAY_BUFFER, length, data, (GLenum)usage);
 }
 
 void rendering_engine::opengl::vertex_buffer::element_data(const void* data,
-                                                        const size_t length,
-                                                        const rendering_engine::opengl::buffer_usage usage)
+                                                           const size_t length,
+                                                           const rendering_engine::opengl::buffer_usage usage)
 {
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_object_id);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, length, data, (GLenum)usage);

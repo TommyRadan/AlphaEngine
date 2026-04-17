@@ -27,8 +27,8 @@
 #include <rendering_engine/rendering_engine.hpp>
 
 rendering_engine::pane::pane(const glm::vec2& size)
-    : m_vertex_count{0}, m_vertex_array_object{nullptr}, m_vertex_buffer{nullptr}, m_indicies_buffer{nullptr}, m_size{size},
-      m_color{0, 0, 0, 0}, m_texture{nullptr}
+    : m_vertex_count{0}, m_vertex_array_object{nullptr}, m_vertex_buffer{nullptr}, m_indicies_buffer{nullptr},
+      m_size{size}, m_color{0, 0, 0, 0}, m_texture{nullptr}
 {
 }
 
@@ -41,11 +41,11 @@ void rendering_engine::pane::set_image(const rendering_engine::util::image& imag
 {
     m_texture = rendering_engine::opengl::context::get_instance().create_texture();
     m_texture->image2_d(image.get_pixels(),
-                       rendering_engine::opengl::data_type::unsigned_byte,
-                       rendering_engine::opengl::format::rgba,
-                       image.get_width(),
-                       image.get_height(),
-                       rendering_engine::opengl::internal_format::rgba);
+                        rendering_engine::opengl::data_type::unsigned_byte,
+                        rendering_engine::opengl::format::rgba,
+                        image.get_width(),
+                        image.get_height(),
+                        rendering_engine::opengl::internal_format::rgba);
 
     m_texture->set_wrapping_r(opengl::wrapping::clamp_edge);
     m_texture->set_wrapping_s(opengl::wrapping::clamp_edge);
@@ -110,8 +110,8 @@ void rendering_engine::pane::render()
     current_renderer->setup_options(options);
 
     rendering_engine::opengl::context::get_instance().draw_elements(*m_vertex_array_object,
-                                                                  rendering_engine::opengl::primitive::triangles,
-                                                                  0,
-                                                                  m_vertex_count,
-                                                                  rendering_engine::opengl::type::unsigned_int);
+                                                                    rendering_engine::opengl::primitive::triangles,
+                                                                    0,
+                                                                    m_vertex_count,
+                                                                    rendering_engine::opengl::type::unsigned_int);
 }

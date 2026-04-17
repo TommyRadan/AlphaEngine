@@ -73,7 +73,6 @@ void event_engine::context::register_listener(const event_type type, const std::
     m_listeners[type].push_back(listener);
     // Registration happens at static-init time (from GAME_MODULE()) and again after
     // main() runs, so keep this quiet at INFO rather than spamming WARN.
-    LOG_INF("Registered listener for event_type=%d (listeners now=%zu)",
-            static_cast<int>(type),
-            m_listeners[type].size());
+    LOG_INF(
+        "Registered listener for event_type=%d (listeners now=%zu)", static_cast<int>(type), m_listeners[type].size());
 }

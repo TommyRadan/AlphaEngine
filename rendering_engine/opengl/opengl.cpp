@@ -47,16 +47,16 @@ void rendering_engine::opengl::context::init()
         throw std::runtime_error{"OpenGL version error! Unsupported hardware or driver"};
     }
 
-    const char* gl_version  = reinterpret_cast<const char*>(glGetString(GL_VERSION));
-    const char* gl_vendor   = reinterpret_cast<const char*>(glGetString(GL_VENDOR));
+    const char* gl_version = reinterpret_cast<const char*>(glGetString(GL_VERSION));
+    const char* gl_vendor = reinterpret_cast<const char*>(glGetString(GL_VENDOR));
     const char* gl_renderer = reinterpret_cast<const char*>(glGetString(GL_RENDERER));
-    const char* gl_glsl     = reinterpret_cast<const char*>(glGetString(GL_SHADING_LANGUAGE_VERSION));
+    const char* gl_glsl = reinterpret_cast<const char*>(glGetString(GL_SHADING_LANGUAGE_VERSION));
 
     LOG_INF("OpenGL context: version=%i.%i", version_major, version_minor);
-    LOG_INF("OpenGL vendor:   %s", gl_vendor   ? gl_vendor   : "<unknown>");
+    LOG_INF("OpenGL vendor:   %s", gl_vendor ? gl_vendor : "<unknown>");
     LOG_INF("OpenGL renderer: %s", gl_renderer ? gl_renderer : "<unknown>");
-    LOG_INF("OpenGL version:  %s", gl_version  ? gl_version  : "<unknown>");
-    LOG_INF("GLSL version:    %s", gl_glsl     ? gl_glsl     : "<unknown>");
+    LOG_INF("OpenGL version:  %s", gl_version ? gl_version : "<unknown>");
+    LOG_INF("GLSL version:    %s", gl_glsl ? gl_glsl : "<unknown>");
 }
 
 void rendering_engine::opengl::context::quit()
@@ -151,7 +151,7 @@ void rendering_engine::opengl::context::depth_mask(const bool write_enabled)
 }
 
 void rendering_engine::opengl::context::bind_texture(const rendering_engine::opengl::texture& texture,
-                                                   const unsigned char unit)
+                                                     const unsigned char unit)
 {
     glActiveTexture(GL_TEXTURE0 + unit);
     glBindTexture(GL_TEXTURE_2D, texture.handle());
@@ -189,9 +189,9 @@ void rendering_engine::opengl::context::bind_framebuffer()
 }
 
 void rendering_engine::opengl::context::draw_arrays(const rendering_engine::opengl::vertex_array& vao,
-                                                  const rendering_engine::opengl::primitive mode,
-                                                  const unsigned int offset,
-                                                  const size_t vertices)
+                                                    const rendering_engine::opengl::primitive mode,
+                                                    const unsigned int offset,
+                                                    const size_t vertices)
 {
     glBindVertexArray(vao.handle());
     glDrawArrays((GLenum)mode, offset, (GLsizei)vertices);
@@ -199,10 +199,10 @@ void rendering_engine::opengl::context::draw_arrays(const rendering_engine::open
 }
 
 void rendering_engine::opengl::context::draw_elements(const rendering_engine::opengl::vertex_array& vao,
-                                                    const rendering_engine::opengl::primitive mode,
-                                                    const intptr_t offset,
-                                                    const unsigned int count,
-                                                    const rendering_engine::opengl::type type)
+                                                      const rendering_engine::opengl::primitive mode,
+                                                      const intptr_t offset,
+                                                      const unsigned int count,
+                                                      const rendering_engine::opengl::type type)
 {
     glBindVertexArray(vao.handle());
     glDrawElements((GLenum)mode, count, (GLenum)type, (const GLvoid*)offset);

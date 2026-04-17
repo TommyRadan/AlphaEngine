@@ -86,7 +86,8 @@ camera_id create_camera(camera_type type)
 
 void destroy_camera(camera_id id)
 {
-    auto it = std::find_if(begin(camera_infos), end(camera_infos),
+    auto it = std::find_if(begin(camera_infos),
+                           end(camera_infos),
                            [id](const std::unique_ptr<camera_info>& info) { return info->id == id; });
 
     if (it == end(camera_infos))

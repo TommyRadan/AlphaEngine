@@ -154,28 +154,30 @@ void rendering_engine::opengl::program::set_uniform(const uniform& uniform, cons
     glUniform4f(uniform, value.x, value.y, value.z, value.w);
 }
 
-void rendering_engine::opengl::program::set_uniform(const uniform& uniform, const float* values, const unsigned int count)
+void rendering_engine::opengl::program::set_uniform(const uniform& uniform,
+                                                    const float* values,
+                                                    const unsigned int count)
 {
     glUniform1fv(uniform, count, values);
 }
 
 void rendering_engine::opengl::program::set_uniform(const uniform& uniform,
-                                                  const glm::vec2* values,
-                                                  const unsigned int count)
+                                                    const glm::vec2* values,
+                                                    const unsigned int count)
 {
     glUniform2fv(uniform, count, (float*)values);
 }
 
 void rendering_engine::opengl::program::set_uniform(const uniform& uniform,
-                                                  const glm::vec3* values,
-                                                  const unsigned int count)
+                                                    const glm::vec3* values,
+                                                    const unsigned int count)
 {
     glUniform3fv(uniform, count, (float*)values);
 }
 
 void rendering_engine::opengl::program::set_uniform(const uniform& uniform,
-                                                  const glm::vec4* values,
-                                                  const unsigned int count)
+                                                    const glm::vec4* values,
+                                                    const unsigned int count)
 {
     glUniform4fv(uniform, count, (float*)values);
 }

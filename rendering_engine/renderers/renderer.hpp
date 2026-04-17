@@ -34,7 +34,7 @@ namespace rendering_engine
     {
         class shader;
         class program;
-    }
+    } // namespace opengl
 
     struct shader_deleter
     {

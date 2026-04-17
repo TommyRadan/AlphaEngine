@@ -58,7 +58,8 @@ void infrastructure::logging::init(int argc, char* argv[])
     LOG_INF("AlphaEngine v%s starting ...", infrastructure::version::get_version().c_str());
 }
 
-void infrastructure::logging::message(enum verbosity verbosity, const char* file, unsigned line, const char* format, ...)
+void infrastructure::logging::message(
+    enum verbosity verbosity, const char* file, unsigned line, const char* format, ...)
 {
     va_list args;
     va_start(args, format);

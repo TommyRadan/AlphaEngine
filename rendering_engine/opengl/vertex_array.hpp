@@ -44,11 +44,11 @@ namespace rendering_engine
             const uint32_t handle() const;
 
             void bind_attribute(const attribute& attribute,
-                               const vertex_buffer& buffer,
-                               type type,
-                               unsigned int count,
-                               unsigned int stride,
-                               unsigned long long offset);
+                                const vertex_buffer& buffer,
+                                type type,
+                                unsigned int count,
+                                unsigned int stride,
+                                unsigned long long offset);
 
             void bind_elements(const vertex_buffer& elements);
 

@@ -39,7 +39,8 @@ const glm::mat4 rendering_engine::orthographic_camera::get_projection_matrix() c
         return m_projection;
     }
 
-    m_projection = glm::ortho(-x_magnification, x_magnification, -y_magnification, y_magnification, near_clip, far_clip);
+    m_projection =
+        glm::ortho(-x_magnification, x_magnification, -y_magnification, y_magnification, near_clip, far_clip);
     m_is_projection_matrix_dirty = false;
     return m_projection;
 }
