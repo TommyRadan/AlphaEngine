@@ -62,6 +62,7 @@ void infrastructure::logging::message(enum verbosity verbosity, const char* form
 {
     va_list args;
     va_start(args, format);
-    VLOG_F(verbosity_to_loguru(verbosity), format, args);
+    auto formatted = loguru::vstrprintf(format, args);
     va_end(args);
+    VLOG_F(verbosity_to_loguru(verbosity), "%s", formatted.c_str());
 }
