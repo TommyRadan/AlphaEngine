@@ -58,11 +58,11 @@ void infrastructure::logging::init(int argc, char* argv[])
     LOG_INF("AlphaEngine v%s starting ...", infrastructure::version::get_version().c_str());
 }
 
-void infrastructure::logging::message(enum verbosity verbosity, const char* format, ...)
+void infrastructure::logging::message(enum verbosity verbosity, const char* file, unsigned line, const char* format, ...)
 {
     va_list args;
     va_start(args, format);
     auto formatted = loguru::vstrprintf(format, args);
     va_end(args);
-    VLOG_F(verbosity_to_loguru(verbosity), "%s", formatted.c_str());
+    loguru::log(verbosity_to_loguru(verbosity), file, line, "%s", formatted.c_str());
 }

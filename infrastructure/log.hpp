@@ -24,10 +24,10 @@
 
 #define LOG_INIT(argc, argv) infrastructure::logging::init(argc, argv)
 
-#define LOG_INF(...) infrastructure::logging::message(infrastructure::logging::verbosity::info, __VA_ARGS__)
-#define LOG_WRN(...) infrastructure::logging::message(infrastructure::logging::verbosity::warn, __VA_ARGS__)
-#define LOG_ERR(...) infrastructure::logging::message(infrastructure::logging::verbosity::error, __VA_ARGS__)
-#define LOG_FTL(...) infrastructure::logging::message(infrastructure::logging::verbosity::fatal, __VA_ARGS__)
+#define LOG_INF(...) infrastructure::logging::message(infrastructure::logging::verbosity::info,  __FILE__, __LINE__, __VA_ARGS__)
+#define LOG_WRN(...) infrastructure::logging::message(infrastructure::logging::verbosity::warn,  __FILE__, __LINE__, __VA_ARGS__)
+#define LOG_ERR(...) infrastructure::logging::message(infrastructure::logging::verbosity::error, __FILE__, __LINE__, __VA_ARGS__)
+#define LOG_FTL(...) infrastructure::logging::message(infrastructure::logging::verbosity::fatal, __FILE__, __LINE__, __VA_ARGS__)
 
 namespace infrastructure
 {
@@ -54,9 +54,11 @@ namespace infrastructure
         /**
          * @brief Logs a message
          * @param verbosity The verbosity of the message (INFO, WARN, ERROR, FATAL)
+         * @param file The source file the call originated from
+         * @param line The source line the call originated from
          * @param format The format of the message
          * @param ... The arguments
          */
-        void message(enum verbosity verbosity, const char* format, ...);
+        void message(enum verbosity verbosity, const char* file, unsigned line, const char* format, ...);
     }; // namespace logging
 } // namespace infrastructure
