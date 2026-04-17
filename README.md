@@ -7,8 +7,7 @@ AlphaEngine is a simulation engine written in C++ that uses OpenGL for rendering
 - CMake 3.16 or higher
 - A C++20 compatible compiler
 - SDL2
-- GLEW
-- OpenGL
+- OpenGL 3.3 (Core profile)
 
 ## Building the Project
 

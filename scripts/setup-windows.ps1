@@ -4,7 +4,7 @@
 
 .DESCRIPTION
     Installs Visual Studio 2022 Build Tools (C++ workload) and vcpkg, then uses
-    vcpkg to install SDL2, GLEW, and GLM. Safe to re-run: every step skips work
+    vcpkg to install SDL2 and GLM. Safe to re-run: every step skips work
     that has already been done.
 
     After completion, build from the repo root with:
@@ -95,8 +95,8 @@ if (-not (Test-Path $vcpkgExe)) {
 }
 Write-Ok "vcpkg ready at $VcpkgRoot"
 
-Write-Step "Installing SDL2, GLEW, GLM via vcpkg (x64-windows)"
-& $vcpkgExe install sdl2:x64-windows glew:x64-windows glm:x64-windows --recurse | Out-Host
+Write-Step "Installing SDL2, GLM via vcpkg (x64-windows)"
+& $vcpkgExe install sdl2:x64-windows glm:x64-windows --recurse | Out-Host
 if ($LASTEXITCODE -ne 0) { throw "vcpkg install failed." }
 Write-Ok "Libraries installed"
 

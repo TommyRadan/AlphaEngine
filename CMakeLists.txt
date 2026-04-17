@@ -23,7 +23,7 @@
 # This file defines AlphaEngine build system
 
 cmake_minimum_required(VERSION 3.16)
-project(AlphaEngine CXX)
+project(AlphaEngine C CXX)
 
 # Set build type to Debug if not specified
 if(NOT CMAKE_BUILD_TYPE)
@@ -114,9 +114,10 @@ target_include_directories(AlphaEngine PRIVATE ${GLM_INCLUDE_DIR})
 target_include_directories(AlphaEngine PRIVATE ${VENDOR_ROOT}loguru)
 target_include_directories(AlphaEngine PRIVATE ${VENDOR_ROOT}stb/)
 
-find_package(GLEW REQUIRED)
-target_link_libraries(AlphaEngine GLEW::GLEW)
-#target_include_directories(AlphaEngine PRIVATE ${GLEW_INCLUDE_DIRS})
+# glad — OpenGL loader (generated for GL 3.3 Core, no extensions)
+add_library(glad STATIC ${VENDOR_ROOT}glad/src/gl.c)
+target_include_directories(glad PUBLIC ${VENDOR_ROOT}glad/include)
+target_link_libraries(AlphaEngine glad)
 
 find_package(OpenGL REQUIRED)
 target_link_libraries(AlphaEngine ${OPENGL_LIBRARIES})
