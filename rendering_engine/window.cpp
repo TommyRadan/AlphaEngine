@@ -29,7 +29,7 @@
 #include <rendering_engine/opengl/opengl.hpp>
 #include <rendering_engine/util/color.hpp>
 #include <rendering_engine/window.hpp>
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 namespace rendering_engine
 {
@@ -45,7 +45,7 @@ namespace rendering_engine
     {
         if (ctx != nullptr)
         {
-            SDL_GL_DeleteContext(ctx);
+            SDL_GL_DestroyContext(static_cast<SDL_GLContext>(ctx));
         }
     }
 
@@ -55,7 +55,7 @@ namespace rendering_engine
     {
         LOG_INF("Init rendering_engine::window");
 
-        if (SDL_InitSubSystem(SDL_INIT_VIDEO) != 0)
+        if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
         {
             LOG_FTL("Could not initialize video system");
             LOG_FTL("SDL_Error: %s", SDL_GetError());
@@ -63,10 +63,11 @@ namespace rendering_engine
         }
 
         ::settings& s{::settings::get_instance()};
-        uint32_t window_flags{SDL_WINDOW_OPENGL};
+        SDL_WindowFlags window_flags{SDL_WINDOW_OPENGL};
         auto type{s.get_window_type()};
 
         const char* type_name = "windowed";
+        bool fullscreen = false;
         if (type == win_type::win_type_borderless)
         {
             window_flags |= SDL_WINDOW_BORDERLESS;
@@ -76,9 +77,8 @@ namespace rendering_engine
         if (type == win_type::win_type_fullscreen)
         {
             window_flags |= SDL_WINDOW_FULLSCREEN;
-            SDL_ShowCursor(SDL_DISABLE);
-            SDL_SetRelativeMouseMode(SDL_TRUE);
             type_name = "fullscreen";
+            fullscreen = true;
         }
 
         LOG_INF("Creating window: name='%s' size=%ux%u mode=%s double_buffered=%s",
@@ -99,18 +99,20 @@ namespace rendering_engine
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
 
-        m_window.reset(SDL_CreateWindow(s.get_window_name(),
-                                        SDL_WINDOWPOS_CENTERED,
-                                        SDL_WINDOWPOS_CENTERED,
-                                        s.get_window_width(),
-                                        s.get_window_height(),
-                                        window_flags));
+        m_window.reset(
+            SDL_CreateWindow(s.get_window_name(), s.get_window_width(), s.get_window_height(), window_flags));
 
         if (m_window == nullptr)
         {
             LOG_FTL("Cannot create window");
             LOG_FTL("SDL Error: %s", SDL_GetError());
             throw std::runtime_error{SDL_GetError()};
+        }
+
+        if (fullscreen)
+        {
+            SDL_HideCursor();
+            SDL_SetWindowRelativeMouseMode(m_window.get(), true);
         }
 
         m_gl_context.reset(SDL_GL_CreateContext(m_window.get()));
@@ -152,14 +154,14 @@ namespace rendering_engine
 
     void window::show_cursor()
     {
-        SDL_ShowCursor(SDL_ENABLE);
-        SDL_SetRelativeMouseMode(SDL_FALSE);
+        SDL_ShowCursor();
+        SDL_SetWindowRelativeMouseMode(m_window.get(), false);
     }
 
     void window::hide_cursor()
     {
-        SDL_ShowCursor(SDL_DISABLE);
-        SDL_SetRelativeMouseMode(SDL_TRUE);
+        SDL_HideCursor();
+        SDL_SetWindowRelativeMouseMode(m_window.get(), true);
     }
 
     void window::tick()
@@ -175,23 +177,23 @@ namespace rendering_engine
         {
             switch (events.type)
             {
-            case SDL_KEYDOWN:
+            case SDL_EVENT_KEY_DOWN:
             {
                 event_engine::key_down key_down;
-                key_down.m_key_code = (event_engine::key_code)events.key.keysym.sym;
+                key_down.m_key_code = (event_engine::key_code)events.key.key;
                 event_engine::context::get_instance().broadcast(key_down);
                 break;
             }
 
-            case SDL_KEYUP:
+            case SDL_EVENT_KEY_UP:
             {
                 event_engine::key_up key_up;
-                key_up.m_key_code = (event_engine::key_code)events.key.keysym.sym;
+                key_up.m_key_code = (event_engine::key_code)events.key.key;
                 event_engine::context::get_instance().broadcast(key_up);
                 break;
             }
 
-            case SDL_MOUSEBUTTONDOWN:
+            case SDL_EVENT_MOUSE_BUTTON_DOWN:
             {
                 event_engine::mouse_key_down mouse_key_down;
                 switch (events.button.button)
@@ -215,7 +217,7 @@ namespace rendering_engine
                 break;
             }
 
-            case SDL_MOUSEBUTTONUP:
+            case SDL_EVENT_MOUSE_BUTTON_UP:
             {
                 event_engine::mouse_key_up mouse_key_up;
                 mouse_key_up.m_key_code = event_engine::mouse_key_code::left;
@@ -240,16 +242,16 @@ namespace rendering_engine
                 break;
             }
 
-            case SDL_MOUSEMOTION:
+            case SDL_EVENT_MOUSE_MOTION:
             {
                 event_engine::mouse_move mouse_move;
-                mouse_move.m_x = events.motion.xrel;
-                mouse_move.m_y = events.motion.yrel;
+                mouse_move.m_x = static_cast<int>(events.motion.xrel);
+                mouse_move.m_y = static_cast<int>(events.motion.yrel);
                 event_engine::context::get_instance().broadcast(mouse_move);
                 break;
             }
 
-            case SDL_QUIT:
+            case SDL_EVENT_QUIT:
                 event_engine::context::get_instance().broadcast(event_engine::quit_requested());
                 break;
 

@@ -103,10 +103,23 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "App
     target_compile_options(AlphaEngine PRIVATE -stdlib=libc++)
 endif()
 
-# Find and link to external dependencies
-find_package(SDL2 REQUIRED)
-target_link_libraries(AlphaEngine SDL2::SDL2)
-target_include_directories(AlphaEngine PRIVATE ${SDL2_INCLUDE_DIRS})
+# SDL3 — fetched and built statically from source
+include(FetchContent)
+set(SDL_STATIC ON CACHE BOOL "" FORCE)
+set(SDL_SHARED OFF CACHE BOOL "" FORCE)
+set(SDL_TEST_LIBRARY OFF CACHE BOOL "" FORCE)
+set(SDL_TESTS OFF CACHE BOOL "" FORCE)
+set(SDL_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(SDL_INSTALL OFF CACHE BOOL "" FORCE)
+set(SDL_DISABLE_INSTALL ON CACHE BOOL "" FORCE)
+FetchContent_Declare(
+    SDL3
+    GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
+    GIT_TAG release-3.2.0
+    GIT_SHALLOW TRUE
+)
+FetchContent_MakeAvailable(SDL3)
+target_link_libraries(AlphaEngine SDL3::SDL3-static)
 
 find_package(GLM REQUIRED)
 target_include_directories(AlphaEngine PRIVATE ${GLM_INCLUDE_DIR})
@@ -126,9 +139,3 @@ target_link_libraries(AlphaEngine ${OPENGL_LIBRARIES})
 if(APPLE)
     target_link_libraries(AlphaEngine "-framework CoreFoundation -framework IOKit -framework CoreVideo")
 endif(APPLE)
-
-#if(APPLE)
-#    add_custom_command(TARGET AlphaEngine POST_BUILD
-#        COMMAND ${CMAKE_COMMAND} -E copy ${SDL2_LIBRARIES} ${LIBRARY_OUTPUT_PATH}
-#        COMMAND ${CMAKE_COMMAND} -E copy ${OPENGL_LIBRARIES} ${LIBRARY_OUTPUT_PATH})
-#endif(APPLE)
