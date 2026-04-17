@@ -33,12 +33,14 @@ namespace rendering_engine
         {
             byte = GL_BYTE,
             unsigned_byte = GL_UNSIGNED_BYTE,
+            // NOLINTBEGIN(readability-identifier-naming) — capitalized to avoid C++ keyword collisions
             Short = GL_SHORT,
             unsigned_short = GL_UNSIGNED_SHORT,
             Int = GL_INT,
             unsigned_int = GL_UNSIGNED_INT,
             Float = GL_FLOAT,
             Double = GL_DOUBLE
+            // NOLINTEND(readability-identifier-naming)
         };
 
         using attribute = GLint;
@@ -170,12 +172,14 @@ namespace rendering_engine
         {
             byte = GL_BYTE,
             unsigned_byte = GL_UNSIGNED_BYTE,
+            // NOLINTBEGIN(readability-identifier-naming) — capitalized to avoid C++ keyword collisions
             Short = GL_SHORT,
             unsigned_short = GL_UNSIGNED_SHORT,
             Int = GL_INT,
             unsigned_int = GL_UNSIGNED_INT,
             Float = GL_FLOAT,
             Double = GL_DOUBLE,
+            // NOLINTEND(readability-identifier-naming)
 
             unsigned_byte332 = GL_UNSIGNED_BYTE_3_3_2,
             unsigned_byte233_rev = GL_UNSIGNED_BYTE_2_3_3_REV,
