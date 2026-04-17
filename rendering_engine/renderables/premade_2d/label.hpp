@@ -22,6 +22,8 @@
 
 #pragma once
 
+#include <memory>
+
 #include <rendering_engine/renderables/premade_2d/pane.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
 
@@ -42,8 +44,9 @@ namespace rendering_engine
         void render() final;
 
     private:
+        // Non-owning: font lifetime is managed by the caller.
         rendering_engine::util::font* m_font;
         std::string m_text;
-        std::vector<rendering_engine::pane*> m_panes;
+        std::vector<std::unique_ptr<rendering_engine::pane>> m_panes;
     };
 } // namespace rendering_engine

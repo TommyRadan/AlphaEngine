@@ -22,12 +22,28 @@
 
 #pragma once
 
+#include <memory>
 #include <string>
 
 #include <infrastructure/singleton.hpp>
 
+struct SDL_Window;
+
 namespace rendering_engine
 {
+    struct sdl_window_deleter
+    {
+        void operator()(SDL_Window* w) const noexcept;
+    };
+
+    struct sdl_gl_context_deleter
+    {
+        void operator()(void* ctx) const noexcept;
+    };
+
+    using sdl_window_handle = std::unique_ptr<SDL_Window, sdl_window_deleter>;
+    using sdl_gl_context_handle = std::unique_ptr<void, sdl_gl_context_deleter>;
+
     struct window : public singleton<window>
     {
         window();
@@ -45,7 +61,7 @@ namespace rendering_engine
         void hide_cursor();
 
     private:
-        void* m_window;
-        void* m_gl_context;
+        sdl_window_handle m_window;
+        sdl_gl_context_handle m_gl_context;
     };
 } // namespace rendering_engine

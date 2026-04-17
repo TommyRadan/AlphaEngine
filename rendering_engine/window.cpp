@@ -33,7 +33,23 @@
 
 namespace rendering_engine
 {
-    window::window() : m_window{nullptr}, m_gl_context{nullptr} {}
+    void sdl_window_deleter::operator()(SDL_Window* w) const noexcept
+    {
+        if (w != nullptr)
+        {
+            SDL_DestroyWindow(w);
+        }
+    }
+
+    void sdl_gl_context_deleter::operator()(void* ctx) const noexcept
+    {
+        if (ctx != nullptr)
+        {
+            SDL_GL_DeleteContext(ctx);
+        }
+    }
+
+    window::window() = default;
 
     void window::init()
     {
@@ -71,12 +87,12 @@ namespace rendering_engine
         SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, s.is_double_buffered());
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
 
-        m_window = SDL_CreateWindow(s.get_window_name(),
-                                    SDL_WINDOWPOS_CENTERED,
-                                    SDL_WINDOWPOS_CENTERED,
-                                    s.get_window_width(),
-                                    s.get_window_height(),
-                                    window_flags);
+        m_window.reset(SDL_CreateWindow(s.get_window_name(),
+                                        SDL_WINDOWPOS_CENTERED,
+                                        SDL_WINDOWPOS_CENTERED,
+                                        s.get_window_width(),
+                                        s.get_window_height(),
+                                        window_flags));
 
         if (m_window == nullptr)
         {
@@ -85,14 +101,14 @@ namespace rendering_engine
             throw std::runtime_error{SDL_GetError()};
         }
 
-        m_gl_context = SDL_GL_CreateContext(static_cast<SDL_Window*>(m_window));
+        m_gl_context.reset(SDL_GL_CreateContext(m_window.get()));
         SDL_GL_SetSwapInterval(0);
     }
 
     void window::quit()
     {
-        SDL_GL_DeleteContext(m_gl_context);
-        SDL_DestroyWindow(static_cast<SDL_Window*>(m_window));
+        m_gl_context.reset();
+        m_window.reset();
 
         SDL_QuitSubSystem(SDL_INIT_VIDEO);
 
@@ -108,13 +124,13 @@ namespace rendering_engine
 
     void window::swap_buffers()
     {
-        SDL_GL_SwapWindow(static_cast<SDL_Window*>(m_window));
+        SDL_GL_SwapWindow(m_window.get());
     }
 
     void window::show_message(const std::string& title, const std::string& message)
     {
         SDL_ShowSimpleMessageBox(
-            SDL_MESSAGEBOX_ERROR, title.c_str(), message.c_str(), static_cast<SDL_Window*>(m_window));
+            SDL_MESSAGEBOX_ERROR, title.c_str(), message.c_str(), m_window.get());
     }
 
     void window::show_cursor()

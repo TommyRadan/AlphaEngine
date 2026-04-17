@@ -35,6 +35,7 @@ namespace rendering_engine
         void attach();
         void detach();
 
+        // Non-owning: points to the currently attached camera, or nullptr.
         static camera* get_current_camera();
 
         rendering_engine::util::transform transform;
@@ -51,6 +52,7 @@ namespace rendering_engine
         mutable glm::mat4 m_projection;
         mutable bool m_is_projection_matrix_dirty;
 
+        // Non-owning observer: lifetime managed elsewhere (e.g. by the creator of the camera).
         static camera* m_current_camera;
     };
 } // namespace rendering_engine
