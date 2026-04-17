@@ -21,7 +21,7 @@
  */
 
 #include <infrastructure/time.hpp>
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 infrastructure::time::time() : m_frame_count{0}, m_delta_time{0} {}
 

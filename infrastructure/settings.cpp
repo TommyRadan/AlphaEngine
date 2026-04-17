@@ -23,7 +23,7 @@
 #include <infrastructure/log.hpp>
 #include <infrastructure/settings.hpp>
 #include <infrastructure/version.hpp>
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 settings::settings()
 {
@@ -38,19 +38,18 @@ settings::settings()
     m_window_height = 600;
     m_window_type = win_type::win_type_windowed;
 #else
-    SDL_DisplayMode displayMode;
-    if (SDL_GetCurrentDisplayMode(0, &displayMode) != 0)
+    const SDL_DisplayMode* displayMode = SDL_GetCurrentDisplayMode(SDL_GetPrimaryDisplay());
+    if (displayMode == nullptr)
     {
-        LOG_WRN("SDL_GetCurrentDisplayMode failed (%s); falling back to 1280x720 windowed",
-                SDL_GetError());
+        LOG_WRN("SDL_GetCurrentDisplayMode failed (%s); falling back to 1280x720 windowed", SDL_GetError());
         m_window_width = 1280;
         m_window_height = 720;
         m_window_type = win_type::win_type_windowed;
     }
     else
     {
-        m_window_width = displayMode.w;
-        m_window_height = displayMode.h;
+        m_window_width = displayMode->w;
+        m_window_height = displayMode->h;
         m_window_type = win_type::win_type_fullscreen;
     }
 #endif

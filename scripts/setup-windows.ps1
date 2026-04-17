@@ -4,8 +4,9 @@
 
 .DESCRIPTION
     Installs Visual Studio 2022 Build Tools (C++ workload) and vcpkg, then uses
-    vcpkg to install SDL2 and GLM. Safe to re-run: every step skips work
-    that has already been done.
+    vcpkg to install GLM. SDL3 is built from source by the project's CMake via
+    FetchContent, so no vcpkg SDL package is required. Safe to re-run: every
+    step skips work that has already been done.
 
     After completion, build from the repo root with:
 
@@ -95,8 +96,8 @@ if (-not (Test-Path $vcpkgExe)) {
 }
 Write-Ok "vcpkg ready at $VcpkgRoot"
 
-Write-Step "Installing SDL2, GLM via vcpkg (x64-windows)"
-& $vcpkgExe install sdl2:x64-windows glm:x64-windows --recurse | Out-Host
+Write-Step "Installing GLM via vcpkg (x64-windows)"
+& $vcpkgExe install glm:x64-windows --recurse | Out-Host
 if ($LASTEXITCODE -ne 0) { throw "vcpkg install failed." }
 Write-Ok "Libraries installed"
 
