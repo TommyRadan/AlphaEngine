@@ -20,30 +20,43 @@
  * SOFTWARE.
  */
 
-#include <stdexcept>
+#include "api/game_module.hpp"
+#include "api/log.hpp"
+#include "api/time.hpp"
 
-#include <event_engine/event_engine.hpp>
-#include <infrastructure/log.hpp>
+#include <rendering_engine/renderables/premade_3d/cube.hpp>
 
-void event_engine::context::init()
+#include <rendering_engine/opengl/opengl.hpp>
+
+static rendering_engine::cube* cube;
+
+float rotation = 0.0f;
+float rotation_speed = 3.14f / 2;
+
+static void on_engine_start(const event_engine::event& event)
 {
-    LOG_INF("Init Event Engine");
+    cube = new rendering_engine::cube();
+
+    cube->upload();
 }
 
-void event_engine::context::quit()
+static void on_frame(const event_engine::event& event)
 {
-    LOG_INF("Quit Event Engine");
+    rotation += rotation_speed * (static_cast<float>(get_delta_time()) / 1000);
+    cube->transform.set_rotation(glm::vec3{0.f, 0.f, rotation});
 }
 
-void event_engine::context::broadcast(const event& event)
+static void on_render_scene(const event_engine::event& event)
 {
-    for (const auto& listener : m_listeners[event.m_type])
-    {
-        listener(event);
-    }
+    cube->render();
 }
 
-void event_engine::context::register_listener(const event_type type, const std::function<void(const event&)>& listener)
+GAME_MODULE()
 {
-    m_listeners[type].push_back(listener);
+    struct game_module_info info;
+    info.on_engine_start = on_engine_start;
+    info.on_render_scene = on_render_scene;
+    info.on_frame = on_frame;
+    register_game_module(info);
+    return true;
 }

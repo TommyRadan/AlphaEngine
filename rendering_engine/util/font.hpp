@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2015-2025 Tomislav Radanovic
+ * Copyright (c) 2015-2019 Tomislav Radanovic
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -20,30 +20,27 @@
  * SOFTWARE.
  */
 
-#include <stdexcept>
+#pragma once
 
-#include <event_engine/event_engine.hpp>
-#include <infrastructure/log.hpp>
+#include <map>
+#include <string>
+#include <vector>
 
-void event_engine::context::init()
+#include <rendering_engine/util/image.hpp>
+#include <stb_truetype.hpp>
+
+namespace rendering_engine::util
 {
-    LOG_INF("Init Event Engine");
-}
-
-void event_engine::context::quit()
-{
-    LOG_INF("Quit Event Engine");
-}
-
-void event_engine::context::broadcast(const event& event)
-{
-    for (const auto& listener : m_listeners[event.m_type])
+    struct font
     {
-        listener(event);
-    }
-}
+        font(const std::string& filename, float font_size);
 
-void event_engine::context::register_listener(const event_type type, const std::function<void(const event&)>& listener)
-{
-    m_listeners[type].push_back(listener);
-}
+        const rendering_engine::util::image* get_image(char letter, int* x0, int* y0, int* x1, int* y1);
+
+    private:
+        std::map<char, rendering_engine::util::image*> m_images;
+        std::vector<unsigned char> m_buffer;
+        stbtt_fontinfo m_font;
+        float m_scale;
+    };
+} // namespace rendering_engine::util

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2015-2025 Tomislav Radanovic
+ * Copyright (c) 2015-2019 Tomislav Radanovic
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -20,30 +20,37 @@
  * SOFTWARE.
  */
 
-#include <stdexcept>
+#pragma once
 
-#include <event_engine/event_engine.hpp>
-#include <infrastructure/log.hpp>
+#include <rendering_engine/util/color.hpp>
+#include <string>
 
-void event_engine::context::init()
+namespace rendering_engine::util
 {
-    LOG_INF("Init Event Engine");
-}
-
-void event_engine::context::quit()
-{
-    LOG_INF("Quit Event Engine");
-}
-
-void event_engine::context::broadcast(const event& event)
-{
-    for (const auto& listener : m_listeners[event.m_type])
+    struct image
     {
-        listener(event);
-    }
-}
+        image();
+        explicit image(const std::string& filename);
+        image(const image& image);
+        image(image&& image) noexcept;
 
-void event_engine::context::register_listener(const event_type type, const std::function<void(const event&)>& listener)
-{
-    m_listeners[type].push_back(listener);
-}
+        image(uint32_t width, uint32_t height, const color& background);
+        image(uint32_t width, uint32_t height, color* data);
+
+        virtual ~image();
+
+        image& operator=(const image& image);
+        image& operator=(image&& image) noexcept;
+
+        const uint32_t get_width() const;
+        const uint32_t get_height() const;
+        const color* const get_pixels() const;
+
+        color get_pixel(uint32_t x, uint32_t y) const;
+        void set_pixel(uint32_t x, uint32_t y, const color& color);
+
+    private:
+        color* m_image_data;
+        uint32_t m_width, m_height;
+    };
+} // namespace rendering_engine::util

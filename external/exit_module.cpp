@@ -20,30 +20,23 @@
  * SOFTWARE.
  */
 
-#include <stdexcept>
-
+#include "api/game_module.hpp"
+#include "api/log.hpp"
 #include <event_engine/event_engine.hpp>
-#include <infrastructure/log.hpp>
 
-void event_engine::context::init()
+static void on_key_down(const event_engine::event& event)
 {
-    LOG_INF("Init Event Engine");
+    auto key_down_event = dynamic_cast<const event_engine::key_down*>(&event);
+    auto key_code = key_down_event->m_key_code;
+    if (key_code != event_engine::key_code::escape)
+        return;
+    event_engine::context::get_instance().broadcast(event_engine::quit_requested());
 }
 
-void event_engine::context::quit()
+GAME_MODULE()
 {
-    LOG_INF("Quit Event Engine");
-}
-
-void event_engine::context::broadcast(const event& event)
-{
-    for (const auto& listener : m_listeners[event.m_type])
-    {
-        listener(event);
-    }
-}
-
-void event_engine::context::register_listener(const event_type type, const std::function<void(const event&)>& listener)
-{
-    m_listeners[type].push_back(listener);
+    struct game_module_info info;
+    info.on_key_down = on_key_down;
+    register_game_module(info);
+    return true;
 }

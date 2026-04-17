@@ -1,0 +1,38 @@
+---
+# Only the identifier-naming check is enabled. Other checks should be added
+# deliberately — many LLVM/cppcore checks produce high-noise diagnostics that
+# are unrelated to the naming convention we're enforcing here.
+Checks: '-*,readability-identifier-naming'
+WarningsAsErrors: ''
+HeaderFilterRegex: '.*'
+
+CheckOptions:
+  # Types
+  - { key: readability-identifier-naming.NamespaceCase,          value: lower_case }
+  - { key: readability-identifier-naming.ClassCase,              value: lower_case }
+  - { key: readability-identifier-naming.StructCase,             value: lower_case }
+  - { key: readability-identifier-naming.UnionCase,              value: lower_case }
+  - { key: readability-identifier-naming.EnumCase,               value: lower_case }
+  - { key: readability-identifier-naming.TypeAliasCase,          value: lower_case }
+  - { key: readability-identifier-naming.TypedefCase,            value: lower_case }
+
+  # Functions and methods
+  - { key: readability-identifier-naming.FunctionCase,           value: lower_case }
+  - { key: readability-identifier-naming.MethodCase,             value: lower_case }
+
+  # Variables
+  - { key: readability-identifier-naming.VariableCase,           value: lower_case }
+  - { key: readability-identifier-naming.ParameterCase,          value: lower_case }
+  - { key: readability-identifier-naming.MemberCase,             value: lower_case }
+  - { key: readability-identifier-naming.EnumConstantCase,       value: lower_case }
+  - { key: readability-identifier-naming.GlobalConstantCase,     value: lower_case }
+  - { key: readability-identifier-naming.StaticConstantCase,     value: lower_case }
+
+  # Templates: keep the usual single-letter/CamelCase convention
+  - { key: readability-identifier-naming.TemplateParameterCase,  value: CamelCase }
+  - { key: readability-identifier-naming.TypeTemplateParameterCase, value: CamelCase }
+  - { key: readability-identifier-naming.ValueTemplateParameterCase, value: CamelCase }
+
+  # Macros stay UPPER_CASE (standard C/C++ convention)
+  - { key: readability-identifier-naming.MacroDefinitionCase,    value: UPPER_CASE }
+...

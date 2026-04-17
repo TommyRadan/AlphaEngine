@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2015-2025 Tomislav Radanovic
+ * Copyright (c) 2015-2019 Tomislav Radanovic
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -20,30 +20,30 @@
  * SOFTWARE.
  */
 
-#include <stdexcept>
+#pragma once
 
-#include <event_engine/event_engine.hpp>
-#include <infrastructure/log.hpp>
+#include <rendering_engine/renderables/premade_2d/pane.hpp>
+#include <rendering_engine/renderables/renderable.hpp>
 
-void event_engine::context::init()
+#include <rendering_engine/opengl/opengl.hpp>
+#include <rendering_engine/util/font.hpp>
+#include <rendering_engine/util/image.hpp>
+#include <rendering_engine/util/transform.hpp>
+
+namespace rendering_engine
 {
-    LOG_INF("Init Event Engine");
-}
-
-void event_engine::context::quit()
-{
-    LOG_INF("Quit Event Engine");
-}
-
-void event_engine::context::broadcast(const event& event)
-{
-    for (const auto& listener : m_listeners[event.m_type])
+    struct label : public renderable
     {
-        listener(event);
-    }
-}
+        label(rendering_engine::util::font* font, float size, const std::string& text);
 
-void event_engine::context::register_listener(const event_type type, const std::function<void(const event&)>& listener)
-{
-    m_listeners[type].push_back(listener);
-}
+        rendering_engine::util::transform transform;
+
+        void upload() final;
+        void render() final;
+
+    private:
+        rendering_engine::util::font* m_font;
+        std::string m_text;
+        std::vector<rendering_engine::pane*> m_panes;
+    };
+} // namespace rendering_engine

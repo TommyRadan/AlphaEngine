@@ -64,7 +64,7 @@ set(CMAKE_VERBOSE_MAKEFILE false)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 # Vendor options
-set(VENDOR_ROOT ${CMAKE_SOURCE_DIR}/Vendor/)
+set(VENDOR_ROOT ${CMAKE_SOURCE_DIR}/vendor/)
 
 # Make output directory if it doesn't exist
 add_custom_target(build-time-make-directory ALL
@@ -75,23 +75,23 @@ include_directories(${CMAKE_SOURCE_DIR})
 
 # Main executable
 file(GLOB EVENT_ENGINE_FILES "event_engine/*.hpp" "event_engine/*.cpp")
-file(GLOB INFRASTRUCTURE_FILES "Infrastructure/*.hpp" "Infrastructure/*.cpp")
-file(GLOB SCENE_GRAPH_FILES "SceneGraph/*.hpp" "SceneGraph/*.cpp")
+file(GLOB INFRASTRUCTURE_FILES "infrastructure/*.hpp" "infrastructure/*.cpp")
+file(GLOB SCENE_GRAPH_FILES "scene_graph/*.hpp" "scene_graph/*.cpp")
 file(GLOB RENDERING_ENGINE_FILES
-        "RenderingEngine/*.hpp" "RenderingEngine/*.cpp"
-        "RenderingEngine/Mesh/*.hpp" "RenderingEngine/Mesh/*.cpp"
-        "RenderingEngine/Renderables/*.hpp" "RenderingEngine/Renderables/*.cpp"
-        "RenderingEngine/Renderables/Premade2D/*.hpp" "RenderingEngine/Renderables/Premade2D/*.cpp"
-        "RenderingEngine/Renderables/Premade3D/*.hpp" "RenderingEngine/Renderables/Premade3D/*.cpp"
-        "RenderingEngine/Renderers/*.hpp" "RenderingEngine/Renderers/*.cpp"
-        "RenderingEngine/Camera/*.hpp" "RenderingEngine/Camera/*.cpp"
-        "RenderingEngine/OpenGL/*.hpp" "RenderingEngine/OpenGL/*.cpp"
-        "RenderingEngine/Util/*.hpp" "RenderingEngine/Util/*.cpp")
+        "rendering_engine/*.hpp" "rendering_engine/*.cpp"
+        "rendering_engine/mesh/*.hpp" "rendering_engine/mesh/*.cpp"
+        "rendering_engine/renderables/*.hpp" "rendering_engine/renderables/*.cpp"
+        "rendering_engine/renderables/premade_2d/*.hpp" "rendering_engine/renderables/premade_2d/*.cpp"
+        "rendering_engine/renderables/premade_3d/*.hpp" "rendering_engine/renderables/premade_3d/*.cpp"
+        "rendering_engine/renderers/*.hpp" "rendering_engine/renderers/*.cpp"
+        "rendering_engine/camera/*.hpp" "rendering_engine/camera/*.cpp"
+        "rendering_engine/opengl/*.hpp" "rendering_engine/opengl/*.cpp"
+        "rendering_engine/util/*.hpp" "rendering_engine/util/*.cpp")
 file(GLOB EXTERNAL_FILES
-        "External/*.hpp" "External/*.cpp"
-        "External/API/*.hpp" "External/API/*.cpp")
-add_executable(AlphaEngine 
-    Control/MainLoop.cpp
+        "external/*.hpp" "external/*.cpp"
+        "external/api/*.hpp" "external/api/*.cpp")
+add_executable(AlphaEngine
+    control/main_loop.cpp
     ${EXTERNAL_FILES}
     ${EVENT_ENGINE_FILES}
     ${INFRASTRUCTURE_FILES}
@@ -111,8 +111,8 @@ target_include_directories(AlphaEngine PRIVATE ${SDL2_INCLUDE_DIRS})
 find_package(GLM REQUIRED)
 target_include_directories(AlphaEngine PRIVATE ${GLM_INCLUDE_DIR})
 
-target_include_directories(AlphaEngine PRIVATE ${VENDOR_ROOT}Loguru)
-target_include_directories(AlphaEngine PRIVATE ${VENDOR_ROOT}STB/)
+target_include_directories(AlphaEngine PRIVATE ${VENDOR_ROOT}loguru)
+target_include_directories(AlphaEngine PRIVATE ${VENDOR_ROOT}stb/)
 
 find_package(GLEW REQUIRED)
 target_link_libraries(AlphaEngine GLEW::GLEW)

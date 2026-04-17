@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2015-2025 Tomislav Radanovic
+ * Copyright (c) 2015-2019 Tomislav Radanovic
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -20,30 +20,30 @@
  * SOFTWARE.
  */
 
-#include <stdexcept>
+#pragma once
 
-#include <event_engine/event_engine.hpp>
-#include <infrastructure/log.hpp>
+#include <rendering_engine/mesh/mesh.hpp>
+#include <rendering_engine/renderables/renderable.hpp>
+#include <rendering_engine/util/transform.hpp>
 
-void event_engine::context::init()
+#include <rendering_engine/opengl/opengl.hpp>
+
+namespace rendering_engine
 {
-    LOG_INF("Init Event Engine");
-}
-
-void event_engine::context::quit()
-{
-    LOG_INF("Quit Event Engine");
-}
-
-void event_engine::context::broadcast(const event& event)
-{
-    for (const auto& listener : m_listeners[event.m_type])
+    struct model : public renderable
     {
-        listener(event);
-    }
-}
+        model();
 
-void event_engine::context::register_listener(const event_type type, const std::function<void(const event&)>& listener)
-{
-    m_listeners[type].push_back(listener);
-}
+        rendering_engine::util::transform transform;
+
+        void upload_mesh(const rendering_engine::mesh& mesh);
+
+        void render() final;
+
+    private:
+        opengl::vertex_array* m_vertex_array_object;
+        opengl::vertex_buffer* m_vertex_buffer_object;
+
+        size_t m_vertex_count;
+    };
+} // namespace rendering_engine

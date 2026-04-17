@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2015-2025 Tomislav Radanovic
+ * Copyright (c) 2015-2019 Tomislav Radanovic
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -20,30 +20,28 @@
  * SOFTWARE.
  */
 
-#include <stdexcept>
+#pragma once
 
-#include <event_engine/event_engine.hpp>
-#include <infrastructure/log.hpp>
+#include <cstdint>
 
-void event_engine::context::init()
+#include "singleton.hpp"
+
+namespace infrastructure
 {
-    LOG_INF("Init Event Engine");
-}
-
-void event_engine::context::quit()
-{
-    LOG_INF("Quit Event Engine");
-}
-
-void event_engine::context::broadcast(const event& event)
-{
-    for (const auto& listener : m_listeners[event.m_type])
+    struct time : public singleton<time>
     {
-        listener(event);
-    }
-}
+        time();
 
-void event_engine::context::register_listener(const event_type type, const std::function<void(const event&)>& listener)
-{
-    m_listeners[type].push_back(listener);
-}
+        void perform_tick();
+
+        const double delta_time() const;
+        const float total_time() const;
+
+        const uint32_t frame_count() const;
+        const float current_fps() const;
+
+    private:
+        uint32_t m_frame_count;
+        double m_delta_time;
+    };
+} // namespace Infrastructure

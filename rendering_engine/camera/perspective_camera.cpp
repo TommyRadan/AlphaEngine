@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2015-2025 Tomislav Radanovic
+ * Copyright (c) 2015-2019 Tomislav Radanovic
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -20,30 +20,29 @@
  * SOFTWARE.
  */
 
-#include <stdexcept>
+#include <rendering_engine/camera/perspective_camera.hpp>
+#define GLM_ENABLE_EXPERIMENTAL
+#include <gtx/transform.hpp>
+#include <infrastructure/settings.hpp>
 
-#include <event_engine/event_engine.hpp>
-#include <infrastructure/log.hpp>
-
-void event_engine::context::init()
+rendering_engine::perspective_camera::perspective_camera()
 {
-    LOG_INF("Init Event Engine");
+    const ::settings& s = ::settings::get_instance();
+
+    field_of_view = s.get_field_of_view();
+    aspect_ratio = s.get_aspect_ratio();
+    near_clip = 0.1f;
+    far_clip = 10000.0f;
 }
 
-void event_engine::context::quit()
+const glm::mat4 rendering_engine::perspective_camera::get_projection_matrix() const
 {
-    LOG_INF("Quit Event Engine");
-}
-
-void event_engine::context::broadcast(const event& event)
-{
-    for (const auto& listener : m_listeners[event.m_type])
+    if (!m_is_projection_matrix_dirty)
     {
-        listener(event);
+        return m_projection;
     }
-}
 
-void event_engine::context::register_listener(const event_type type, const std::function<void(const event&)>& listener)
-{
-    m_listeners[type].push_back(listener);
+    m_projection = glm::perspective(field_of_view, aspect_ratio, near_clip, far_clip);
+    m_is_projection_matrix_dirty = false;
+    return m_projection;
 }

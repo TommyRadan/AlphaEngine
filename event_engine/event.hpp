@@ -41,27 +41,27 @@ namespace event_engine
 
     enum class key_code
     {
-        W = 119,
-        A = 97,
-        S = 115,
-        D = 100,
-        SPACE = 32,
-        SHIFT = 1073742049,
-        CTRL = 1073741881,
-        ENTER = 13,
-        ESCAPE = 27,
+        w = 119,
+        a = 97,
+        s = 115,
+        d = 100,
+        space = 32,
+        shift = 1073742049,
+        ctrl = 1073741881,
+        enter = 13,
+        escape = 27,
     };
 
     enum class mouse_key_code
     {
-        LEFT = 141881,
-        RIGHT = 141882,
-        MIDDLE = 141883,
+        left = 141881,
+        right = 141882,
+        middle = 141883,
     };
 
     struct event
     {
-        event(event_type type) : m_type { type } {}
+        event(event_type type) : m_type{type} {}
         virtual ~event() = default;
 
         event_type m_type;
@@ -134,4 +134,4 @@ namespace event_engine
         int m_x;
         int m_y;
     };
-}
+} // namespace event_engine

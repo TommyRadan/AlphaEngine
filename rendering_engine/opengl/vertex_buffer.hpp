@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2015-2025 Tomislav Radanovic
+ * Copyright (c) 2015-2019 Tomislav Radanovic
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -22,26 +22,36 @@
 
 #pragma once
 
-#include <functional>
-#include <unordered_map>
-#include <vector>
+#include <cstddef>
 
-#include <event_engine/event.hpp>
-#include <infrastructure/singleton.hpp>
+#include <rendering_engine/opengl/typedef.hpp>
 
-namespace event_engine
+namespace rendering_engine
 {
-    struct context : public singleton<context>
+    namespace opengl
     {
-        context() = default;
+        class vertex_buffer
+        {
+            friend class context;
+            vertex_buffer();
+            ~vertex_buffer();
 
-        void init();
-        void quit();
+            vertex_buffer(const vertex_buffer& other) = delete;
+            vertex_buffer(const vertex_buffer&& other) = delete;
+            const vertex_buffer& operator=(const vertex_buffer& other) = delete;
+            const vertex_buffer&& operator=(const vertex_buffer&& other) = delete;
 
-        void broadcast(const event& event);
-        void register_listener(const event_type type, const std::function<void(const event&)>& listener);
+        public:
+            const unsigned int handle() const;
 
-    private:
-        std::unordered_map<event_type, std::vector<std::function<void(const event&)>>> m_listeners;
-    };
-} // namespace event_engine
+            void data(const void* data, size_t length, buffer_usage usage);
+            void element_data(const void* data, size_t length, buffer_usage usage);
+            void sub_data(const void* data, size_t offset, size_t length);
+
+            void get_sub_data(void* data, size_t offset, size_t length);
+
+        private:
+            unsigned int m_object_id;
+        };
+    } // namespace opengl
+} // namespace rendering_engine
