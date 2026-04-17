@@ -24,6 +24,8 @@
 #include "api/log.hpp"
 #include "api/time.hpp"
 
+#include <infrastructure/log.hpp>
+
 #include <string>
 
 static void on_frame(const event_engine::event& event)
@@ -34,6 +36,7 @@ static void on_frame(const event_engine::event& event)
 
 GAME_MODULE()
 {
+    LOG_INF("Registering external module: frame_module");
     struct game_module_info info;
     info.on_frame = on_frame;
     register_game_module(info);

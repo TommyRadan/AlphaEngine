@@ -57,6 +57,10 @@ The Rendering Engine is responsible for all graphical output. It uses OpenGL for
 
 The Scene Graph manages the hierarchical organization of objects in the scene. It allows for efficient updates and rendering of complex scenes by organizing objects into a tree structure.
 
+## Logging
+
+AlphaEngine uses a thin wrapper over [loguru](https://github.com/emilk/loguru) exposed via `infrastructure/log.hpp`. Four levels are currently available: `LOG_INF`, `LOG_WRN`, `LOG_ERR`, and `LOG_FTL`. See [docs/logging.md](./docs/logging.md) for the conventions used across subsystems and guidance on picking a level when adding new log statements.
+
 ## License
 
 AlphaEngine is licensed under the MIT License. See the [LICENSE](./LICENSE.txt) file for more details.

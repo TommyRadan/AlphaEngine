@@ -40,6 +40,8 @@ int main(int argc, char* argv[])
 {
     LOG_INIT(argc, argv);
 
+    LOG_INF("Engine starting: initializing subsystems");
+
     try
     {
         event_engine::context::get_instance().init();
@@ -48,9 +50,12 @@ int main(int argc, char* argv[])
     }
     catch (const std::exception& e)
     {
+        LOG_ERR("Subsystem initialization failed: %s", e.what());
         rendering_engine::window::get_instance().show_message("Initialization Error", e.what());
         return EXIT_FAILURE;
     }
+
+    LOG_INF("Engine initialized: entering main loop");
 
     try
     {
@@ -69,16 +74,20 @@ int main(int argc, char* argv[])
                 break;
         }
 
+        LOG_INF("Quit requested: broadcasting engine_stop");
         event_engine::context::get_instance().broadcast(event_engine::engine_stop());
     }
     catch (const std::exception& e)
     {
+        LOG_ERR("Unrecoverable error in main loop: %s", e.what());
         rendering_engine::window::get_instance().show_message("Error", e.what());
         return EXIT_FAILURE;
     }
 
+    LOG_INF("Engine shutting down: tearing down subsystems");
     scene_graph::context::get_instance().quit();
     rendering_engine::context::get_instance().quit();
     event_engine::context::get_instance().quit();
+    LOG_INF("Engine stopped cleanly");
     return EXIT_SUCCESS;
 }

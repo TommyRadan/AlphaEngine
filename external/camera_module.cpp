@@ -27,6 +27,7 @@
 #include "api/log.hpp"
 #include "api/time.hpp"
 
+#include <infrastructure/log.hpp>
 #include <infrastructure/settings.hpp>
 #include <rendering_engine/rendering_engine.hpp>
 #define GLM_ENABLE_EXPERIMENTAL
@@ -183,6 +184,7 @@ static void on_mouse_move(const event_engine::event& event)
 
 GAME_MODULE()
 {
+    LOG_INF("Registering external module: camera_module");
     struct game_module_info info = {};
     info.on_frame = on_frame;
     info.on_engine_start = on_engine_start;

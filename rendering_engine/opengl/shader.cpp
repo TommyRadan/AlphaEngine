@@ -30,9 +30,10 @@ rendering_engine::opengl::shader::shader(const shader_type type)
     m_object_id = glCreateShader(GLenum(type));
     if (m_object_id == 0)
     {
-        LOG_FTL("Cannot create shader");
+        LOG_FTL("Cannot create shader (type=0x%X)", static_cast<unsigned>(type));
         throw std::runtime_error{"Shader creation failed!"};
     }
+    LOG_INF("Created shader id=%u type=0x%X", m_object_id, static_cast<unsigned>(type));
 }
 
 rendering_engine::opengl::shader::~shader()
@@ -61,11 +62,14 @@ void rendering_engine::opengl::shader::compile()
 
     if (res != GL_TRUE)
     {
+        LOG_ERR("Shader compile failed (id=%u)", m_object_id);
         LOG_ERR("Shader code: \n%s", m_code.c_str());
-        LOG_ERR("Errors: \n%s", get_info_log().c_str());
+        LOG_ERR("Info log: \n%s", get_info_log().c_str());
         LOG_FTL("Cannot compile shader");
         throw std::runtime_error{get_info_log()};
     }
+
+    LOG_INF("Shader compiled successfully (id=%u)", m_object_id);
 }
 
 std::string rendering_engine::opengl::shader::get_info_log()

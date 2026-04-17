@@ -33,11 +33,11 @@ void rendering_engine::opengl::context::init()
 
     if (!gladLoadGL((GLADloadfunc)SDL_GL_GetProcAddress))
     {
-        LOG_FTL("Could not initialize OpenGL");
+        LOG_FTL("Could not initialize OpenGL (glad failed to load GL functions)");
         throw std::runtime_error{"Could not initialize OpenGL"};
     }
 
-    int version_major, version_minor;
+    int version_major = 0, version_minor = 0;
     glGetIntegerv(GL_MAJOR_VERSION, &version_major);
     glGetIntegerv(GL_MINOR_VERSION, &version_minor);
 
@@ -46,6 +46,17 @@ void rendering_engine::opengl::context::init()
         LOG_FTL("Could not initialize OpenGL, supported version is %i.%i", version_major, version_minor);
         throw std::runtime_error{"OpenGL version error! Unsupported hardware or driver"};
     }
+
+    const char* gl_version  = reinterpret_cast<const char*>(glGetString(GL_VERSION));
+    const char* gl_vendor   = reinterpret_cast<const char*>(glGetString(GL_VENDOR));
+    const char* gl_renderer = reinterpret_cast<const char*>(glGetString(GL_RENDERER));
+    const char* gl_glsl     = reinterpret_cast<const char*>(glGetString(GL_SHADING_LANGUAGE_VERSION));
+
+    LOG_INF("OpenGL context: version=%i.%i", version_major, version_minor);
+    LOG_INF("OpenGL vendor:   %s", gl_vendor   ? gl_vendor   : "<unknown>");
+    LOG_INF("OpenGL renderer: %s", gl_renderer ? gl_renderer : "<unknown>");
+    LOG_INF("OpenGL version:  %s", gl_version  ? gl_version  : "<unknown>");
+    LOG_INF("GLSL version:    %s", gl_glsl     ? gl_glsl     : "<unknown>");
 }
 
 void rendering_engine::opengl::context::quit()

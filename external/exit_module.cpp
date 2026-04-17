@@ -23,6 +23,7 @@
 #include "api/game_module.hpp"
 #include "api/log.hpp"
 #include <event_engine/event_engine.hpp>
+#include <infrastructure/log.hpp>
 
 static void on_key_down(const event_engine::event& event)
 {
@@ -35,6 +36,7 @@ static void on_key_down(const event_engine::event& event)
 
 GAME_MODULE()
 {
+    LOG_INF("Registering external module: exit_module");
     struct game_module_info info;
     info.on_key_down = on_key_down;
     register_game_module(info);

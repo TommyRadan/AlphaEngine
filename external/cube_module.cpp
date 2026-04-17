@@ -24,6 +24,7 @@
 #include "api/log.hpp"
 #include "api/time.hpp"
 
+#include <infrastructure/log.hpp>
 #include <rendering_engine/renderables/premade_3d/cube.hpp>
 
 #include <rendering_engine/opengl/opengl.hpp>
@@ -59,6 +60,7 @@ static void on_render_scene(const event_engine::event& event)
 
 GAME_MODULE()
 {
+    LOG_INF("Registering external module: cube_module");
     struct game_module_info info;
     info.on_engine_start = on_engine_start;
     info.on_engine_stop = on_engine_stop;

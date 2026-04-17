@@ -20,23 +20,39 @@
  * SOFTWARE.
  */
 
+#include <infrastructure/log.hpp>
 #include <infrastructure/settings.hpp>
 #include <infrastructure/version.hpp>
 #include <SDL.h>
 
 settings::settings()
 {
+    // Settings are currently sourced from compile-time defaults / the current
+    // display mode rather than a config file. When a file-based loader is
+    // introduced, log the resolved config path at INFO here. For now we log
+    // "compiled-in defaults" as the resolved source.
+    LOG_INF("Settings: loading from compiled-in defaults (no config file on disk)");
+
 #if _DEBUG
     m_window_width = 800;
     m_window_height = 600;
     m_window_type = win_type::win_type_windowed;
 #else
     SDL_DisplayMode displayMode;
-    SDL_GetCurrentDisplayMode(0, &displayMode);
-
-    m_window_width = displayMode.w;
-    m_window_height = displayMode.h;
-    m_window_type = win_type::win_type_fullscreen;
+    if (SDL_GetCurrentDisplayMode(0, &displayMode) != 0)
+    {
+        LOG_WRN("SDL_GetCurrentDisplayMode failed (%s); falling back to 1280x720 windowed",
+                SDL_GetError());
+        m_window_width = 1280;
+        m_window_height = 720;
+        m_window_type = win_type::win_type_windowed;
+    }
+    else
+    {
+        m_window_width = displayMode.w;
+        m_window_height = displayMode.h;
+        m_window_type = win_type::win_type_fullscreen;
+    }
 #endif
 
     m_window_name = std::string{"AlphaEngine v"} + infrastructure::version::get_version();
@@ -44,6 +60,17 @@ settings::settings()
     m_field_of_view = 70.0f;
     m_mouse_sensitivity = 0.005f;
     m_is_mouse_reversed = false;
+
+    LOG_INF("Settings parsed: window=%ux%u type=%d double_buffered=%d fov=%.1f "
+            "mouse_sensitivity=%.4f mouse_reversed=%d name='%s'",
+            m_window_width,
+            m_window_height,
+            static_cast<int>(m_window_type),
+            m_is_double_buffered ? 1 : 0,
+            m_field_of_view,
+            m_mouse_sensitivity,
+            m_is_mouse_reversed ? 1 : 0,
+            m_window_name.c_str());
 }
 
 const unsigned int settings::get_window_width() const noexcept
