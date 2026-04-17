@@ -20,6 +20,11 @@
  * SOFTWARE.
  */
 
+/**
+ * @file rendering_engine.hpp
+ * @brief Top-level entry point for the rendering subsystem.
+ */
+
 #pragma once
 
 #include <vector>
@@ -28,11 +33,34 @@
 
 namespace rendering_engine
 {
+    /**
+     * @brief Orchestrates the rendering subsystem (window, GL context, renderers).
+     *
+     * Process-wide singleton. @ref init brings up the window and OpenGL
+     * context and constructs the built-in renderers; @ref quit tears the
+     * GL context and window down in reverse order. All methods must be
+     * called from the main thread that owns the GL context.
+     */
     struct context : public singleton<context>
     {
+        /**
+         * @brief Initializes the window, GL context and built-in renderers.
+         *        Must be called once before @ref render.
+         */
         void init();
+
+        /** @brief Tears the renderers, GL context and window down. */
         void quit();
 
+        /**
+         * @brief Renders one frame.
+         *
+         * Runs the scene pass (broadcasting @ref event_engine::render_scene
+         * if a camera is active) followed by the UI overlay pass
+         * (broadcasting @ref event_engine::render_ui). Depth testing is
+         * disabled for the overlay and restored afterwards. Does not
+         * swap buffers — callers are responsible for presenting.
+         */
         void render();
     };
 } // namespace rendering_engine

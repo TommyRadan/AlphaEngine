@@ -20,19 +20,33 @@
  * SOFTWARE.
  */
 
+/**
+ * @file settings.hpp
+ * @brief Global read-only application settings (window, camera, input).
+ */
+
 #pragma once
 
 #include <string>
 
 #include <infrastructure/singleton.hpp>
 
+/** @brief Presentation mode for the application window. */
 enum class win_type
 {
-    win_type_windowed,
-    win_type_borderless,
-    win_type_fullscreen
+    win_type_windowed,   /**< Standard decorated window. */
+    win_type_borderless, /**< Borderless window. */
+    win_type_fullscreen  /**< Exclusive fullscreen. */
 };
 
+/**
+ * @brief Process-wide configuration singleton.
+ *
+ * Values are populated in the constructor — debug builds default to an
+ * 800x600 windowed layout, release builds match the current display
+ * mode and go fullscreen. All accessors are @c const and @c noexcept;
+ * the struct is intended as read-only engine-wide configuration.
+ */
 struct settings : public singleton<settings>
 {
     settings();
@@ -44,7 +58,10 @@ struct settings : public singleton<settings>
     const bool is_double_buffered() const noexcept;
     const float get_field_of_view() const noexcept;
     const float get_mouse_sensitivity() const noexcept;
+
+    /** @brief Returns @c width / @c height of the window. */
     const float get_aspect_ratio() const noexcept;
+
     const bool is_mouse_reversed() const noexcept;
 
 private:

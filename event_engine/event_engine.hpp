@@ -20,6 +20,11 @@
  * SOFTWARE.
  */
 
+/**
+ * @file event_engine.hpp
+ * @brief Event dispatch subsystem: publish/subscribe hub for engine events.
+ */
+
 #pragma once
 
 #include <functional>
@@ -31,14 +36,42 @@
 
 namespace event_engine
 {
+    /**
+     * @brief Central event bus used by all subsystems.
+     *
+     * Listeners register callbacks keyed on an @ref event_type and are
+     * invoked synchronously whenever an event of that type is broadcast.
+     * The context is a process-wide singleton; listener storage and
+     * dispatch are not thread-safe — register listeners during init and
+     * broadcast from the main loop thread only.
+     */
     struct context : public singleton<context>
     {
         context() = default;
 
+        /** @brief Initializes the event engine. Must be called once at startup. */
         void init();
+
+        /** @brief Shuts down the event engine. Called once at teardown. */
         void quit();
 
+        /**
+         * @brief Dispatches @p event synchronously to every listener
+         *        registered for its type.
+         * @param event Event to broadcast. The reference must stay valid
+         *              for the duration of the call; listeners receive a
+         *              const reference and must not retain it.
+         */
         void broadcast(const event& event);
+
+        /**
+         * @brief Registers a callback for events of a given type.
+         * @param type     The event type to subscribe to.
+         * @param listener Callable invoked on every matching broadcast.
+         *                 Stored by value in the engine; any captured
+         *                 state must outlive the engine or be owned by
+         *                 the callable itself.
+         */
         void register_listener(const event_type type, const std::function<void(const event&)>& listener);
 
     private:

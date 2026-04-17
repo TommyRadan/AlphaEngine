@@ -20,19 +20,30 @@
  * SOFTWARE.
  */
 
+/**
+ * @file singleton.hpp
+ * @brief CRTP helper for process-wide singletons.
+ */
+
 #pragma once
 
 /**
- * @brief A generic singleton class
- * @tparam T The class that will be a singleton
+ * @brief Meyers-style singleton base, used via CRTP (e.g. @c struct foo : singleton<foo>).
+ *
+ * The instance is a function-local @c static, so construction is thread-safe
+ * under C++11 rules but other member access is not — subclasses must document
+ * their own thread-safety. Copy and assignment are deleted to prevent
+ * accidental duplication of the singleton state.
+ *
+ * @tparam T The derived class being made into a singleton.
  */
 template<typename T>
 class singleton
 {
 public:
     /**
-     * @brief Returns the instance of the singleton
-     * @return The instance of the singleton
+     * @brief Returns the singleton instance, constructing it on first call.
+     * @return Reference to the single instance of @p T.
      */
     static T& get_instance()
     {
