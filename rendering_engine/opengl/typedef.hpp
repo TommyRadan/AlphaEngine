@@ -23,7 +23,7 @@
 #pragma once
 
 #include <cstdint>
-#include <GL/glew.h>
+#include <glad/gl.h>
 
 namespace rendering_engine
 {

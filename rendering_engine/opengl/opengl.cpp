@@ -22,6 +22,8 @@
 
 #include <stdexcept>
 
+#include <SDL2/SDL_video.h>
+
 #include <infrastructure/log.hpp>
 #include <rendering_engine/opengl/opengl.hpp>
 
@@ -29,7 +31,7 @@ void rendering_engine::opengl::context::init()
 {
     LOG_INF("Init rendering_engine::OpenGL");
 
-    if (glewInit() != GLEW_OK)
+    if (!gladLoadGL((GLADloadfunc)SDL_GL_GetProcAddress))
     {
         LOG_FTL("Could not initialize OpenGL");
         throw std::runtime_error{"Could not initialize OpenGL"};
