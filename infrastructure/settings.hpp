@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2015-2025 Tomislav Radanovic
+ * Copyright (c) 2015-2019 Tomislav Radanovic
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -20,30 +20,40 @@
  * SOFTWARE.
  */
 
-#include <stdexcept>
+#pragma once
 
-#include <event_engine/event_engine.hpp>
-#include <infrastructure/log.hpp>
+#include <string>
 
-void event_engine::context::init()
+#include <infrastructure/singleton.hpp>
+
+enum class win_type
 {
-    LOG_INF("Init Event Engine");
-}
+    win_type_windowed,
+    win_type_borderless,
+    win_type_fullscreen
+};
 
-void event_engine::context::quit()
+struct settings : public singleton<settings>
 {
-    LOG_INF("Quit Event Engine");
-}
+    settings();
 
-void event_engine::context::broadcast(const event& event)
-{
-    for (const auto& listener : m_listeners[event.m_type])
-    {
-        listener(event);
-    }
-}
+    const unsigned int get_window_width() const noexcept;
+    const unsigned int get_window_height() const noexcept;
+    const char* get_window_name() const noexcept;
+    const win_type get_window_type() const noexcept;
+    const bool is_double_buffered() const noexcept;
+    const float get_field_of_view() const noexcept;
+    const float get_mouse_sensitivity() const noexcept;
+    const float get_aspect_ratio() const noexcept;
+    const bool is_mouse_reversed() const noexcept;
 
-void event_engine::context::register_listener(const event_type type, const std::function<void(const event&)>& listener)
-{
-    m_listeners[type].push_back(listener);
-}
+private:
+    unsigned int m_window_width;
+    unsigned int m_window_height;
+    std::string m_window_name;
+    win_type m_window_type;
+    bool m_is_double_buffered;
+    float m_field_of_view;
+    float m_mouse_sensitivity;
+    bool m_is_mouse_reversed;
+};

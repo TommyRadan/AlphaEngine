@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2015-2025 Tomislav Radanovic
+ * Copyright (c) 2015-2019 Tomislav Radanovic
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -20,30 +20,33 @@
  * SOFTWARE.
  */
 
-#include <stdexcept>
+#include <fstream>
+#include <infrastructure/buffer.hpp>
 
-#include <event_engine/event_engine.hpp>
 #include <infrastructure/log.hpp>
 
-void event_engine::context::init()
+infrastructure::buffer::buffer(const std::string& filename)
 {
-    LOG_INF("Init Event Engine");
-}
+    std::ifstream in(filename, std::ios::in | std::ios::binary);
 
-void event_engine::context::quit()
-{
-    LOG_INF("Quit Event Engine");
-}
-
-void event_engine::context::broadcast(const event& event)
-{
-    for (const auto& listener : m_listeners[event.m_type])
+    if (!in)
     {
-        listener(event);
+        LOG_ERR("Could not load buffer (%s)", filename.c_str());
+        return;
     }
+
+    in.seekg(0, std::ios::end);
+    m_data.resize(static_cast<size_t>(in.tellg()));
+    in.seekg(0, std::ios::beg);
+
+    in.read((char*)m_data.data(), m_data.size());
+
+    in.close();
+
+    LOG_INF("Loaded buffer (%s)", filename.c_str());
 }
 
-void event_engine::context::register_listener(const event_type type, const std::function<void(const event&)>& listener)
+const uint8_t* infrastructure::buffer::get_data() const
 {
-    m_listeners[type].push_back(listener);
+    return m_data.data();
 }

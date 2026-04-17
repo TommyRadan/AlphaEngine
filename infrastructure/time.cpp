@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2015-2025 Tomislav Radanovic
+ * Copyright (c) 2015-2019 Tomislav Radanovic
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -20,30 +20,40 @@
  * SOFTWARE.
  */
 
-#include <stdexcept>
+#include <infrastructure/time.hpp>
+#include <SDL.h>
 
-#include <event_engine/event_engine.hpp>
-#include <infrastructure/log.hpp>
+infrastructure::time::time() : m_frame_count{0}, m_delta_time{0} {}
 
-void event_engine::context::init()
+void infrastructure::time::perform_tick()
 {
-    LOG_INF("Init Event Engine");
+    m_frame_count++;
+
+    const uint64_t ticks = SDL_GetPerformanceCounter();
+
+    static uint64_t frame_start_tick_count = ticks;
+    m_delta_time = (double)((ticks - frame_start_tick_count) * 1000) / SDL_GetPerformanceFrequency();
+    frame_start_tick_count = ticks;
 }
 
-void event_engine::context::quit()
+const double infrastructure::time::delta_time() const
 {
-    LOG_INF("Quit Event Engine");
+    return m_delta_time;
 }
 
-void event_engine::context::broadcast(const event& event)
+const float infrastructure::time::total_time() const
 {
-    for (const auto& listener : m_listeners[event.m_type])
-    {
-        listener(event);
-    }
+    return (float)SDL_GetTicks();
 }
 
-void event_engine::context::register_listener(const event_type type, const std::function<void(const event&)>& listener)
+const uint32_t infrastructure::time::frame_count() const
 {
-    m_listeners[type].push_back(listener);
+    return m_frame_count;
+}
+
+const float infrastructure::time::current_fps() const
+{
+    if (m_delta_time < 0.001)
+        return 0;
+    return (float)(1000.0 / m_delta_time);
 }

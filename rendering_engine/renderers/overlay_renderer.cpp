@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2015-2025 Tomislav Radanovic
+ * Copyright (c) 2015-2019 Tomislav Radanovic
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -20,30 +20,45 @@
  * SOFTWARE.
  */
 
-#include <stdexcept>
+#include <rendering_engine/renderers/overlay_renderer.hpp>
 
-#include <event_engine/event_engine.hpp>
-#include <infrastructure/log.hpp>
+static std::string vertex_shader = R"vs(
+        #version 330
 
-void event_engine::context::init()
+        layout(location=0) in vec3 position;
+        layout(location=1) in vec2 uv;
+
+        out vec2 texCoord;
+
+        void main()
+        {
+            texCoord = uv;
+            gl_Position = vec4(position, 1.0);
+        }
+)vs";
+
+static std::string fragment_shader = R"fs(
+        #version 330
+
+        out vec4 fragColor;
+        in vec2 texCoord;
+
+        uniform float useTexture = 0.0;
+        uniform vec4 color;
+        uniform sampler2D tex;
+
+        void main()
+        {
+            fragColor = (useTexture != 0.0) ? texture(tex, vec2(texCoord.x, 1.0 - texCoord.y)) : color;
+        }
+)fs";
+
+rendering_engine::renderers::overlay_renderer::overlay_renderer() : renderer{}
 {
-    LOG_INF("Init Event Engine");
+    construct_program(vertex_shader, fragment_shader);
 }
 
-void event_engine::context::quit()
+rendering_engine::renderers::overlay_renderer::~overlay_renderer()
 {
-    LOG_INF("Quit Event Engine");
-}
-
-void event_engine::context::broadcast(const event& event)
-{
-    for (const auto& listener : m_listeners[event.m_type])
-    {
-        listener(event);
-    }
-}
-
-void event_engine::context::register_listener(const event_type type, const std::function<void(const event&)>& listener)
-{
-    m_listeners[type].push_back(listener);
+    destruct_program();
 }

@@ -20,30 +20,30 @@
  * SOFTWARE.
  */
 
-#include <stdexcept>
+#pragma once
 
-#include <event_engine/event_engine.hpp>
-#include <infrastructure/log.hpp>
-
-void event_engine::context::init()
+/**
+ * @brief A generic singleton class
+ * @tparam T The class that will be a singleton
+ */
+template<typename T>
+class singleton
 {
-    LOG_INF("Init Event Engine");
-}
-
-void event_engine::context::quit()
-{
-    LOG_INF("Quit Event Engine");
-}
-
-void event_engine::context::broadcast(const event& event)
-{
-    for (const auto& listener : m_listeners[event.m_type])
+public:
+    /**
+     * @brief Returns the instance of the singleton
+     * @return The instance of the singleton
+     */
+    static T& get_instance()
     {
-        listener(event);
+        static T instance;
+        return instance;
     }
-}
 
-void event_engine::context::register_listener(const event_type type, const std::function<void(const event&)>& listener)
-{
-    m_listeners[type].push_back(listener);
-}
+    singleton(const singleton&) = delete;
+    singleton& operator=(const singleton&) = delete;
+
+protected:
+    singleton() {}
+    virtual ~singleton() {}
+};

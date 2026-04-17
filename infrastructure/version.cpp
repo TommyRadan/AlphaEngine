@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2015-2025 Tomislav Radanovic
+ * Copyright (c) 2015-2019 Tomislav Radanovic
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -20,30 +20,33 @@
  * SOFTWARE.
  */
 
-#include <stdexcept>
+#include <infrastructure/version.hpp>
 
-#include <event_engine/event_engine.hpp>
-#include <infrastructure/log.hpp>
+#define STR_HELPER(x) #x
+#define STR(x) STR_HELPER(x)
 
-void event_engine::context::init()
+#ifndef VERSION_MAJOR
+#warning VERSION_MAJOR not defined, setting to default value ...
+#define VERSION_MAJOR 0
+#endif
+
+#ifndef VERSION_MINOR
+#warning VERSION_MINOR not defined, setting to default value ...
+#define VERSION_MINOR 0
+#endif
+
+#ifndef VERSION_PATCH
+#warning VERSION_PATCH not defined, setting to default value ...
+#define VERSION_PATCH 0
+#endif
+
+const std::string infrastructure::version::get_version()
 {
-    LOG_INF("Init Event Engine");
+    return std::string{STR(VERSION_MAJOR) + std::string{"."} + STR(VERSION_MINOR) + std::string{"."} +
+                       STR(VERSION_PATCH)};
 }
 
-void event_engine::context::quit()
+const std::string infrastructure::version::get_build_date()
 {
-    LOG_INF("Quit Event Engine");
-}
-
-void event_engine::context::broadcast(const event& event)
-{
-    for (const auto& listener : m_listeners[event.m_type])
-    {
-        listener(event);
-    }
-}
-
-void event_engine::context::register_listener(const event_type type, const std::function<void(const event&)>& listener)
-{
-    m_listeners[type].push_back(listener);
+    return std::string{__DATE__};
 }

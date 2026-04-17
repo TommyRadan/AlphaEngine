@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2015-2025 Tomislav Radanovic
+ * Copyright (c) 2015-2019 Tomislav Radanovic
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -20,30 +20,18 @@
  * SOFTWARE.
  */
 
-#include <stdexcept>
+#include <scene_graph/scene_graph.hpp>
 
-#include <event_engine/event_engine.hpp>
 #include <infrastructure/log.hpp>
 
-void event_engine::context::init()
+#include <string>
+
+void scene_graph::context::init()
 {
-    LOG_INF("Init Event Engine");
+    LOG_INF("Init Scene Graph");
 }
 
-void event_engine::context::quit()
+void scene_graph::context::quit()
 {
-    LOG_INF("Quit Event Engine");
-}
-
-void event_engine::context::broadcast(const event& event)
-{
-    for (const auto& listener : m_listeners[event.m_type])
-    {
-        listener(event);
-    }
-}
-
-void event_engine::context::register_listener(const event_type type, const std::function<void(const event&)>& listener)
-{
-    m_listeners[type].push_back(listener);
+    LOG_INF("Quit Scene Graph");
 }

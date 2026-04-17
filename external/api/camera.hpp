@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2015-2025 Tomislav Radanovic
+ * Copyright (c) 2015-2019 Tomislav Radanovic
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -20,30 +20,32 @@
  * SOFTWARE.
  */
 
-#include <stdexcept>
+#pragma once
 
-#include <event_engine/event_engine.hpp>
-#include <infrastructure/log.hpp>
+using camera_id = int;
 
-void event_engine::context::init()
+enum class camera_type
 {
-    LOG_INF("Init Event Engine");
-}
+    unknown,
+    orthographic,
+    perspective
+};
 
-void event_engine::context::quit()
-{
-    LOG_INF("Quit Event Engine");
-}
+camera_id create_camera(camera_type type);
+void destroy_camera(camera_id id);
 
-void event_engine::context::broadcast(const event& event)
-{
-    for (const auto& listener : m_listeners[event.m_type])
-    {
-        listener(event);
-    }
-}
+camera_type get_camera_type(camera_id id);
 
-void event_engine::context::register_listener(const event_type type, const std::function<void(const event&)>& listener)
-{
-    m_listeners[type].push_back(listener);
-}
+void set_camera_pos(camera_id id, float px, float py, float pz);
+void get_camera_pos(camera_id id, float* px, float* py, float* pz);
+
+void set_camera_rot(camera_id id, float rx, float ry, float rz);
+void get_camera_rot(camera_id id, float* rx, float* ry, float* rz);
+
+void destroy_all_cameras();
+int get_number_of_cameras();
+
+void attach_camera(camera_id id);
+void detach_camera();
+bool is_camera_attached(camera_id id);
+bool is_any_camera_attached();

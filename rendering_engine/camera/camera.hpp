@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2015-2025 Tomislav Radanovic
+ * Copyright (c) 2015-2019 Tomislav Radanovic
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -20,30 +20,37 @@
  * SOFTWARE.
  */
 
-#include <stdexcept>
+#pragma once
 
-#include <event_engine/event_engine.hpp>
-#include <infrastructure/log.hpp>
+#include <glm.hpp>
+#include <rendering_engine/util/transform.hpp>
 
-void event_engine::context::init()
+namespace rendering_engine
 {
-    LOG_INF("Init Event Engine");
-}
-
-void event_engine::context::quit()
-{
-    LOG_INF("Quit Event Engine");
-}
-
-void event_engine::context::broadcast(const event& event)
-{
-    for (const auto& listener : m_listeners[event.m_type])
+    struct camera
     {
-        listener(event);
-    }
-}
+        camera();
+        virtual ~camera() = default;
 
-void event_engine::context::register_listener(const event_type type, const std::function<void(const event&)>& listener)
-{
-    m_listeners[type].push_back(listener);
-}
+        void attach();
+        void detach();
+
+        static camera* get_current_camera();
+
+        rendering_engine::util::transform transform;
+
+        void invalidate_view_matrix();
+        const glm::mat4 get_view_matrix() const;
+
+        void invalidate_projection_matrix();
+        virtual const glm::mat4 get_projection_matrix() const = 0;
+
+    protected:
+        mutable glm::mat4 m_view_matrix;
+        mutable bool m_is_view_matrix_dirty;
+        mutable glm::mat4 m_projection;
+        mutable bool m_is_projection_matrix_dirty;
+
+        static camera* m_current_camera;
+    };
+} // namespace rendering_engine

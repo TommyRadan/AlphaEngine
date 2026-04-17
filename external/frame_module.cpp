@@ -20,30 +20,22 @@
  * SOFTWARE.
  */
 
-#include <stdexcept>
+#include "api/game_module.hpp"
+#include "api/log.hpp"
+#include "api/time.hpp"
 
-#include <event_engine/event_engine.hpp>
-#include <infrastructure/log.hpp>
+#include <string>
 
-void event_engine::context::init()
+static void on_frame(const event_engine::event& event)
 {
-    LOG_INF("Init Event Engine");
+    // PrintInfo(std::string{"Delta time: "} + std::to_string(GetDeltaTime()) + " ms");
+    // PrintInfo(std::string{"FPS: "} + std::to_string(GetCurrentFPS()));
 }
 
-void event_engine::context::quit()
+GAME_MODULE()
 {
-    LOG_INF("Quit Event Engine");
-}
-
-void event_engine::context::broadcast(const event& event)
-{
-    for (const auto& listener : m_listeners[event.m_type])
-    {
-        listener(event);
-    }
-}
-
-void event_engine::context::register_listener(const event_type type, const std::function<void(const event&)>& listener)
-{
-    m_listeners[type].push_back(listener);
+    struct game_module_info info;
+    info.on_frame = on_frame;
+    register_game_module(info);
+    return true;
 }

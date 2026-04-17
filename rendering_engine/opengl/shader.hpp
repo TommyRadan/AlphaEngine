@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2015-2025 Tomislav Radanovic
+ * Copyright (c) 2015-2019 Tomislav Radanovic
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -20,30 +20,38 @@
  * SOFTWARE.
  */
 
-#include <stdexcept>
+#pragma once
 
-#include <event_engine/event_engine.hpp>
-#include <infrastructure/log.hpp>
+#include <rendering_engine/opengl/typedef.hpp>
 
-void event_engine::context::init()
+#include <string>
+
+namespace rendering_engine
 {
-    LOG_INF("Init Event Engine");
-}
-
-void event_engine::context::quit()
-{
-    LOG_INF("Quit Event Engine");
-}
-
-void event_engine::context::broadcast(const event& event)
-{
-    for (const auto& listener : m_listeners[event.m_type])
+    namespace opengl
     {
-        listener(event);
-    }
-}
+        class shader
+        {
+            friend class context;
+            explicit shader(shader_type type);
+            ~shader();
 
-void event_engine::context::register_listener(const event_type type, const std::function<void(const event&)>& listener)
-{
-    m_listeners[type].push_back(listener);
-}
+            shader(const shader&) = delete;
+            shader(const shader&&) = delete;
+            const shader& operator=(const shader&) = delete;
+            const shader&& operator=(const shader&&) = delete;
+
+        public:
+            const GLuint handle() const;
+
+            void source(const std::string& code);
+            void compile();
+
+            std::string get_info_log();
+
+        private:
+            std::string m_code;
+            GLuint m_object_id;
+        };
+    } // namespace opengl
+} // namespace rendering_engine

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2015-2025 Tomislav Radanovic
+ * Copyright (c) 2015-2019 Tomislav Radanovic
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -20,30 +20,25 @@
  * SOFTWARE.
  */
 
-#include <stdexcept>
+#include "time.hpp"
+#include <infrastructure/time.hpp>
 
-#include <event_engine/event_engine.hpp>
-#include <infrastructure/log.hpp>
-
-void event_engine::context::init()
+float get_current_fps()
 {
-    LOG_INF("Init Event Engine");
+    return infrastructure::time::get_instance().current_fps();
 }
 
-void event_engine::context::quit()
+int get_frame_count()
 {
-    LOG_INF("Quit Event Engine");
+    return infrastructure::time::get_instance().frame_count();
 }
 
-void event_engine::context::broadcast(const event& event)
+double get_delta_time()
 {
-    for (const auto& listener : m_listeners[event.m_type])
-    {
-        listener(event);
-    }
+    return infrastructure::time::get_instance().delta_time();
 }
 
-void event_engine::context::register_listener(const event_type type, const std::function<void(const event&)>& listener)
+float get_total_time()
 {
-    m_listeners[type].push_back(listener);
+    return infrastructure::time::get_instance().total_time();
 }

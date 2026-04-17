@@ -20,30 +20,32 @@
  * SOFTWARE.
  */
 
-#include <stdexcept>
+#pragma once
 
-#include <event_engine/event_engine.hpp>
-#include <infrastructure/log.hpp>
+#include <string>
 
-void event_engine::context::init()
+#include <infrastructure/singleton.hpp>
+
+namespace rendering_engine
 {
-    LOG_INF("Init Event Engine");
-}
-
-void event_engine::context::quit()
-{
-    LOG_INF("Quit Event Engine");
-}
-
-void event_engine::context::broadcast(const event& event)
-{
-    for (const auto& listener : m_listeners[event.m_type])
+    struct window : public singleton<window>
     {
-        listener(event);
-    }
-}
+        window();
 
-void event_engine::context::register_listener(const event_type type, const std::function<void(const event&)>& listener)
-{
-    m_listeners[type].push_back(listener);
-}
+        void init();
+        void quit();
+
+        void tick();
+
+        void clear();
+        void swap_buffers();
+        void show_message(const std::string& title, const std::string& message);
+
+        void show_cursor();
+        void hide_cursor();
+
+    private:
+        void* m_window;
+        void* m_gl_context;
+    };
+} // namespace rendering_engine
