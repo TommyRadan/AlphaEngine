@@ -47,7 +47,7 @@ rendering_engine::util::font::font(const std::string& filename, float font_size)
         int w, h;
         unsigned char* bitmap = stbtt_GetCodepointBitmap(&m_font, m_scale, m_scale, c, &w, &h, 0, 0);
 
-        auto img = new image(w, h, color{0, 0, 0, 0});
+        auto img = std::make_unique<image>(w, h, color{0, 0, 0, 0});
         for (int j = 0; j < h; ++j)
         {
             for (int i = 0; i < w; ++i)
@@ -56,7 +56,7 @@ rendering_engine::util::font::font(const std::string& filename, float font_size)
                 img->set_pixel(i, j, color{c_value, c_value, c_value, c_value});
             }
         }
-        m_images[c] = img;
+        m_images[c] = std::move(img);
     }
 
     LOG_INF("Loaded font \"%s\"", filename.c_str());
@@ -66,5 +66,5 @@ const rendering_engine::util::image*
 rendering_engine::util::font::get_image(char letter, int* x0, int* y0, int* x1, int* y1)
 {
     stbtt_GetCodepointBitmapBoxSubpixel(&m_font, letter, m_scale, m_scale, 0, 0, x0, y0, x1, y1);
-    return m_images[letter];
+    return m_images[letter].get();
 }

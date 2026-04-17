@@ -25,6 +25,7 @@
 #include <rendering_engine/rendering_engine.hpp>
 
 #include <algorithm>
+#include <memory>
 #include <utility>
 #include <vector>
 
@@ -32,24 +33,22 @@ struct camera_info
 {
     camera_id id;
     camera_type type;
-    rendering_engine::camera* handle;
+    std::unique_ptr<rendering_engine::camera> handle;
 };
 
-static std::vector<struct camera_info*> camera_infos;
+static std::vector<std::unique_ptr<camera_info>> camera_infos;
 
-static struct camera_info* get_camera_info(camera_id id)
+static camera_info* get_camera_info(camera_id id)
 {
-    struct camera_info* result{nullptr};
-
-    for (auto camera_info : camera_infos)
+    for (auto& info : camera_infos)
     {
-        if (camera_info->id == id)
+        if (info->id == id)
         {
-            result = camera_info;
+            return info.get();
         }
     }
 
-    return result;
+    return nullptr;
 }
 
 camera_id get_new_camera_id()
@@ -66,10 +65,10 @@ camera_id get_new_camera_id()
 
 camera_id create_camera(camera_type type)
 {
-    struct camera_info* camera_info{new struct camera_info};
+    auto info = std::make_unique<camera_info>();
 
-    camera_info->id = get_new_camera_id();
-    camera_info->type = type;
+    info->id = get_new_camera_id();
+    info->type = type;
 
     switch (type)
     {
@@ -77,25 +76,23 @@ camera_id create_camera(camera_type type)
     case camera_type::orthographic:
         // TODO: Implement Orthographic camera.
     case camera_type::perspective:
-        camera_info->handle = new rendering_engine::perspective_camera;
+        info->handle = std::make_unique<rendering_engine::perspective_camera>();
     }
 
-    camera_infos.push_back(camera_info);
-    return camera_info->id;
+    camera_id id = info->id;
+    camera_infos.push_back(std::move(info));
+    return id;
 }
 
 void destroy_camera(camera_id id)
 {
-    auto camera_info = get_camera_info(id);
+    auto it = std::find_if(begin(camera_infos), end(camera_infos),
+                           [id](const std::unique_ptr<camera_info>& info) { return info->id == id; });
 
-    if (camera_info == nullptr)
+    if (it == end(camera_infos))
         return;
 
-    auto it = std::find(begin(camera_infos), end(camera_infos), camera_info);
-
-    delete camera_info->handle;
-
-    camera_infos.erase(std::find(begin(camera_infos), end(camera_infos), camera_info));
+    camera_infos.erase(it);
 }
 
 camera_type get_camera_type(camera_id id)
@@ -160,11 +157,6 @@ void get_camera_rot(camera_id id, float* rx, float* ry, float* rz)
 
 void destroy_all_cameras()
 {
-    for (auto& camera_info : camera_infos)
-    {
-        delete camera_info->handle;
-    }
-
     camera_infos.clear();
 }
 
@@ -200,7 +192,7 @@ bool is_camera_attached(camera_id id)
     if (camera_info == nullptr)
         return false;
 
-    return (rendering_engine::camera::get_current_camera() == camera_info->handle);
+    return (rendering_engine::camera::get_current_camera() == camera_info->handle.get());
 }
 
 bool is_any_camera_attached()

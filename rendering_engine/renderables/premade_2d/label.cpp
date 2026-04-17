@@ -44,11 +44,11 @@ rendering_engine::label::label(rendering_engine::util::font* font, float size, c
         const rendering_engine::util::image* image = font->get_image(c, &x0, &y0, &x1, &y1);
         LOG_INF("%c - %i %i %i %i", c, x0, y0, x1, y1);
         const float width = ((float)image->get_width() / image->get_height()) * size;
-        rendering_engine::pane* pane = new rendering_engine::pane(glm::vec2{width, size});
+        auto pane = std::make_unique<rendering_engine::pane>(glm::vec2{width, size});
         pane->set_image(*image);
         pane->transform.set_position(glm::vec3{-0.3f + position, 0.95f, 0.0f});
         position += width + size * 0.1;
-        m_panes.push_back(pane);
+        m_panes.push_back(std::move(pane));
     }
 }
 

@@ -23,6 +23,7 @@
 #pragma once
 
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -38,7 +39,7 @@ namespace rendering_engine::util
         const rendering_engine::util::image* get_image(char letter, int* x0, int* y0, int* x1, int* y1);
 
     private:
-        std::map<char, rendering_engine::util::image*> m_images;
+        std::map<char, std::unique_ptr<rendering_engine::util::image>> m_images;
         std::vector<unsigned char> m_buffer;
         stbtt_fontinfo m_font;
         float m_scale;

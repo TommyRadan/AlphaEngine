@@ -23,17 +23,35 @@
 #pragma once
 
 #include <glm.hpp>
+#include <memory>
 #include <string>
 
 #include <rendering_engine/renderers/render_options.hpp>
 
 namespace rendering_engine
 {
+    namespace opengl
+    {
+        class shader;
+        class program;
+    }
+
+    struct shader_deleter
+    {
+        void operator()(opengl::shader* s) const noexcept;
+    };
+
+    struct program_deleter
+    {
+        void operator()(opengl::program* p) const noexcept;
+    };
+
     struct renderer
     {
         void start_renderer();
         void stop_renderer();
 
+        // Non-owning: points to the currently attached renderer, or nullptr.
         static renderer* get_current_renderer();
 
         void setup_camera();
@@ -49,14 +67,16 @@ namespace rendering_engine
 
     protected:
         renderer() = default;
+        ~renderer();
 
         void construct_program(const std::string& vs_string, const std::string& fs_string);
         void destruct_program();
 
-        void* m_vertex_shader;
-        void* m_fragment_shader;
-        void* m_program;
+        std::unique_ptr<opengl::shader, shader_deleter> m_vertex_shader;
+        std::unique_ptr<opengl::shader, shader_deleter> m_fragment_shader;
+        std::unique_ptr<opengl::program, program_deleter> m_program;
 
+        // Non-owning: points to the currently active renderer, or nullptr.
         static renderer* m_current_renderer;
     };
 } // namespace rendering_engine

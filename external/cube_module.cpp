@@ -28,16 +28,22 @@
 
 #include <rendering_engine/opengl/opengl.hpp>
 
-static rendering_engine::cube* cube;
+#include <memory>
+
+static std::unique_ptr<rendering_engine::cube> cube;
 
 float rotation = 0.0f;
 float rotation_speed = 3.14f / 2;
 
 static void on_engine_start(const event_engine::event& event)
 {
-    cube = new rendering_engine::cube();
-
+    cube = std::make_unique<rendering_engine::cube>();
     cube->upload();
+}
+
+static void on_engine_stop(const event_engine::event& event)
+{
+    cube.reset();
 }
 
 static void on_frame(const event_engine::event& event)
@@ -55,6 +61,7 @@ GAME_MODULE()
 {
     struct game_module_info info;
     info.on_engine_start = on_engine_start;
+    info.on_engine_stop = on_engine_stop;
     info.on_render_scene = on_render_scene;
     info.on_frame = on_frame;
     register_game_module(info);

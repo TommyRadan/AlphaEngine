@@ -28,16 +28,34 @@
 
 rendering_engine::renderer* rendering_engine::renderer::m_current_renderer = nullptr;
 
+void rendering_engine::shader_deleter::operator()(opengl::shader* s) const noexcept
+{
+    if (s != nullptr)
+    {
+        opengl::context::get_instance().delete_shader(s);
+    }
+}
+
+void rendering_engine::program_deleter::operator()(opengl::program* p) const noexcept
+{
+    if (p != nullptr)
+    {
+        opengl::context::get_instance().delete_program(p);
+    }
+}
+
+rendering_engine::renderer::~renderer() = default;
+
 void rendering_engine::renderer::start_renderer()
 {
     m_current_renderer = this;
-    static_cast<opengl::program*>(m_program)->start();
+    m_program->start();
 }
 
 void rendering_engine::renderer::stop_renderer()
 {
     m_current_renderer = nullptr;
-    static_cast<opengl::program*>(m_program)->stop();
+    m_program->stop();
 }
 
 rendering_engine::renderer* rendering_engine::renderer::get_current_renderer()
@@ -87,105 +105,101 @@ void rendering_engine::renderer::setup_options(const render_options& options)
 
 void rendering_engine::renderer::upload_texture_reference(const std::string& texture_name, const int position)
 {
-    opengl::uniform uniform = static_cast<opengl::program*>(m_program)->get_uniform(texture_name);
+    opengl::uniform uniform = m_program->get_uniform(texture_name);
     if (uniform == -1)
     {
         LOG_WRN("Cannot find uniform: %s", texture_name.c_str());
         return;
     }
-    static_cast<opengl::program*>(m_program)->set_uniform(uniform, position);
+    m_program->set_uniform(uniform, position);
 }
 
 void rendering_engine::renderer::upload_coefficient(const std::string& coefficient_name, const float coefficient)
 {
-    opengl::uniform uniform = static_cast<opengl::program*>(m_program)->get_uniform(coefficient_name);
+    opengl::uniform uniform = m_program->get_uniform(coefficient_name);
     if (uniform == -1)
     {
         LOG_WRN("Cannot find uniform: %s", coefficient_name.c_str());
         return;
     }
-    static_cast<opengl::program*>(m_program)->set_uniform(uniform, coefficient);
+    m_program->set_uniform(uniform, coefficient);
 }
 
 void rendering_engine::renderer::upload_matrix3(const std::string& mat3_name, const glm::mat3& matrix)
 {
-    opengl::uniform uniform = static_cast<opengl::program*>(m_program)->get_uniform(mat3_name);
+    opengl::uniform uniform = m_program->get_uniform(mat3_name);
     if (uniform == -1)
     {
         LOG_WRN("Cannot find uniform: %s", mat3_name.c_str());
         return;
     }
-    static_cast<opengl::program*>(m_program)->set_uniform(uniform, matrix);
+    m_program->set_uniform(uniform, matrix);
 }
 
 void rendering_engine::renderer::upload_matrix4(const std::string& mat4_name, const glm::mat4& matrix)
 {
-    opengl::uniform uniform = static_cast<opengl::program*>(m_program)->get_uniform(mat4_name);
+    opengl::uniform uniform = m_program->get_uniform(mat4_name);
     if (uniform == -1)
     {
         LOG_WRN("Cannot find uniform: %s", mat4_name.c_str());
         return;
     }
-    static_cast<opengl::program*>(m_program)->set_uniform(uniform, matrix);
+    m_program->set_uniform(uniform, matrix);
 }
 
 void rendering_engine::renderer::upload_vector2(const std::string& vec2_name, const glm::vec2& vector)
 {
-    opengl::uniform uniform = static_cast<opengl::program*>(m_program)->get_uniform(vec2_name);
+    opengl::uniform uniform = m_program->get_uniform(vec2_name);
     if (uniform == -1)
     {
         LOG_WRN("Cannot find uniform: %s", vec2_name.c_str());
         return;
     }
-    static_cast<opengl::program*>(m_program)->set_uniform(uniform, vector);
+    m_program->set_uniform(uniform, vector);
 }
 
 void rendering_engine::renderer::upload_vector3(const std::string& vec3_name, const glm::vec3& vector)
 {
-    opengl::uniform uniform = static_cast<opengl::program*>(m_program)->get_uniform(vec3_name);
+    opengl::uniform uniform = m_program->get_uniform(vec3_name);
     if (uniform == -1)
     {
         LOG_WRN("Cannot find uniform: %s", vec3_name.c_str());
         return;
     }
-    static_cast<opengl::program*>(m_program)->set_uniform(uniform, vector);
+    m_program->set_uniform(uniform, vector);
 }
 
 void rendering_engine::renderer::upload_vector4(const std::string& vec4_name, const glm::vec4& vector)
 {
-    opengl::uniform uniform = static_cast<opengl::program*>(m_program)->get_uniform(vec4_name);
+    opengl::uniform uniform = m_program->get_uniform(vec4_name);
     if (uniform == -1)
     {
         LOG_WRN("Cannot find uniform: %s", vec4_name.c_str());
         return;
     }
-    static_cast<opengl::program*>(m_program)->set_uniform(uniform, vector);
+    m_program->set_uniform(uniform, vector);
 }
 
 void rendering_engine::renderer::construct_program(const std::string& vs_string, const std::string& fs_string)
 {
-    m_vertex_shader = opengl::context::get_instance().create_shader(opengl::shader_type::vertex);
-    m_fragment_shader = opengl::context::get_instance().create_shader(opengl::shader_type::fragment);
-    m_program = opengl::context::get_instance().create_program();
+    m_vertex_shader.reset(opengl::context::get_instance().create_shader(opengl::shader_type::vertex));
+    m_fragment_shader.reset(opengl::context::get_instance().create_shader(opengl::shader_type::fragment));
+    m_program.reset(opengl::context::get_instance().create_program());
 
-    auto vs = (opengl::shader*)m_vertex_shader;
-    auto fs = (opengl::shader*)m_fragment_shader;
-    auto prog = (opengl::program*)m_program;
+    m_vertex_shader->source(vs_string);
+    m_vertex_shader->compile();
 
-    vs->source(vs_string);
-    vs->compile();
+    m_fragment_shader->source(fs_string);
+    m_fragment_shader->compile();
 
-    fs->source(fs_string);
-    fs->compile();
-
-    prog->attach(*vs);
-    prog->attach(*fs);
-    prog->link();
+    m_program->attach(*m_vertex_shader);
+    m_program->attach(*m_fragment_shader);
+    m_program->link();
 }
 
 void rendering_engine::renderer::destruct_program()
 {
-    opengl::context::get_instance().delete_shader((opengl::shader*)m_vertex_shader);
-    opengl::context::get_instance().delete_shader((opengl::shader*)m_fragment_shader);
-    opengl::context::get_instance().delete_program((opengl::program*)m_program);
+    m_vertex_shader.reset();
+    m_fragment_shader.reset();
+    m_program.reset();
 }
