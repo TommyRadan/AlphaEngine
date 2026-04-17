@@ -30,9 +30,9 @@
 #define POPSTATE() glBindFramebuffer(GL_DRAW_FRAMEBUFFER, restoreId);
 
 rendering_engine::opengl::framebuffer::framebuffer(const uint32_t width,
-                                                  const uint32_t height,
-                                                  const uint8_t color,
-                                                  const uint8_t depth)
+                                                   const uint32_t height,
+                                                   const uint8_t color,
+                                                   const uint8_t depth)
     : m_object_id{0}
 {
     PUSHSTATE()

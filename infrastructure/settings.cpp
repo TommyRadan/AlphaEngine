@@ -41,8 +41,7 @@ settings::settings()
     SDL_DisplayMode displayMode;
     if (SDL_GetCurrentDisplayMode(0, &displayMode) != 0)
     {
-        LOG_WRN("SDL_GetCurrentDisplayMode failed (%s); falling back to 1280x720 windowed",
-                SDL_GetError());
+        LOG_WRN("SDL_GetCurrentDisplayMode failed (%s); falling back to 1280x720 windowed", SDL_GetError());
         m_window_width = 1280;
         m_window_height = 720;
         m_window_type = win_type::win_type_windowed;

@@ -88,11 +88,11 @@ void rendering_engine::cube::upload()
         0, *m_vertex_buffer_object, rendering_engine::opengl::type::Float, 3, sizeof(vertex_postion_normal), 0);
 
     m_vertex_array_object->bind_attribute(1,
-                                       *m_vertex_buffer_object,
-                                       rendering_engine::opengl::type::Float,
-                                       3,
-                                       sizeof(vertex_postion_normal),
-                                       sizeof(glm::vec3));
+                                          *m_vertex_buffer_object,
+                                          rendering_engine::opengl::type::Float,
+                                          3,
+                                          sizeof(vertex_postion_normal),
+                                          sizeof(glm::vec3));
 }
 
 void rendering_engine::cube::render()

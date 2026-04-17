@@ -35,13 +35,17 @@
 #define LOG_INIT(argc, argv) infrastructure::logging::init(argc, argv)
 
 /** @brief Logs an informational message (printf-style). */
-#define LOG_INF(...) infrastructure::logging::message(infrastructure::logging::verbosity::info,  __FILE__, __LINE__, __VA_ARGS__)
+#define LOG_INF(...)                                                                                                   \
+    infrastructure::logging::message(infrastructure::logging::verbosity::info, __FILE__, __LINE__, __VA_ARGS__)
 /** @brief Logs a warning message (printf-style). */
-#define LOG_WRN(...) infrastructure::logging::message(infrastructure::logging::verbosity::warn,  __FILE__, __LINE__, __VA_ARGS__)
+#define LOG_WRN(...)                                                                                                   \
+    infrastructure::logging::message(infrastructure::logging::verbosity::warn, __FILE__, __LINE__, __VA_ARGS__)
 /** @brief Logs an error message (printf-style). */
-#define LOG_ERR(...) infrastructure::logging::message(infrastructure::logging::verbosity::error, __FILE__, __LINE__, __VA_ARGS__)
+#define LOG_ERR(...)                                                                                                   \
+    infrastructure::logging::message(infrastructure::logging::verbosity::error, __FILE__, __LINE__, __VA_ARGS__)
 /** @brief Logs a fatal message (printf-style); Loguru will abort the process. */
-#define LOG_FTL(...) infrastructure::logging::message(infrastructure::logging::verbosity::fatal, __FILE__, __LINE__, __VA_ARGS__)
+#define LOG_FTL(...)                                                                                                   \
+    infrastructure::logging::message(infrastructure::logging::verbosity::fatal, __FILE__, __LINE__, __VA_ARGS__)
 
 namespace infrastructure
 {

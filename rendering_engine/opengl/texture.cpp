@@ -43,11 +43,11 @@ const uint32_t rendering_engine::opengl::texture::handle() const
 }
 
 void rendering_engine::opengl::texture::image2_d(const void* data,
-                                               const data_type type,
-                                               const format format,
-                                               const uint32_t width,
-                                               const uint32_t height,
-                                               const internal_format internal_format)
+                                                 const data_type type,
+                                                 const format format,
+                                                 const uint32_t width,
+                                                 const uint32_t height,
+                                                 const internal_format internal_format)
 {
     PUSHSTATE()
 
@@ -88,7 +88,7 @@ void rendering_engine::opengl::texture::set_wrapping_r(const rendering_engine::o
 }
 
 void rendering_engine::opengl::texture::set_filters(const rendering_engine::opengl::filter min,
-                                                  const rendering_engine::opengl::filter mag)
+                                                    const rendering_engine::opengl::filter mag)
 {
     PUSHSTATE()
 

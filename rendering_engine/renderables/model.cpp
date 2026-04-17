@@ -34,31 +34,31 @@ void rendering_engine::model::upload_mesh(const rendering_engine::mesh& mesh)
     m_vertex_buffer_object = opengl::context::get_instance().create_vbo();
 
     m_vertex_buffer_object->data(mesh.vertices(),
-                               m_vertex_count * sizeof(rendering_engine::vertex_position_uv_normal),
-                               rendering_engine::opengl::buffer_usage::static_draw);
+                                 m_vertex_count * sizeof(rendering_engine::vertex_position_uv_normal),
+                                 rendering_engine::opengl::buffer_usage::static_draw);
 
     m_vertex_array_object = opengl::context::get_instance().create_vao();
 
     m_vertex_array_object->bind_attribute(0,
-                                       *m_vertex_buffer_object,
-                                       rendering_engine::opengl::type::Float,
-                                       3,
-                                       sizeof(rendering_engine::vertex_position_uv_normal),
-                                       0);
+                                          *m_vertex_buffer_object,
+                                          rendering_engine::opengl::type::Float,
+                                          3,
+                                          sizeof(rendering_engine::vertex_position_uv_normal),
+                                          0);
 
     m_vertex_array_object->bind_attribute(1,
-                                       *m_vertex_buffer_object,
-                                       rendering_engine::opengl::type::Float,
-                                       2,
-                                       sizeof(rendering_engine::vertex_position_uv_normal),
-                                       sizeof(glm::vec3));
+                                          *m_vertex_buffer_object,
+                                          rendering_engine::opengl::type::Float,
+                                          2,
+                                          sizeof(rendering_engine::vertex_position_uv_normal),
+                                          sizeof(glm::vec3));
 
     m_vertex_array_object->bind_attribute(2,
-                                       *m_vertex_buffer_object,
-                                       rendering_engine::opengl::type::Float,
-                                       3,
-                                       sizeof(rendering_engine::vertex_position_uv_normal),
-                                       sizeof(glm::vec3) + sizeof(glm::vec2));
+                                          *m_vertex_buffer_object,
+                                          rendering_engine::opengl::type::Float,
+                                          3,
+                                          sizeof(rendering_engine::vertex_position_uv_normal),
+                                          sizeof(glm::vec3) + sizeof(glm::vec2));
 }
 
 void rendering_engine::model::render()

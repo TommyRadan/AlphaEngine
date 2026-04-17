@@ -39,8 +39,9 @@ struct game_module_info
     std::function<void(const event_engine::event&)> on_mouse_move;
 
     game_module_info()
-        : on_engine_start{nullptr}, on_engine_stop{nullptr}, on_frame{nullptr}, on_render_scene{nullptr}, on_render_ui{nullptr},
-          on_key_down{nullptr}, on_key_up{nullptr}, on_mouse_key_down{nullptr}, on_mouse_key_up{nullptr}, on_mouse_move{nullptr}
+        : on_engine_start{nullptr}, on_engine_stop{nullptr}, on_frame{nullptr}, on_render_scene{nullptr},
+          on_render_ui{nullptr}, on_key_down{nullptr}, on_key_up{nullptr}, on_mouse_key_down{nullptr},
+          on_mouse_key_up{nullptr}, on_mouse_move{nullptr}
     {
     }
 };
