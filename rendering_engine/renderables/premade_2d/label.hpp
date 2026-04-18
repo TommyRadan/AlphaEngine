@@ -38,7 +38,9 @@ namespace rendering_engine
     {
         label(rendering_engine::util::font* font, float size, const std::string& text);
 
-        rendering_engine::util::transform transform;
+        void set_text(const std::string& text);
+        void set_position(const glm::vec3& position);
+        float get_width() const;
 
         void upload() final;
         void render() final;
@@ -47,6 +49,11 @@ namespace rendering_engine
         // Non-owning: font lifetime is managed by the caller.
         rendering_engine::util::font* m_font;
         std::string m_text;
+        float m_size;
+        glm::vec3 m_position{0.0f};
+        float m_width{0.0f};
         std::vector<std::unique_ptr<rendering_engine::pane>> m_panes;
+
+        void rebuild_panes();
     };
 } // namespace rendering_engine

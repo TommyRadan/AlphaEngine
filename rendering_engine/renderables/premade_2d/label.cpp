@@ -28,28 +28,61 @@
 #include <rendering_engine/util/image.hpp>
 
 rendering_engine::label::label(rendering_engine::util::font* font, float size, const std::string& text)
-    : m_font{font}, m_text{text}
+    : m_font{font}, m_text{text}, m_size{size}
 {
-    float position = 0.0f;
+    rebuild_panes();
+}
 
-    for (auto& c : text)
+void rendering_engine::label::set_text(const std::string& text)
+{
+    if (text == m_text)
+    {
+        return;
+    }
+    m_text = text;
+    rebuild_panes();
+    upload();
+}
+
+void rendering_engine::label::set_position(const glm::vec3& position)
+{
+    const glm::vec3 delta = position - m_position;
+    m_position = position;
+    for (auto& p : m_panes)
+    {
+        p->transform.set_position(p->transform.get_position() + delta);
+    }
+}
+
+float rendering_engine::label::get_width() const
+{
+    return m_width;
+}
+
+void rendering_engine::label::rebuild_panes()
+{
+    m_panes.clear();
+    float cursor = 0.0f;
+
+    for (auto& c : m_text)
     {
         if (c == ' ')
         {
-            position += size * 0.3;
+            cursor += m_size * 0.3f;
             continue;
         }
 
         int x0, y0, x1, y1;
-        const rendering_engine::util::image* image = font->get_image(c, &x0, &y0, &x1, &y1);
-        LOG_INF("%c - %i %i %i %i", c, x0, y0, x1, y1);
-        const float width = ((float)image->get_width() / image->get_height()) * size;
-        auto pane = std::make_unique<rendering_engine::pane>(glm::vec2{width, size});
+        const rendering_engine::util::image* image = m_font->get_image(c, &x0, &y0, &x1, &y1);
+        const float width = ((float)image->get_width() / image->get_height()) * m_size;
+        auto pane = std::make_unique<rendering_engine::pane>(glm::vec2{width, m_size});
         pane->set_image(*image);
-        pane->transform.set_position(glm::vec3{-0.3f + position, 0.95f, 0.0f});
-        position += width + size * 0.1;
+        pane->transform.set_position(glm::vec3{m_position.x + cursor, m_position.y, m_position.z});
+        cursor += width + m_size * 0.1f;
         m_panes.push_back(std::move(pane));
     }
+
+    m_width = cursor;
 }
 
 void rendering_engine::label::upload()
