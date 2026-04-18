@@ -122,7 +122,10 @@ namespace rendering_engine
             throw std::runtime_error{SDL_GetError()};
         }
         LOG_INF("SDL window and GL context created successfully");
-        SDL_GL_SetSwapInterval(0);
+        if (!SDL_GL_SetSwapInterval(1))
+        {
+            LOG_WRN("Could not enable vsync: %s", SDL_GetError());
+        }
     }
 
     void window::quit()
