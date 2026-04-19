@@ -22,7 +22,7 @@
 
 /**
  * @file log.hpp
- * @brief Printf-style logging facade backed by Loguru.
+ * @brief Printf-style logging facade backed by SDL's logging API.
  *
  * Prefer the @c LOG_INF / @c LOG_WRN / @c LOG_ERR / @c LOG_FTL macros
  * over calling @ref infrastructure::logging::message directly — they
@@ -43,7 +43,7 @@
 /** @brief Logs an error message (printf-style). */
 #define LOG_ERR(...)                                                                                                   \
     infrastructure::logging::message(infrastructure::logging::verbosity::error, __FILE__, __LINE__, __VA_ARGS__)
-/** @brief Logs a fatal message (printf-style); Loguru will abort the process. */
+/** @brief Logs a fatal message (printf-style); the process is aborted after the message is emitted. */
 #define LOG_FTL(...)                                                                                                   \
     infrastructure::logging::message(infrastructure::logging::verbosity::fatal, __FILE__, __LINE__, __VA_ARGS__)
 

@@ -131,7 +131,6 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(glm)
 target_link_libraries(AlphaEngine glm::glm)
 
-target_include_directories(AlphaEngine PRIVATE ${VENDOR_ROOT}loguru)
 target_include_directories(AlphaEngine PRIVATE ${VENDOR_ROOT}stb/)
 
 # glad — OpenGL loader (generated for GL 3.3 Core, no extensions)
