@@ -22,6 +22,7 @@
 
 #include <stdexcept>
 
+#include <control/engine.hpp>
 #include <event_engine/event_engine.hpp>
 #include <infrastructure/log.hpp>
 #include <infrastructure/settings.hpp>
@@ -62,7 +63,7 @@ namespace rendering_engine
             throw std::runtime_error{"Could not initialize video system"};
         }
 
-        ::settings& s{::settings::get_instance()};
+        ::settings& s{*control::current_engine().settings};
         SDL_WindowFlags window_flags{SDL_WINDOW_OPENGL};
         auto type{s.get_window_type()};
 
@@ -140,9 +141,10 @@ namespace rendering_engine
 
     void window::clear()
     {
-        opengl::context::get_instance().clear_color(rendering_engine::util::color{0, 0, 0, 255});
-        opengl::context::get_instance().clear(opengl::buffer::color);
-        opengl::context::get_instance().clear(opengl::buffer::depth);
+        auto& gl = *control::current_engine().opengl;
+        gl.clear_color(rendering_engine::util::color{0, 0, 0, 255});
+        gl.clear(opengl::buffer::color);
+        gl.clear(opengl::buffer::depth);
     }
 
     void window::swap_buffers()
@@ -171,10 +173,11 @@ namespace rendering_engine
     {
         SDL_Event events = {0};
 
-        auto& bus = event_engine::event_bus::get_instance();
+        auto& eng = control::current_engine();
+        auto& bus = *eng.events;
 
         event_engine::frame frame;
-        frame.m_delta_time = static_cast<float>(infrastructure::time::get_instance().delta_time());
+        frame.m_delta_time = static_cast<float>(eng.time->delta_time());
         bus.emit<event_engine::frame>(frame);
 
         SDL_PumpEvents();

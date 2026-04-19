@@ -35,7 +35,6 @@
 #include <vector>
 
 #include <event_engine/event.hpp>
-#include <infrastructure/singleton.hpp>
 
 namespace event_engine
 {
@@ -47,16 +46,16 @@ namespace event_engine
      * through @ref emit. @ref enqueue buffers events for later delivery
      * through @ref flush, which drains the queue once in FIFO order.
      *
-     * The bus is a process-wide singleton. Listener storage, dispatch, and
-     * the pending queue are not thread-safe — register listeners during
-     * init and emit/enqueue from the main-loop thread only.
+     * Owned by @ref control::engine. Listener storage, dispatch, and the
+     * pending queue are not thread-safe — register listeners during init
+     * and emit/enqueue from the main-loop thread only.
      *
      * Events are arbitrary value types. No base class is required: the
      * bus keys listeners on @c std::type_index and stores enqueued events
      * in @c std::any. Game modules can introduce their own event structs
      * without touching engine headers.
      */
-    struct event_bus : public singleton<event_bus>
+    struct event_bus
     {
         event_bus() = default;
 

@@ -29,18 +29,16 @@
 
 #include <string>
 
-#include <infrastructure/singleton.hpp>
-
 namespace scene_graph
 {
     /**
      * @brief Lifetime owner of the scene graph subsystem.
      *
-     * Process-wide singleton. Currently a lifecycle stub that matches
-     * the shape of the other engine subsystems — @ref init is called
-     * at startup and @ref quit at shutdown.
+     * Owned by @ref control::engine. Currently a lifecycle stub that
+     * matches the shape of the other engine subsystems — @ref init is
+     * called at startup and @ref quit at shutdown.
      */
-    struct context : public singleton<context>
+    struct context
     {
         /** @brief Initializes the scene graph subsystem. */
         void init();

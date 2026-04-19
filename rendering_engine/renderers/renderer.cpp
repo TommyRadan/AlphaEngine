@@ -20,6 +20,7 @@
  * SOFTWARE.
  */
 
+#include <control/engine.hpp>
 #include <infrastructure/log.hpp>
 #include <rendering_engine/camera/camera.hpp>
 #include <rendering_engine/opengl/opengl.hpp>
@@ -32,7 +33,7 @@ void rendering_engine::shader_deleter::operator()(opengl::shader* s) const noexc
 {
     if (s != nullptr)
     {
-        opengl::context::get_instance().delete_shader(s);
+        control::current_engine().opengl->delete_shader(s);
     }
 }
 
@@ -40,7 +41,7 @@ void rendering_engine::program_deleter::operator()(opengl::program* p) const noe
 {
     if (p != nullptr)
     {
-        opengl::context::get_instance().delete_program(p);
+        control::current_engine().opengl->delete_program(p);
     }
 }
 
@@ -98,7 +99,7 @@ void rendering_engine::renderer::setup_options(const render_options& options)
     for (auto& element : options.textures)
     {
         this->upload_texture_reference(element.first, uploaded_texture_references);
-        opengl::context::get_instance().bind_texture(*element.second, uploaded_texture_references);
+        control::current_engine().opengl->bind_texture(*element.second, uploaded_texture_references);
         uploaded_texture_references++;
     }
 }
@@ -182,9 +183,10 @@ void rendering_engine::renderer::upload_vector4(const std::string& vec4_name, co
 
 void rendering_engine::renderer::construct_program(const std::string& vs_string, const std::string& fs_string)
 {
-    m_vertex_shader.reset(opengl::context::get_instance().create_shader(opengl::shader_type::vertex));
-    m_fragment_shader.reset(opengl::context::get_instance().create_shader(opengl::shader_type::fragment));
-    m_program.reset(opengl::context::get_instance().create_program());
+    auto& gl = *control::current_engine().opengl;
+    m_vertex_shader.reset(gl.create_shader(opengl::shader_type::vertex));
+    m_fragment_shader.reset(gl.create_shader(opengl::shader_type::fragment));
+    m_program.reset(gl.create_program());
 
     m_vertex_shader->source(vs_string);
     m_vertex_shader->compile();

@@ -20,8 +20,10 @@
  * SOFTWARE.
  */
 
+#include <control/engine.hpp>
 #include <infrastructure/log.hpp>
 #include <rendering_engine/mesh/vertex.hpp>
+#include <rendering_engine/opengl/opengl.hpp>
 #include <rendering_engine/renderables/premade_3d/cube.hpp>
 #include <rendering_engine/renderers/renderer.hpp>
 #include <rendering_engine/rendering_engine.hpp>
@@ -79,11 +81,12 @@ void rendering_engine::cube::upload()
         }
     }
 
-    m_vertex_buffer_object = opengl::context::get_instance().create_vbo();
+    auto& gl = *control::current_engine().opengl;
+    m_vertex_buffer_object = gl.create_vbo();
     m_vertex_buffer_object->data(
         expanded_vertices, sizeof(expanded_vertices), rendering_engine::opengl::buffer_usage::static_draw);
 
-    m_vertex_array_object = opengl::context::get_instance().create_vao();
+    m_vertex_array_object = gl.create_vao();
     m_vertex_array_object->bind_attribute(
         0, *m_vertex_buffer_object, rendering_engine::opengl::type::Float, 3, sizeof(vertex_postion_normal), 0);
 
@@ -108,6 +111,6 @@ void rendering_engine::cube::render()
     current_renderer->upload_matrix4("modelMatrix", this->transform.get_transform_matrix());
     current_renderer->setup_options(options);
 
-    rendering_engine::opengl::context::get_instance().draw_arrays(
+    control::current_engine().opengl->draw_arrays(
         *m_vertex_array_object, rendering_engine::opengl::primitive::triangles, 0, m_vertex_count);
 }

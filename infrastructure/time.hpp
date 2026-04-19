@@ -29,18 +29,16 @@
 
 #include <cstdint>
 
-#include "singleton.hpp"
-
 namespace infrastructure
 {
     /**
-     * @brief Process-wide frame clock.
+     * @brief Frame clock owned by @ref control::engine.
      *
      * Backed by SDL's high-resolution performance counter. Call
      * @ref perform_tick once per frame to advance the clock; the other
      * accessors report values from the most recent tick. Not thread-safe.
      */
-    struct time : public singleton<time>
+    struct time
     {
         time();
 

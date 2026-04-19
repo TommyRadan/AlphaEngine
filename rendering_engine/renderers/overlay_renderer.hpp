@@ -22,14 +22,13 @@
 
 #pragma once
 
-#include <infrastructure/singleton.hpp>
 #include <rendering_engine/renderers/renderer.hpp>
 
 namespace rendering_engine
 {
     namespace renderers
     {
-        struct overlay_renderer : public renderer, public singleton<overlay_renderer>
+        struct overlay_renderer : public renderer
         {
             overlay_renderer();
 
