@@ -22,6 +22,8 @@
 
 #include <scene_graph/scene_graph.hpp>
 
+#include <event_engine/event.hpp>
+#include <event_engine/event_engine.hpp>
 #include <infrastructure/log.hpp>
 
 #include <string>
@@ -29,11 +31,28 @@
 void scene_graph::context::init()
 {
     LOG_INF("Init Scene Graph");
-    // Node add/remove and traversal diagnostics are expected to be logged from
-    // here by scene_graph API calls once they exist. See docs/logging.md.
+
+    // Dispatch render_scene events through the ECS world so that entities
+    // carrying a renderable_component can draw without each game module
+    // having to subscribe to render_scene directly. See docs/logging.md.
+    event_engine::context::get_instance().register_listener(event_engine::event_type::render_scene,
+                                                            [](const event_engine::event&)
+                                                            {
+                                                                auto& world = context::get_instance().get_world();
+                                                                for (auto id : world.view<renderable_component>())
+                                                                {
+                                                                    auto* renderable =
+                                                                        world.get<renderable_component>(id);
+                                                                    if (renderable != nullptr && renderable->draw)
+                                                                    {
+                                                                        renderable->draw();
+                                                                    }
+                                                                }
+                                                            });
 }
 
 void scene_graph::context::quit()
 {
-    LOG_INF("Quit Scene Graph");
+    LOG_INF("Quit Scene Graph: %zu entities still alive", m_world.entity_count());
+    m_world.clear();
 }
