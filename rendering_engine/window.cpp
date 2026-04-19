@@ -22,6 +22,7 @@
 
 #include <stdexcept>
 
+#include <control/engine.hpp>
 #include <event_engine/event_engine.hpp>
 #include <infrastructure/log.hpp>
 #include <infrastructure/settings.hpp>
@@ -62,7 +63,7 @@ namespace rendering_engine
             throw std::runtime_error{"Could not initialize video system"};
         }
 
-        ::settings& s{::settings::get_instance()};
+        ::settings& s{*control::current_engine().settings};
         SDL_WindowFlags window_flags{SDL_WINDOW_OPENGL};
         auto type{s.get_window_type()};
 
@@ -140,9 +141,10 @@ namespace rendering_engine
 
     void window::clear()
     {
-        opengl::context::get_instance().clear_color(rendering_engine::util::color{0, 0, 0, 255});
-        opengl::context::get_instance().clear(opengl::buffer::color);
-        opengl::context::get_instance().clear(opengl::buffer::depth);
+        auto& gl = *control::current_engine().opengl;
+        gl.clear_color(rendering_engine::util::color{0, 0, 0, 255});
+        gl.clear(opengl::buffer::color);
+        gl.clear(opengl::buffer::depth);
     }
 
     void window::swap_buffers()
@@ -171,9 +173,12 @@ namespace rendering_engine
     {
         SDL_Event events = {0};
 
+        auto& eng = control::current_engine();
+        auto& bus = *eng.events;
+
         event_engine::frame frame;
-        frame.m_delta_time = static_cast<float>(infrastructure::time::get_instance().delta_time());
-        event_engine::context::get_instance().broadcast(frame);
+        frame.m_delta_time = static_cast<float>(eng.time->delta_time());
+        bus.broadcast(frame);
 
         SDL_PumpEvents();
         while (SDL_PollEvent(&events))
@@ -184,7 +189,7 @@ namespace rendering_engine
             {
                 event_engine::key_down key_down;
                 key_down.m_key_code = (event_engine::key_code)events.key.key;
-                event_engine::context::get_instance().broadcast(key_down);
+                bus.broadcast(key_down);
                 break;
             }
 
@@ -192,7 +197,7 @@ namespace rendering_engine
             {
                 event_engine::key_up key_up;
                 key_up.m_key_code = (event_engine::key_code)events.key.key;
-                event_engine::context::get_instance().broadcast(key_up);
+                bus.broadcast(key_up);
                 break;
             }
 
@@ -216,7 +221,7 @@ namespace rendering_engine
                 default:
                     break;
                 }
-                event_engine::context::get_instance().broadcast(mouse_key_down);
+                bus.broadcast(mouse_key_down);
                 break;
             }
 
@@ -241,7 +246,7 @@ namespace rendering_engine
                 default:
                     break;
                 }
-                event_engine::context::get_instance().broadcast(mouse_key_up);
+                bus.broadcast(mouse_key_up);
                 break;
             }
 
@@ -250,12 +255,12 @@ namespace rendering_engine
                 event_engine::mouse_move mouse_move;
                 mouse_move.m_x = static_cast<int>(events.motion.xrel);
                 mouse_move.m_y = static_cast<int>(events.motion.yrel);
-                event_engine::context::get_instance().broadcast(mouse_move);
+                bus.broadcast(mouse_move);
                 break;
             }
 
             case SDL_EVENT_QUIT:
-                event_engine::context::get_instance().broadcast(event_engine::quit_requested());
+                bus.broadcast(event_engine::quit_requested());
                 break;
 
             default:

@@ -28,6 +28,7 @@
 #include <rendering_engine/renderers/basic_renderer.hpp>
 #include <rendering_engine/renderers/overlay_renderer.hpp>
 
+#include <control/engine.hpp>
 #include <event_engine/event_engine.hpp>
 
 #include <infrastructure/log.hpp>
@@ -37,43 +38,48 @@ void rendering_engine::context::init()
 {
     LOG_INF("Init Rendering Engine");
 
-    rendering_engine::window::get_instance().init();
-    rendering_engine::opengl::context::get_instance().init();
+    auto& eng = control::current_engine();
+    eng.window->init();
+    eng.opengl->init();
 
-    rendering_engine::opengl::context::get_instance().enable(rendering_engine::opengl::capability::cull_face);
-    rendering_engine::opengl::context::get_instance().enable(rendering_engine::opengl::capability::depth_test);
-    rendering_engine::opengl::context::get_instance().enable(rendering_engine::opengl::capability::blend);
+    eng.opengl->enable(rendering_engine::opengl::capability::cull_face);
+    eng.opengl->enable(rendering_engine::opengl::capability::depth_test);
+    eng.opengl->enable(rendering_engine::opengl::capability::blend);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     LOG_INF("Rendering Engine: enabled cull_face, depth_test, blend (SRC_ALPHA / ONE_MINUS_SRC_ALPHA)");
 
-    rendering_engine::renderers::basic_renderer::get_instance();
-    rendering_engine::renderers::overlay_renderer::get_instance();
+    // GL is live; construct the built-in renderers so their shader
+    // programs can be compiled against the active context.
+    eng.basic_renderer = std::make_unique<rendering_engine::renderers::basic_renderer>();
+    eng.overlay_renderer = std::make_unique<rendering_engine::renderers::overlay_renderer>();
     LOG_INF("Rendering Engine: basic_renderer and overlay_renderer constructed");
 }
 
 void rendering_engine::context::quit()
 {
-    rendering_engine::opengl::context::get_instance().quit();
-    rendering_engine::window::get_instance().quit();
+    auto& eng = control::current_engine();
+    eng.opengl->quit();
+    eng.window->quit();
 
     LOG_INF("Quit Rendering Engine");
 }
 
 void rendering_engine::context::render()
 {
-    rendering_engine::window::get_instance().clear();
+    auto& eng = control::current_engine();
+    eng.window->clear();
 
     if (rendering_engine::camera::get_current_camera() != nullptr)
     {
-        rendering_engine::renderers::basic_renderer::get_instance().start_renderer();
-        rendering_engine::renderers::basic_renderer::get_instance().setup_camera();
-        event_engine::context::get_instance().broadcast(event_engine::render_scene());
-        rendering_engine::renderers::basic_renderer::get_instance().stop_renderer();
+        eng.basic_renderer->start_renderer();
+        eng.basic_renderer->setup_camera();
+        eng.events->broadcast(event_engine::render_scene());
+        eng.basic_renderer->stop_renderer();
     }
 
-    rendering_engine::opengl::context::get_instance().disable(rendering_engine::opengl::capability::depth_test);
-    rendering_engine::renderers::overlay_renderer::get_instance().start_renderer();
-    event_engine::context::get_instance().broadcast(event_engine::render_ui());
-    rendering_engine::renderers::overlay_renderer::get_instance().stop_renderer();
-    rendering_engine::opengl::context::get_instance().enable(rendering_engine::opengl::capability::depth_test);
+    eng.opengl->disable(rendering_engine::opengl::capability::depth_test);
+    eng.overlay_renderer->start_renderer();
+    eng.events->broadcast(event_engine::render_ui());
+    eng.overlay_renderer->stop_renderer();
+    eng.opengl->enable(rendering_engine::opengl::capability::depth_test);
 }

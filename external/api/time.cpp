@@ -21,24 +21,26 @@
  */
 
 #include "time.hpp"
+
+#include <control/engine.hpp>
 #include <infrastructure/time.hpp>
 
 float get_current_fps()
 {
-    return infrastructure::time::get_instance().current_fps();
+    return control::current_engine().time->current_fps();
 }
 
 int get_frame_count()
 {
-    return infrastructure::time::get_instance().frame_count();
+    return control::current_engine().time->frame_count();
 }
 
 double get_delta_time()
 {
-    return infrastructure::time::get_instance().delta_time();
+    return control::current_engine().time->delta_time();
 }
 
 float get_total_time()
 {
-    return infrastructure::time::get_instance().total_time();
+    return control::current_engine().time->total_time();
 }

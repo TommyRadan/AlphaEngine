@@ -20,8 +20,10 @@
  * SOFTWARE.
  */
 
+#include <control/engine.hpp>
 #include <infrastructure/log.hpp>
 #include <rendering_engine/mesh/vertex.hpp>
+#include <rendering_engine/opengl/opengl.hpp>
 #include <rendering_engine/renderables/premade_2d/pane.hpp>
 #include <rendering_engine/renderers/renderer.hpp>
 #include <rendering_engine/rendering_engine.hpp>
@@ -39,7 +41,7 @@ void rendering_engine::pane::set_color(const rendering_engine::util::color& colo
 
 void rendering_engine::pane::set_image(const rendering_engine::util::image& image)
 {
-    m_texture = rendering_engine::opengl::context::get_instance().create_texture();
+    m_texture = control::current_engine().opengl->create_texture();
     m_texture->image2_d(image.get_pixels(),
                         rendering_engine::opengl::data_type::unsigned_byte,
                         rendering_engine::opengl::format::rgba,
@@ -73,13 +75,14 @@ void rendering_engine::pane::upload()
 
     uint32_t indicies[6] = {3, 0, 1, 3, 1, 2};
 
-    m_vertex_buffer = opengl::context::get_instance().create_vbo();
+    auto& gl = *control::current_engine().opengl;
+    m_vertex_buffer = gl.create_vbo();
     m_vertex_buffer->data(vertex, sizeof(vertex), rendering_engine::opengl::buffer_usage::static_draw);
 
-    m_indicies_buffer = opengl::context::get_instance().create_vbo();
+    m_indicies_buffer = gl.create_vbo();
     m_indicies_buffer->element_data(indicies, sizeof(indicies), rendering_engine::opengl::buffer_usage::static_draw);
 
-    m_vertex_array_object = opengl::context::get_instance().create_vao();
+    m_vertex_array_object = gl.create_vao();
     m_vertex_array_object->bind_attribute(
         0, *m_vertex_buffer, rendering_engine::opengl::type::Float, 3, sizeof(vertex_position_uv), 0);
     m_vertex_array_object->bind_attribute(
@@ -109,9 +112,9 @@ void rendering_engine::pane::render()
     }
     current_renderer->setup_options(options);
 
-    rendering_engine::opengl::context::get_instance().draw_elements(*m_vertex_array_object,
-                                                                    rendering_engine::opengl::primitive::triangles,
-                                                                    0,
-                                                                    m_vertex_count,
-                                                                    rendering_engine::opengl::type::unsigned_int);
+    control::current_engine().opengl->draw_elements(*m_vertex_array_object,
+                                                    rendering_engine::opengl::primitive::triangles,
+                                                    0,
+                                                    m_vertex_count,
+                                                    rendering_engine::opengl::type::unsigned_int);
 }
