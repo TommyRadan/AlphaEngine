@@ -11,7 +11,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake
   cmake --build build --config Release
   ```
-- **SDL3 and GLM are fetched from source** by CMake via `FetchContent` — no system packages are required. GLM is pinned to tag `1.0.1` and header-only; SDL3 is built statically. OpenGL, glad, loguru, and stb are linked in as well (glad is built from `vendor/glad`, loguru/stb are header-only in `vendor/`).
+- **SDL3 and GLM are fetched from source** by CMake via `FetchContent` — no system packages are required. GLM is pinned to tag `1.0.1` and header-only; SDL3 is built statically. OpenGL, glad, and stb are linked in as well (glad is built from `vendor/glad`, stb is header-only in `vendor/`). Logging is backed by SDL3's logging API behind `infrastructure/log.hpp`.
 - **Output:** `Binaries/AlphaEngine.exe` (Ninja / single-config) or `Binaries/<Configuration>/AlphaEngine.exe` (Visual Studio multi-config).
 - **No test suite exists.** CI does not run tests; don't invent a test target.
 
