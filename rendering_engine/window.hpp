@@ -30,8 +30,6 @@
 #include <memory>
 #include <string>
 
-#include <infrastructure/singleton.hpp>
-
 struct SDL_Window;
 
 namespace rendering_engine
@@ -57,20 +55,20 @@ namespace rendering_engine
     /**
      * @brief Owns the application window, its GL context, and pumps OS input.
      *
-     * Process-wide singleton. The window and GL context are held as
-     * @c std::unique_ptr with SDL-specific deleters, so their lifetime
-     * is strictly tied to this instance — @ref init creates them and
-     * @ref quit (or destruction) releases them. All methods must be
-     * invoked from the main thread.
+     * Owned by @ref control::engine. The window and GL context are
+     * held as @c std::unique_ptr with SDL-specific deleters, so their
+     * lifetime is strictly tied to this instance — @ref init creates
+     * them and @ref quit (or destruction) releases them. All methods
+     * must be invoked from the main thread.
      */
-    struct window : public singleton<window>
+    struct window
     {
         window();
 
         /**
          * @brief Initializes SDL video, creates the window and the GL
          *        context using the dimensions and flags read from the
-         *        global @c settings singleton.
+         *        engine-wide @c settings object.
          * @throws std::runtime_error if SDL video init or window creation fails.
          */
         void init();

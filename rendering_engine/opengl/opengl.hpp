@@ -22,7 +22,6 @@
 
 #pragma once
 
-#include <infrastructure/singleton.hpp>
 #include <rendering_engine/opengl/framebuffer.hpp>
 #include <rendering_engine/opengl/program.hpp>
 #include <rendering_engine/opengl/shader.hpp>
@@ -36,7 +35,7 @@ namespace rendering_engine
 {
     namespace opengl
     {
-        struct context : public singleton<context>
+        struct context
         {
             void init();
             void quit();

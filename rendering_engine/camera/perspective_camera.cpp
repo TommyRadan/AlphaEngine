@@ -22,12 +22,13 @@
 
 #include <rendering_engine/camera/perspective_camera.hpp>
 #define GLM_ENABLE_EXPERIMENTAL
+#include <control/engine.hpp>
 #include <glm/gtx/transform.hpp>
 #include <infrastructure/settings.hpp>
 
 rendering_engine::perspective_camera::perspective_camera()
 {
-    const ::settings& s = ::settings::get_instance();
+    const ::settings& s = *control::current_engine().settings;
 
     field_of_view = s.get_field_of_view();
     aspect_ratio = s.get_aspect_ratio();

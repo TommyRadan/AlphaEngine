@@ -22,19 +22,9 @@
 
 #include <stdexcept>
 
-#include <event_engine/event_engine.hpp>
+#include <control/engine.hpp>
 #include <infrastructure/log.hpp>
-#include <infrastructure/time.hpp>
-#include <rendering_engine/rendering_engine.hpp>
 #include <rendering_engine/window.hpp>
-#include <scene_graph/scene_graph.hpp>
-
-bool is_quit_requested = false;
-
-void quit_request_listener(const event_engine::event& event)
-{
-    is_quit_requested = true;
-}
 
 int main(int argc, char* argv[])
 {
@@ -42,16 +32,23 @@ int main(int argc, char* argv[])
 
     LOG_INF("Engine starting: initializing subsystems");
 
+    // Construct the owning engine on the stack. Its constructor
+    // installs itself as control::current_engine() for the duration
+    // of this scope, so every subsystem that used to pull its
+    // dependency out of a singleton can resolve it from the engine.
+    control::engine engine;
+
     try
     {
-        event_engine::context::get_instance().init();
-        rendering_engine::context::get_instance().init();
-        scene_graph::context::get_instance().init();
+        engine.init();
     }
     catch (const std::exception& e)
     {
         LOG_ERR("Subsystem initialization failed: %s", e.what());
-        rendering_engine::window::get_instance().show_message("Initialization Error", e.what());
+        if (engine.window != nullptr)
+        {
+            engine.window->show_message("Initialization Error", e.what());
+        }
         return EXIT_FAILURE;
     }
 
@@ -59,35 +56,28 @@ int main(int argc, char* argv[])
 
     try
     {
-        event_engine::context::get_instance().register_listener(event_engine::event_type::quit_requested,
-                                                                quit_request_listener);
-        event_engine::context::get_instance().broadcast(event_engine::engine_start());
+        engine.broadcast_engine_start();
 
-        for (;;)
+        while (!engine.is_quit_requested())
         {
-            rendering_engine::window::get_instance().tick();
-            rendering_engine::context::get_instance().render();
-            rendering_engine::window::get_instance().swap_buffers();
-            infrastructure::time::get_instance().perform_tick();
-
-            if (is_quit_requested)
-                break;
+            engine.tick();
         }
 
         LOG_INF("Quit requested: broadcasting engine_stop");
-        event_engine::context::get_instance().broadcast(event_engine::engine_stop());
+        engine.broadcast_engine_stop();
     }
     catch (const std::exception& e)
     {
         LOG_ERR("Unrecoverable error in main loop: %s", e.what());
-        rendering_engine::window::get_instance().show_message("Error", e.what());
+        if (engine.window != nullptr)
+        {
+            engine.window->show_message("Error", e.what());
+        }
         return EXIT_FAILURE;
     }
 
     LOG_INF("Engine shutting down: tearing down subsystems");
-    scene_graph::context::get_instance().quit();
-    rendering_engine::context::get_instance().quit();
-    event_engine::context::get_instance().quit();
+    engine.quit();
     LOG_INF("Engine stopped cleanly");
     return EXIT_SUCCESS;
 }

@@ -22,14 +22,13 @@
 
 #pragma once
 
-#include <infrastructure/singleton.hpp>
 #include <rendering_engine/renderers/renderer.hpp>
 
 namespace rendering_engine
 {
     namespace renderers
     {
-        struct basic_renderer : public renderer, public singleton<basic_renderer>
+        struct basic_renderer : public renderer
         {
             basic_renderer();
 

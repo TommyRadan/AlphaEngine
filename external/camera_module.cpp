@@ -27,6 +27,7 @@
 #include "api/log.hpp"
 #include "api/time.hpp"
 
+#include <control/engine.hpp>
 #include <infrastructure/log.hpp>
 #include <infrastructure/settings.hpp>
 #include <rendering_engine/rendering_engine.hpp>
@@ -158,8 +159,9 @@ static void on_mouse_move(const event_engine::event& event)
     // Calculate the right vector (perpendicular to forward and up)
     glm::vec3 right = glm::normalize(glm::cross(forward, up_vector));
 
-    float sensitivity = settings::get_instance().get_mouse_sensitivity();
-    int pitch_multiplier = settings::get_instance().is_mouse_reversed() ? -1 : 1;
+    const auto& s = *control::current_engine().settings;
+    float sensitivity = s.get_mouse_sensitivity();
+    int pitch_multiplier = s.is_mouse_reversed() ? -1 : 1;
 
     // Calculate rotation angles in radians
     float yaw_angle = delta_x * sensitivity;

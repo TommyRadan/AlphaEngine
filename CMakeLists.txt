@@ -74,6 +74,7 @@ add_custom_target(build-time-make-directory ALL
 include_directories(${CMAKE_SOURCE_DIR})
 
 # Main executable
+file(GLOB CONTROL_FILES "control/*.hpp" "control/*.cpp")
 file(GLOB EVENT_ENGINE_FILES "event_engine/*.hpp" "event_engine/*.cpp")
 file(GLOB INFRASTRUCTURE_FILES "infrastructure/*.hpp" "infrastructure/*.cpp")
 file(GLOB SCENE_GRAPH_FILES "scene_graph/*.hpp" "scene_graph/*.cpp")
@@ -91,7 +92,7 @@ file(GLOB EXTERNAL_FILES
         "external/*.hpp" "external/*.cpp"
         "external/api/*.hpp" "external/api/*.cpp")
 add_executable(AlphaEngine
-    control/main_loop.cpp
+    ${CONTROL_FILES}
     ${EXTERNAL_FILES}
     ${EVENT_ENGINE_FILES}
     ${INFRASTRUCTURE_FILES}

@@ -32,7 +32,6 @@
 #include <vector>
 
 #include <event_engine/event.hpp>
-#include <infrastructure/singleton.hpp>
 
 namespace event_engine
 {
@@ -41,11 +40,11 @@ namespace event_engine
      *
      * Listeners register callbacks keyed on an @ref event_type and are
      * invoked synchronously whenever an event of that type is broadcast.
-     * The context is a process-wide singleton; listener storage and
-     * dispatch are not thread-safe — register listeners during init and
-     * broadcast from the main loop thread only.
+     * The context is owned by @ref control::engine; listener storage
+     * and dispatch are not thread-safe — register listeners during init
+     * and broadcast from the main loop thread only.
      */
-    struct context : public singleton<context>
+    struct context
     {
         context() = default;
 

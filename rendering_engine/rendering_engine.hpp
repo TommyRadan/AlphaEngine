@@ -29,19 +29,18 @@
 
 #include <vector>
 
-#include <infrastructure/singleton.hpp>
-
 namespace rendering_engine
 {
     /**
      * @brief Orchestrates the rendering subsystem (window, GL context, renderers).
      *
-     * Process-wide singleton. @ref init brings up the window and OpenGL
-     * context and constructs the built-in renderers; @ref quit tears the
-     * GL context and window down in reverse order. All methods must be
-     * called from the main thread that owns the GL context.
+     * Owned by @ref control::engine. @ref init brings up the window
+     * and OpenGL context and constructs the built-in renderers;
+     * @ref quit tears the GL context and window down in reverse order.
+     * All methods must be called from the main thread that owns the GL
+     * context.
      */
-    struct context : public singleton<context>
+    struct context
     {
         /**
          * @brief Initializes the window, GL context and built-in renderers.
