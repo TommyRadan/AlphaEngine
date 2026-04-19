@@ -85,8 +85,11 @@ file(GLOB RENDERING_ENGINE_FILES
         "rendering_engine/renderables/premade_3d/*.hpp" "rendering_engine/renderables/premade_3d/*.cpp"
         "rendering_engine/renderers/*.hpp" "rendering_engine/renderers/*.cpp"
         "rendering_engine/camera/*.hpp" "rendering_engine/camera/*.cpp"
-        "rendering_engine/opengl/*.hpp" "rendering_engine/opengl/*.cpp"
         "rendering_engine/util/*.hpp" "rendering_engine/util/*.cpp")
+file(GLOB RHI_FILES
+        "rhi/*.hpp" "rhi/*.cpp"
+        "rhi/opengl/*.hpp" "rhi/opengl/*.cpp"
+        "rhi/null/*.hpp" "rhi/null/*.cpp")
 file(GLOB EXTERNAL_FILES
         "external/*.hpp" "external/*.cpp"
         "external/api/*.hpp" "external/api/*.cpp")
@@ -96,7 +99,8 @@ add_executable(AlphaEngine
     ${EVENT_ENGINE_FILES}
     ${INFRASTRUCTURE_FILES}
     ${SCENE_GRAPH_FILES}
-    ${RENDERING_ENGINE_FILES})
+    ${RENDERING_ENGINE_FILES}
+    ${RHI_FILES})
 
 # Use C++ standard library
 if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")

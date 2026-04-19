@@ -30,7 +30,8 @@ Entry point is `control/main_loop.cpp`. It initializes three subsystems, runs th
 The subsystems:
 
 - **`event_engine`** — process-wide synchronous publish/subscribe hub (`event_engine::context`). Listeners register against `event_type` keys and receive `const event&` callbacks. Not thread-safe; register during init, broadcast from the main loop. Engine-wide events include `engine_start`, `engine_stop`, `render_scene`, `render_ui`, input events, and `quit_requested`.
-- **`rendering_engine`** — owns the window, SDL/GL context, and built-in renderers (`basic_renderer`, `overlay_renderer`). `render()` broadcasts `render_scene` (if a camera is active) then `render_ui` with depth test disabled. It does **not** swap buffers — the main loop calls `window::swap_buffers()` explicitly. Subfolders: `camera/`, `mesh/`, `opengl/` (GL wrapper types: program, shader, buffer, texture, framebuffer, vertex_array), `renderables/` (+ `premade_2d/`, `premade_3d/`), `renderers/`, `util/` (color, font, image, transform).
+- **`rendering_engine`** — owns the window, the active RHI device, and built-in renderers (`basic_renderer`, `overlay_renderer`). `render()` broadcasts `render_scene` (if a camera is active) then `render_ui` with depth test disabled. It does **not** swap buffers — the main loop calls `window::swap_buffers()` explicitly. Subfolders: `camera/`, `mesh/`, `renderables/` (+ `premade_2d/`, `premade_3d/`), `renderers/`, `util/` (color, font, image, transform).
+- **`rhi`** — Render Hardware Interface. Pure-virtual `rhi::device` defines the GPU API the renderers target; concrete backends live in `rhi/opengl/` (glad + OpenGL 3.3 Core) and `rhi/null/` (headless no-op). The active device is published via `rhi::set_device` / `rhi::get_device`. No file outside `rhi/opengl/` may include `<glad/gl.h>`.
 - **`scene_graph`** — currently a lifecycle stub with the same init/quit shape as the others.
 
 ### Game modules (the `external/` layer)
@@ -41,7 +42,7 @@ Game modules must include the **public API headers** under `external/api/` — `
 
 ### Adding sources
 
-`CMakeLists.txt` uses `file(GLOB ...)` across each subsystem's top-level directory plus the known `rendering_engine/*` subdirectories. New files in those locations are picked up on reconfigure. **New rendering subdirectories** (beyond `mesh/`, `renderables/`, `renderables/premade_2d/`, `renderables/premade_3d/`, `renderers/`, `camera/`, `opengl/`, `util/`) require a matching GLOB in `CMakeLists.txt`.
+`CMakeLists.txt` uses `file(GLOB ...)` across each subsystem's top-level directory plus the known `rendering_engine/*` and `rhi/*` subdirectories. New files in those locations are picked up on reconfigure. **New rendering subdirectories** (beyond `mesh/`, `renderables/`, `renderables/premade_2d/`, `renderables/premade_3d/`, `renderers/`, `camera/`, `util/`) and **new RHI backend subdirectories** (beyond `opengl/`, `null/`) require a matching GLOB in `CMakeLists.txt`.
 
 ## Logging
 

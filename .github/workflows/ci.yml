@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  SOURCE_DIRS: "control event_engine rendering_engine scene_graph infrastructure external"
+  SOURCE_DIRS: "control event_engine rendering_engine scene_graph infrastructure rhi external"
   CLANG_VERSION: "18"
 
 jobs:
@@ -102,7 +102,7 @@ jobs:
       - name: Run run-clang-tidy on subsystem sources
         run: |
           set -euo pipefail
-          pattern="/(control|event_engine|rendering_engine|scene_graph|infrastructure|external)/"
+          pattern="/(control|event_engine|rendering_engine|scene_graph|infrastructure|rhi|external)/"
           run-clang-tidy -p build -quiet "${pattern}"
 
   # ---------------------------------------------------------------------------

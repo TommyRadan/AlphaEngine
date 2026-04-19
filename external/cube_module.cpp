@@ -27,8 +27,6 @@
 #include <infrastructure/log.hpp>
 #include <rendering_engine/renderables/premade_3d/cube.hpp>
 
-#include <rendering_engine/opengl/opengl.hpp>
-
 #include <memory>
 
 static std::unique_ptr<rendering_engine::cube> cube;

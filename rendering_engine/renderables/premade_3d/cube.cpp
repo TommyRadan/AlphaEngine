@@ -25,6 +25,7 @@
 #include <rendering_engine/renderables/premade_3d/cube.hpp>
 #include <rendering_engine/renderers/renderer.hpp>
 #include <rendering_engine/rendering_engine.hpp>
+#include <rhi/rhi.hpp>
 
 rendering_engine::cube::cube() : m_vertex_count{0}, m_vertex_array_object{nullptr}, m_vertex_buffer_object{nullptr} {}
 
@@ -79,20 +80,34 @@ void rendering_engine::cube::upload()
         }
     }
 
-    m_vertex_buffer_object = opengl::context::get_instance().create_vbo();
-    m_vertex_buffer_object->data(
-        expanded_vertices, sizeof(expanded_vertices), rendering_engine::opengl::buffer_usage::static_draw);
+    rhi::device* device = rhi::get_device();
 
-    m_vertex_array_object = opengl::context::get_instance().create_vao();
-    m_vertex_array_object->bind_attribute(
-        0, *m_vertex_buffer_object, rendering_engine::opengl::type::Float, 3, sizeof(vertex_postion_normal), 0);
+    rhi::buffer_desc vb_desc{};
+    vb_desc.initial_data = expanded_vertices;
+    vb_desc.size = sizeof(expanded_vertices);
+    vb_desc.usage = rhi::buffer_usage::static_draw;
+    vb_desc.is_index_buffer = false;
+    m_vertex_buffer_object = device->create_buffer(vb_desc);
 
-    m_vertex_array_object->bind_attribute(1,
-                                          *m_vertex_buffer_object,
-                                          rendering_engine::opengl::type::Float,
-                                          3,
-                                          sizeof(vertex_postion_normal),
-                                          sizeof(glm::vec3));
+    m_vertex_array_object = device->create_vertex_array();
+
+    rhi::vertex_attribute_desc attr0{};
+    attr0.location = 0;
+    attr0.source = m_vertex_buffer_object;
+    attr0.type = rhi::element_type::float_type;
+    attr0.component_count = 3;
+    attr0.stride = sizeof(vertex_postion_normal);
+    attr0.offset = 0;
+    device->vertex_array_bind_attribute(m_vertex_array_object, attr0);
+
+    rhi::vertex_attribute_desc attr1{};
+    attr1.location = 1;
+    attr1.source = m_vertex_buffer_object;
+    attr1.type = rhi::element_type::float_type;
+    attr1.component_count = 3;
+    attr1.stride = sizeof(vertex_postion_normal);
+    attr1.offset = sizeof(glm::vec3);
+    device->vertex_array_bind_attribute(m_vertex_array_object, attr1);
 }
 
 void rendering_engine::cube::render()
@@ -108,6 +123,11 @@ void rendering_engine::cube::render()
     current_renderer->upload_matrix4("modelMatrix", this->transform.get_transform_matrix());
     current_renderer->setup_options(options);
 
-    rendering_engine::opengl::context::get_instance().draw_arrays(
-        *m_vertex_array_object, rendering_engine::opengl::primitive::triangles, 0, m_vertex_count);
+    rhi::draw_call call{};
+    call.vao = m_vertex_array_object;
+    call.topology = rhi::primitive_type::triangles;
+    call.indexed = false;
+    call.offset = 0;
+    call.count = m_vertex_count;
+    rhi::get_device()->draw(call);
 }
