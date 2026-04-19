@@ -20,7 +20,10 @@
  * SOFTWARE.
  */
 
+#include <memory>
+
 #include <infrastructure/log.hpp>
+#include <rendering_engine/material/material.hpp>
 #include <rendering_engine/mesh/vertex.hpp>
 #include <rendering_engine/renderables/premade_2d/pane.hpp>
 #include <rendering_engine/renderers/renderer.hpp>
@@ -30,6 +33,7 @@ rendering_engine::pane::pane(const glm::vec2& size)
     : m_vertex_count{0}, m_vertex_array_object{nullptr}, m_vertex_buffer{nullptr}, m_indicies_buffer{nullptr},
       m_size{size}, m_color{0, 0, 0, 0}, m_texture{nullptr}
 {
+    shared_material = std::make_shared<rendering_engine::material>();
 }
 
 void rendering_engine::pane::set_color(const rendering_engine::util::color& color)
@@ -97,17 +101,17 @@ void rendering_engine::pane::render()
         return;
     }
 
-    options.colors["color"] = this->m_color;
+    shared_material->set_uniform("color", this->m_color);
     if (this->m_texture)
     {
-        options.textures["tex"] = this->m_texture;
-        options.coefficients["useTexture"] = 1.0f;
+        shared_material->set_texture("tex", this->m_texture);
+        shared_material->set_uniform("useTexture", 1.0f);
     }
     else
     {
-        options.coefficients["useTexture"] = 0.0f;
+        shared_material->set_uniform("useTexture", 0.0f);
     }
-    current_renderer->setup_options(options);
+    shared_material->bind();
 
     rendering_engine::opengl::context::get_instance().draw_elements(*m_vertex_array_object,
                                                                     rendering_engine::opengl::primitive::triangles,

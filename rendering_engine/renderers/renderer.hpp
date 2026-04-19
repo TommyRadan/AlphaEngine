@@ -26,8 +26,6 @@
 #include <memory>
 #include <string>
 
-#include <rendering_engine/renderers/render_options.hpp>
-
 namespace rendering_engine
 {
     namespace opengl
@@ -55,7 +53,6 @@ namespace rendering_engine
         static renderer* get_current_renderer();
 
         void setup_camera();
-        void setup_options(const render_options& options);
 
         void upload_texture_reference(const std::string& texture_name, int position);
         void upload_coefficient(const std::string& coefficient_name, float coefficient);
