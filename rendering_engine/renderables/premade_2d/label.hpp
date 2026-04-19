@@ -26,8 +26,6 @@
 
 #include <rendering_engine/renderables/premade_2d/pane.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
-
-#include <rendering_engine/opengl/opengl.hpp>
 #include <rendering_engine/util/font.hpp>
 #include <rendering_engine/util/image.hpp>
 #include <rendering_engine/util/transform.hpp>

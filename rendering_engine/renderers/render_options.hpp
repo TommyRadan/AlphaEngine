@@ -25,15 +25,15 @@
 #include <map>
 #include <string>
 
-#include <rendering_engine/opengl/texture.hpp>
 #include <rendering_engine/util/color.hpp>
+#include <rhi/rhi.hpp>
 
 namespace rendering_engine
 {
     struct render_options
     {
         std::map<std::string, float> coefficients;
-        std::map<std::string, opengl::texture*> textures;
+        std::map<std::string, rhi::texture*> textures;
         std::map<std::string, rendering_engine::util::color> colors;
     };
 } // namespace rendering_engine

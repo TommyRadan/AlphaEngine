@@ -27,29 +27,31 @@
 
 #pragma once
 
+#include <memory>
 #include <vector>
 
 #include <infrastructure/singleton.hpp>
+#include <rhi/rhi.hpp>
 
 namespace rendering_engine
 {
     /**
-     * @brief Orchestrates the rendering subsystem (window, GL context, renderers).
+     * @brief Orchestrates the rendering subsystem (window, RHI device, renderers).
      *
-     * Process-wide singleton. @ref init brings up the window and OpenGL
-     * context and constructs the built-in renderers; @ref quit tears the
-     * GL context and window down in reverse order. All methods must be
-     * called from the main thread that owns the GL context.
+     * Process-wide singleton. @ref init brings up the window and RHI
+     * backend and constructs the built-in renderers; @ref quit tears the
+     * RHI device and window down in reverse order. All methods must be
+     * called from the main thread that owns the graphics context.
      */
     struct context : public singleton<context>
     {
         /**
-         * @brief Initializes the window, GL context and built-in renderers.
+         * @brief Initializes the window, RHI backend and built-in renderers.
          *        Must be called once before @ref render.
          */
         void init();
 
-        /** @brief Tears the renderers, GL context and window down. */
+        /** @brief Tears the renderers, RHI device and window down. */
         void quit();
 
         /**
@@ -62,5 +64,8 @@ namespace rendering_engine
          * swap buffers — callers are responsible for presenting.
          */
         void render();
+
+    private:
+        std::unique_ptr<rhi::device> m_rhi_device;
     };
 } // namespace rendering_engine

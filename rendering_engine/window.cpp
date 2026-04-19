@@ -26,9 +26,9 @@
 #include <infrastructure/log.hpp>
 #include <infrastructure/settings.hpp>
 #include <infrastructure/time.hpp>
-#include <rendering_engine/opengl/opengl.hpp>
 #include <rendering_engine/util/color.hpp>
 #include <rendering_engine/window.hpp>
+#include <rhi/rhi.hpp>
 #include <SDL3/SDL.h>
 
 namespace rendering_engine
@@ -140,9 +140,9 @@ namespace rendering_engine
 
     void window::clear()
     {
-        opengl::context::get_instance().clear_color(rendering_engine::util::color{0, 0, 0, 255});
-        opengl::context::get_instance().clear(opengl::buffer::color);
-        opengl::context::get_instance().clear(opengl::buffer::depth);
+        rhi::device* device = rhi::get_device();
+        device->set_clear_color(0.0f, 0.0f, 0.0f, 1.0f);
+        device->clear(rhi::clear_buffer::color | rhi::clear_buffer::depth);
     }
 
     void window::swap_buffers()

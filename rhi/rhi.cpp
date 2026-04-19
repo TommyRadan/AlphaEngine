@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2015-2019 Tomislav Radanovic
+ * Copyright (c) 2015-2026 Tomislav Radanovic
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -20,38 +20,22 @@
  * SOFTWARE.
  */
 
-#pragma once
+#include <rhi/rhi.hpp>
 
-#include <rendering_engine/opengl/typedef.hpp>
-
-#include <string>
-
-namespace rendering_engine
+namespace rhi
 {
-    namespace opengl
+    namespace
     {
-        class shader
-        {
-            friend class context;
-            explicit shader(shader_type type);
-            ~shader();
+        device* g_active_device = nullptr;
+    } // namespace
 
-            shader(const shader&) = delete;
-            shader(const shader&&) = delete;
-            const shader& operator=(const shader&) = delete;
-            const shader&& operator=(const shader&&) = delete;
+    void set_device(device* d)
+    {
+        g_active_device = d;
+    }
 
-        public:
-            const GLuint handle() const;
-
-            void source(const std::string& code);
-            void compile();
-
-            std::string get_info_log();
-
-        private:
-            std::string m_code;
-            GLuint m_object_id;
-        };
-    } // namespace opengl
-} // namespace rendering_engine
+    device* get_device()
+    {
+        return g_active_device;
+    }
+} // namespace rhi

@@ -23,9 +23,8 @@
 #pragma once
 
 #include <rendering_engine/renderables/renderable.hpp>
-
-#include <rendering_engine/opengl/opengl.hpp>
 #include <rendering_engine/util/transform.hpp>
+#include <rhi/rhi.hpp>
 
 namespace rendering_engine
 {
@@ -39,8 +38,8 @@ namespace rendering_engine
         void render() final;
 
     private:
-        opengl::vertex_array* m_vertex_array_object;
-        opengl::vertex_buffer* m_vertex_buffer_object;
+        rhi::vertex_array* m_vertex_array_object;
+        rhi::buffer* m_vertex_buffer_object;
 
         unsigned int m_vertex_count;
     };

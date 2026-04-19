@@ -1,0 +1,98 @@
+/**
+ * Copyright (c) 2015-2026 Tomislav Radanovic
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+#include <rhi/opengl/opengl_resources.hpp>
+
+namespace rhi
+{
+    namespace opengl
+    {
+        gl_buffer::gl_buffer()
+        {
+            glGenBuffers(1, &id);
+        }
+
+        gl_buffer::~gl_buffer()
+        {
+            if (id != 0)
+            {
+                glDeleteBuffers(1, &id);
+            }
+        }
+
+        gl_texture::gl_texture()
+        {
+            glGenTextures(1, &id);
+        }
+
+        gl_texture::~gl_texture()
+        {
+            if (id != 0)
+            {
+                glDeleteTextures(1, &id);
+            }
+        }
+
+        gl_shader::gl_shader() = default;
+
+        gl_shader::~gl_shader()
+        {
+            if (id != 0)
+            {
+                glDeleteShader(id);
+            }
+        }
+
+        gl_program::gl_program() = default;
+
+        gl_program::~gl_program()
+        {
+            if (id != 0)
+            {
+                glDeleteProgram(id);
+            }
+        }
+
+        gl_vertex_array::gl_vertex_array()
+        {
+            glGenVertexArrays(1, &id);
+        }
+
+        gl_vertex_array::~gl_vertex_array()
+        {
+            if (id != 0)
+            {
+                glDeleteVertexArrays(1, &id);
+            }
+        }
+
+        gl_framebuffer::gl_framebuffer() = default;
+
+        gl_framebuffer::~gl_framebuffer()
+        {
+            if (id != 0)
+            {
+                glDeleteFramebuffers(1, &id);
+            }
+        }
+    } // namespace opengl
+} // namespace rhi
