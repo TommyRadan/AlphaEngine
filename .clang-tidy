@@ -7,7 +7,7 @@ WarningsAsErrors: ''
 # Only lint first-party subsystem headers. Vendored code (glad, loguru, stb)
 # and system/toolchain headers use their own naming conventions and would
 # otherwise flood diagnostics.
-HeaderFilterRegex: '[\\/](control|event_engine|rendering_engine|scene_graph|infrastructure|external)[\\/]'
+HeaderFilterRegex: '[\\/](control|event_engine|rendering_engine|scene_graph|infrastructure|external|asset_manager)[\\/]'
 
 CheckOptions:
   # Types

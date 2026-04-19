@@ -22,6 +22,7 @@
 
 #include <stdexcept>
 
+#include <asset_manager/asset_manager.hpp>
 #include <event_engine/event_engine.hpp>
 #include <infrastructure/log.hpp>
 #include <infrastructure/time.hpp>
@@ -45,6 +46,7 @@ int main(int argc, char* argv[])
     try
     {
         event_engine::context::get_instance().init();
+        asset_manager::context::get_instance().init();
         rendering_engine::context::get_instance().init();
         scene_graph::context::get_instance().init();
     }
@@ -87,6 +89,7 @@ int main(int argc, char* argv[])
     LOG_INF("Engine shutting down: tearing down subsystems");
     scene_graph::context::get_instance().quit();
     rendering_engine::context::get_instance().quit();
+    asset_manager::context::get_instance().quit();
     event_engine::context::get_instance().quit();
     LOG_INF("Engine stopped cleanly");
     return EXIT_SUCCESS;
