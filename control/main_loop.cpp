@@ -31,7 +31,7 @@
 
 bool is_quit_requested = false;
 
-void quit_request_listener(const event_engine::event& event)
+void quit_request_listener(const event_engine::quit_requested& event)
 {
     is_quit_requested = true;
 }
@@ -44,7 +44,7 @@ int main(int argc, char* argv[])
 
     try
     {
-        event_engine::context::get_instance().init();
+        event_engine::event_bus::get_instance().init();
         rendering_engine::context::get_instance().init();
         scene_graph::context::get_instance().init();
     }
@@ -59,9 +59,8 @@ int main(int argc, char* argv[])
 
     try
     {
-        event_engine::context::get_instance().register_listener(event_engine::event_type::quit_requested,
-                                                                quit_request_listener);
-        event_engine::context::get_instance().broadcast(event_engine::engine_start());
+        event_engine::event_bus::get_instance().subscribe<event_engine::quit_requested>(quit_request_listener);
+        event_engine::event_bus::get_instance().emit<event_engine::engine_start>();
 
         for (;;)
         {
@@ -75,7 +74,7 @@ int main(int argc, char* argv[])
         }
 
         LOG_INF("Quit requested: broadcasting engine_stop");
-        event_engine::context::get_instance().broadcast(event_engine::engine_stop());
+        event_engine::event_bus::get_instance().emit<event_engine::engine_stop>();
     }
     catch (const std::exception& e)
     {
@@ -87,7 +86,7 @@ int main(int argc, char* argv[])
     LOG_INF("Engine shutting down: tearing down subsystems");
     scene_graph::context::get_instance().quit();
     rendering_engine::context::get_instance().quit();
-    event_engine::context::get_instance().quit();
+    event_engine::event_bus::get_instance().quit();
     LOG_INF("Engine stopped cleanly");
     return EXIT_SUCCESS;
 }

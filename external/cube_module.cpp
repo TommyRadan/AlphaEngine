@@ -36,24 +36,24 @@ static std::unique_ptr<rendering_engine::cube> cube;
 float rotation = 0.0f;
 float rotation_speed = 3.14f / 2;
 
-static void on_engine_start(const event_engine::event& event)
+static void on_engine_start(const event_engine::engine_start& event)
 {
     cube = std::make_unique<rendering_engine::cube>();
     cube->upload();
 }
 
-static void on_engine_stop(const event_engine::event& event)
+static void on_engine_stop(const event_engine::engine_stop& event)
 {
     cube.reset();
 }
 
-static void on_frame(const event_engine::event& event)
+static void on_frame(const event_engine::frame& event)
 {
     rotation += rotation_speed * (static_cast<float>(get_delta_time()) / 1000);
     cube->transform.set_rotation(glm::vec3{0.f, 0.f, rotation});
 }
 
-static void on_render_scene(const event_engine::event& event)
+static void on_render_scene(const event_engine::render_scene& event)
 {
     cube->render();
 }

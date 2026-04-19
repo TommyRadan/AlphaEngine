@@ -67,13 +67,13 @@ void rendering_engine::context::render()
     {
         rendering_engine::renderers::basic_renderer::get_instance().start_renderer();
         rendering_engine::renderers::basic_renderer::get_instance().setup_camera();
-        event_engine::context::get_instance().broadcast(event_engine::render_scene());
+        event_engine::event_bus::get_instance().emit<event_engine::render_scene>();
         rendering_engine::renderers::basic_renderer::get_instance().stop_renderer();
     }
 
     rendering_engine::opengl::context::get_instance().disable(rendering_engine::opengl::capability::depth_test);
     rendering_engine::renderers::overlay_renderer::get_instance().start_renderer();
-    event_engine::context::get_instance().broadcast(event_engine::render_ui());
+    event_engine::event_bus::get_instance().emit<event_engine::render_ui>();
     rendering_engine::renderers::overlay_renderer::get_instance().stop_renderer();
     rendering_engine::opengl::context::get_instance().enable(rendering_engine::opengl::capability::depth_test);
 }

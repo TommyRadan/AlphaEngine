@@ -23,63 +23,60 @@
 #define INTERNAL_GAMEMODULE_IMPLEMENTATION
 #include "game_module.hpp"
 #undef INTERNAL_GAMEMODULE_IMPLEMENTATION
+
 #include <event_engine/event_engine.hpp>
 
 void register_game_module(struct game_module_info& info)
 {
+    auto& bus = event_engine::event_bus::get_instance();
+
     if (info.on_engine_start)
     {
-        event_engine::context::get_instance().register_listener(event_engine::event_type::engine_start,
-                                                                info.on_engine_start);
+        bus.subscribe<event_engine::engine_start>(info.on_engine_start);
     }
 
     if (info.on_engine_stop)
     {
-        event_engine::context::get_instance().register_listener(event_engine::event_type::engine_stop,
-                                                                info.on_engine_stop);
+        bus.subscribe<event_engine::engine_stop>(info.on_engine_stop);
     }
 
     if (info.on_frame)
     {
-        event_engine::context::get_instance().register_listener(event_engine::event_type::frame, info.on_frame);
+        bus.subscribe<event_engine::frame>(info.on_frame);
     }
 
     if (info.on_render_scene)
     {
-        event_engine::context::get_instance().register_listener(event_engine::event_type::render_scene,
-                                                                info.on_render_scene);
+        bus.subscribe<event_engine::render_scene>(info.on_render_scene);
     }
 
     if (info.on_render_ui)
     {
-        event_engine::context::get_instance().register_listener(event_engine::event_type::render_ui, info.on_render_ui);
+        bus.subscribe<event_engine::render_ui>(info.on_render_ui);
     }
 
     if (info.on_mouse_key_down)
     {
-        event_engine::context::get_instance().register_listener(event_engine::event_type::mouse_key_down,
-                                                                info.on_mouse_key_down);
+        bus.subscribe<event_engine::mouse_key_down>(info.on_mouse_key_down);
     }
 
     if (info.on_mouse_key_up)
     {
-        event_engine::context::get_instance().register_listener(event_engine::event_type::mouse_key_up,
-                                                                info.on_mouse_key_up);
+        bus.subscribe<event_engine::mouse_key_up>(info.on_mouse_key_up);
     }
 
     if (info.on_key_down)
     {
-        event_engine::context::get_instance().register_listener(event_engine::event_type::key_down, info.on_key_down);
+        bus.subscribe<event_engine::key_down>(info.on_key_down);
     }
 
     if (info.on_key_up)
     {
-        event_engine::context::get_instance().register_listener(event_engine::event_type::key_up, info.on_key_up);
+        bus.subscribe<event_engine::key_up>(info.on_key_up);
     }
 
     if (info.on_mouse_move)
     {
-        event_engine::context::get_instance().register_listener(event_engine::event_type::mouse_move,
-                                                                info.on_mouse_move);
+        bus.subscribe<event_engine::mouse_move>(info.on_mouse_move);
     }
 }

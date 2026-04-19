@@ -20,59 +20,52 @@
  * SOFTWARE.
  */
 
-#include <stdexcept>
+#include <utility>
 
 #include <event_engine/event_engine.hpp>
 #include <infrastructure/log.hpp>
 
-void event_engine::context::init()
+void event_engine::event_bus::init()
 {
     LOG_INF("Init Event Engine");
 }
 
-void event_engine::context::quit()
+void event_engine::event_bus::quit()
 {
     LOG_INF("Quit Event Engine: %zu event types had listeners registered", m_listeners.size());
+    m_listeners.clear();
+    m_pending.clear();
 }
 
-void event_engine::context::broadcast(const event& event)
+void event_engine::event_bus::dispatch(std::type_index type, const std::any& payload)
 {
-    // Lifecycle and low-frequency events are worth noting at INFO; per-frame / input
-    // events happen many times per second and would flood logs, so we stay silent for
-    // them. Broadcasting to zero listeners is legal and intentionally not logged.
-    switch (event.m_type)
+    auto it = m_listeners.find(type);
+    if (it == m_listeners.end())
     {
-    case event_type::engine_start:
-    case event_type::engine_stop:
-    case event_type::quit_requested:
-        LOG_INF("Broadcasting event_type=%d", static_cast<int>(event.m_type));
-        break;
-    default:
-        break;
-    }
-
-    for (const auto& listener : m_listeners[event.m_type])
-    {
-        if (!listener)
-        {
-            LOG_ERR("Skipping null listener for event_type=%d", static_cast<int>(event.m_type));
-            continue;
-        }
-        listener(event);
-    }
-}
-
-void event_engine::context::register_listener(const event_type type, const std::function<void(const event&)>& listener)
-{
-    if (!listener)
-    {
-        LOG_ERR("Attempted to register null listener for event_type=%d", static_cast<int>(type));
         return;
     }
 
-    m_listeners[type].push_back(listener);
-    // Registration happens at static-init time (from GAME_MODULE()) and again after
-    // main() runs, so keep this quiet at INFO rather than spamming WARN.
-    LOG_INF(
-        "Registered listener for event_type=%d (listeners now=%zu)", static_cast<int>(type), m_listeners[type].size());
+    for (const auto& listener : it->second)
+    {
+        if (!listener)
+        {
+            LOG_ERR("Skipping null listener for event type '%s'", type.name());
+            continue;
+        }
+        listener(payload);
+    }
+}
+
+void event_engine::event_bus::flush()
+{
+    // Swap the pending queue into a local so that listeners re-entering via
+    // enqueue() during this flush have their events deferred to the next
+    // flush, matching the buffered-dispatch contract.
+    std::vector<queued_entry> draining;
+    draining.swap(m_pending);
+
+    for (const auto& entry : draining)
+    {
+        dispatch(entry.first, entry.second);
+    }
 }

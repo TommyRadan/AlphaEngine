@@ -31,7 +31,7 @@ Entry point is `control/main_loop.cpp`. It initializes three subsystems, runs th
 
 The subsystems:
 
-- **`event_engine`** — process-wide synchronous publish/subscribe hub (`event_engine::context`). Listeners register against `event_type` keys and receive `const event&` callbacks. Not thread-safe; register during init, broadcast from the main loop. Engine-wide events include `engine_start`, `engine_stop`, `render_scene`, `render_ui`, input events, and `quit_requested`.
+- **`event_engine`** — process-wide synchronous publish/subscribe hub (`event_engine::event_bus`). Listeners subscribe by event struct type (`std::type_index`-keyed) and receive a typed `const E&` callback; the bus exposes `subscribe<E>(listener)`, immediate `emit<E>(args...)`, buffered `enqueue<E>(args...)`, and `flush()`. Not thread-safe; register during init, dispatch from the main loop. Built-in events include `engine_start`, `engine_stop`, `render_scene`, `render_ui`, input events, and `quit_requested`; game modules may define their own event structs without touching core headers.
 - **`rendering_engine`** — owns the window, SDL/GL context, and built-in renderers (`basic_renderer`, `overlay_renderer`). `render()` broadcasts `render_scene` (if a camera is active) then `render_ui` with depth test disabled. It does **not** swap buffers — the main loop calls `window::swap_buffers()` explicitly. Subfolders: `camera/`, `mesh/`, `opengl/` (GL wrapper types: program, shader, buffer, texture, framebuffer, vertex_array), `renderables/` (+ `premade_2d/`, `premade_3d/`), `renderers/`, `util/` (color, font, image, transform).
 - **`scene_graph`** — currently a lifecycle stub with the same init/quit shape as the others.
 

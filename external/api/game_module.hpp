@@ -22,21 +22,22 @@
 
 #pragma once
 
+#include <functional>
+
 #include <event_engine/event_engine.hpp>
-#include <string>
 
 struct game_module_info
 {
-    std::function<void(const event_engine::event&)> on_engine_start;
-    std::function<void(const event_engine::event&)> on_engine_stop;
-    std::function<void(const event_engine::event&)> on_frame;
-    std::function<void(const event_engine::event&)> on_render_scene;
-    std::function<void(const event_engine::event&)> on_render_ui;
-    std::function<void(const event_engine::event&)> on_key_down;
-    std::function<void(const event_engine::event&)> on_key_up;
-    std::function<void(const event_engine::event&)> on_mouse_key_down;
-    std::function<void(const event_engine::event&)> on_mouse_key_up;
-    std::function<void(const event_engine::event&)> on_mouse_move;
+    std::function<void(const event_engine::engine_start&)> on_engine_start;
+    std::function<void(const event_engine::engine_stop&)> on_engine_stop;
+    std::function<void(const event_engine::frame&)> on_frame;
+    std::function<void(const event_engine::render_scene&)> on_render_scene;
+    std::function<void(const event_engine::render_ui&)> on_render_ui;
+    std::function<void(const event_engine::key_down&)> on_key_down;
+    std::function<void(const event_engine::key_up&)> on_key_up;
+    std::function<void(const event_engine::mouse_key_down&)> on_mouse_key_down;
+    std::function<void(const event_engine::mouse_key_up&)> on_mouse_key_up;
+    std::function<void(const event_engine::mouse_move&)> on_mouse_move;
 
     game_module_info()
         : on_engine_start{nullptr}, on_engine_stop{nullptr}, on_frame{nullptr}, on_render_scene{nullptr},

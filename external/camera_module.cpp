@@ -37,7 +37,7 @@ camera_id g_camera_id = 0;
 std::map<event_engine::key_code, bool> keys;
 std::map<event_engine::mouse_key_code, bool> mouse_keys;
 
-static void on_engine_start(const event_engine::event& event)
+static void on_engine_start(const event_engine::engine_start& event)
 {
     g_camera_id = create_camera(camera_type::perspective);
     attach_camera(g_camera_id);
@@ -45,36 +45,32 @@ static void on_engine_start(const event_engine::event& event)
     set_camera_pos(g_camera_id, -5.0, 0.0, 0.0);
 }
 
-static void on_engine_stop(const event_engine::event& event)
+static void on_engine_stop(const event_engine::engine_stop& event)
 {
     destroy_camera(g_camera_id);
 }
 
-static void on_key_down(const event_engine::event& event)
+static void on_key_down(const event_engine::key_down& event)
 {
-    auto key_event = dynamic_cast<const event_engine::key_down*>(&event);
-    keys[key_event->m_key_code] = true;
+    keys[event.m_key_code] = true;
 }
 
-static void on_key_up(const event_engine::event& event)
+static void on_key_up(const event_engine::key_up& event)
 {
-    auto key_event = dynamic_cast<const event_engine::key_up*>(&event);
-    keys[key_event->m_key_code] = false;
+    keys[event.m_key_code] = false;
 }
 
-static void on_mouse_key_down(const event_engine::event& event)
+static void on_mouse_key_down(const event_engine::mouse_key_down& event)
 {
-    auto mouse_event = dynamic_cast<const event_engine::mouse_key_down*>(&event);
-    mouse_keys[mouse_event->m_key_code] = true;
+    mouse_keys[event.m_key_code] = true;
 }
 
-static void on_mouse_key_up(const event_engine::event& event)
+static void on_mouse_key_up(const event_engine::mouse_key_up& event)
 {
-    auto mouse_event = dynamic_cast<const event_engine::mouse_key_up*>(&event);
-    mouse_keys[mouse_event->m_key_code] = false;
+    mouse_keys[event.m_key_code] = false;
 }
 
-static void on_frame(const event_engine::event& event)
+static void on_frame(const event_engine::frame& event)
 {
     if (g_camera_id == 0)
     {
@@ -130,11 +126,10 @@ static void on_frame(const event_engine::event& event)
     set_camera_pos(g_camera_id, new_position.x, new_position.y, new_position.z);
 }
 
-static void on_mouse_move(const event_engine::event& event)
+static void on_mouse_move(const event_engine::mouse_move& event)
 {
-    auto move_event = dynamic_cast<const event_engine::mouse_move*>(&event);
-    int32_t delta_x = move_event->m_x;
-    int32_t delta_y = move_event->m_y;
+    int32_t delta_x = event.m_x;
+    int32_t delta_y = event.m_y;
 
 #if _DEBUG
     if (!mouse_keys[event_engine::mouse_key_code::left])

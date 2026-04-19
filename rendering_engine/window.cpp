@@ -171,9 +171,11 @@ namespace rendering_engine
     {
         SDL_Event events = {0};
 
+        auto& bus = event_engine::event_bus::get_instance();
+
         event_engine::frame frame;
         frame.m_delta_time = static_cast<float>(infrastructure::time::get_instance().delta_time());
-        event_engine::context::get_instance().broadcast(frame);
+        bus.emit<event_engine::frame>(frame);
 
         SDL_PumpEvents();
         while (SDL_PollEvent(&events))
@@ -184,7 +186,7 @@ namespace rendering_engine
             {
                 event_engine::key_down key_down;
                 key_down.m_key_code = (event_engine::key_code)events.key.key;
-                event_engine::context::get_instance().broadcast(key_down);
+                bus.emit<event_engine::key_down>(key_down);
                 break;
             }
 
@@ -192,7 +194,7 @@ namespace rendering_engine
             {
                 event_engine::key_up key_up;
                 key_up.m_key_code = (event_engine::key_code)events.key.key;
-                event_engine::context::get_instance().broadcast(key_up);
+                bus.emit<event_engine::key_up>(key_up);
                 break;
             }
 
@@ -216,7 +218,7 @@ namespace rendering_engine
                 default:
                     break;
                 }
-                event_engine::context::get_instance().broadcast(mouse_key_down);
+                bus.emit<event_engine::mouse_key_down>(mouse_key_down);
                 break;
             }
 
@@ -241,7 +243,7 @@ namespace rendering_engine
                 default:
                     break;
                 }
-                event_engine::context::get_instance().broadcast(mouse_key_up);
+                bus.emit<event_engine::mouse_key_up>(mouse_key_up);
                 break;
             }
 
@@ -250,12 +252,12 @@ namespace rendering_engine
                 event_engine::mouse_move mouse_move;
                 mouse_move.m_x = static_cast<int>(events.motion.xrel);
                 mouse_move.m_y = static_cast<int>(events.motion.yrel);
-                event_engine::context::get_instance().broadcast(mouse_move);
+                bus.emit<event_engine::mouse_move>(mouse_move);
                 break;
             }
 
             case SDL_EVENT_QUIT:
-                event_engine::context::get_instance().broadcast(event_engine::quit_requested());
+                bus.emit<event_engine::quit_requested>();
                 break;
 
             default:
