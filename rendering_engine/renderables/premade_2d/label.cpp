@@ -44,9 +44,9 @@ void rendering_engine::label::set_text(const std::string& text)
     upload();
 }
 
-void rendering_engine::label::set_position(const glm::vec3& position)
+void rendering_engine::label::set_position(const infrastructure::math::vec3& position)
 {
-    const glm::vec3 delta = position - m_position;
+    const infrastructure::math::vec3 delta = position - m_position;
     m_position = position;
     for (auto& p : m_panes)
     {
@@ -75,9 +75,9 @@ void rendering_engine::label::rebuild_panes()
         int x0, y0, x1, y1;
         const rendering_engine::util::image* image = m_font->get_image(c, &x0, &y0, &x1, &y1);
         const float width = ((float)image->get_width() / image->get_height()) * m_size;
-        auto pane = std::make_unique<rendering_engine::pane>(glm::vec2{width, m_size});
+        auto pane = std::make_unique<rendering_engine::pane>(infrastructure::math::vec2{width, m_size});
         pane->set_image(*image);
-        pane->transform.set_position(glm::vec3{m_position.x + cursor, m_position.y, m_position.z});
+        pane->transform.set_position(infrastructure::math::vec3{m_position.x + cursor, m_position.y, m_position.z});
         cursor += width + m_size * 0.1f;
         m_panes.push_back(std::move(pane));
     }

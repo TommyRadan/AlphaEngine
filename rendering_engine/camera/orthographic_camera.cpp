@@ -20,9 +20,8 @@
  * SOFTWARE.
  */
 
+#include <infrastructure/math/math.hpp>
 #include <rendering_engine/camera/orthographic_camera.hpp>
-#define GLM_ENABLE_EXPERIMENTAL
-#include <glm/gtx/transform.hpp>
 
 rendering_engine::orthographic_camera::orthographic_camera()
 {
@@ -32,15 +31,15 @@ rendering_engine::orthographic_camera::orthographic_camera()
     far_clip = 10000.0f;
 }
 
-const glm::mat4 rendering_engine::orthographic_camera::get_projection_matrix() const
+const infrastructure::math::mat4 rendering_engine::orthographic_camera::get_projection_matrix() const
 {
     if (!m_is_projection_matrix_dirty)
     {
         return m_projection;
     }
 
-    m_projection =
-        glm::ortho(-x_magnification, x_magnification, -y_magnification, y_magnification, near_clip, far_clip);
+    m_projection = infrastructure::math::ortho(
+        -x_magnification, x_magnification, -y_magnification, y_magnification, near_clip, far_clip);
     m_is_projection_matrix_dirty = false;
     return m_projection;
 }

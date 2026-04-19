@@ -25,7 +25,7 @@
 #include <rendering_engine/opengl/shader.hpp>
 #include <rendering_engine/opengl/typedef.hpp>
 
-#include <glm/glm.hpp>
+#include <infrastructure/math/math.hpp>
 #include <map>
 #include <string>
 
@@ -72,15 +72,15 @@ namespace rendering_engine
 
             void set_uniform(const uniform& uniform, int value);
             void set_uniform(const uniform& uniform, float value);
-            void set_uniform(const uniform& uniform, const glm::vec2& value);
-            void set_uniform(const uniform& uniform, const glm::vec3& value);
-            void set_uniform(const uniform& uniform, const glm::vec4& value);
+            void set_uniform(const uniform& uniform, const infrastructure::math::vec2& value);
+            void set_uniform(const uniform& uniform, const infrastructure::math::vec3& value);
+            void set_uniform(const uniform& uniform, const infrastructure::math::vec4& value);
             void set_uniform(const uniform& uniform, const float* values, unsigned int count);
-            void set_uniform(const uniform& uniform, const glm::vec2* values, unsigned int count);
-            void set_uniform(const uniform& uniform, const glm::vec3* values, unsigned int count);
-            void set_uniform(const uniform& uniform, const glm::vec4* values, unsigned int count);
-            void set_uniform(const uniform& uniform, const glm::mat3& value);
-            void set_uniform(const uniform& uniform, const glm::mat4& value);
+            void set_uniform(const uniform& uniform, const infrastructure::math::vec2* values, unsigned int count);
+            void set_uniform(const uniform& uniform, const infrastructure::math::vec3* values, unsigned int count);
+            void set_uniform(const uniform& uniform, const infrastructure::math::vec4* values, unsigned int count);
+            void set_uniform(const uniform& uniform, const infrastructure::math::mat3& value);
+            void set_uniform(const uniform& uniform, const infrastructure::math::mat4& value);
 
         private:
             unsigned int m_object_id;

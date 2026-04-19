@@ -32,7 +32,7 @@ namespace rendering_engine
 {
     struct pane : public renderable
     {
-        pane(const glm::vec2& size);
+        pane(const infrastructure::math::vec2& size);
 
         void set_color(const rendering_engine::util::color& color);
         void set_image(const rendering_engine::util::image& image);
@@ -49,7 +49,7 @@ namespace rendering_engine
 
         unsigned int m_vertex_count;
 
-        glm::vec2 m_size;
+        infrastructure::math::vec2 m_size;
         rendering_engine::util::color m_color;
         rendering_engine::opengl::texture* m_texture;
     };

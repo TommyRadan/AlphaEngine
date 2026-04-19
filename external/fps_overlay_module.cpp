@@ -45,7 +45,7 @@ static double time_since_update_ms = 0.0;
 static void reposition_top_right()
 {
     const float x = 1.0f - fps_label->get_width() - RIGHT_MARGIN;
-    fps_label->set_position(glm::vec3{x, TOP_Y, 0.0f});
+    fps_label->set_position(infrastructure::math::vec3{x, TOP_Y, 0.0f});
 }
 
 static void on_engine_start(const event_engine::event& event)

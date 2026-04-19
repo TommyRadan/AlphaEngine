@@ -22,10 +22,10 @@
 
 #pragma once
 
-#include <glm/glm.hpp>
 #include <memory>
 #include <string>
 
+#include <infrastructure/math/math.hpp>
 #include <rendering_engine/renderers/render_options.hpp>
 
 namespace rendering_engine
@@ -59,11 +59,11 @@ namespace rendering_engine
 
         void upload_texture_reference(const std::string& texture_name, int position);
         void upload_coefficient(const std::string& coefficient_name, float coefficient);
-        void upload_matrix3(const std::string& mat3_name, const glm::mat3& matrix);
-        void upload_matrix4(const std::string& mat4_name, const glm::mat4& matrix);
-        void upload_vector2(const std::string& vec2_name, const glm::vec2& vector);
-        void upload_vector3(const std::string& vec3_name, const glm::vec3& vector);
-        void upload_vector4(const std::string& vec4_name, const glm::vec4& vector);
+        void upload_matrix3(const std::string& mat3_name, const infrastructure::math::mat3& matrix);
+        void upload_matrix4(const std::string& mat4_name, const infrastructure::math::mat4& matrix);
+        void upload_vector2(const std::string& vec2_name, const infrastructure::math::vec2& vector);
+        void upload_vector3(const std::string& vec3_name, const infrastructure::math::vec3& vector);
+        void upload_vector4(const std::string& vec4_name, const infrastructure::math::vec4& vector);
 
     protected:
         renderer() = default;

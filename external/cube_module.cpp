@@ -50,7 +50,7 @@ static void on_engine_stop(const event_engine::event& event)
 static void on_frame(const event_engine::event& event)
 {
     rotation += rotation_speed * (static_cast<float>(get_delta_time()) / 1000);
-    cube->transform.set_rotation(glm::vec3{0.f, 0.f, rotation});
+    cube->transform.set_rotation(infrastructure::math::vec3{0.f, 0.f, rotation});
 }
 
 static void on_render_scene(const event_engine::event& event)
