@@ -22,6 +22,8 @@
 
 #include <scene_graph/scene_graph.hpp>
 
+#include <event_engine/event.hpp>
+#include <event_engine/event_engine.hpp>
 #include <infrastructure/log.hpp>
 
 #include <string>
@@ -29,11 +31,32 @@
 void scene_graph::context::init()
 {
     LOG_INF("Init Scene Graph");
-    // Node add/remove and traversal diagnostics are expected to be logged from
-    // here by scene_graph API calls once they exist. See docs/logging.md.
+
+    // Drive the active scene's on_update from the per-frame event. The active
+    // scene is looked up at dispatch time so push/pop/replace take effect
+    // immediately on the following frame.
+    event_engine::context::get_instance().register_listener(
+        event_engine::event_type::frame,
+        [this](const event_engine::event& event)
+        {
+            auto& frame_event = static_cast<const event_engine::frame&>(event);
+            if (m_scene_manager.has_active())
+            {
+                m_scene_manager.active().on_update(frame_event.m_delta_time);
+            }
+        });
 }
 
 void scene_graph::context::quit()
 {
-    LOG_INF("Quit Scene Graph");
+    LOG_INF("Quit Scene Graph: unloading %zu scene(s) left on the stack", m_scene_manager.size());
+    while (m_scene_manager.has_active())
+    {
+        m_scene_manager.pop();
+    }
+}
+
+scene_graph::scene_manager& scene_graph::context::get_scene_manager()
+{
+    return m_scene_manager;
 }

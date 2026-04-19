@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2015-2019 Tomislav Radanovic
+ * Copyright (c) 2015-2025 Tomislav Radanovic
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -21,39 +21,28 @@
  */
 
 /**
- * @file scene_graph.hpp
- * @brief Scene graph subsystem entry point.
+ * @file world.hpp
+ * @brief Placeholder ECS world type embedded in every @ref scene_graph::scene.
+ *
+ * The real ECS @c world is being implemented in parallel on the
+ * @c feat/ecs-world branch (issue #16). Until that lands this empty
+ * struct keeps the @ref scene_graph::scene API stable; once the ECS
+ * world is merged, this header will be superseded and the @c game_world
+ * member of @ref scene_graph::scene will become the real type.
  */
 
 #pragma once
 
-#include <string>
-
-#include <infrastructure/singleton.hpp>
-#include <scene_graph/scene_manager.hpp>
-
 namespace scene_graph
 {
     /**
-     * @brief Lifetime owner of the scene graph subsystem.
+     * @brief Placeholder ECS world used by @ref scene until issue #16 lands.
      *
-     * Process-wide singleton. Owns the @ref scene_manager and drives
-     * the active scene's @c on_update hook from the event engine's
-     * per-frame @c frame event. The @ref init / @ref quit pair matches
-     * the shape of the other engine subsystems.
+     * Intentionally empty — existence of the type is enough to pin the
+     * @ref scene ABI while the ECS implementation is in flight on a
+     * separate branch.
      */
-    struct context : public singleton<context>
+    struct world
     {
-        /** @brief Initializes the scene graph subsystem. */
-        void init();
-
-        /** @brief Shuts down the scene graph subsystem. */
-        void quit();
-
-        /** @brief Returns the owned @ref scene_manager. */
-        scene_manager& get_scene_manager();
-
-    private:
-        scene_manager m_scene_manager;
     };
 } // namespace scene_graph
