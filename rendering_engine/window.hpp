@@ -80,7 +80,7 @@ namespace rendering_engine
 
         /**
          * @brief Pumps the SDL event queue and translates OS input into
-         *        engine events broadcast through @ref event_engine::context.
+         *        engine events broadcast through @ref event_engine::event_bus.
          *
          * Also broadcasts a @ref event_engine::frame event carrying the
          * current delta time. Call once per main-loop iteration.

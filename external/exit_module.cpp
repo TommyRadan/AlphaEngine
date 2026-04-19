@@ -25,13 +25,11 @@
 #include <event_engine/event_engine.hpp>
 #include <infrastructure/log.hpp>
 
-static void on_key_down(const event_engine::event& event)
+static void on_key_down(const event_engine::key_down& event)
 {
-    auto key_down_event = dynamic_cast<const event_engine::key_down*>(&event);
-    auto key_code = key_down_event->m_key_code;
-    if (key_code != event_engine::key_code::escape)
+    if (event.m_key_code != event_engine::key_code::escape)
         return;
-    event_engine::context::get_instance().broadcast(event_engine::quit_requested());
+    event_engine::event_bus::get_instance().emit<event_engine::quit_requested>();
 }
 
 GAME_MODULE()

@@ -28,7 +28,7 @@
 
 #include <string>
 
-static void on_frame(const event_engine::event& event)
+static void on_frame(const event_engine::frame& event)
 {
     // PrintInfo(std::string{"Delta time: "} + std::to_string(GetDeltaTime()) + " ms");
     // PrintInfo(std::string{"FPS: "} + std::to_string(GetCurrentFPS()));

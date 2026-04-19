@@ -22,13 +22,16 @@
 
 /**
  * @file event_engine.hpp
- * @brief Event dispatch subsystem: publish/subscribe hub for engine events.
+ * @brief Generic typed event bus: publish/subscribe hub for engine events.
  */
 
 #pragma once
 
+#include <any>
 #include <functional>
+#include <typeindex>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include <event_engine/event.hpp>
@@ -37,44 +40,103 @@
 namespace event_engine
 {
     /**
-     * @brief Central event bus used by all subsystems.
+     * @brief Central typed event bus used by all subsystems.
      *
-     * Listeners register callbacks keyed on an @ref event_type and are
-     * invoked synchronously whenever an event of that type is broadcast.
-     * The context is a process-wide singleton; listener storage and
-     * dispatch are not thread-safe — register listeners during init and
-     * broadcast from the main loop thread only.
+     * Listeners are registered per event type @c E via @ref subscribe and
+     * invoked synchronously whenever an event of that type is dispatched
+     * through @ref emit. @ref enqueue buffers events for later delivery
+     * through @ref flush, which drains the queue once in FIFO order.
+     *
+     * The bus is a process-wide singleton. Listener storage, dispatch, and
+     * the pending queue are not thread-safe — register listeners during
+     * init and emit/enqueue from the main-loop thread only.
+     *
+     * Events are arbitrary value types. No base class is required: the
+     * bus keys listeners on @c std::type_index and stores enqueued events
+     * in @c std::any. Game modules can introduce their own event structs
+     * without touching engine headers.
      */
-    struct context : public singleton<context>
+    struct event_bus : public singleton<event_bus>
     {
-        context() = default;
+        event_bus() = default;
 
-        /** @brief Initializes the event engine. Must be called once at startup. */
+        /** @brief Initializes the event bus. Must be called once at startup. */
         void init();
 
-        /** @brief Shuts down the event engine. Called once at teardown. */
+        /** @brief Shuts down the event bus. Called once at teardown. */
         void quit();
 
         /**
-         * @brief Dispatches @p event synchronously to every listener
-         *        registered for its type.
-         * @param event Event to broadcast. The reference must stay valid
-         *              for the duration of the call; listeners receive a
-         *              const reference and must not retain it.
+         * @brief Registers a callback for events of type @c E.
+         * @tparam E        The event struct type to subscribe to.
+         * @param listener  Callable invoked on every matching dispatch.
+         *                  Stored by value in the bus; any captured state
+         *                  must outlive the bus or be owned by the callable.
          */
-        void broadcast(const event& event);
+        template<typename E>
+        void subscribe(std::function<void(const E&)> listener);
 
         /**
-         * @brief Registers a callback for events of a given type.
-         * @param type     The event type to subscribe to.
-         * @param listener Callable invoked on every matching broadcast.
-         *                 Stored by value in the engine; any captured
-         *                 state must outlive the engine or be owned by
-         *                 the callable itself.
+         * @brief Constructs an event of type @c E in place and dispatches
+         *        it synchronously to every subscribed listener.
+         * @tparam E       The event struct type to emit.
+         * @tparam Args    Argument types forwarded to @c E's constructor.
+         * @param args     Arguments forwarded to @c E's constructor.
          */
-        void register_listener(const event_type type, const std::function<void(const event&)>& listener);
+        template<typename E, typename... Args>
+        void emit(Args&&... args);
+
+        /**
+         * @brief Constructs an event of type @c E in place and buffers it
+         *        on the pending queue for later delivery via @ref flush.
+         * @tparam E       The event struct type to enqueue.
+         * @tparam Args    Argument types forwarded to @c E's constructor.
+         * @param args     Arguments forwarded to @c E's constructor.
+         */
+        template<typename E, typename... Args>
+        void enqueue(Args&&... args);
+
+        /**
+         * @brief Drains the pending queue in FIFO order, dispatching each
+         *        buffered event through its registered listeners. Events
+         *        enqueued while flushing are deferred until the next
+         *        @ref flush call.
+         */
+        void flush();
 
     private:
-        std::unordered_map<event_type, std::vector<std::function<void(const event&)>>> m_listeners;
+        using listener_entry = std::function<void(const std::any&)>;
+        using queued_entry = std::pair<std::type_index, std::any>;
+
+        std::unordered_map<std::type_index, std::vector<listener_entry>> m_listeners;
+        std::vector<queued_entry> m_pending;
+
+        void dispatch(std::type_index type, const std::any& payload);
     };
+
+    template<typename E>
+    void event_bus::subscribe(std::function<void(const E&)> listener)
+    {
+        if (!listener)
+        {
+            return;
+        }
+
+        auto wrapper = [listener = std::move(listener)](const std::any& payload)
+        { listener(*std::any_cast<E>(&payload)); };
+        m_listeners[std::type_index(typeid(E))].push_back(std::move(wrapper));
+    }
+
+    template<typename E, typename... Args>
+    void event_bus::emit(Args&&... args)
+    {
+        std::any payload = E{std::forward<Args>(args)...};
+        dispatch(std::type_index(typeid(E)), payload);
+    }
+
+    template<typename E, typename... Args>
+    void event_bus::enqueue(Args&&... args)
+    {
+        m_pending.emplace_back(std::type_index(typeid(E)), std::any{E{std::forward<Args>(args)...}});
+    }
 } // namespace event_engine
