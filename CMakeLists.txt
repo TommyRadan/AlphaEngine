@@ -79,6 +79,7 @@ file(GLOB INFRASTRUCTURE_FILES "infrastructure/*.hpp" "infrastructure/*.cpp")
 file(GLOB SCENE_GRAPH_FILES "scene_graph/*.hpp" "scene_graph/*.cpp")
 file(GLOB RENDERING_ENGINE_FILES
         "rendering_engine/*.hpp" "rendering_engine/*.cpp"
+        "rendering_engine/material/*.hpp" "rendering_engine/material/*.cpp"
         "rendering_engine/mesh/*.hpp" "rendering_engine/mesh/*.cpp"
         "rendering_engine/renderables/*.hpp" "rendering_engine/renderables/*.cpp"
         "rendering_engine/renderables/premade_2d/*.hpp" "rendering_engine/renderables/premade_2d/*.cpp"

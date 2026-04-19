@@ -77,32 +77,6 @@ void rendering_engine::renderer::setup_camera()
     this->upload_matrix4("projectionMatrix", current_camera->get_projection_matrix());
 }
 
-void rendering_engine::renderer::setup_options(const render_options& options)
-{
-    for (auto& element : options.coefficients)
-    {
-        this->upload_coefficient(element.first, element.second);
-    }
-
-    for (auto& element : options.colors)
-    {
-        auto vector = glm::vec4{(float)element.second.r / 255.0f,
-                                (float)element.second.g / 255.0f,
-                                (float)element.second.b / 255.0f,
-                                (float)element.second.a / 255.0f};
-
-        this->upload_vector4(element.first, vector);
-    }
-
-    uint8_t uploaded_texture_references = 0u;
-    for (auto& element : options.textures)
-    {
-        this->upload_texture_reference(element.first, uploaded_texture_references);
-        opengl::context::get_instance().bind_texture(*element.second, uploaded_texture_references);
-        uploaded_texture_references++;
-    }
-}
-
 void rendering_engine::renderer::upload_texture_reference(const std::string& texture_name, const int position)
 {
     opengl::uniform uniform = m_program->get_uniform(texture_name);

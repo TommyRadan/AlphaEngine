@@ -106,7 +106,10 @@ void rendering_engine::cube::render()
     }
 
     current_renderer->upload_matrix4("modelMatrix", this->transform.get_transform_matrix());
-    current_renderer->setup_options(options);
+    if (shared_material)
+    {
+        shared_material->bind();
+    }
 
     rendering_engine::opengl::context::get_instance().draw_arrays(
         *m_vertex_array_object, rendering_engine::opengl::primitive::triangles, 0, m_vertex_count);
