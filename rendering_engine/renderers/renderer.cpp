@@ -86,10 +86,10 @@ void rendering_engine::renderer::setup_options(const render_options& options)
 
     for (auto& element : options.colors)
     {
-        auto vector = glm::vec4{(float)element.second.r / 255.0f,
-                                (float)element.second.g / 255.0f,
-                                (float)element.second.b / 255.0f,
-                                (float)element.second.a / 255.0f};
+        auto vector = infrastructure::math::vec4{(float)element.second.r / 255.0f,
+                                                 (float)element.second.g / 255.0f,
+                                                 (float)element.second.b / 255.0f,
+                                                 (float)element.second.a / 255.0f};
 
         this->upload_vector4(element.first, vector);
     }
@@ -125,7 +125,7 @@ void rendering_engine::renderer::upload_coefficient(const std::string& coefficie
     m_program->set_uniform(uniform, coefficient);
 }
 
-void rendering_engine::renderer::upload_matrix3(const std::string& mat3_name, const glm::mat3& matrix)
+void rendering_engine::renderer::upload_matrix3(const std::string& mat3_name, const infrastructure::math::mat3& matrix)
 {
     opengl::uniform uniform = m_program->get_uniform(mat3_name);
     if (uniform == -1)
@@ -136,7 +136,7 @@ void rendering_engine::renderer::upload_matrix3(const std::string& mat3_name, co
     m_program->set_uniform(uniform, matrix);
 }
 
-void rendering_engine::renderer::upload_matrix4(const std::string& mat4_name, const glm::mat4& matrix)
+void rendering_engine::renderer::upload_matrix4(const std::string& mat4_name, const infrastructure::math::mat4& matrix)
 {
     opengl::uniform uniform = m_program->get_uniform(mat4_name);
     if (uniform == -1)
@@ -147,7 +147,7 @@ void rendering_engine::renderer::upload_matrix4(const std::string& mat4_name, co
     m_program->set_uniform(uniform, matrix);
 }
 
-void rendering_engine::renderer::upload_vector2(const std::string& vec2_name, const glm::vec2& vector)
+void rendering_engine::renderer::upload_vector2(const std::string& vec2_name, const infrastructure::math::vec2& vector)
 {
     opengl::uniform uniform = m_program->get_uniform(vec2_name);
     if (uniform == -1)
@@ -158,7 +158,7 @@ void rendering_engine::renderer::upload_vector2(const std::string& vec2_name, co
     m_program->set_uniform(uniform, vector);
 }
 
-void rendering_engine::renderer::upload_vector3(const std::string& vec3_name, const glm::vec3& vector)
+void rendering_engine::renderer::upload_vector3(const std::string& vec3_name, const infrastructure::math::vec3& vector)
 {
     opengl::uniform uniform = m_program->get_uniform(vec3_name);
     if (uniform == -1)
@@ -169,7 +169,7 @@ void rendering_engine::renderer::upload_vector3(const std::string& vec3_name, co
     m_program->set_uniform(uniform, vector);
 }
 
-void rendering_engine::renderer::upload_vector4(const std::string& vec4_name, const glm::vec4& vector)
+void rendering_engine::renderer::upload_vector4(const std::string& vec4_name, const infrastructure::math::vec4& vector)
 {
     opengl::uniform uniform = m_program->get_uniform(vec4_name);
     if (uniform == -1)

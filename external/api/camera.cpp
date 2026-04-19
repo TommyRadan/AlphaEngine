@@ -124,7 +124,7 @@ void get_camera_pos(camera_id id, float* px, float* py, float* pz)
     if (camera_info == nullptr)
         return;
 
-    glm::vec3 pos{camera_info->handle->transform.get_position()};
+    infrastructure::math::vec3 pos{camera_info->handle->transform.get_position()};
 
     *px = pos.x;
     *py = pos.y;
@@ -149,7 +149,7 @@ void get_camera_rot(camera_id id, float* rx, float* ry, float* rz)
     if (camera_info == nullptr)
         return;
 
-    glm::vec3 rot{camera_info->handle->transform.get_rotation()};
+    infrastructure::math::vec3 rot{camera_info->handle->transform.get_rotation()};
 
     *rx = rot.x;
     *ry = rot.y;

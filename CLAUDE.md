@@ -47,6 +47,10 @@ Game modules must include the **public API headers** under `external/api/` — `
 
 Use the wrapper in `infrastructure/log.hpp`: `LOG_INF`, `LOG_WRN`, `LOG_ERR`, `LOG_FTL`. There is **no TRACE or DEBUG sink yet** — do not add per-frame or per-draw logs. Level-selection guidance and examples are in `docs/logging.md`.
 
+## Math
+
+Use the engine-owned math types in `infrastructure/math/math.hpp`: `infrastructure::math::vec2`, `vec3`, `vec4`, `mat3`, `mat4`, `quat`, and the snake_case free functions `dot`, `cross`, `normalize`, `length`, `distance`, `lerp`, `look_at`, `perspective`, `ortho`, `translate`, `rotate`, `scale`, `inverse`, `transpose`. These are thin wrappers over GLM with identical memory layout, so GLSL uniform uploads use `value.data()` (matrices) or the existing pointer form for arrays. **Do not reference `glm::` anywhere outside `infrastructure/math/`** — that directory is the only place that may include or name GLM directly.
+
 ## Working conventions
 
 Before finishing any task:

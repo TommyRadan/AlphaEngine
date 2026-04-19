@@ -26,7 +26,7 @@
 #include <rendering_engine/renderers/renderer.hpp>
 #include <rendering_engine/rendering_engine.hpp>
 
-rendering_engine::pane::pane(const glm::vec2& size)
+rendering_engine::pane::pane(const infrastructure::math::vec2& size)
     : m_vertex_count{0}, m_vertex_array_object{nullptr}, m_vertex_buffer{nullptr}, m_indicies_buffer{nullptr},
       m_size{size}, m_color{0, 0, 0, 0}, m_texture{nullptr}
 {
@@ -59,17 +59,17 @@ void rendering_engine::pane::upload()
 {
     this->m_vertex_count = 6;
 
-    glm::vec3 position{this->transform.get_position()};
+    infrastructure::math::vec3 position{this->transform.get_position()};
 
     vertex_position_uv vertex[4];
-    vertex[0].pos = glm::vec3{position.x, position.y - m_size.y, -1.0f};
-    vertex[0].uv = glm::vec2{0.0f, 0.0f};
-    vertex[1].pos = glm::vec3{position.x + m_size.x, position.y - m_size.y, -1.0f};
-    vertex[1].uv = glm::vec2{1.0f, 0.0f};
-    vertex[2].pos = glm::vec3{position.x + m_size.x, position.y, -1.0f};
-    vertex[2].uv = glm::vec2{1.0f, 1.0f};
-    vertex[3].pos = glm::vec3{position.x, position.y, -1.0f};
-    vertex[3].uv = glm::vec2{0.0f, 1.0f};
+    vertex[0].pos = infrastructure::math::vec3{position.x, position.y - m_size.y, -1.0f};
+    vertex[0].uv = infrastructure::math::vec2{0.0f, 0.0f};
+    vertex[1].pos = infrastructure::math::vec3{position.x + m_size.x, position.y - m_size.y, -1.0f};
+    vertex[1].uv = infrastructure::math::vec2{1.0f, 0.0f};
+    vertex[2].pos = infrastructure::math::vec3{position.x + m_size.x, position.y, -1.0f};
+    vertex[2].uv = infrastructure::math::vec2{1.0f, 1.0f};
+    vertex[3].pos = infrastructure::math::vec3{position.x, position.y, -1.0f};
+    vertex[3].uv = infrastructure::math::vec2{0.0f, 1.0f};
 
     uint32_t indicies[6] = {3, 0, 1, 3, 1, 2};
 
@@ -82,8 +82,12 @@ void rendering_engine::pane::upload()
     m_vertex_array_object = opengl::context::get_instance().create_vao();
     m_vertex_array_object->bind_attribute(
         0, *m_vertex_buffer, rendering_engine::opengl::type::Float, 3, sizeof(vertex_position_uv), 0);
-    m_vertex_array_object->bind_attribute(
-        1, *m_vertex_buffer, rendering_engine::opengl::type::Float, 2, sizeof(vertex_position_uv), sizeof(glm::vec3));
+    m_vertex_array_object->bind_attribute(1,
+                                          *m_vertex_buffer,
+                                          rendering_engine::opengl::type::Float,
+                                          2,
+                                          sizeof(vertex_position_uv),
+                                          sizeof(infrastructure::math::vec3));
     m_vertex_array_object->bind_elements(*m_indicies_buffer);
 }
 

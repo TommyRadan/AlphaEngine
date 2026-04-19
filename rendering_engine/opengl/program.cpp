@@ -139,17 +139,17 @@ void rendering_engine::opengl::program::set_uniform(const uniform& uniform, cons
     glUniform1f(uniform, value);
 }
 
-void rendering_engine::opengl::program::set_uniform(const uniform& uniform, const glm::vec2& value)
+void rendering_engine::opengl::program::set_uniform(const uniform& uniform, const infrastructure::math::vec2& value)
 {
     glUniform2f(uniform, value.x, value.y);
 }
 
-void rendering_engine::opengl::program::set_uniform(const uniform& uniform, const glm::vec3& value)
+void rendering_engine::opengl::program::set_uniform(const uniform& uniform, const infrastructure::math::vec3& value)
 {
     glUniform3f(uniform, value.x, value.y, value.z);
 }
 
-void rendering_engine::opengl::program::set_uniform(const uniform& uniform, const glm::vec4& value)
+void rendering_engine::opengl::program::set_uniform(const uniform& uniform, const infrastructure::math::vec4& value)
 {
     glUniform4f(uniform, value.x, value.y, value.z, value.w);
 }
@@ -162,32 +162,32 @@ void rendering_engine::opengl::program::set_uniform(const uniform& uniform,
 }
 
 void rendering_engine::opengl::program::set_uniform(const uniform& uniform,
-                                                    const glm::vec2* values,
+                                                    const infrastructure::math::vec2* values,
                                                     const unsigned int count)
 {
-    glUniform2fv(uniform, count, (float*)values);
+    glUniform2fv(uniform, count, reinterpret_cast<const float*>(values));
 }
 
 void rendering_engine::opengl::program::set_uniform(const uniform& uniform,
-                                                    const glm::vec3* values,
+                                                    const infrastructure::math::vec3* values,
                                                     const unsigned int count)
 {
-    glUniform3fv(uniform, count, (float*)values);
+    glUniform3fv(uniform, count, reinterpret_cast<const float*>(values));
 }
 
 void rendering_engine::opengl::program::set_uniform(const uniform& uniform,
-                                                    const glm::vec4* values,
+                                                    const infrastructure::math::vec4* values,
                                                     const unsigned int count)
 {
-    glUniform4fv(uniform, count, (float*)values);
+    glUniform4fv(uniform, count, reinterpret_cast<const float*>(values));
 }
 
-void rendering_engine::opengl::program::set_uniform(const uniform& uniform, const glm::mat3& value)
+void rendering_engine::opengl::program::set_uniform(const uniform& uniform, const infrastructure::math::mat3& value)
 {
-    glUniformMatrix3fv(uniform, 1, GL_FALSE, &value[0][0]);
+    glUniformMatrix3fv(uniform, 1, GL_FALSE, value.data());
 }
 
-void rendering_engine::opengl::program::set_uniform(const uniform& uniform, const glm::mat4& value)
+void rendering_engine::opengl::program::set_uniform(const uniform& uniform, const infrastructure::math::mat4& value)
 {
-    glUniformMatrix4fv(uniform, 1, GL_FALSE, &value[0][0]);
+    glUniformMatrix4fv(uniform, 1, GL_FALSE, value.data());
 }

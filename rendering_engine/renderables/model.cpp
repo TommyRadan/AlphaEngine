@@ -51,14 +51,14 @@ void rendering_engine::model::upload_mesh(const rendering_engine::mesh& mesh)
                                           rendering_engine::opengl::type::Float,
                                           2,
                                           sizeof(rendering_engine::vertex_position_uv_normal),
-                                          sizeof(glm::vec3));
+                                          sizeof(infrastructure::math::vec3));
 
     m_vertex_array_object->bind_attribute(2,
                                           *m_vertex_buffer_object,
                                           rendering_engine::opengl::type::Float,
                                           3,
                                           sizeof(rendering_engine::vertex_position_uv_normal),
-                                          sizeof(glm::vec3) + sizeof(glm::vec2));
+                                          sizeof(infrastructure::math::vec3) + sizeof(infrastructure::math::vec2));
 }
 
 void rendering_engine::model::render()

@@ -34,14 +34,14 @@ void rendering_engine::cube::upload()
 
     vertex_postion_normal vertices[8];
 
-    vertices[0].pos = glm::vec3{-1.0f, -1.0f, 1.0f};
-    vertices[1].pos = glm::vec3{1.0f, -1.0f, 1.0f};
-    vertices[2].pos = glm::vec3{1.0f, 1.0f, 1.0f};
-    vertices[3].pos = glm::vec3{-1.0f, 1.0f, 1.0f};
-    vertices[4].pos = glm::vec3{-1.0f, -1.0f, -1.0f};
-    vertices[5].pos = glm::vec3{1.0f, -1.0f, -1.0f};
-    vertices[6].pos = glm::vec3{1.0f, 1.0f, -1.0f};
-    vertices[7].pos = glm::vec3{-1.0f, 1.0f, -1.0f};
+    vertices[0].pos = infrastructure::math::vec3{-1.0f, -1.0f, 1.0f};
+    vertices[1].pos = infrastructure::math::vec3{1.0f, -1.0f, 1.0f};
+    vertices[2].pos = infrastructure::math::vec3{1.0f, 1.0f, 1.0f};
+    vertices[3].pos = infrastructure::math::vec3{-1.0f, 1.0f, 1.0f};
+    vertices[4].pos = infrastructure::math::vec3{-1.0f, -1.0f, -1.0f};
+    vertices[5].pos = infrastructure::math::vec3{1.0f, -1.0f, -1.0f};
+    vertices[6].pos = infrastructure::math::vec3{1.0f, 1.0f, -1.0f};
+    vertices[7].pos = infrastructure::math::vec3{-1.0f, 1.0f, -1.0f};
 
     uint32_t indicies[36] = {0, 1, 2, 2, 3, 0, 1, 5, 6, 6, 2, 1, 7, 6, 5, 5, 4, 7,
                              4, 0, 3, 3, 7, 4, 4, 5, 1, 1, 0, 4, 3, 2, 6, 6, 7, 3};
@@ -57,25 +57,25 @@ void rendering_engine::cube::upload()
         switch (sector)
         {
         case 0:
-            expanded_vertices[i].normal = glm::vec3{0.0f, 0.0f, 1.0f};
+            expanded_vertices[i].normal = infrastructure::math::vec3{0.0f, 0.0f, 1.0f};
             break;
         case 1:
-            expanded_vertices[i].normal = glm::vec3{1.0f, 0.0f, 0.0f};
+            expanded_vertices[i].normal = infrastructure::math::vec3{1.0f, 0.0f, 0.0f};
             break;
         case 2:
-            expanded_vertices[i].normal = glm::vec3{0.0f, 0.0f, -1.0f};
+            expanded_vertices[i].normal = infrastructure::math::vec3{0.0f, 0.0f, -1.0f};
             break;
         case 3:
-            expanded_vertices[i].normal = glm::vec3{-1.0f, 0.0f, 0.0f};
+            expanded_vertices[i].normal = infrastructure::math::vec3{-1.0f, 0.0f, 0.0f};
             break;
         case 4:
-            expanded_vertices[i].normal = glm::vec3{0.0f, -1.0f, 0.0f};
+            expanded_vertices[i].normal = infrastructure::math::vec3{0.0f, -1.0f, 0.0f};
             break;
         case 5:
-            expanded_vertices[i].normal = glm::vec3{0.0f, 1.0f, 0.0f};
+            expanded_vertices[i].normal = infrastructure::math::vec3{0.0f, 1.0f, 0.0f};
             break;
         default:
-            expanded_vertices[i].normal = glm::vec3{0.0f, 0.0f, 0.0f};
+            expanded_vertices[i].normal = infrastructure::math::vec3{0.0f, 0.0f, 0.0f};
         }
     }
 
@@ -92,7 +92,7 @@ void rendering_engine::cube::upload()
                                           rendering_engine::opengl::type::Float,
                                           3,
                                           sizeof(vertex_postion_normal),
-                                          sizeof(glm::vec3));
+                                          sizeof(infrastructure::math::vec3));
 }
 
 void rendering_engine::cube::render()

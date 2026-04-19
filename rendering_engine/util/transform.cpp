@@ -20,9 +20,8 @@
  * SOFTWARE.
  */
 
+#include <infrastructure/math/math.hpp>
 #include <rendering_engine/util/transform.hpp>
-#define GLM_ENABLE_EXPERIMENTAL
-#include <glm/gtx/transform.hpp>
 
 rendering_engine::util::transform::transform()
     : m_is_transform_matrix_dirty{true}, m_position{0.0f, 0.0f, 0.0f}, m_rotation{0.0f, 0.0f, 0.0f},
@@ -30,52 +29,58 @@ rendering_engine::util::transform::transform()
 {
 }
 
-void rendering_engine::util::transform::set_position(const glm::vec3& position)
+void rendering_engine::util::transform::set_position(const infrastructure::math::vec3& position)
 {
     m_position = position;
     m_is_transform_matrix_dirty = true;
 }
 
-void rendering_engine::util::transform::set_rotation(const glm::vec3& rotation)
+void rendering_engine::util::transform::set_rotation(const infrastructure::math::vec3& rotation)
 {
     m_rotation = rotation;
     m_is_transform_matrix_dirty = true;
 }
 
-void rendering_engine::util::transform::set_scale(const glm::vec3& scale)
+void rendering_engine::util::transform::set_scale(const infrastructure::math::vec3& scale)
 {
     m_scale = scale;
     m_is_transform_matrix_dirty = true;
 }
 
-glm::vec3 rendering_engine::util::transform::get_position() const
+infrastructure::math::vec3 rendering_engine::util::transform::get_position() const
 {
     return m_position;
 }
 
-glm::vec3 rendering_engine::util::transform::get_rotation() const
+infrastructure::math::vec3 rendering_engine::util::transform::get_rotation() const
 {
     return m_rotation;
 }
 
-glm::vec3 rendering_engine::util::transform::get_scale() const
+infrastructure::math::vec3 rendering_engine::util::transform::get_scale() const
 {
     return m_scale;
 }
 
-glm::mat4 rendering_engine::util::transform::get_transform_matrix() const
+infrastructure::math::mat4 rendering_engine::util::transform::get_transform_matrix() const
 {
     if (!m_is_transform_matrix_dirty)
     {
         return m_transform_matrix;
     }
 
-    glm::mat4 pos_matrix = glm::translate(m_position);
-    glm::mat4 rot_x_matrix = glm::rotate(m_rotation.x, glm::vec3(1.0f, 0.0f, 0.0f));
-    glm::mat4 rot_y_matrix = glm::rotate(m_rotation.y, glm::vec3(0.0f, 1.0f, 0.0f));
-    glm::mat4 rot_z_matrix = glm::rotate(m_rotation.z, glm::vec3(0.0f, 0.0f, 1.0f));
-    glm::mat4 scale_matrix = glm::scale(m_scale);
-    glm::mat4 rot_matrix = rot_z_matrix * rot_y_matrix * rot_x_matrix;
+    using infrastructure::math::mat4;
+    using infrastructure::math::rotate;
+    using infrastructure::math::scale;
+    using infrastructure::math::translate;
+    using infrastructure::math::vec3;
+
+    mat4 pos_matrix = translate(m_position);
+    mat4 rot_x_matrix = rotate(m_rotation.x, vec3{1.0f, 0.0f, 0.0f});
+    mat4 rot_y_matrix = rotate(m_rotation.y, vec3{0.0f, 1.0f, 0.0f});
+    mat4 rot_z_matrix = rotate(m_rotation.z, vec3{0.0f, 0.0f, 1.0f});
+    mat4 scale_matrix = scale(m_scale);
+    mat4 rot_matrix = rot_z_matrix * rot_y_matrix * rot_x_matrix;
 
     m_transform_matrix = pos_matrix * rot_matrix * scale_matrix;
     m_is_transform_matrix_dirty = false;
