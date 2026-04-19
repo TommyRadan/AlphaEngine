@@ -3,16 +3,15 @@
     Bootstraps a Windows 11 machine so AlphaEngine can be built and run with MSVC.
 
 .DESCRIPTION
-    Installs Visual Studio 2022 Build Tools (C++ workload) and vcpkg, then uses
-    vcpkg to install GLM. SDL3 is built from source by the project's CMake via
-    FetchContent, so no vcpkg SDL package is required. Safe to re-run: every
-    step skips work that has already been done.
+    Installs Visual Studio 2022 Build Tools (C++ workload) and vcpkg. SDL3 and
+    GLM are fetched and built from source by the project's CMake via
+    FetchContent, so no vcpkg packages need to be installed. Safe to re-run:
+    every step skips work that has already been done.
 
     After completion, build from the repo root with:
 
         cmake -S . -B build -G "Visual Studio 17 2022" -A x64 `
-            -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake `
-            -DGLM_INCLUDE_DIR=C:/vcpkg/installed/x64-windows/include
+            -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake
         cmake --build build --config Release
 
     The resulting binary is written to Binaries\Release\AlphaEngine.exe.
@@ -96,11 +95,6 @@ if (-not (Test-Path $vcpkgExe)) {
 }
 Write-Ok "vcpkg ready at $VcpkgRoot"
 
-Write-Step "Installing GLM via vcpkg (x64-windows)"
-& $vcpkgExe install glm:x64-windows --recurse | Out-Host
-if ($LASTEXITCODE -ne 0) { throw "vcpkg install failed." }
-Write-Ok "Libraries installed"
-
 $vcpkgFwd = $VcpkgRoot -replace '\\','/'
 $template = @'
 
@@ -108,7 +102,7 @@ Environment is ready.
 
 To build AlphaEngine from the repository root, run:
 
-    cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_TOOLCHAIN_FILE={0}/scripts/buildsystems/vcpkg.cmake -DGLM_INCLUDE_DIR={0}/installed/x64-windows/include/glm
+    cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_TOOLCHAIN_FILE={0}/scripts/buildsystems/vcpkg.cmake
     cmake --build build --config Release
 
 The binary will be produced at Binaries\Release\AlphaEngine.exe.

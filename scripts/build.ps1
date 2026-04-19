@@ -106,20 +106,17 @@ if ($Toolchain -eq 'msvc') {
     $configArgs += @(
         '-G', 'Visual Studio 17 2022',
         '-A', 'x64',
-        "-DCMAKE_TOOLCHAIN_FILE=$vcpkgFwd/scripts/buildsystems/vcpkg.cmake",
-        "-DGLM_INCLUDE_DIR=$vcpkgFwd/installed/x64-windows/include/glm"
+        "-DCMAKE_TOOLCHAIN_FILE=$vcpkgFwd/scripts/buildsystems/vcpkg.cmake"
     )
     $buildArgs += @('--config', $Configuration)
     $expectedExe = Join-Path $repoRoot "Binaries\$Configuration\AlphaEngine.exe"
 } else {
     $gppFwd = ($msys2Gpp -replace '\\','/')
-    $glmFwd = (Join-Path $Msys2Root 'ucrt64\include\glm') -replace '\\','/'
     $env:Path = (Join-Path $Msys2Root 'ucrt64\bin') + ';' + $env:Path
     $configArgs += @(
         '-G', 'Ninja',
         "-DCMAKE_BUILD_TYPE=$Configuration",
-        "-DCMAKE_CXX_COMPILER=$gppFwd",
-        "-DGLM_INCLUDE_DIR=$glmFwd"
+        "-DCMAKE_CXX_COMPILER=$gppFwd"
     )
     $expectedExe = Join-Path $repoRoot "Binaries\AlphaEngine.exe"
 }
