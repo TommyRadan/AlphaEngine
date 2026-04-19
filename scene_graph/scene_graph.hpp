@@ -30,22 +30,44 @@
 #include <string>
 
 #include <infrastructure/singleton.hpp>
+#include <scene_graph/world.hpp>
 
 namespace scene_graph
 {
     /**
      * @brief Lifetime owner of the scene graph subsystem.
      *
-     * Process-wide singleton. Currently a lifecycle stub that matches
-     * the shape of the other engine subsystems — @ref init is called
-     * at startup and @ref quit at shutdown.
+     * Process-wide singleton that owns the ECS @ref world. @ref init is
+     * called at startup and @ref quit at shutdown. Between those two calls,
+     * the context subscribes to @c render_scene on the event bus and
+     * iterates every entity with a @ref renderable_component, invoking its
+     * @c draw callback. This replaces the older pattern of every game
+     * module subscribing to @c render_scene independently.
      */
     struct context : public singleton<context>
     {
-        /** @brief Initializes the scene graph subsystem. */
+        /** @brief Initializes the scene graph subsystem and registers event listeners. */
         void init();
 
-        /** @brief Shuts down the scene graph subsystem. */
+        /** @brief Shuts down the scene graph subsystem and clears the world. */
         void quit();
+
+        /**
+         * @brief Accessor for the ECS world owned by this subsystem.
+         * @return Mutable reference to the process-wide @ref world.
+         */
+        world& get_world()
+        {
+            return m_world;
+        }
+
+        /** @brief Const overload of @ref get_world. */
+        [[nodiscard]] const world& get_world() const
+        {
+            return m_world;
+        }
+
+    private:
+        world m_world;
     };
 } // namespace scene_graph
