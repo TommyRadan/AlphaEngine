@@ -22,7 +22,7 @@
 
 #pragma once
 
-#include <glm.hpp>
+#include <glm/glm.hpp>
 #include <rendering_engine/camera/camera.hpp>
 
 namespace rendering_engine

@@ -22,7 +22,7 @@
 
 #pragma once
 
-#include <glm.hpp>
+#include <glm/glm.hpp>
 #include <rendering_engine/util/transform.hpp>
 
 namespace rendering_engine

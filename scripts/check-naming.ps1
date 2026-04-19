@@ -67,7 +67,6 @@ $compileDb    = Join-Path $tidyBuildDir 'compile_commands.json'
 $msys2Bin     = Join-Path $Msys2Root 'ucrt64\bin'
 $gpp          = (Join-Path $msys2Bin 'g++.exe')        -replace '\\','/'
 $cmakeExe     = (Join-Path $msys2Bin 'cmake.exe')      -replace '\\','/'
-$glmInc       = (Join-Path $Msys2Root 'ucrt64\include\glm') -replace '\\','/'
 if (-not (Test-Path $cmakeExe)) { $cmakeExe = 'cmake' }
 
 if (-not (Test-Path $compileDb)) {
@@ -79,7 +78,6 @@ if (-not (Test-Path $compileDb)) {
         '-G', 'Ninja',
         '-DCMAKE_BUILD_TYPE=Debug',
         "-DCMAKE_CXX_COMPILER=$gpp",
-        "-DGLM_INCLUDE_DIR=$glmInc",
         '-DCMAKE_EXPORT_COMPILE_COMMANDS=ON'
     )
     & $cmakeExe @cmakeArgs | Out-Host

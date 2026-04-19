@@ -25,7 +25,7 @@
 #include <rendering_engine/opengl/shader.hpp>
 #include <rendering_engine/opengl/typedef.hpp>
 
-#include <glm.hpp>
+#include <glm/glm.hpp>
 #include <map>
 #include <string>
 

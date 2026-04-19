@@ -22,7 +22,7 @@
 
 #include <rendering_engine/camera/orthographic_camera.hpp>
 #define GLM_ENABLE_EXPERIMENTAL
-#include <gtx/transform.hpp>
+#include <glm/gtx/transform.hpp>
 
 rendering_engine::orthographic_camera::orthographic_camera()
 {

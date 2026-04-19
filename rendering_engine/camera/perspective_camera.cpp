@@ -22,7 +22,7 @@
 
 #include <rendering_engine/camera/perspective_camera.hpp>
 #define GLM_ENABLE_EXPERIMENTAL
-#include <gtx/transform.hpp>
+#include <glm/gtx/transform.hpp>
 #include <infrastructure/settings.hpp>
 
 rendering_engine::perspective_camera::perspective_camera()

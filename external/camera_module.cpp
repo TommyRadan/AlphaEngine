@@ -31,7 +31,7 @@
 #include <infrastructure/settings.hpp>
 #include <rendering_engine/rendering_engine.hpp>
 #define GLM_ENABLE_EXPERIMENTAL
-#include <gtx/vector_angle.hpp>
+#include <glm/gtx/vector_angle.hpp>
 
 camera_id g_camera_id = 0;
 std::map<event_engine::key_code, bool> keys;

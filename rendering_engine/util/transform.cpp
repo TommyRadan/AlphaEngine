@@ -22,7 +22,7 @@
 
 #include <rendering_engine/util/transform.hpp>
 #define GLM_ENABLE_EXPERIMENTAL
-#include <gtx/transform.hpp>
+#include <glm/gtx/transform.hpp>
 
 rendering_engine::util::transform::transform()
     : m_is_transform_matrix_dirty{true}, m_position{0.0f, 0.0f, 0.0f}, m_rotation{0.0f, 0.0f, 0.0f},

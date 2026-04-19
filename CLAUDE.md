@@ -8,12 +8,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Direct CMake (MSVC + vcpkg):**
   ```
   cmake -S . -B build -G "Visual Studio 17 2022" -A x64 \
-    -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake \
-    -DGLM_INCLUDE_DIR=C:/vcpkg/installed/x64-windows/include/glm
+    -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake
   cmake --build build --config Release
   ```
-  `FindGLM.cmake` only searches Homebrew paths, so `GLM_INCLUDE_DIR` must be set explicitly on Windows and Linux.
-- **SDL3 is fetched and built statically** by CMake via `FetchContent` — no system SDL package is required. GLM, OpenGL, glad, loguru, and stb are linked in as well (glad is built from `vendor/glad`, loguru/stb are header-only in `vendor/`).
+- **SDL3 and GLM are fetched from source** by CMake via `FetchContent` — no system packages are required. GLM is pinned to tag `1.0.1` and header-only; SDL3 is built statically. OpenGL, glad, loguru, and stb are linked in as well (glad is built from `vendor/glad`, loguru/stb are header-only in `vendor/`).
 - **Output:** `Binaries/AlphaEngine.exe` (Ninja / single-config) or `Binaries/<Configuration>/AlphaEngine.exe` (Visual Studio multi-config).
 - **No test suite exists.** CI does not run tests; don't invent a test target.
 
