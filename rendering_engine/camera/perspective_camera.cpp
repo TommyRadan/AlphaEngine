@@ -20,10 +20,9 @@
  * SOFTWARE.
  */
 
-#include <rendering_engine/camera/perspective_camera.hpp>
-#define GLM_ENABLE_EXPERIMENTAL
-#include <glm/gtx/transform.hpp>
+#include <infrastructure/math/math.hpp>
 #include <infrastructure/settings.hpp>
+#include <rendering_engine/camera/perspective_camera.hpp>
 
 rendering_engine::perspective_camera::perspective_camera()
 {
@@ -35,14 +34,14 @@ rendering_engine::perspective_camera::perspective_camera()
     far_clip = 10000.0f;
 }
 
-const glm::mat4 rendering_engine::perspective_camera::get_projection_matrix() const
+const infrastructure::math::mat4 rendering_engine::perspective_camera::get_projection_matrix() const
 {
     if (!m_is_projection_matrix_dirty)
     {
         return m_projection;
     }
 
-    m_projection = glm::perspective(field_of_view, aspect_ratio, near_clip, far_clip);
+    m_projection = infrastructure::math::perspective(field_of_view, aspect_ratio, near_clip, far_clip);
     m_is_projection_matrix_dirty = false;
     return m_projection;
 }

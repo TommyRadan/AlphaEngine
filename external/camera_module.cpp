@@ -20,6 +20,7 @@
  * SOFTWARE.
  */
 
+#include <cmath>
 #include <map>
 
 #include "api/camera.hpp"
@@ -28,10 +29,9 @@
 #include "api/time.hpp"
 
 #include <infrastructure/log.hpp>
+#include <infrastructure/math/math.hpp>
 #include <infrastructure/settings.hpp>
 #include <rendering_engine/rendering_engine.hpp>
-#define GLM_ENABLE_EXPERIMENTAL
-#include <glm/gtx/vector_angle.hpp>
 
 camera_id g_camera_id = 0;
 std::map<event_engine::key_code, bool> keys;
@@ -81,10 +81,10 @@ static void on_frame(const event_engine::event& event)
         return;
     }
 
-    glm::vec3 position;
+    infrastructure::math::vec3 position;
     get_camera_pos(g_camera_id, &position.x, &position.y, &position.z);
 
-    glm::vec3 rotation;
+    infrastructure::math::vec3 rotation;
     get_camera_rot(g_camera_id, &rotation.x, &rotation.y, &rotation.z);
 
     float speed = 3.0f;
@@ -94,8 +94,8 @@ static void on_frame(const event_engine::event& event)
     }
 
     float distance = speed * ((float)get_delta_time() / 1000);
-    glm::vec3 up_vector{0.0f, 0.0f, 1.0f};
-    glm::vec3 new_position = position;
+    infrastructure::math::vec3 up_vector{0.0f, 0.0f, 1.0f};
+    infrastructure::math::vec3 new_position = position;
 
     if (keys[event_engine::key_code::w])
     {
@@ -104,7 +104,7 @@ static void on_frame(const event_engine::event& event)
 
     if (keys[event_engine::key_code::a])
     {
-        new_position -= glm::cross(rotation, up_vector) * distance;
+        new_position -= infrastructure::math::cross(rotation, up_vector) * distance;
     }
 
     if (keys[event_engine::key_code::s])
@@ -114,7 +114,7 @@ static void on_frame(const event_engine::event& event)
 
     if (keys[event_engine::key_code::d])
     {
-        new_position += glm::cross(rotation, up_vector) * distance;
+        new_position += infrastructure::math::cross(rotation, up_vector) * distance;
     }
 
     if (keys[event_engine::key_code::space])
@@ -148,15 +148,15 @@ static void on_mouse_move(const event_engine::event& event)
         return;
     }
 
-    glm::vec3 rotation;
+    infrastructure::math::vec3 rotation;
     get_camera_rot(g_camera_id, &rotation.x, &rotation.y, &rotation.z);
-    glm::vec3 up_vector{0.0f, 0.0f, 1.0f};
+    infrastructure::math::vec3 up_vector{0.0f, 0.0f, 1.0f};
 
     // Normalize the rotation vector to get the forward direction
-    glm::vec3 forward = glm::normalize(rotation);
+    infrastructure::math::vec3 forward = infrastructure::math::normalize(rotation);
 
     // Calculate the right vector (perpendicular to forward and up)
-    glm::vec3 right = glm::normalize(glm::cross(forward, up_vector));
+    infrastructure::math::vec3 right = infrastructure::math::normalize(infrastructure::math::cross(forward, up_vector));
 
     float sensitivity = settings::get_instance().get_mouse_sensitivity();
     int pitch_multiplier = settings::get_instance().is_mouse_reversed() ? -1 : 1;
@@ -166,15 +166,15 @@ static void on_mouse_move(const event_engine::event& event)
     float pitch_angle = delta_y * sensitivity * pitch_multiplier;
 
     // Create rotation matrices
-    glm::mat4 yaw_rotation = glm::rotate(yaw_angle, up_vector);
-    glm::mat4 pitch_rotation = glm::rotate(pitch_angle, right);
+    infrastructure::math::mat4 yaw_rotation = infrastructure::math::rotate(yaw_angle, up_vector);
+    infrastructure::math::mat4 pitch_rotation = infrastructure::math::rotate(pitch_angle, right);
 
     // Apply rotations
-    glm::vec4 rotated = glm::vec4(forward, 0.0f) * yaw_rotation * pitch_rotation;
-    glm::vec3 new_rotation = glm::vec3(rotated.x, rotated.y, rotated.z);
+    infrastructure::math::vec4 rotated = infrastructure::math::vec4{forward, 0.0f} * yaw_rotation * pitch_rotation;
+    infrastructure::math::vec3 new_rotation = infrastructure::math::vec3{rotated.x, rotated.y, rotated.z};
 
     // Prevent looking too far up or down
-    if (glm::abs(new_rotation.z) > 0.99f)
+    if (std::abs(new_rotation.z) > 0.99f)
     {
         new_rotation = forward;
     }

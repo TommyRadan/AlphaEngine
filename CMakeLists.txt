@@ -75,7 +75,9 @@ include_directories(${CMAKE_SOURCE_DIR})
 
 # Main executable
 file(GLOB EVENT_ENGINE_FILES "event_engine/*.hpp" "event_engine/*.cpp")
-file(GLOB INFRASTRUCTURE_FILES "infrastructure/*.hpp" "infrastructure/*.cpp")
+file(GLOB INFRASTRUCTURE_FILES
+        "infrastructure/*.hpp" "infrastructure/*.cpp"
+        "infrastructure/math/*.hpp" "infrastructure/math/*.cpp")
 file(GLOB SCENE_GRAPH_FILES "scene_graph/*.hpp" "scene_graph/*.cpp")
 file(GLOB RENDERING_ENGINE_FILES
         "rendering_engine/*.hpp" "rendering_engine/*.cpp"

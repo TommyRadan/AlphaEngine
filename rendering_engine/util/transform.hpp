@@ -22,7 +22,7 @@
 
 #pragma once
 
-#include <glm/glm.hpp>
+#include <infrastructure/math/math.hpp>
 
 namespace rendering_engine::util
 {
@@ -30,22 +30,22 @@ namespace rendering_engine::util
     {
         transform();
 
-        void set_position(const glm::vec3& position);
-        void set_rotation(const glm::vec3& rotation);
-        void set_scale(const glm::vec3& scale);
+        void set_position(const infrastructure::math::vec3& position);
+        void set_rotation(const infrastructure::math::vec3& rotation);
+        void set_scale(const infrastructure::math::vec3& scale);
 
-        glm::vec3 get_position() const;
-        glm::vec3 get_rotation() const;
-        glm::vec3 get_scale() const;
+        infrastructure::math::vec3 get_position() const;
+        infrastructure::math::vec3 get_rotation() const;
+        infrastructure::math::vec3 get_scale() const;
 
-        glm::mat4 get_transform_matrix() const;
+        infrastructure::math::mat4 get_transform_matrix() const;
 
     private:
-        mutable glm::mat4 m_transform_matrix;
+        mutable infrastructure::math::mat4 m_transform_matrix;
         mutable bool m_is_transform_matrix_dirty;
 
-        glm::vec3 m_position;
-        glm::vec3 m_rotation;
-        glm::vec3 m_scale;
+        infrastructure::math::vec3 m_position;
+        infrastructure::math::vec3 m_rotation;
+        infrastructure::math::vec3 m_scale;
     };
 } // namespace rendering_engine::util
