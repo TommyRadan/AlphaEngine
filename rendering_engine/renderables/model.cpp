@@ -20,7 +20,9 @@
  * SOFTWARE.
  */
 
+#include <control/engine.hpp>
 #include <infrastructure/log.hpp>
+#include <rendering_engine/opengl/opengl.hpp>
 #include <rendering_engine/renderables/model.hpp>
 #include <rendering_engine/renderers/renderer.hpp>
 #include <rendering_engine/rendering_engine.hpp>
@@ -31,13 +33,13 @@ void rendering_engine::model::upload_mesh(const rendering_engine::mesh& mesh)
 {
     m_vertex_count = mesh.vertex_count();
 
-    m_vertex_buffer_object = opengl::context::get_instance().create_vbo();
+    m_vertex_buffer_object = control::current_engine().opengl->create_vbo();
 
     m_vertex_buffer_object->data(mesh.vertices(),
                                  m_vertex_count * sizeof(rendering_engine::vertex_position_uv_normal),
                                  rendering_engine::opengl::buffer_usage::static_draw);
 
-    m_vertex_array_object = opengl::context::get_instance().create_vao();
+    m_vertex_array_object = control::current_engine().opengl->create_vao();
 
     m_vertex_array_object->bind_attribute(0,
                                           *m_vertex_buffer_object,
@@ -74,6 +76,6 @@ void rendering_engine::model::render()
     current_renderer->upload_matrix4("modelMatrix", transform.get_transform_matrix());
     current_renderer->setup_options(options);
 
-    rendering_engine::opengl::context::get_instance().draw_arrays(
+    control::current_engine().opengl->draw_arrays(
         *m_vertex_array_object, rendering_engine::opengl::primitive::triangles, 0, m_vertex_count);
 }

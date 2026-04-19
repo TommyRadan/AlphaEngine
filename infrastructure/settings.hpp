@@ -29,8 +29,6 @@
 
 #include <string>
 
-#include <infrastructure/singleton.hpp>
-
 /** @brief Presentation mode for the application window. */
 enum class win_type
 {
@@ -40,14 +38,14 @@ enum class win_type
 };
 
 /**
- * @brief Process-wide configuration singleton.
+ * @brief Engine-wide configuration, owned by @ref control::engine.
  *
  * Values are populated in the constructor — debug builds default to an
  * 800x600 windowed layout, release builds match the current display
  * mode and go fullscreen. All accessors are @c const and @c noexcept;
  * the struct is intended as read-only engine-wide configuration.
  */
-struct settings : public singleton<settings>
+struct settings
 {
     settings();
 

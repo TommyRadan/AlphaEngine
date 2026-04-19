@@ -25,7 +25,7 @@ Both gates run in CI on Linux with clang-format/clang-tidy version 18. Run local
 
 ## Architecture
 
-Entry point is `control/main_loop.cpp`. It initializes three subsystems, runs the render loop, and tears them down in reverse. All three follow the same shape: a `context` struct in its own namespace that inherits from `infrastructure::singleton<T>` and exposes `init()` / `quit()`. The singleton is a Meyers-style function-local static — construction is thread-safe but member access is not; treat everything as main-thread-only.
+Entry point is `control/main_loop.cpp`. It constructs a `control::engine` (declared in `control/engine.hpp`) whose constructor wires every subsystem up as a `std::unique_ptr` and publishes itself through `control::current_engine()`. `engine::init()` brings each subsystem up in dependency order, the main loop calls `engine::tick()` until `is_quit_requested()` is true, and the engine's destructor tears the subsystems down in reverse. Each subsystem still exposes its own `init()` / `quit()` pair and a plain `context` / `window` / `time` struct — none of them are singletons. Everything is main-thread-only; member access is not synchronised.
 
 The subsystems:
 
