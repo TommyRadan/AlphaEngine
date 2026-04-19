@@ -22,7 +22,9 @@
 
 #pragma once
 
-#include <rendering_engine/renderers/render_options.hpp>
+#include <memory>
+
+#include <rendering_engine/material/material.hpp>
 
 namespace rendering_engine
 {
@@ -30,6 +32,13 @@ namespace rendering_engine
     {
         virtual void upload() = 0;
         virtual void render() = 0;
-        render_options options;
+
+        /**
+         * Shader program, uniform values and texture bindings used by this
+         * renderable. Shared between renderables by design — instantiate once
+         * and assign the same std::shared_ptr<material> to each renderable
+         * that should draw with the same look.
+         */
+        std::shared_ptr<material> shared_material;
     };
 } // namespace rendering_engine
