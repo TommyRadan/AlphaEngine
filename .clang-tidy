@@ -4,7 +4,7 @@
 # are unrelated to the naming convention we're enforcing here.
 Checks: '-*,readability-identifier-naming'
 WarningsAsErrors: ''
-# Only lint first-party subsystem headers. Vendored code (glad, loguru, stb)
+# Only lint first-party subsystem headers. Vendored code (glad, stb)
 # and system/toolchain headers use their own naming conventions and would
 # otherwise flood diagnostics.
 HeaderFilterRegex: '[\\/](control|event_engine|rendering_engine|scene_graph|infrastructure|external)[\\/]'

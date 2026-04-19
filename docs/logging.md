@@ -1,7 +1,7 @@
 # Logging
 
 AlphaEngine logs through the thin wrapper in `infrastructure/log.hpp`, which
-forwards to [loguru](https://github.com/emilk/loguru). Four macros are
+forwards to SDL's logging API (`SDL_LogMessageV`). Four macros are
 available today:
 
 | Macro     | Verbosity | Use for                                                     |
