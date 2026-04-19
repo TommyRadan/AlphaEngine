@@ -34,7 +34,7 @@ available today:
 
 - Subsystem lifecycle — `control/main_loop.cpp`:
   `LOG_INF("Engine starting: initializing subsystems");`
-- GL capability banner — `rendering_engine/opengl/opengl.cpp`:
+- GL capability banner — `rhi/opengl/opengl_rhi.cpp`:
   `LOG_INF("OpenGL renderer: %s", gl_renderer);`
 - Settings summary — `infrastructure/settings.cpp`:
   `LOG_INF("Settings parsed: window=%ux%u ...");`
@@ -42,8 +42,8 @@ available today:
   `LOG_INF("Registering external module: cube_module");`
 - Recoverable fault — `rendering_engine/renderers/renderer.cpp`:
   `LOG_WRN("Cannot find uniform: %s", name.c_str());`
-- Unrecoverable fault — `rendering_engine/opengl/shader.cpp`:
-  `LOG_FTL("Cannot compile shader");`
+- Unrecoverable fault — `rhi/opengl/opengl_rhi.cpp`:
+  `LOG_FTL("Cannot create shader (stage=%u)", stage);`
 
 ## Adding new logs
 

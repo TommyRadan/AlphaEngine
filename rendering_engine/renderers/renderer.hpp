@@ -27,23 +27,18 @@
 #include <string>
 
 #include <rendering_engine/renderers/render_options.hpp>
+#include <rhi/rhi.hpp>
 
 namespace rendering_engine
 {
-    namespace opengl
-    {
-        class shader;
-        class program;
-    } // namespace opengl
-
     struct shader_deleter
     {
-        void operator()(opengl::shader* s) const noexcept;
+        void operator()(rhi::shader* s) const noexcept;
     };
 
     struct program_deleter
     {
-        void operator()(opengl::program* p) const noexcept;
+        void operator()(rhi::program* p) const noexcept;
     };
 
     struct renderer
@@ -72,9 +67,9 @@ namespace rendering_engine
         void construct_program(const std::string& vs_string, const std::string& fs_string);
         void destruct_program();
 
-        std::unique_ptr<opengl::shader, shader_deleter> m_vertex_shader;
-        std::unique_ptr<opengl::shader, shader_deleter> m_fragment_shader;
-        std::unique_ptr<opengl::program, program_deleter> m_program;
+        std::unique_ptr<rhi::shader, shader_deleter> m_vertex_shader;
+        std::unique_ptr<rhi::shader, shader_deleter> m_fragment_shader;
+        std::unique_ptr<rhi::program, program_deleter> m_program;
 
         // Non-owning: points to the currently active renderer, or nullptr.
         static renderer* m_current_renderer;

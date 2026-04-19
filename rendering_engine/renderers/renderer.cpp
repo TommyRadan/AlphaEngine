@@ -22,25 +22,31 @@
 
 #include <infrastructure/log.hpp>
 #include <rendering_engine/camera/camera.hpp>
-#include <rendering_engine/opengl/opengl.hpp>
 #include <rendering_engine/renderers/renderer.hpp>
 #include <rendering_engine/rendering_engine.hpp>
+#include <rhi/rhi.hpp>
 
 rendering_engine::renderer* rendering_engine::renderer::m_current_renderer = nullptr;
 
-void rendering_engine::shader_deleter::operator()(opengl::shader* s) const noexcept
+void rendering_engine::shader_deleter::operator()(rhi::shader* s) const noexcept
 {
     if (s != nullptr)
     {
-        opengl::context::get_instance().delete_shader(s);
+        if (auto* device = rhi::get_device(); device != nullptr)
+        {
+            device->destroy_shader(s);
+        }
     }
 }
 
-void rendering_engine::program_deleter::operator()(opengl::program* p) const noexcept
+void rendering_engine::program_deleter::operator()(rhi::program* p) const noexcept
 {
     if (p != nullptr)
     {
-        opengl::context::get_instance().delete_program(p);
+        if (auto* device = rhi::get_device(); device != nullptr)
+        {
+            device->destroy_program(p);
+        }
     }
 }
 
@@ -49,13 +55,13 @@ rendering_engine::renderer::~renderer() = default;
 void rendering_engine::renderer::start_renderer()
 {
     m_current_renderer = this;
-    m_program->start();
+    rhi::get_device()->program_start(m_program.get());
 }
 
 void rendering_engine::renderer::stop_renderer()
 {
     m_current_renderer = nullptr;
-    m_program->stop();
+    rhi::get_device()->program_stop(m_program.get());
 }
 
 rendering_engine::renderer* rendering_engine::renderer::get_current_renderer()
@@ -98,103 +104,106 @@ void rendering_engine::renderer::setup_options(const render_options& options)
     for (auto& element : options.textures)
     {
         this->upload_texture_reference(element.first, uploaded_texture_references);
-        opengl::context::get_instance().bind_texture(*element.second, uploaded_texture_references);
+        rhi::get_device()->bind_texture(element.second, uploaded_texture_references);
         uploaded_texture_references++;
     }
 }
 
 void rendering_engine::renderer::upload_texture_reference(const std::string& texture_name, const int position)
 {
-    opengl::uniform uniform = m_program->get_uniform(texture_name);
-    if (uniform == -1)
+    rhi::device* device = rhi::get_device();
+    int32_t location = device->program_get_uniform_location(m_program.get(), texture_name);
+    if (location == -1)
     {
         LOG_WRN("Cannot find uniform: %s", texture_name.c_str());
         return;
     }
-    m_program->set_uniform(uniform, position);
+    device->program_set_uniform(m_program.get(), location, static_cast<int32_t>(position));
 }
 
 void rendering_engine::renderer::upload_coefficient(const std::string& coefficient_name, const float coefficient)
 {
-    opengl::uniform uniform = m_program->get_uniform(coefficient_name);
-    if (uniform == -1)
+    rhi::device* device = rhi::get_device();
+    int32_t location = device->program_get_uniform_location(m_program.get(), coefficient_name);
+    if (location == -1)
     {
         LOG_WRN("Cannot find uniform: %s", coefficient_name.c_str());
         return;
     }
-    m_program->set_uniform(uniform, coefficient);
+    device->program_set_uniform(m_program.get(), location, coefficient);
 }
 
 void rendering_engine::renderer::upload_matrix3(const std::string& mat3_name, const glm::mat3& matrix)
 {
-    opengl::uniform uniform = m_program->get_uniform(mat3_name);
-    if (uniform == -1)
+    rhi::device* device = rhi::get_device();
+    int32_t location = device->program_get_uniform_location(m_program.get(), mat3_name);
+    if (location == -1)
     {
         LOG_WRN("Cannot find uniform: %s", mat3_name.c_str());
         return;
     }
-    m_program->set_uniform(uniform, matrix);
+    device->program_set_uniform(m_program.get(), location, matrix);
 }
 
 void rendering_engine::renderer::upload_matrix4(const std::string& mat4_name, const glm::mat4& matrix)
 {
-    opengl::uniform uniform = m_program->get_uniform(mat4_name);
-    if (uniform == -1)
+    rhi::device* device = rhi::get_device();
+    int32_t location = device->program_get_uniform_location(m_program.get(), mat4_name);
+    if (location == -1)
     {
         LOG_WRN("Cannot find uniform: %s", mat4_name.c_str());
         return;
     }
-    m_program->set_uniform(uniform, matrix);
+    device->program_set_uniform(m_program.get(), location, matrix);
 }
 
 void rendering_engine::renderer::upload_vector2(const std::string& vec2_name, const glm::vec2& vector)
 {
-    opengl::uniform uniform = m_program->get_uniform(vec2_name);
-    if (uniform == -1)
+    rhi::device* device = rhi::get_device();
+    int32_t location = device->program_get_uniform_location(m_program.get(), vec2_name);
+    if (location == -1)
     {
         LOG_WRN("Cannot find uniform: %s", vec2_name.c_str());
         return;
     }
-    m_program->set_uniform(uniform, vector);
+    device->program_set_uniform(m_program.get(), location, vector);
 }
 
 void rendering_engine::renderer::upload_vector3(const std::string& vec3_name, const glm::vec3& vector)
 {
-    opengl::uniform uniform = m_program->get_uniform(vec3_name);
-    if (uniform == -1)
+    rhi::device* device = rhi::get_device();
+    int32_t location = device->program_get_uniform_location(m_program.get(), vec3_name);
+    if (location == -1)
     {
         LOG_WRN("Cannot find uniform: %s", vec3_name.c_str());
         return;
     }
-    m_program->set_uniform(uniform, vector);
+    device->program_set_uniform(m_program.get(), location, vector);
 }
 
 void rendering_engine::renderer::upload_vector4(const std::string& vec4_name, const glm::vec4& vector)
 {
-    opengl::uniform uniform = m_program->get_uniform(vec4_name);
-    if (uniform == -1)
+    rhi::device* device = rhi::get_device();
+    int32_t location = device->program_get_uniform_location(m_program.get(), vec4_name);
+    if (location == -1)
     {
         LOG_WRN("Cannot find uniform: %s", vec4_name.c_str());
         return;
     }
-    m_program->set_uniform(uniform, vector);
+    device->program_set_uniform(m_program.get(), location, vector);
 }
 
 void rendering_engine::renderer::construct_program(const std::string& vs_string, const std::string& fs_string)
 {
-    m_vertex_shader.reset(opengl::context::get_instance().create_shader(opengl::shader_type::vertex));
-    m_fragment_shader.reset(opengl::context::get_instance().create_shader(opengl::shader_type::fragment));
-    m_program.reset(opengl::context::get_instance().create_program());
+    rhi::device* device = rhi::get_device();
 
-    m_vertex_shader->source(vs_string);
-    m_vertex_shader->compile();
+    m_vertex_shader.reset(device->create_shader(rhi::shader_stage::vertex, vs_string));
+    m_fragment_shader.reset(device->create_shader(rhi::shader_stage::fragment, fs_string));
+    m_program.reset(device->create_program());
 
-    m_fragment_shader->source(fs_string);
-    m_fragment_shader->compile();
-
-    m_program->attach(*m_vertex_shader);
-    m_program->attach(*m_fragment_shader);
-    m_program->link();
+    device->program_attach(m_program.get(), m_vertex_shader.get());
+    device->program_attach(m_program.get(), m_fragment_shader.get());
+    device->program_link(m_program.get());
 }
 
 void rendering_engine::renderer::destruct_program()

@@ -32,11 +32,11 @@
 #include <memory>
 #include <string>
 
-static constexpr const char* FONT_PATH = "C:/Windows/Fonts/consola.ttf";
-static constexpr float FONT_SIZE = 0.08f;
-static constexpr float TOP_Y = 0.92f;
-static constexpr float RIGHT_MARGIN = 0.02f;
-static constexpr double UPDATE_INTERVAL_MS = 250.0;
+static constexpr const char* font_path = "C:/Windows/Fonts/consola.ttf";
+static constexpr float font_size = 0.08f;
+static constexpr float top_y = 0.92f;
+static constexpr float right_margin = 0.02f;
+static constexpr double update_interval_ms = 250.0;
 
 static std::unique_ptr<rendering_engine::util::font> font;
 static std::unique_ptr<rendering_engine::label> fps_label;
@@ -44,16 +44,16 @@ static double time_since_update_ms = 0.0;
 
 static void reposition_top_right()
 {
-    const float x = 1.0f - fps_label->get_width() - RIGHT_MARGIN;
-    fps_label->set_position(glm::vec3{x, TOP_Y, 0.0f});
+    const float x = 1.0f - fps_label->get_width() - right_margin;
+    fps_label->set_position(glm::vec3{x, top_y, 0.0f});
 }
 
 static void on_engine_start(const event_engine::event& event)
 {
     try
     {
-        font = std::make_unique<rendering_engine::util::font>(FONT_PATH, 64.0f);
-        fps_label = std::make_unique<rendering_engine::label>(font.get(), FONT_SIZE, "FPS: ---");
+        font = std::make_unique<rendering_engine::util::font>(font_path, 64.0f);
+        fps_label = std::make_unique<rendering_engine::label>(font.get(), font_size, "FPS: ---");
         fps_label->upload();
         reposition_top_right();
     }
@@ -79,7 +79,7 @@ static void on_frame(const event_engine::event& event)
     }
 
     time_since_update_ms += get_delta_time();
-    if (time_since_update_ms < UPDATE_INTERVAL_MS)
+    if (time_since_update_ms < update_interval_ms)
     {
         return;
     }

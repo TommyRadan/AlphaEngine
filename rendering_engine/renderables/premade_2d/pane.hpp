@@ -23,10 +23,9 @@
 #pragma once
 
 #include <rendering_engine/renderables/renderable.hpp>
-
-#include <rendering_engine/opengl/opengl.hpp>
 #include <rendering_engine/util/image.hpp>
 #include <rendering_engine/util/transform.hpp>
+#include <rhi/rhi.hpp>
 
 namespace rendering_engine
 {
@@ -43,14 +42,14 @@ namespace rendering_engine
         void render() final;
 
     private:
-        opengl::vertex_array* m_vertex_array_object;
-        opengl::vertex_buffer* m_vertex_buffer;
-        opengl::vertex_buffer* m_indicies_buffer;
+        rhi::vertex_array* m_vertex_array_object;
+        rhi::buffer* m_vertex_buffer;
+        rhi::buffer* m_indicies_buffer;
 
         unsigned int m_vertex_count;
 
         glm::vec2 m_size;
         rendering_engine::util::color m_color;
-        rendering_engine::opengl::texture* m_texture;
+        rhi::texture* m_texture;
     };
 } // namespace rendering_engine

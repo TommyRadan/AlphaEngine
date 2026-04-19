@@ -24,6 +24,7 @@
 #include <rendering_engine/renderables/model.hpp>
 #include <rendering_engine/renderers/renderer.hpp>
 #include <rendering_engine/rendering_engine.hpp>
+#include <rhi/rhi.hpp>
 
 rendering_engine::model::model() : m_vertex_count{0}, m_vertex_array_object{nullptr}, m_vertex_buffer_object{nullptr} {}
 
@@ -31,34 +32,43 @@ void rendering_engine::model::upload_mesh(const rendering_engine::mesh& mesh)
 {
     m_vertex_count = mesh.vertex_count();
 
-    m_vertex_buffer_object = opengl::context::get_instance().create_vbo();
+    rhi::device* device = rhi::get_device();
 
-    m_vertex_buffer_object->data(mesh.vertices(),
-                                 m_vertex_count * sizeof(rendering_engine::vertex_position_uv_normal),
-                                 rendering_engine::opengl::buffer_usage::static_draw);
+    rhi::buffer_desc vb_desc{};
+    vb_desc.initial_data = mesh.vertices();
+    vb_desc.size = m_vertex_count * sizeof(rendering_engine::vertex_position_uv_normal);
+    vb_desc.usage = rhi::buffer_usage::static_draw;
+    vb_desc.is_index_buffer = false;
+    m_vertex_buffer_object = device->create_buffer(vb_desc);
 
-    m_vertex_array_object = opengl::context::get_instance().create_vao();
+    m_vertex_array_object = device->create_vertex_array();
 
-    m_vertex_array_object->bind_attribute(0,
-                                          *m_vertex_buffer_object,
-                                          rendering_engine::opengl::type::Float,
-                                          3,
-                                          sizeof(rendering_engine::vertex_position_uv_normal),
-                                          0);
+    rhi::vertex_attribute_desc attr0{};
+    attr0.location = 0;
+    attr0.source = m_vertex_buffer_object;
+    attr0.type = rhi::element_type::float_type;
+    attr0.component_count = 3;
+    attr0.stride = sizeof(rendering_engine::vertex_position_uv_normal);
+    attr0.offset = 0;
+    device->vertex_array_bind_attribute(m_vertex_array_object, attr0);
 
-    m_vertex_array_object->bind_attribute(1,
-                                          *m_vertex_buffer_object,
-                                          rendering_engine::opengl::type::Float,
-                                          2,
-                                          sizeof(rendering_engine::vertex_position_uv_normal),
-                                          sizeof(glm::vec3));
+    rhi::vertex_attribute_desc attr1{};
+    attr1.location = 1;
+    attr1.source = m_vertex_buffer_object;
+    attr1.type = rhi::element_type::float_type;
+    attr1.component_count = 2;
+    attr1.stride = sizeof(rendering_engine::vertex_position_uv_normal);
+    attr1.offset = sizeof(glm::vec3);
+    device->vertex_array_bind_attribute(m_vertex_array_object, attr1);
 
-    m_vertex_array_object->bind_attribute(2,
-                                          *m_vertex_buffer_object,
-                                          rendering_engine::opengl::type::Float,
-                                          3,
-                                          sizeof(rendering_engine::vertex_position_uv_normal),
-                                          sizeof(glm::vec3) + sizeof(glm::vec2));
+    rhi::vertex_attribute_desc attr2{};
+    attr2.location = 2;
+    attr2.source = m_vertex_buffer_object;
+    attr2.type = rhi::element_type::float_type;
+    attr2.component_count = 3;
+    attr2.stride = sizeof(rendering_engine::vertex_position_uv_normal);
+    attr2.offset = sizeof(glm::vec3) + sizeof(glm::vec2);
+    device->vertex_array_bind_attribute(m_vertex_array_object, attr2);
 }
 
 void rendering_engine::model::render()
@@ -74,6 +84,11 @@ void rendering_engine::model::render()
     current_renderer->upload_matrix4("modelMatrix", transform.get_transform_matrix());
     current_renderer->setup_options(options);
 
-    rendering_engine::opengl::context::get_instance().draw_arrays(
-        *m_vertex_array_object, rendering_engine::opengl::primitive::triangles, 0, m_vertex_count);
+    rhi::draw_call call{};
+    call.vao = m_vertex_array_object;
+    call.topology = rhi::primitive_type::triangles;
+    call.indexed = false;
+    call.offset = 0;
+    call.count = m_vertex_count;
+    rhi::get_device()->draw(call);
 }

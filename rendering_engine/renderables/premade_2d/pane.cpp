@@ -25,6 +25,7 @@
 #include <rendering_engine/renderables/premade_2d/pane.hpp>
 #include <rendering_engine/renderers/renderer.hpp>
 #include <rendering_engine/rendering_engine.hpp>
+#include <rhi/rhi.hpp>
 
 rendering_engine::pane::pane(const glm::vec2& size)
     : m_vertex_count{0}, m_vertex_array_object{nullptr}, m_vertex_buffer{nullptr}, m_indicies_buffer{nullptr},
@@ -39,20 +40,21 @@ void rendering_engine::pane::set_color(const rendering_engine::util::color& colo
 
 void rendering_engine::pane::set_image(const rendering_engine::util::image& image)
 {
-    m_texture = rendering_engine::opengl::context::get_instance().create_texture();
-    m_texture->image2_d(image.get_pixels(),
-                        rendering_engine::opengl::data_type::unsigned_byte,
-                        rendering_engine::opengl::format::rgba,
-                        image.get_width(),
-                        image.get_height(),
-                        rendering_engine::opengl::internal_format::rgba);
+    rhi::device* device = rhi::get_device();
 
-    m_texture->set_wrapping_r(opengl::wrapping::clamp_edge);
-    m_texture->set_wrapping_s(opengl::wrapping::clamp_edge);
-    m_texture->set_wrapping_t(opengl::wrapping::clamp_edge);
+    rhi::texture_desc desc{};
+    desc.initial_pixels = image.get_pixels();
+    desc.width = image.get_width();
+    desc.height = image.get_height();
+    desc.source_format = rhi::pixel_format::rgba;
+    desc.source_type = rhi::element_type::unsigned_byte_type;
+    desc.storage_format = rhi::internal_format::rgba;
+    m_texture = device->create_texture(desc);
 
-    m_texture->set_filters(opengl::filter::nearest, opengl::filter::nearest);
-    m_texture->generate_mipmaps();
+    device->texture_set_wrap(
+        m_texture, rhi::wrap_mode::clamp_edge, rhi::wrap_mode::clamp_edge, rhi::wrap_mode::clamp_edge);
+    device->texture_set_filters(m_texture, rhi::filter_mode::nearest, rhi::filter_mode::nearest);
+    device->texture_generate_mipmaps(m_texture);
 }
 
 void rendering_engine::pane::upload()
@@ -73,18 +75,43 @@ void rendering_engine::pane::upload()
 
     uint32_t indicies[6] = {3, 0, 1, 3, 1, 2};
 
-    m_vertex_buffer = opengl::context::get_instance().create_vbo();
-    m_vertex_buffer->data(vertex, sizeof(vertex), rendering_engine::opengl::buffer_usage::static_draw);
+    rhi::device* device = rhi::get_device();
 
-    m_indicies_buffer = opengl::context::get_instance().create_vbo();
-    m_indicies_buffer->element_data(indicies, sizeof(indicies), rendering_engine::opengl::buffer_usage::static_draw);
+    rhi::buffer_desc vb_desc{};
+    vb_desc.initial_data = vertex;
+    vb_desc.size = sizeof(vertex);
+    vb_desc.usage = rhi::buffer_usage::static_draw;
+    vb_desc.is_index_buffer = false;
+    m_vertex_buffer = device->create_buffer(vb_desc);
 
-    m_vertex_array_object = opengl::context::get_instance().create_vao();
-    m_vertex_array_object->bind_attribute(
-        0, *m_vertex_buffer, rendering_engine::opengl::type::Float, 3, sizeof(vertex_position_uv), 0);
-    m_vertex_array_object->bind_attribute(
-        1, *m_vertex_buffer, rendering_engine::opengl::type::Float, 2, sizeof(vertex_position_uv), sizeof(glm::vec3));
-    m_vertex_array_object->bind_elements(*m_indicies_buffer);
+    rhi::buffer_desc ib_desc{};
+    ib_desc.initial_data = indicies;
+    ib_desc.size = sizeof(indicies);
+    ib_desc.usage = rhi::buffer_usage::static_draw;
+    ib_desc.is_index_buffer = true;
+    m_indicies_buffer = device->create_buffer(ib_desc);
+
+    m_vertex_array_object = device->create_vertex_array();
+
+    rhi::vertex_attribute_desc attr0{};
+    attr0.location = 0;
+    attr0.source = m_vertex_buffer;
+    attr0.type = rhi::element_type::float_type;
+    attr0.component_count = 3;
+    attr0.stride = sizeof(vertex_position_uv);
+    attr0.offset = 0;
+    device->vertex_array_bind_attribute(m_vertex_array_object, attr0);
+
+    rhi::vertex_attribute_desc attr1{};
+    attr1.location = 1;
+    attr1.source = m_vertex_buffer;
+    attr1.type = rhi::element_type::float_type;
+    attr1.component_count = 2;
+    attr1.stride = sizeof(vertex_position_uv);
+    attr1.offset = sizeof(glm::vec3);
+    device->vertex_array_bind_attribute(m_vertex_array_object, attr1);
+
+    device->vertex_array_bind_elements(m_vertex_array_object, m_indicies_buffer);
 }
 
 void rendering_engine::pane::render()
@@ -109,9 +136,12 @@ void rendering_engine::pane::render()
     }
     current_renderer->setup_options(options);
 
-    rendering_engine::opengl::context::get_instance().draw_elements(*m_vertex_array_object,
-                                                                    rendering_engine::opengl::primitive::triangles,
-                                                                    0,
-                                                                    m_vertex_count,
-                                                                    rendering_engine::opengl::type::unsigned_int);
+    rhi::draw_call call{};
+    call.vao = m_vertex_array_object;
+    call.topology = rhi::primitive_type::triangles;
+    call.indexed = true;
+    call.offset = 0;
+    call.count = m_vertex_count;
+    call.index_type = rhi::element_type::unsigned_int_type;
+    rhi::get_device()->draw(call);
 }

@@ -20,7 +20,6 @@
  * SOFTWARE.
  */
 
-#include <rendering_engine/opengl/opengl.hpp>
 #include <rendering_engine/rendering_engine.hpp>
 #include <rendering_engine/window.hpp>
 
@@ -32,18 +31,23 @@
 
 #include <infrastructure/log.hpp>
 #include <rendering_engine/renderables/premade_3d/cube.hpp>
+#include <rhi/opengl/opengl_rhi.hpp>
+#include <rhi/rhi.hpp>
 
 void rendering_engine::context::init()
 {
     LOG_INF("Init Rendering Engine");
 
     rendering_engine::window::get_instance().init();
-    rendering_engine::opengl::context::get_instance().init();
 
-    rendering_engine::opengl::context::get_instance().enable(rendering_engine::opengl::capability::cull_face);
-    rendering_engine::opengl::context::get_instance().enable(rendering_engine::opengl::capability::depth_test);
-    rendering_engine::opengl::context::get_instance().enable(rendering_engine::opengl::capability::blend);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    m_rhi_device = std::make_unique<rhi::opengl::opengl_rhi>();
+    rhi::set_device(m_rhi_device.get());
+    m_rhi_device->init();
+
+    m_rhi_device->enable(rhi::capability::cull_face);
+    m_rhi_device->enable(rhi::capability::depth_test);
+    m_rhi_device->enable(rhi::capability::blend);
+    m_rhi_device->set_blend_func_alpha();
     LOG_INF("Rendering Engine: enabled cull_face, depth_test, blend (SRC_ALPHA / ONE_MINUS_SRC_ALPHA)");
 
     rendering_engine::renderers::basic_renderer::get_instance();
@@ -53,7 +57,13 @@ void rendering_engine::context::init()
 
 void rendering_engine::context::quit()
 {
-    rendering_engine::opengl::context::get_instance().quit();
+    if (m_rhi_device != nullptr)
+    {
+        m_rhi_device->quit();
+    }
+    rhi::set_device(nullptr);
+    m_rhi_device.reset();
+
     rendering_engine::window::get_instance().quit();
 
     LOG_INF("Quit Rendering Engine");
@@ -71,9 +81,9 @@ void rendering_engine::context::render()
         rendering_engine::renderers::basic_renderer::get_instance().stop_renderer();
     }
 
-    rendering_engine::opengl::context::get_instance().disable(rendering_engine::opengl::capability::depth_test);
+    m_rhi_device->disable(rhi::capability::depth_test);
     rendering_engine::renderers::overlay_renderer::get_instance().start_renderer();
     event_engine::context::get_instance().broadcast(event_engine::render_ui());
     rendering_engine::renderers::overlay_renderer::get_instance().stop_renderer();
-    rendering_engine::opengl::context::get_instance().enable(rendering_engine::opengl::capability::depth_test);
+    m_rhi_device->enable(rhi::capability::depth_test);
 }
