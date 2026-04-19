@@ -22,7 +22,7 @@
 
 #pragma once
 
-#include <glm/glm.hpp>
+#include <infrastructure/math/math.hpp>
 #include <rendering_engine/util/transform.hpp>
 
 namespace rendering_engine
@@ -41,15 +41,15 @@ namespace rendering_engine
         rendering_engine::util::transform transform;
 
         void invalidate_view_matrix();
-        const glm::mat4 get_view_matrix() const;
+        const infrastructure::math::mat4 get_view_matrix() const;
 
         void invalidate_projection_matrix();
-        virtual const glm::mat4 get_projection_matrix() const = 0;
+        virtual const infrastructure::math::mat4 get_projection_matrix() const = 0;
 
     protected:
-        mutable glm::mat4 m_view_matrix;
+        mutable infrastructure::math::mat4 m_view_matrix;
         mutable bool m_is_view_matrix_dirty;
-        mutable glm::mat4 m_projection;
+        mutable infrastructure::math::mat4 m_projection;
         mutable bool m_is_projection_matrix_dirty;
 
         // Non-owning observer: lifetime managed elsewhere (e.g. by the creator of the camera).

@@ -22,44 +22,44 @@
 
 #pragma once
 
-#include <glm/glm.hpp>
+#include <infrastructure/math/math.hpp>
 
 namespace rendering_engine
 {
     struct vertex_position
     {
-        glm::vec3 pos;
+        infrastructure::math::vec3 pos;
     };
 
     struct vertex_postion_color
     {
-        glm::vec3 pos;
-        glm::vec3 color;
+        infrastructure::math::vec3 pos;
+        infrastructure::math::vec3 color;
     };
 
     struct vertex_position_uv
     {
-        glm::vec3 pos;
-        glm::vec2 uv;
+        infrastructure::math::vec3 pos;
+        infrastructure::math::vec2 uv;
     };
 
     struct vertex_postion_normal
     {
-        glm::vec3 pos;
-        glm::vec3 normal;
+        infrastructure::math::vec3 pos;
+        infrastructure::math::vec3 normal;
     };
 
     struct vertex_position_color_normal
     {
-        glm::vec3 pos;
-        glm::vec3 color;
-        glm::vec3 normal;
+        infrastructure::math::vec3 pos;
+        infrastructure::math::vec3 color;
+        infrastructure::math::vec3 normal;
     };
 
     struct vertex_position_uv_normal
     {
-        glm::vec3 pos;
-        glm::vec2 uv;
-        glm::vec3 normal;
+        infrastructure::math::vec3 pos;
+        infrastructure::math::vec2 uv;
+        infrastructure::math::vec3 normal;
     };
 } // namespace rendering_engine

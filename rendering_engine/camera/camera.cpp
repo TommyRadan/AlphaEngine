@@ -20,10 +20,9 @@
  * SOFTWARE.
  */
 
-#include <rendering_engine/camera/camera.hpp>
-#define GLM_ENABLE_EXPERIMENTAL
-#include <glm/gtx/transform.hpp>
+#include <infrastructure/math/math.hpp>
 #include <infrastructure/settings.hpp>
+#include <rendering_engine/camera/camera.hpp>
 #include <rendering_engine/rendering_engine.hpp>
 
 rendering_engine::camera* rendering_engine::camera::m_current_camera = nullptr;
@@ -56,16 +55,16 @@ void rendering_engine::camera::invalidate_view_matrix()
     m_is_view_matrix_dirty = true;
 }
 
-const glm::mat4 rendering_engine::camera::get_view_matrix() const
+const infrastructure::math::mat4 rendering_engine::camera::get_view_matrix() const
 {
     if (!m_is_view_matrix_dirty)
     {
         return m_view_matrix;
     }
 
-    glm::vec3 up_vector(0.0f, 0.0f, 1.0f);
-    glm::vec3 look_at = transform.get_position() + transform.get_rotation();
-    m_view_matrix = glm::lookAt(transform.get_position(), look_at, up_vector);
+    infrastructure::math::vec3 up_vector{0.0f, 0.0f, 1.0f};
+    infrastructure::math::vec3 look_at_target = transform.get_position() + transform.get_rotation();
+    m_view_matrix = infrastructure::math::look_at(transform.get_position(), look_at_target, up_vector);
     m_is_view_matrix_dirty = false;
     return m_view_matrix;
 }

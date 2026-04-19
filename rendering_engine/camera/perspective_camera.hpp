@@ -22,7 +22,7 @@
 
 #pragma once
 
-#include <glm/glm.hpp>
+#include <infrastructure/math/math.hpp>
 #include <rendering_engine/camera/camera.hpp>
 
 namespace rendering_engine
@@ -31,7 +31,7 @@ namespace rendering_engine
     {
         perspective_camera();
 
-        const glm::mat4 get_projection_matrix() const final;
+        const infrastructure::math::mat4 get_projection_matrix() const final;
 
         float field_of_view;
         float aspect_ratio;
