@@ -81,6 +81,24 @@ rendering_engine::opengl::program* rendering_engine::opengl::context::create_pro
     return new opengl::program();
 }
 
+rendering_engine::opengl::program*
+rendering_engine::opengl::context::compile_program(const std::string& vertex_source, const std::string& fragment_source)
+{
+    auto* vs = create_shader(shader_type::vertex);
+    vs->source(vertex_source);
+    vs->compile();
+    auto* fs = create_shader(shader_type::fragment);
+    fs->source(fragment_source);
+    fs->compile();
+    auto* prog = create_program();
+    prog->attach(*vs);
+    prog->attach(*fs);
+    prog->link();
+    delete_shader(vs);
+    delete_shader(fs);
+    return prog;
+}
+
 rendering_engine::opengl::shader* rendering_engine::opengl::context::create_shader(shader_type type)
 {
     return new opengl::shader(type);
@@ -166,6 +184,21 @@ void rendering_engine::opengl::context::depth_mask(const bool write_enabled)
     glDepthMask(write_enabled ? GL_TRUE : GL_FALSE);
 }
 
+void rendering_engine::opengl::context::blend_func(const blend_factor src, const blend_factor dst)
+{
+    glBlendFunc((GLenum)src, (GLenum)dst);
+}
+
+void rendering_engine::opengl::context::set_viewport(const int x, const int y, const int width, const int height)
+{
+    glViewport(x, y, width, height);
+}
+
+void rendering_engine::opengl::context::set_polygon_mode(const polygon_mode mode)
+{
+    glPolygonMode(GL_FRONT_AND_BACK, (GLenum)mode);
+}
+
 void rendering_engine::opengl::context::bind_texture(const rendering_engine::opengl::texture& texture,
                                                      const unsigned char unit)
 {
@@ -197,6 +230,11 @@ void rendering_engine::opengl::context::bind_framebuffer(const rendering_engine:
     glBindTexture(GL_TEXTURE_2D, res);
 
     glViewport(0, 0, width, height);
+}
+
+void rendering_engine::opengl::context::unbind_vao()
+{
+    glBindVertexArray(0);
 }
 
 void rendering_engine::opengl::context::bind_framebuffer()
