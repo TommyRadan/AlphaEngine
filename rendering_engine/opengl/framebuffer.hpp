@@ -33,6 +33,10 @@ namespace rendering_engine
         {
             friend class context;
             framebuffer(uint32_t width, uint32_t height, uint8_t color = 32u, uint8_t depth = 24u);
+            // Explicit-format ctor: takes the GL internal_format directly so callers
+            // can request HDR formats (e.g. rgb_a16_f) and skip the depth attachment
+            // entirely when only color is needed.
+            framebuffer(uint32_t width, uint32_t height, internal_format color_format, bool with_depth);
             ~framebuffer();
 
             framebuffer(const framebuffer&) = delete;

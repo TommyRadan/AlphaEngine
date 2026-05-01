@@ -42,6 +42,7 @@ namespace rendering_engine
             void quit();
 
             opengl::framebuffer* create_framebuffer(uint32_t, uint32_t, uint8_t, uint8_t);
+            opengl::framebuffer* create_framebuffer(uint32_t, uint32_t, internal_format, bool with_depth);
             opengl::program* create_program();
             opengl::shader* create_shader(shader_type);
             opengl::texture* create_texture();
