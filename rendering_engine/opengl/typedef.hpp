@@ -224,5 +224,29 @@ namespace rendering_engine
             dynamic_read = GL_DYNAMIC_READ,
             dynamic_copy = GL_DYNAMIC_COPY
         };
+
+        enum class blend_factor
+        {
+            zero = GL_ZERO,
+            one = GL_ONE,
+            src_color = GL_SRC_COLOR,
+            one_minus_src_color = GL_ONE_MINUS_SRC_COLOR,
+            dst_color = GL_DST_COLOR,
+            one_minus_dst_color = GL_ONE_MINUS_DST_COLOR,
+            src_alpha = GL_SRC_ALPHA,
+            one_minus_src_alpha = GL_ONE_MINUS_SRC_ALPHA,
+            dst_alpha = GL_DST_ALPHA,
+            one_minus_dst_alpha = GL_ONE_MINUS_DST_ALPHA
+        };
+
+        // Rasterization mode for the front-and-back of polygons. In a Core
+        // 3.3+ profile only @c GL_FRONT_AND_BACK is valid for the face
+        // parameter, so the abstraction exposes the @c mode only.
+        enum class polygon_mode
+        {
+            fill = GL_FILL,
+            line = GL_LINE,
+            point = GL_POINT
+        };
     } // namespace opengl
 } // namespace rendering_engine

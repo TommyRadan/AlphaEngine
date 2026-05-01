@@ -22,6 +22,8 @@
 
 #pragma once
 
+#include <string>
+
 #include <rendering_engine/opengl/cube_texture.hpp>
 #include <rendering_engine/opengl/framebuffer.hpp>
 #include <rendering_engine/opengl/program.hpp>
@@ -44,6 +46,9 @@ namespace rendering_engine
             opengl::framebuffer* create_framebuffer(uint32_t, uint32_t, uint8_t, uint8_t);
             opengl::framebuffer* create_framebuffer(uint32_t, uint32_t, internal_format, bool with_depth);
             opengl::program* create_program();
+            // Convenience: compile a vertex+fragment program from source strings,
+            // attach, link, and discard the shaders. Throws on compile/link failure.
+            opengl::program* compile_program(const std::string& vertex_source, const std::string& fragment_source);
             opengl::shader* create_shader(shader_type);
             opengl::texture* create_texture();
             opengl::cube_texture* create_cube_texture();
@@ -64,11 +69,21 @@ namespace rendering_engine
             void clear_color(const rendering_engine::util::color& color);
             void clear(opengl::buffer buffers);
             void depth_mask(bool write_enabled);
+            void blend_func(blend_factor src, blend_factor dst);
+            void set_viewport(int x, int y, int width, int height);
+            // Sets the polygon rasterization mode for both faces. Used for
+            // wireframe debug views; pass @c polygon_mode::fill to restore.
+            void set_polygon_mode(polygon_mode mode);
 
             void bind_texture(const opengl::texture& texture, const unsigned char unit);
             void bind_cube_texture(const opengl::cube_texture& texture, const unsigned char unit);
             void bind_framebuffer(const opengl::framebuffer& framebuffer);
             void bind_framebuffer();
+            // Unbinds whichever VAO is currently bound. Useful at the end of
+            // mesh setup so the VAO's state gets committed by the driver
+            // before its first draw — some drivers don't commit VAO state
+            // until the VAO is unbound at least once after configuration.
+            void unbind_vao();
 
             void
             draw_arrays(const opengl::vertex_array& vao, opengl::primitive mode, unsigned int offset, size_t vertices);
