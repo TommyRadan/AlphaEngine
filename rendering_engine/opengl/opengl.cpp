@@ -70,6 +70,12 @@ rendering_engine::opengl::context::create_framebuffer(uint32_t width, uint32_t h
     return new rendering_engine::opengl::framebuffer(width, height, color, depth);
 }
 
+rendering_engine::opengl::framebuffer* rendering_engine::opengl::context::create_framebuffer(
+    uint32_t width, uint32_t height, internal_format color_format, bool with_depth)
+{
+    return new rendering_engine::opengl::framebuffer(width, height, color_format, with_depth);
+}
+
 rendering_engine::opengl::program* rendering_engine::opengl::context::create_program()
 {
     return new opengl::program();
