@@ -22,6 +22,7 @@
 
 #pragma once
 
+#include <rendering_engine/opengl/cube_texture.hpp>
 #include <rendering_engine/opengl/framebuffer.hpp>
 #include <rendering_engine/opengl/program.hpp>
 #include <rendering_engine/opengl/shader.hpp>
@@ -44,6 +45,7 @@ namespace rendering_engine
             opengl::program* create_program();
             opengl::shader* create_shader(shader_type);
             opengl::texture* create_texture();
+            opengl::cube_texture* create_cube_texture();
             opengl::vertex_array* create_vao();
             opengl::vertex_buffer* create_vbo();
 
@@ -51,6 +53,7 @@ namespace rendering_engine
             void delete_program(const opengl::program*);
             void delete_shader(const opengl::shader*);
             void delete_texture(const opengl::texture*);
+            void delete_cube_texture(const opengl::cube_texture*);
             void delete_vab(const opengl::vertex_array*);
             void delete_vbo(const opengl::vertex_buffer*);
 
@@ -62,6 +65,7 @@ namespace rendering_engine
             void depth_mask(bool write_enabled);
 
             void bind_texture(const opengl::texture& texture, const unsigned char unit);
+            void bind_cube_texture(const opengl::cube_texture& texture, const unsigned char unit);
             void bind_framebuffer(const opengl::framebuffer& framebuffer);
             void bind_framebuffer();
 

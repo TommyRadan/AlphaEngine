@@ -85,6 +85,11 @@ rendering_engine::opengl::texture* rendering_engine::opengl::context::create_tex
     return new opengl::texture();
 }
 
+rendering_engine::opengl::cube_texture* rendering_engine::opengl::context::create_cube_texture()
+{
+    return new opengl::cube_texture();
+}
+
 rendering_engine::opengl::vertex_array* rendering_engine::opengl::context::create_vao()
 {
     return new opengl::vertex_array();
@@ -111,6 +116,11 @@ void rendering_engine::opengl::context::delete_shader(const opengl::shader* shad
 }
 
 void rendering_engine::opengl::context::delete_texture(const opengl::texture* texture)
+{
+    delete texture;
+}
+
+void rendering_engine::opengl::context::delete_cube_texture(const opengl::cube_texture* texture)
 {
     delete texture;
 }
@@ -155,6 +165,13 @@ void rendering_engine::opengl::context::bind_texture(const rendering_engine::ope
 {
     glActiveTexture(GL_TEXTURE0 + unit);
     glBindTexture(GL_TEXTURE_2D, texture.handle());
+}
+
+void rendering_engine::opengl::context::bind_cube_texture(const rendering_engine::opengl::cube_texture& texture,
+                                                          const unsigned char unit)
+{
+    glActiveTexture(GL_TEXTURE0 + unit);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, texture.handle());
 }
 
 void rendering_engine::opengl::context::bind_framebuffer(const rendering_engine::opengl::framebuffer& framebuffer)
