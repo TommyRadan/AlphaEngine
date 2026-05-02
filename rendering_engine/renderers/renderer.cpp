@@ -41,6 +41,21 @@ namespace rendering_engine
             return m_current_renderer;
         }
 
+        gpu::pipeline renderer::pipeline_handle() const
+        {
+            return m_pipeline;
+        }
+
+        gpu::bind_group_layout renderer::draw_bind_group_layout() const
+        {
+            return m_draw_layout;
+        }
+
+        uint32_t renderer::draw_bind_group_slot() const
+        {
+            return m_frame_layout.valid() ? 1u : 0u;
+        }
+
         void renderer::begin(gpu::render_pass_encoder& encoder)
         {
             m_current_renderer = this;
