@@ -36,63 +36,60 @@
 
 #include <cstdint>
 
-namespace rendering_engine
+namespace rendering_engine::gpu
 {
-    namespace gpu
+    template<typename Tag>
+    struct handle
     {
-        template<typename Tag>
-        struct handle
-        {
-            uint64_t id{0};
+        uint64_t id{0};
 
-            constexpr bool valid() const noexcept
-            {
-                return id != 0;
-            }
+        constexpr bool valid() const noexcept
+        {
+            return id != 0;
+        }
 
-            constexpr bool operator==(const handle& other) const noexcept
-            {
-                return id == other.id;
-            }
+        constexpr bool operator==(const handle& other) const noexcept
+        {
+            return id == other.id;
+        }
 
-            constexpr bool operator!=(const handle& other) const noexcept
-            {
-                return id != other.id;
-            }
-        };
+        constexpr bool operator!=(const handle& other) const noexcept
+        {
+            return id != other.id;
+        }
+    };
 
-        struct buffer_tag
-        {
-        };
-        struct texture_tag
-        {
-        };
-        struct sampler_tag
-        {
-        };
-        struct shader_module_tag
-        {
-        };
-        struct pipeline_tag
-        {
-        };
-        struct bind_group_layout_tag
-        {
-        };
-        struct bind_group_tag
-        {
-        };
-        struct render_target_tag
-        {
-        };
+    struct buffer_tag
+    {
+    };
+    struct texture_tag
+    {
+    };
+    struct sampler_tag
+    {
+    };
+    struct shader_module_tag
+    {
+    };
+    struct pipeline_tag
+    {
+    };
+    struct bind_group_layout_tag
+    {
+    };
+    struct bind_group_tag
+    {
+    };
+    struct render_target_tag
+    {
+    };
 
-        using buffer = handle<buffer_tag>;
-        using texture = handle<texture_tag>;
-        using sampler = handle<sampler_tag>;
-        using shader_module = handle<shader_module_tag>;
-        using pipeline = handle<pipeline_tag>;
-        using bind_group_layout = handle<bind_group_layout_tag>;
-        using bind_group = handle<bind_group_tag>;
-        using render_target = handle<render_target_tag>;
-    } // namespace gpu
-} // namespace rendering_engine
+    using buffer = handle<buffer_tag>;
+    using texture = handle<texture_tag>;
+    using sampler = handle<sampler_tag>;
+    using shader_module = handle<shader_module_tag>;
+    using pipeline = handle<pipeline_tag>;
+    using bind_group_layout = handle<bind_group_layout_tag>;
+    using bind_group = handle<bind_group_tag>;
+    using render_target = handle<render_target_tag>;
+} // namespace rendering_engine::gpu

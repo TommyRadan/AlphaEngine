@@ -33,71 +33,61 @@
 #include <infrastructure/log.hpp>
 #include <rendering_engine/gpu/backend/opengl/gl_translate.hpp>
 
-namespace rendering_engine
+namespace rendering_engine::gpu::backend::opengl
 {
-    namespace gpu
+    buffer gl_device::create_buffer(const buffer_descriptor& descriptor)
     {
-        namespace backend
+        gl_buffer record{};
+        record.size = descriptor.size;
+        record.usage = descriptor.usage;
+        if ((descriptor.usage & buffer_usage_index) != 0u)
         {
-            namespace opengl
+            record.default_target = GL_ELEMENT_ARRAY_BUFFER;
+        }
+        else if ((descriptor.usage & buffer_usage_uniform) != 0u)
+        {
+            record.default_target = GL_UNIFORM_BUFFER;
+        }
+        else
+        {
+            record.default_target = GL_ARRAY_BUFFER;
+        }
+
+        glGenBuffers(1, &record.object_id);
+        glBindBuffer(record.default_target, record.object_id);
+        glBufferData(record.default_target,
+                     static_cast<GLsizeiptr>(descriptor.size),
+                     descriptor.initial_data,
+                     to_gl_buffer_usage_hint(descriptor.hint));
+        glBindBuffer(record.default_target, 0);
+
+        buffer h{};
+        h.id = m_buffers.insert(record);
+        return h;
+    }
+
+    void gl_device::destroy(buffer handle)
+    {
+        if (auto* record = m_buffers.lookup(handle.id))
+        {
+            if (record->object_id != 0)
             {
-                buffer gl_device::create_buffer(const buffer_descriptor& descriptor)
-                {
-                    gl_buffer record{};
-                    record.size = descriptor.size;
-                    record.usage = descriptor.usage;
-                    if ((descriptor.usage & buffer_usage_index) != 0u)
-                    {
-                        record.default_target = GL_ELEMENT_ARRAY_BUFFER;
-                    }
-                    else if ((descriptor.usage & buffer_usage_uniform) != 0u)
-                    {
-                        record.default_target = GL_UNIFORM_BUFFER;
-                    }
-                    else
-                    {
-                        record.default_target = GL_ARRAY_BUFFER;
-                    }
+                glDeleteBuffers(1, &record->object_id);
+            }
+            m_buffers.remove(handle.id);
+        }
+    }
 
-                    glGenBuffers(1, &record.object_id);
-                    glBindBuffer(record.default_target, record.object_id);
-                    glBufferData(record.default_target,
-                                 static_cast<GLsizeiptr>(descriptor.size),
-                                 descriptor.initial_data,
-                                 to_gl_buffer_usage_hint(descriptor.hint));
-                    glBindBuffer(record.default_target, 0);
-
-                    buffer h{};
-                    h.id = m_buffers.insert(record);
-                    return h;
-                }
-
-                void gl_device::destroy(buffer handle)
-                {
-                    if (auto* record = m_buffers.lookup(handle.id))
-                    {
-                        if (record->object_id != 0)
-                        {
-                            glDeleteBuffers(1, &record->object_id);
-                        }
-                        m_buffers.remove(handle.id);
-                    }
-                }
-
-                void gl_device::write_buffer(buffer handle, const void* data, size_t size, size_t offset)
-                {
-                    auto* record = m_buffers.lookup(handle.id);
-                    if (record == nullptr || record->object_id == 0)
-                    {
-                        LOG_WRN("write_buffer: invalid buffer handle");
-                        return;
-                    }
-                    glBindBuffer(record->default_target, record->object_id);
-                    glBufferSubData(
-                        record->default_target, static_cast<GLintptr>(offset), static_cast<GLsizeiptr>(size), data);
-                    glBindBuffer(record->default_target, 0);
-                }
-            } // namespace opengl
-        } // namespace backend
-    } // namespace gpu
-} // namespace rendering_engine
+    void gl_device::write_buffer(buffer handle, const void* data, size_t size, size_t offset)
+    {
+        auto* record = m_buffers.lookup(handle.id);
+        if (record == nullptr || record->object_id == 0)
+        {
+            LOG_WRN("write_buffer: invalid buffer handle");
+            return;
+        }
+        glBindBuffer(record->default_target, record->object_id);
+        glBufferSubData(record->default_target, static_cast<GLintptr>(offset), static_cast<GLsizeiptr>(size), data);
+        glBindBuffer(record->default_target, 0);
+    }
+} // namespace rendering_engine::gpu::backend::opengl

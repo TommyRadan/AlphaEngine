@@ -37,60 +37,47 @@
 
 #include <rendering_engine/gpu/command_encoder.hpp>
 
-namespace rendering_engine
+namespace rendering_engine::gpu::backend::opengl
 {
-    namespace gpu
+    struct gl_device;
+
+    struct gl_render_pass_encoder : public render_pass_encoder
     {
-        namespace backend
-        {
-            namespace opengl
-            {
-                struct gl_device;
+        gl_render_pass_encoder(gl_device& device, const render_pass_descriptor& descriptor);
+        ~gl_render_pass_encoder() override;
 
-                struct gl_render_pass_encoder : public render_pass_encoder
-                {
-                    gl_render_pass_encoder(gl_device& device, const render_pass_descriptor& descriptor);
-                    ~gl_render_pass_encoder() override;
+        void set_pipeline(pipeline pipeline_handle) override;
+        void set_vertex_buffer(uint32_t slot, buffer buffer_handle, size_t offset, uint32_t stride_override) override;
+        void set_index_buffer(buffer buffer_handle, index_format format) override;
+        void set_bind_group(uint32_t group, bind_group bind_group_handle) override;
+        void set_viewport(int x, int y, int width, int height) override;
+        void draw(uint32_t vertex_count, uint32_t first_vertex) override;
+        void draw_indexed(uint32_t index_count, uint32_t first_index) override;
+        void end() override;
 
-                    void set_pipeline(pipeline pipeline_handle) override;
-                    void set_vertex_buffer(uint32_t slot,
-                                           buffer buffer_handle,
-                                           size_t offset,
-                                           uint32_t stride_override) override;
-                    void set_index_buffer(buffer buffer_handle, index_format format) override;
-                    void set_bind_group(uint32_t group, bind_group bind_group_handle) override;
-                    void set_viewport(int x, int y, int width, int height) override;
-                    void draw(uint32_t vertex_count, uint32_t first_vertex) override;
-                    void draw_indexed(uint32_t index_count, uint32_t first_index) override;
-                    void end() override;
+    private:
+        gl_device& m_device;
 
-                private:
-                    gl_device& m_device;
+        pipeline m_pipeline_handle{};
+        GLuint m_program_id{0};
+        GLuint m_vao_id{0};
+        GLenum m_topology{GL_TRIANGLES};
 
-                    pipeline m_pipeline_handle{};
-                    GLuint m_program_id{0};
-                    GLuint m_vao_id{0};
-                    GLenum m_topology{GL_TRIANGLES};
+        GLenum m_index_type{GL_UNSIGNED_INT};
+        GLsizei m_index_size{4};
+        bool m_index_buffer_bound{false};
 
-                    GLenum m_index_type{GL_UNSIGNED_INT};
-                    GLsizei m_index_size{4};
-                    bool m_index_buffer_bound{false};
+        bool m_active{false};
+    };
 
-                    bool m_active{false};
-                };
+    struct gl_command_encoder : public command_encoder
+    {
+        explicit gl_command_encoder(gl_device& device);
+        ~gl_command_encoder() override = default;
 
-                struct gl_command_encoder : public command_encoder
-                {
-                    explicit gl_command_encoder(gl_device& device);
-                    ~gl_command_encoder() override = default;
+        std::unique_ptr<render_pass_encoder> begin_render_pass(const render_pass_descriptor& descriptor) override;
 
-                    std::unique_ptr<render_pass_encoder>
-                    begin_render_pass(const render_pass_descriptor& descriptor) override;
-
-                private:
-                    gl_device& m_device;
-                };
-            } // namespace opengl
-        } // namespace backend
-    } // namespace gpu
-} // namespace rendering_engine
+    private:
+        gl_device& m_device;
+    };
+} // namespace rendering_engine::gpu::backend::opengl

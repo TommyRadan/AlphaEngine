@@ -48,78 +48,67 @@
 #include <rendering_engine/gpu/backend/opengl/gl_resources.hpp>
 #include <rendering_engine/gpu/device.hpp>
 
-namespace rendering_engine
+namespace rendering_engine::gpu::backend::opengl
 {
-    namespace gpu
+    struct gl_device : public device
     {
-        namespace backend
-        {
-            namespace opengl
-            {
-                struct gl_device : public device
-                {
-                    gl_device();
-                    ~gl_device() override;
+        gl_device();
+        ~gl_device() override;
 
-                    void init() override;
-                    void quit() override;
+        void init() override;
+        void quit() override;
 
-                    buffer create_buffer(const buffer_descriptor& descriptor) override;
-                    texture create_texture(const texture_descriptor& descriptor) override;
-                    sampler create_sampler(const sampler_descriptor& descriptor) override;
-                    shader_module create_shader_module(const shader_module_descriptor& descriptor) override;
-                    bind_group_layout create_bind_group_layout(const bind_group_layout_descriptor& descriptor) override;
-                    pipeline create_pipeline(const pipeline_descriptor& descriptor) override;
-                    bind_group create_bind_group(const bind_group_descriptor& descriptor) override;
-                    void update_bind_group(bind_group bind_group_handle,
-                                           const std::vector<binding_value>& entries) override;
+        buffer create_buffer(const buffer_descriptor& descriptor) override;
+        texture create_texture(const texture_descriptor& descriptor) override;
+        sampler create_sampler(const sampler_descriptor& descriptor) override;
+        shader_module create_shader_module(const shader_module_descriptor& descriptor) override;
+        bind_group_layout create_bind_group_layout(const bind_group_layout_descriptor& descriptor) override;
+        pipeline create_pipeline(const pipeline_descriptor& descriptor) override;
+        bind_group create_bind_group(const bind_group_descriptor& descriptor) override;
+        void update_bind_group(bind_group bind_group_handle, const std::vector<binding_value>& entries) override;
 
-                    void destroy(buffer handle) override;
-                    void destroy(texture handle) override;
-                    void destroy(sampler handle) override;
-                    void destroy(shader_module handle) override;
-                    void destroy(bind_group_layout handle) override;
-                    void destroy(pipeline handle) override;
-                    void destroy(bind_group handle) override;
+        void destroy(buffer handle) override;
+        void destroy(texture handle) override;
+        void destroy(sampler handle) override;
+        void destroy(shader_module handle) override;
+        void destroy(bind_group_layout handle) override;
+        void destroy(pipeline handle) override;
+        void destroy(bind_group handle) override;
 
-                    void write_buffer(buffer buffer_handle, const void* data, size_t size, size_t offset) override;
-                    void write_texture(texture texture_handle, const void* data, size_t size) override;
-                    void
-                    write_cube_face(texture texture_handle, cube_face face, const void* data, size_t size) override;
-                    void generate_mipmaps(texture texture_handle) override;
+        void write_buffer(buffer buffer_handle, const void* data, size_t size, size_t offset) override;
+        void write_texture(texture texture_handle, const void* data, size_t size) override;
+        void write_cube_face(texture texture_handle, cube_face face, const void* data, size_t size) override;
+        void generate_mipmaps(texture texture_handle) override;
 
-                    render_target swapchain_target() override;
-                    void resize_swapchain(uint32_t width, uint32_t height) override;
+        render_target swapchain_target() override;
+        void resize_swapchain(uint32_t width, uint32_t height) override;
 
-                    std::unique_ptr<command_encoder> create_command_encoder() override;
-                    void submit(std::unique_ptr<command_encoder> encoder) override;
+        std::unique_ptr<command_encoder> create_command_encoder() override;
+        void submit(std::unique_ptr<command_encoder> encoder) override;
 
-                    // Internal accessors used by the encoder to map a
-                    // public handle back to its GL-side record.
-                    // Definitions are in gl_device.cpp.
-                    gl_buffer* lookup_buffer(buffer h);
-                    gl_texture* lookup_texture(texture h);
-                    gl_sampler* lookup_sampler(sampler h);
-                    gl_pipeline* lookup_pipeline(pipeline h);
-                    gl_bind_group* lookup_bind_group(bind_group h);
-                    gl_render_target* lookup_render_target(render_target h);
-                    gl_bind_group_layout* lookup_bind_group_layout(bind_group_layout h);
+        // Internal accessors used by the encoder to map a
+        // public handle back to its GL-side record.
+        // Definitions are in gl_device.cpp.
+        gl_buffer* lookup_buffer(buffer h);
+        gl_texture* lookup_texture(texture h);
+        gl_sampler* lookup_sampler(sampler h);
+        gl_pipeline* lookup_pipeline(pipeline h);
+        gl_bind_group* lookup_bind_group(bind_group h);
+        gl_render_target* lookup_render_target(render_target h);
+        gl_bind_group_layout* lookup_bind_group_layout(bind_group_layout h);
 
-                private:
-                    gl_pool<gl_buffer> m_buffers;
-                    gl_pool<gl_texture> m_textures;
-                    gl_pool<gl_sampler> m_samplers;
-                    gl_pool<gl_shader_module> m_shader_modules;
-                    gl_pool<gl_bind_group_layout> m_bind_group_layouts;
-                    gl_pool<gl_pipeline> m_pipelines;
-                    gl_pool<gl_bind_group> m_bind_groups;
-                    gl_pool<gl_render_target> m_render_targets;
+    private:
+        gl_pool<gl_buffer> m_buffers;
+        gl_pool<gl_texture> m_textures;
+        gl_pool<gl_sampler> m_samplers;
+        gl_pool<gl_shader_module> m_shader_modules;
+        gl_pool<gl_bind_group_layout> m_bind_group_layouts;
+        gl_pool<gl_pipeline> m_pipelines;
+        gl_pool<gl_bind_group> m_bind_groups;
+        gl_pool<gl_render_target> m_render_targets;
 
-                    render_target m_swapchain{};
+        render_target m_swapchain{};
 
-                    bool m_initialised{false};
-                };
-            } // namespace opengl
-        } // namespace backend
-    } // namespace gpu
-} // namespace rendering_engine
+        bool m_initialised{false};
+    };
+} // namespace rendering_engine::gpu::backend::opengl

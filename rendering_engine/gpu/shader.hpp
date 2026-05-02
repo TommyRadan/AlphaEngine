@@ -35,43 +35,40 @@
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/gpu/types.hpp>
 
-namespace rendering_engine
+namespace rendering_engine::gpu
 {
-    namespace gpu
+    struct shader_module_descriptor
     {
-        struct shader_module_descriptor
-        {
-            shader_stage stage{shader_stage::vertex};
+        shader_stage stage{shader_stage::vertex};
 
-            // Source text, in whatever language the active backend
-            // accepts. The OpenGL backend takes GLSL #version 330 source
-            // verbatim. A future cross-backend pipeline (SPIR-V cross,
-            // glslang) would replace this string with a byte blob, but
-            // the descriptor shape stays the same.
-            std::string source;
-        };
+        // Source text, in whatever language the active backend
+        // accepts. The OpenGL backend takes GLSL #version 330 source
+        // verbatim. A future cross-backend pipeline (SPIR-V cross,
+        // glslang) would replace this string with a byte blob, but
+        // the descriptor shape stays the same.
+        std::string source;
+    };
 
-        // One attribute fed into the vertex shader. @ref location is the
-        // shader-side input slot (matches GLSL @c layout(location=N)).
-        // @ref components is the per-vertex element count (e.g. 3 for a
-        // @c vec3 position) and @ref type the scalar type of each
-        // component. @ref offset is the byte offset within the vertex
-        // record.
-        struct vertex_attribute
-        {
-            uint32_t location{0};
-            uint32_t components{0};
-            scalar_type type{scalar_type::float32};
-            uint32_t offset{0};
-        };
+    // One attribute fed into the vertex shader. @ref location is the
+    // shader-side input slot (matches GLSL @c layout(location=N)).
+    // @ref components is the per-vertex element count (e.g. 3 for a
+    // @c vec3 position) and @ref type the scalar type of each
+    // component. @ref offset is the byte offset within the vertex
+    // record.
+    struct vertex_attribute
+    {
+        uint32_t location{0};
+        uint32_t components{0};
+        scalar_type type{scalar_type::float32};
+        uint32_t offset{0};
+    };
 
-        // Layout of one vertex buffer slot fed into a pipeline. The
-        // pipeline references its layouts by index; the runtime
-        // @c set_vertex_buffer call binds a buffer to the same slot.
-        struct vertex_buffer_layout
-        {
-            uint32_t stride{0};
-            std::vector<vertex_attribute> attributes;
-        };
-    } // namespace gpu
-} // namespace rendering_engine
+    // Layout of one vertex buffer slot fed into a pipeline. The
+    // pipeline references its layouts by index; the runtime
+    // @c set_vertex_buffer call binds a buffer to the same slot.
+    struct vertex_buffer_layout
+    {
+        uint32_t stride{0};
+        std::vector<vertex_attribute> attributes;
+    };
+} // namespace rendering_engine::gpu

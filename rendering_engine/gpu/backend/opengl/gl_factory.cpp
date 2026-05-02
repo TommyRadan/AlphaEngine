@@ -26,19 +26,16 @@
 #include <rendering_engine/gpu/backend/opengl/gl_device.hpp>
 #include <rendering_engine/gpu/device.hpp>
 
-namespace rendering_engine
+namespace rendering_engine::gpu
 {
-    namespace gpu
+    std::unique_ptr<device> create_device(backend_type type)
     {
-        std::unique_ptr<device> create_device(backend_type type)
+        switch (type)
         {
-            switch (type)
-            {
-            case backend_type::opengl:
-                return std::make_unique<backend::opengl::gl_device>();
-            }
-            LOG_FTL("create_device: unknown backend_type");
-            throw std::runtime_error{"create_device: unknown backend_type"};
+        case backend_type::opengl:
+            return std::make_unique<backend::opengl::gl_device>();
         }
-    } // namespace gpu
-} // namespace rendering_engine
+        LOG_FTL("create_device: unknown backend_type");
+        throw std::runtime_error{"create_device: unknown backend_type"};
+    }
+} // namespace rendering_engine::gpu

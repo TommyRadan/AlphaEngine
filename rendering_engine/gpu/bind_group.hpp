@@ -46,67 +46,64 @@
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/gpu/types.hpp>
 
-namespace rendering_engine
+namespace rendering_engine::gpu
 {
-    namespace gpu
+    // What a single binding entry stores. Value kinds map to
+    // single-uniform writes on the GL backend; @c texture and
+    // @c sampler resolve to a texture-unit assignment.
+    enum class binding_kind
     {
-        // What a single binding entry stores. Value kinds map to
-        // single-uniform writes on the GL backend; @c texture and
-        // @c sampler resolve to a texture-unit assignment.
-        enum class binding_kind
-        {
-            float_value,
-            int_value,
-            vec2_value,
-            vec3_value,
-            vec4_value,
-            mat3_value,
-            mat4_value,
-            texture,
-            sampler,
-        };
+        float_value,
+        int_value,
+        vec2_value,
+        vec3_value,
+        vec4_value,
+        mat3_value,
+        mat4_value,
+        texture,
+        sampler,
+    };
 
-        // One slot in a layout. @ref name is the shader-side identifier
-        // the backend uses to resolve the slot at pipeline-create time
-        // (e.g. @c glGetUniformLocation for the GL backend). Once the
-        // pipeline is built, slot resolution is cached and string keys
-        // are not consulted again.
-        struct bind_group_layout_entry
-        {
-            uint32_t binding{0};
-            binding_kind kind{binding_kind::float_value};
-            std::string name;
-        };
+    // One slot in a layout. @ref name is the shader-side identifier
+    // the backend uses to resolve the slot at pipeline-create time
+    // (e.g. @c glGetUniformLocation for the GL backend). Once the
+    // pipeline is built, slot resolution is cached and string keys
+    // are not consulted again.
+    struct bind_group_layout_entry
+    {
+        uint32_t binding{0};
+        binding_kind kind{binding_kind::float_value};
+        std::string name;
+    };
 
-        struct bind_group_layout_descriptor
-        {
-            std::vector<bind_group_layout_entry> entries;
-        };
+    struct bind_group_layout_descriptor
+    {
+        std::vector<bind_group_layout_entry> entries;
+    };
 
-        // A concrete value for one binding slot. Only the field matching
-        // @ref kind is read. The non-active fields are present to keep
-        // the type a plain aggregate so call sites can use designated
-        // initializers without juggling a tagged union.
-        struct binding_value
-        {
-            uint32_t binding{0};
-            binding_kind kind{binding_kind::float_value};
+    // A concrete value for one binding slot. Only the field matching
+    // @ref kind is read. The non-active fields are present to keep
+    // the type a plain aggregate so call sites can use designated
+    // initializers without juggling a tagged union.
+    struct binding_value
+    {
+        uint32_t binding{0};
+        binding_kind kind{binding_kind::float_value};
 
-            float float_value{0.0f};
-            int int_value{0};
-            infrastructure::math::vec2 vec2_value{};
-            infrastructure::math::vec3 vec3_value{};
-            infrastructure::math::vec4 vec4_value{};
-            infrastructure::math::mat3 mat3_value{};
-            infrastructure::math::mat4 mat4_value{};
-            gpu::texture texture_value{};
-            gpu::sampler sampler_value{};
-        };
+        float float_value{0.0f};
+        int int_value{0};
+        infrastructure::math::vec2 vec2_value{};
+        infrastructure::math::vec3 vec3_value{};
+        infrastructure::math::vec4 vec4_value{};
+        infrastructure::math::mat3 mat3_value{};
+        infrastructure::math::mat4 mat4_value{};
+        gpu::texture texture_value{};
+        gpu::sampler sampler_value{};
+    };
 
-        struct bind_group_descriptor
-        {
-            bind_group_layout layout{};
-            std::vector<binding_value> entries;
-        };
-    } // namespace gpu
-} // namespace rendering_engine
+    struct bind_group_descriptor
+    {
+        bind_group_layout layout{};
+        std::vector<binding_value> entries;
+    };
+} // namespace rendering_engine::gpu

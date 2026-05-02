@@ -35,183 +35,173 @@
 #include <infrastructure/log.hpp>
 #include <rendering_engine/gpu/backend/opengl/gl_translate.hpp>
 
-namespace rendering_engine
+namespace rendering_engine::gpu::backend::opengl
 {
-    namespace gpu
+    namespace
     {
-        namespace backend
+        void apply_sampler_state(GLenum target,
+                                 const filter_mode min,
+                                 const filter_mode mag,
+                                 const mipmap_mode mip,
+                                 const address_mode u,
+                                 const address_mode v,
+                                 const address_mode w)
         {
-            namespace opengl
+            glTexParameteri(target, GL_TEXTURE_MIN_FILTER, to_gl_min_filter(min, mip));
+            glTexParameteri(target, GL_TEXTURE_MAG_FILTER, to_gl_mag_filter(mag));
+            glTexParameteri(target, GL_TEXTURE_WRAP_S, to_gl_address_mode(u));
+            glTexParameteri(target, GL_TEXTURE_WRAP_T, to_gl_address_mode(v));
+            glTexParameteri(target, GL_TEXTURE_WRAP_R, to_gl_address_mode(w));
+        }
+    } // namespace
+
+    texture gl_device::create_texture(const texture_descriptor& descriptor)
+    {
+        gl_texture record{};
+        record.target = descriptor.dimension == texture_dimension::cube ? GL_TEXTURE_CUBE_MAP : GL_TEXTURE_2D;
+        record.format = descriptor.format;
+        record.width = descriptor.width;
+        record.height = descriptor.height;
+        record.mipmaps = descriptor.mipmaps;
+
+        glGenTextures(1, &record.object_id);
+        glBindTexture(record.target, record.object_id);
+
+        apply_sampler_state(record.target,
+                            descriptor.min_filter,
+                            descriptor.mag_filter,
+                            descriptor.mipmap_filter,
+                            descriptor.address_u,
+                            descriptor.address_v,
+                            descriptor.address_w);
+
+        // Allocate storage. For 2D textures we allocate
+        // mip-0 directly via @c glTexImage2D with a null
+        // pointer; the caller fills it via
+        // @ref write_texture or @ref write_cube_face. For
+        // cube maps we allocate all six faces with null data
+        // so each face can be uploaded independently later.
+        const auto fmt = to_gl_texture_format(descriptor.format);
+        if (record.target == GL_TEXTURE_2D)
+        {
+            glTexImage2D(GL_TEXTURE_2D,
+                         0,
+                         fmt.internal_format,
+                         static_cast<GLsizei>(descriptor.width),
+                         static_cast<GLsizei>(descriptor.height),
+                         0,
+                         fmt.upload_format,
+                         fmt.upload_type,
+                         nullptr);
+        }
+        else
+        {
+            for (int face = 0; face < 6; ++face)
             {
-                namespace
-                {
-                    void apply_sampler_state(GLenum target,
-                                             const filter_mode min,
-                                             const filter_mode mag,
-                                             const mipmap_mode mip,
-                                             const address_mode u,
-                                             const address_mode v,
-                                             const address_mode w)
-                    {
-                        glTexParameteri(target, GL_TEXTURE_MIN_FILTER, to_gl_min_filter(min, mip));
-                        glTexParameteri(target, GL_TEXTURE_MAG_FILTER, to_gl_mag_filter(mag));
-                        glTexParameteri(target, GL_TEXTURE_WRAP_S, to_gl_address_mode(u));
-                        glTexParameteri(target, GL_TEXTURE_WRAP_T, to_gl_address_mode(v));
-                        glTexParameteri(target, GL_TEXTURE_WRAP_R, to_gl_address_mode(w));
-                    }
-                } // namespace
+                glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + face,
+                             0,
+                             fmt.internal_format,
+                             static_cast<GLsizei>(descriptor.width),
+                             static_cast<GLsizei>(descriptor.height),
+                             0,
+                             fmt.upload_format,
+                             fmt.upload_type,
+                             nullptr);
+            }
+        }
 
-                texture gl_device::create_texture(const texture_descriptor& descriptor)
-                {
-                    gl_texture record{};
-                    record.target =
-                        descriptor.dimension == texture_dimension::cube ? GL_TEXTURE_CUBE_MAP : GL_TEXTURE_2D;
-                    record.format = descriptor.format;
-                    record.width = descriptor.width;
-                    record.height = descriptor.height;
-                    record.mipmaps = descriptor.mipmaps;
+        glBindTexture(record.target, 0);
 
-                    glGenTextures(1, &record.object_id);
-                    glBindTexture(record.target, record.object_id);
+        texture h{};
+        h.id = m_textures.insert(record);
+        return h;
+    }
 
-                    apply_sampler_state(record.target,
-                                        descriptor.min_filter,
-                                        descriptor.mag_filter,
-                                        descriptor.mipmap_filter,
-                                        descriptor.address_u,
-                                        descriptor.address_v,
-                                        descriptor.address_w);
+    void gl_device::destroy(texture handle)
+    {
+        if (auto* record = m_textures.lookup(handle.id))
+        {
+            if (record->object_id != 0)
+            {
+                glDeleteTextures(1, &record->object_id);
+            }
+            m_textures.remove(handle.id);
+        }
+    }
 
-                    // Allocate storage. For 2D textures we allocate
-                    // mip-0 directly via @c glTexImage2D with a null
-                    // pointer; the caller fills it via
-                    // @ref write_texture or @ref write_cube_face. For
-                    // cube maps we allocate all six faces with null data
-                    // so each face can be uploaded independently later.
-                    const auto fmt = to_gl_texture_format(descriptor.format);
-                    if (record.target == GL_TEXTURE_2D)
-                    {
-                        glTexImage2D(GL_TEXTURE_2D,
-                                     0,
-                                     fmt.internal_format,
-                                     static_cast<GLsizei>(descriptor.width),
-                                     static_cast<GLsizei>(descriptor.height),
-                                     0,
-                                     fmt.upload_format,
-                                     fmt.upload_type,
-                                     nullptr);
-                    }
-                    else
-                    {
-                        for (int face = 0; face < 6; ++face)
-                        {
-                            glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + face,
-                                         0,
-                                         fmt.internal_format,
-                                         static_cast<GLsizei>(descriptor.width),
-                                         static_cast<GLsizei>(descriptor.height),
-                                         0,
-                                         fmt.upload_format,
-                                         fmt.upload_type,
-                                         nullptr);
-                        }
-                    }
+    void gl_device::write_texture(texture handle, const void* data, size_t /*size*/)
+    {
+        auto* record = m_textures.lookup(handle.id);
+        if (record == nullptr || record->object_id == 0 || record->target != GL_TEXTURE_2D)
+        {
+            LOG_WRN("write_texture: invalid 2D texture handle");
+            return;
+        }
+        const auto fmt = to_gl_texture_format(record->format);
+        glBindTexture(GL_TEXTURE_2D, record->object_id);
+        glTexSubImage2D(GL_TEXTURE_2D,
+                        0,
+                        0,
+                        0,
+                        static_cast<GLsizei>(record->width),
+                        static_cast<GLsizei>(record->height),
+                        fmt.upload_format,
+                        fmt.upload_type,
+                        data);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
 
-                    glBindTexture(record.target, 0);
+    void gl_device::write_cube_face(texture handle, cube_face face, const void* data, size_t /*size*/)
+    {
+        auto* record = m_textures.lookup(handle.id);
+        if (record == nullptr || record->object_id == 0 || record->target != GL_TEXTURE_CUBE_MAP)
+        {
+            LOG_WRN("write_cube_face: invalid cube texture handle");
+            return;
+        }
+        const auto fmt = to_gl_texture_format(record->format);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, record->object_id);
+        glTexSubImage2D(to_gl_cube_face(face),
+                        0,
+                        0,
+                        0,
+                        static_cast<GLsizei>(record->width),
+                        static_cast<GLsizei>(record->height),
+                        fmt.upload_format,
+                        fmt.upload_type,
+                        data);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+    }
 
-                    texture h{};
-                    h.id = m_textures.insert(record);
-                    return h;
-                }
+    void gl_device::generate_mipmaps(texture handle)
+    {
+        auto* record = m_textures.lookup(handle.id);
+        if (record == nullptr || record->object_id == 0)
+        {
+            return;
+        }
+        glBindTexture(record->target, record->object_id);
+        glGenerateMipmap(record->target);
+        glBindTexture(record->target, 0);
+    }
 
-                void gl_device::destroy(texture handle)
-                {
-                    if (auto* record = m_textures.lookup(handle.id))
-                    {
-                        if (record->object_id != 0)
-                        {
-                            glDeleteTextures(1, &record->object_id);
-                        }
-                        m_textures.remove(handle.id);
-                    }
-                }
+    sampler gl_device::create_sampler(const sampler_descriptor& descriptor)
+    {
+        // The GL backend currently expresses sampler state on
+        // the texture itself (set at create time via
+        // @c texture_descriptor). Stand-alone samplers exist
+        // in the API for forward-compatibility with explicit
+        // binding-model backends; on GL they are recorded
+        // here and treated as no-ops at bind time.
+        gl_sampler record{};
+        record.descriptor = descriptor;
+        sampler h{};
+        h.id = m_samplers.insert(record);
+        return h;
+    }
 
-                void gl_device::write_texture(texture handle, const void* data, size_t /*size*/)
-                {
-                    auto* record = m_textures.lookup(handle.id);
-                    if (record == nullptr || record->object_id == 0 || record->target != GL_TEXTURE_2D)
-                    {
-                        LOG_WRN("write_texture: invalid 2D texture handle");
-                        return;
-                    }
-                    const auto fmt = to_gl_texture_format(record->format);
-                    glBindTexture(GL_TEXTURE_2D, record->object_id);
-                    glTexSubImage2D(GL_TEXTURE_2D,
-                                    0,
-                                    0,
-                                    0,
-                                    static_cast<GLsizei>(record->width),
-                                    static_cast<GLsizei>(record->height),
-                                    fmt.upload_format,
-                                    fmt.upload_type,
-                                    data);
-                    glBindTexture(GL_TEXTURE_2D, 0);
-                }
-
-                void gl_device::write_cube_face(texture handle, cube_face face, const void* data, size_t /*size*/)
-                {
-                    auto* record = m_textures.lookup(handle.id);
-                    if (record == nullptr || record->object_id == 0 || record->target != GL_TEXTURE_CUBE_MAP)
-                    {
-                        LOG_WRN("write_cube_face: invalid cube texture handle");
-                        return;
-                    }
-                    const auto fmt = to_gl_texture_format(record->format);
-                    glBindTexture(GL_TEXTURE_CUBE_MAP, record->object_id);
-                    glTexSubImage2D(to_gl_cube_face(face),
-                                    0,
-                                    0,
-                                    0,
-                                    static_cast<GLsizei>(record->width),
-                                    static_cast<GLsizei>(record->height),
-                                    fmt.upload_format,
-                                    fmt.upload_type,
-                                    data);
-                    glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
-                }
-
-                void gl_device::generate_mipmaps(texture handle)
-                {
-                    auto* record = m_textures.lookup(handle.id);
-                    if (record == nullptr || record->object_id == 0)
-                    {
-                        return;
-                    }
-                    glBindTexture(record->target, record->object_id);
-                    glGenerateMipmap(record->target);
-                    glBindTexture(record->target, 0);
-                }
-
-                sampler gl_device::create_sampler(const sampler_descriptor& descriptor)
-                {
-                    // The GL backend currently expresses sampler state on
-                    // the texture itself (set at create time via
-                    // @c texture_descriptor). Stand-alone samplers exist
-                    // in the API for forward-compatibility with explicit
-                    // binding-model backends; on GL they are recorded
-                    // here and treated as no-ops at bind time.
-                    gl_sampler record{};
-                    record.descriptor = descriptor;
-                    sampler h{};
-                    h.id = m_samplers.insert(record);
-                    return h;
-                }
-
-                void gl_device::destroy(sampler handle)
-                {
-                    m_samplers.remove(handle.id);
-                }
-            } // namespace opengl
-        } // namespace backend
-    } // namespace gpu
-} // namespace rendering_engine
+    void gl_device::destroy(sampler handle)
+    {
+        m_samplers.remove(handle.id);
+    }
+} // namespace rendering_engine::gpu::backend::opengl

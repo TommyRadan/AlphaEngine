@@ -35,53 +35,50 @@
 #include <rendering_engine/gpu/shader.hpp>
 #include <rendering_engine/gpu/types.hpp>
 
-namespace rendering_engine
+namespace rendering_engine::gpu
 {
-    namespace gpu
+    struct blend_state
     {
-        struct blend_state
-        {
-            bool enabled{false};
-            blend_factor src{blend_factor::one};
-            blend_factor dst{blend_factor::zero};
-            blend_op op{blend_op::add};
-        };
+        bool enabled{false};
+        blend_factor src{blend_factor::one};
+        blend_factor dst{blend_factor::zero};
+        blend_op op{blend_op::add};
+    };
 
-        struct depth_state
-        {
-            bool test_enabled{true};
-            bool write_enabled{true};
-            compare_function compare{compare_function::less};
-        };
+    struct depth_state
+    {
+        bool test_enabled{true};
+        bool write_enabled{true};
+        compare_function compare{compare_function::less};
+    };
 
-        struct rasterizer_state
-        {
-            cull_mode cull{cull_mode::back};
-            front_face front{front_face::counter_clockwise};
-            polygon_mode polygon{polygon_mode::fill};
-        };
+    struct rasterizer_state
+    {
+        cull_mode cull{cull_mode::back};
+        front_face front{front_face::counter_clockwise};
+        polygon_mode polygon{polygon_mode::fill};
+    };
 
-        // Pipeline state object: every piece of GPU state that a
-        // backend can bake at create time lives here. Bound to a
-        // @c render_pass_encoder by handle; binding does not consult any
-        // string table.
-        struct pipeline_descriptor
-        {
-            shader_module vertex_shader{};
-            shader_module fragment_shader{};
-            shader_module geometry_shader{};
+    // Pipeline state object: every piece of GPU state that a
+    // backend can bake at create time lives here. Bound to a
+    // @c render_pass_encoder by handle; binding does not consult any
+    // string table.
+    struct pipeline_descriptor
+    {
+        shader_module vertex_shader{};
+        shader_module fragment_shader{};
+        shader_module geometry_shader{};
 
-            std::vector<vertex_buffer_layout> vertex_buffers;
+        std::vector<vertex_buffer_layout> vertex_buffers;
 
-            primitive_topology topology{primitive_topology::triangles};
-            blend_state blend;
-            depth_state depth;
-            rasterizer_state rasterizer;
+        primitive_topology topology{primitive_topology::triangles};
+        blend_state blend;
+        depth_state depth;
+        rasterizer_state rasterizer;
 
-            // Bind-group layouts referenced by this pipeline. The index
-            // into this vector is the slot number passed to
-            // @c render_pass_encoder::set_bind_group.
-            std::vector<bind_group_layout> bind_group_layouts;
-        };
-    } // namespace gpu
-} // namespace rendering_engine
+        // Bind-group layouts referenced by this pipeline. The index
+        // into this vector is the slot number passed to
+        // @c render_pass_encoder::set_bind_group.
+        std::vector<bind_group_layout> bind_group_layouts;
+    };
+} // namespace rendering_engine::gpu

@@ -44,87 +44,78 @@
 #include <rendering_engine/gpu/texture.hpp>
 #include <rendering_engine/gpu/types.hpp>
 
-namespace rendering_engine
+namespace rendering_engine::gpu::backend::opengl
 {
-    namespace gpu
+    struct gl_buffer
     {
-        namespace backend
-        {
-            namespace opengl
-            {
-                struct gl_buffer
-                {
-                    GLuint object_id{0};
-                    GLenum default_target{0}; // GL_ARRAY_BUFFER / _ELEMENT_ARRAY_BUFFER / _UNIFORM_BUFFER
-                    size_t size{0};
-                    buffer_usage usage{0};
-                };
+        GLuint object_id{0};
+        GLenum default_target{0}; // GL_ARRAY_BUFFER / _ELEMENT_ARRAY_BUFFER / _UNIFORM_BUFFER
+        size_t size{0};
+        buffer_usage usage{0};
+    };
 
-                struct gl_texture
-                {
-                    GLuint object_id{0};
-                    GLenum target{0}; // GL_TEXTURE_2D or GL_TEXTURE_CUBE_MAP
-                    texture_format format{texture_format::rgba8_unorm};
-                    uint32_t width{0};
-                    uint32_t height{0};
-                    bool mipmaps{false};
-                };
+    struct gl_texture
+    {
+        GLuint object_id{0};
+        GLenum target{0}; // GL_TEXTURE_2D or GL_TEXTURE_CUBE_MAP
+        texture_format format{texture_format::rgba8_unorm};
+        uint32_t width{0};
+        uint32_t height{0};
+        bool mipmaps{false};
+    };
 
-                struct gl_sampler
-                {
-                    // Stored sampler parameters; applied to the bound
-                    // texture at draw time. GL 3.3 doesn't require a
-                    // sampler object, so the backend just remembers the
-                    // settings here and reapplies via @c glTexParameteri.
-                    sampler_descriptor descriptor;
-                };
+    struct gl_sampler
+    {
+        // Stored sampler parameters; applied to the bound
+        // texture at draw time. GL 3.3 doesn't require a
+        // sampler object, so the backend just remembers the
+        // settings here and reapplies via @c glTexParameteri.
+        sampler_descriptor descriptor;
+    };
 
-                struct gl_shader_module
-                {
-                    GLuint object_id{0};
-                    shader_stage stage{shader_stage::vertex};
-                };
+    struct gl_shader_module
+    {
+        GLuint object_id{0};
+        shader_stage stage{shader_stage::vertex};
+    };
 
-                struct gl_bind_group_layout
-                {
-                    bind_group_layout_descriptor descriptor;
-                };
+    struct gl_bind_group_layout
+    {
+        bind_group_layout_descriptor descriptor;
+    };
 
-                struct gl_pipeline
-                {
-                    GLuint program_id{0};
-                    GLuint vao_id{0};
+    struct gl_pipeline
+    {
+        GLuint program_id{0};
+        GLuint vao_id{0};
 
-                    primitive_topology topology{primitive_topology::triangles};
-                    blend_state blend;
-                    depth_state depth;
-                    rasterizer_state rasterizer;
+        primitive_topology topology{primitive_topology::triangles};
+        blend_state blend;
+        depth_state depth;
+        rasterizer_state rasterizer;
 
-                    std::vector<vertex_buffer_layout> vertex_buffers;
-                    std::vector<bind_group_layout> bind_group_layouts;
+        std::vector<vertex_buffer_layout> vertex_buffers;
+        std::vector<bind_group_layout> bind_group_layouts;
 
-                    // Cached per-bind-group, per-binding uniform / texture-unit
-                    // assignment, indexed as cached_locations[group][slot_index].
-                    // For texture / sampler entries the value is a texture
-                    // unit ordinal; for value entries it is the GL uniform
-                    // location returned by @c glGetUniformLocation.
-                    std::vector<std::vector<GLint>> cached_locations;
-                };
+        // Cached per-bind-group, per-binding uniform / texture-unit
+        // assignment, indexed as cached_locations[group][slot_index].
+        // For texture / sampler entries the value is a texture
+        // unit ordinal; for value entries it is the GL uniform
+        // location returned by @c glGetUniformLocation.
+        std::vector<std::vector<GLint>> cached_locations;
+    };
 
-                struct gl_bind_group
-                {
-                    bind_group_layout layout{};
-                    std::vector<binding_value> entries;
-                };
+    struct gl_bind_group
+    {
+        bind_group_layout layout{};
+        std::vector<binding_value> entries;
+    };
 
-                struct gl_render_target
-                {
-                    GLuint framebuffer_id{0}; // 0 == default swapchain
-                    uint32_t width{0};
-                    uint32_t height{0};
-                    bool has_depth{true};
-                };
-            } // namespace opengl
-        } // namespace backend
-    } // namespace gpu
-} // namespace rendering_engine
+    struct gl_render_target
+    {
+        GLuint framebuffer_id{0}; // 0 == default swapchain
+        uint32_t width{0};
+        uint32_t height{0};
+        bool has_depth{true};
+    };
+} // namespace rendering_engine::gpu::backend::opengl

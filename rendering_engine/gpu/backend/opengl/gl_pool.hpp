@@ -37,111 +37,102 @@
 #include <utility>
 #include <vector>
 
-namespace rendering_engine
+namespace rendering_engine::gpu::backend::opengl
 {
-    namespace gpu
+    template<typename T>
+    class gl_pool
     {
-        namespace backend
+    public:
+        uint64_t insert(T value)
         {
-            namespace opengl
+            uint32_t slot = 0;
+            if (!m_free.empty())
             {
-                template<typename T>
-                class gl_pool
+                slot = m_free.back();
+                m_free.pop_back();
+                m_slots[slot] = std::move(value);
+                m_alive[slot] = true;
+            }
+            else
+            {
+                slot = static_cast<uint32_t>(m_slots.size());
+                m_slots.push_back(std::move(value));
+                m_generations.push_back(1);
+                m_alive.push_back(true);
+            }
+            const uint32_t gen = m_generations[slot];
+            return encode(slot, gen);
+        }
+
+        T* lookup(uint64_t encoded)
+        {
+            uint32_t slot = 0;
+            uint32_t gen = 0;
+            decode(encoded, slot, gen);
+            if (slot >= m_slots.size() || !m_alive[slot] || m_generations[slot] != gen)
+            {
+                return nullptr;
+            }
+            return &m_slots[slot];
+        }
+
+        bool remove(uint64_t encoded)
+        {
+            uint32_t slot = 0;
+            uint32_t gen = 0;
+            decode(encoded, slot, gen);
+            if (slot >= m_slots.size() || !m_alive[slot] || m_generations[slot] != gen)
+            {
+                return false;
+            }
+            m_alive[slot] = false;
+            m_generations[slot]++;
+            m_free.push_back(slot);
+            return true;
+        }
+
+        // Iterate live entries. Used during quit() to release
+        // any GL objects that callers leaked.
+        template<typename Fn>
+        void for_each(Fn&& fn)
+        {
+            for (size_t i = 0; i < m_slots.size(); ++i)
+            {
+                if (m_alive[i])
                 {
-                public:
-                    uint64_t insert(T value)
-                    {
-                        uint32_t slot = 0;
-                        if (!m_free.empty())
-                        {
-                            slot = m_free.back();
-                            m_free.pop_back();
-                            m_slots[slot] = std::move(value);
-                            m_alive[slot] = true;
-                        }
-                        else
-                        {
-                            slot = static_cast<uint32_t>(m_slots.size());
-                            m_slots.push_back(std::move(value));
-                            m_generations.push_back(1);
-                            m_alive.push_back(true);
-                        }
-                        const uint32_t gen = m_generations[slot];
-                        return encode(slot, gen);
-                    }
+                    fn(m_slots[i]);
+                }
+            }
+        }
 
-                    T* lookup(uint64_t encoded)
-                    {
-                        uint32_t slot = 0;
-                        uint32_t gen = 0;
-                        decode(encoded, slot, gen);
-                        if (slot >= m_slots.size() || !m_alive[slot] || m_generations[slot] != gen)
-                        {
-                            return nullptr;
-                        }
-                        return &m_slots[slot];
-                    }
+        void clear()
+        {
+            m_slots.clear();
+            m_generations.clear();
+            m_alive.clear();
+            m_free.clear();
+        }
 
-                    bool remove(uint64_t encoded)
-                    {
-                        uint32_t slot = 0;
-                        uint32_t gen = 0;
-                        decode(encoded, slot, gen);
-                        if (slot >= m_slots.size() || !m_alive[slot] || m_generations[slot] != gen)
-                        {
-                            return false;
-                        }
-                        m_alive[slot] = false;
-                        m_generations[slot]++;
-                        m_free.push_back(slot);
-                        return true;
-                    }
+    private:
+        static uint64_t encode(uint32_t slot, uint32_t gen)
+        {
+            return (static_cast<uint64_t>(gen) << 32) | static_cast<uint64_t>(slot + 1);
+        }
+        static void decode(uint64_t encoded, uint32_t& slot, uint32_t& gen)
+        {
+            if (encoded == 0)
+            {
+                slot = static_cast<uint32_t>(-1);
+                gen = 0;
+                return;
+            }
+            slot = static_cast<uint32_t>(encoded & 0xFFFFFFFFu) - 1;
+            gen = static_cast<uint32_t>(encoded >> 32);
+        }
 
-                    // Iterate live entries. Used during quit() to release
-                    // any GL objects that callers leaked.
-                    template<typename Fn>
-                    void for_each(Fn&& fn)
-                    {
-                        for (size_t i = 0; i < m_slots.size(); ++i)
-                        {
-                            if (m_alive[i])
-                            {
-                                fn(m_slots[i]);
-                            }
-                        }
-                    }
-
-                    void clear()
-                    {
-                        m_slots.clear();
-                        m_generations.clear();
-                        m_alive.clear();
-                        m_free.clear();
-                    }
-
-                private:
-                    static uint64_t encode(uint32_t slot, uint32_t gen)
-                    {
-                        return (static_cast<uint64_t>(gen) << 32) | static_cast<uint64_t>(slot + 1);
-                    }
-                    static void decode(uint64_t encoded, uint32_t& slot, uint32_t& gen)
-                    {
-                        if (encoded == 0)
-                        {
-                            slot = static_cast<uint32_t>(-1);
-                            gen = 0;
-                            return;
-                        }
-                        slot = static_cast<uint32_t>(encoded & 0xFFFFFFFFu) - 1;
-                        gen = static_cast<uint32_t>(encoded >> 32);
-                    }
-
-                    std::vector<T> m_slots;
-                    std::vector<uint32_t> m_generations;
-                    std::vector<bool> m_alive;
-                    std::vector<uint32_t> m_free;
-                };
-            } // namespace opengl
-        } // namespace backend
-    } // namespace gpu
-} // namespace rendering_engine
+        std::vector<T> m_slots;
+        std::vector<uint32_t> m_generations;
+        std::vector<bool> m_alive;
+        std::vector<uint32_t> m_free;
+    };
+} // namespace rendering_engine::gpu::backend::opengl
