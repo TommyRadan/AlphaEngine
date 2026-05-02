@@ -104,6 +104,7 @@ add_executable(AlphaEngine
 # Use C++ standard library
 if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
     target_compile_options(AlphaEngine PRIVATE -stdlib=libc++)
+    target_link_options(AlphaEngine PRIVATE -stdlib=libc++)
 endif()
 
 # SDL3 — fetched and built statically from source
