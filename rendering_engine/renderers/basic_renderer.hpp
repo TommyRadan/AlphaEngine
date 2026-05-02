@@ -24,26 +24,23 @@
 
 #include <rendering_engine/renderers/renderer.hpp>
 
-namespace rendering_engine
+namespace rendering_engine::renderers
 {
-    namespace renderers
+    // 3D scene renderer. Drives a position-only vertex stream
+    // through an MVP-transform vertex shader and a flat-white
+    // fragment shader. Per-frame bind group at slot 0 carries the
+    // camera @c viewMatrix and @c projectionMatrix; per-draw bind
+    // group at slot 1 carries the @c modelMatrix.
+    struct basic_renderer : public renderer
     {
-        // 3D scene renderer. Drives a position-only vertex stream
-        // through an MVP-transform vertex shader and a flat-white
-        // fragment shader. Per-frame bind group at slot 0 carries the
-        // camera @c viewMatrix and @c projectionMatrix; per-draw bind
-        // group at slot 1 carries the @c modelMatrix.
-        struct basic_renderer : public renderer
-        {
-            basic_renderer();
-            ~basic_renderer() override;
+        basic_renderer();
+        ~basic_renderer() override;
 
-            void begin(gpu::render_pass_encoder& encoder) override;
+        void begin(gpu::render_pass_encoder& encoder) override;
 
-        private:
-            // Cached frame bind group, refilled with the current
-            // camera's matrices in @ref begin and reused thereafter.
-            gpu::bind_group m_frame_bind_group{};
-        };
-    } // namespace renderers
-} // namespace rendering_engine
+    private:
+        // Cached frame bind group, refilled with the current
+        // camera's matrices in @ref begin and reused thereafter.
+        gpu::bind_group m_frame_bind_group{};
+    };
+} // namespace rendering_engine::renderers

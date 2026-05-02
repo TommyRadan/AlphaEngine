@@ -24,20 +24,17 @@
 
 #include <rendering_engine/renderers/renderer.hpp>
 
-namespace rendering_engine
+namespace rendering_engine::renderers
 {
-    namespace renderers
+    // 2D UI renderer. Drives a position+uv vertex stream through a
+    // pass-through vertex shader (positions are already in NDC) and
+    // a fragment shader that picks between a flat colour and a 2D
+    // texture sample. No per-frame bind group — all per-draw state
+    // (colour, texture, useTexture flag) flows through the per-draw
+    // bind group at slot 0.
+    struct overlay_renderer : public renderer
     {
-        // 2D UI renderer. Drives a position+uv vertex stream through a
-        // pass-through vertex shader (positions are already in NDC) and
-        // a fragment shader that picks between a flat colour and a 2D
-        // texture sample. No per-frame bind group — all per-draw state
-        // (colour, texture, useTexture flag) flows through the per-draw
-        // bind group at slot 0.
-        struct overlay_renderer : public renderer
-        {
-            overlay_renderer();
-            ~overlay_renderer() override;
-        };
-    } // namespace renderers
-} // namespace rendering_engine
+        overlay_renderer();
+        ~overlay_renderer() override;
+    };
+} // namespace rendering_engine::renderers

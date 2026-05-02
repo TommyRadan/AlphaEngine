@@ -32,45 +32,42 @@
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/gpu/types.hpp>
 
-namespace rendering_engine
+namespace rendering_engine::gpu
 {
-    namespace gpu
+    struct texture_descriptor
     {
-        struct texture_descriptor
-        {
-            texture_dimension dimension{texture_dimension::d2};
-            texture_format format{texture_format::rgba8_unorm};
-            uint32_t width{0};
-            uint32_t height{0};
+        texture_dimension dimension{texture_dimension::d2};
+        texture_format format{texture_format::rgba8_unorm};
+        uint32_t width{0};
+        uint32_t height{0};
 
-            // When true, the backend allocates a full mip chain and the
-            // caller may invoke @c device::generate_mipmaps after
-            // uploading the level-0 data. @c false leaves the texture
-            // single-mip.
-            bool mipmaps{false};
+        // When true, the backend allocates a full mip chain and the
+        // caller may invoke @c device::generate_mipmaps after
+        // uploading the level-0 data. @c false leaves the texture
+        // single-mip.
+        bool mipmaps{false};
 
-            // Per-texture sampler state. The GL backend bakes these via
-            // @c glTexParameteri at create time so a texture is fully
-            // configured by its descriptor; standalone @ref sampler
-            // resources are reserved for future explicit-binding-model
-            // backends and currently override per-texture state only on
-            // those backends.
-            filter_mode min_filter{filter_mode::linear};
-            filter_mode mag_filter{filter_mode::linear};
-            mipmap_mode mipmap_filter{mipmap_mode::none};
-            address_mode address_u{address_mode::repeat};
-            address_mode address_v{address_mode::repeat};
-            address_mode address_w{address_mode::repeat};
-        };
+        // Per-texture sampler state. The GL backend bakes these via
+        // @c glTexParameteri at create time so a texture is fully
+        // configured by its descriptor; standalone @ref sampler
+        // resources are reserved for future explicit-binding-model
+        // backends and currently override per-texture state only on
+        // those backends.
+        filter_mode min_filter{filter_mode::linear};
+        filter_mode mag_filter{filter_mode::linear};
+        mipmap_mode mipmap_filter{mipmap_mode::none};
+        address_mode address_u{address_mode::repeat};
+        address_mode address_v{address_mode::repeat};
+        address_mode address_w{address_mode::repeat};
+    };
 
-        struct sampler_descriptor
-        {
-            filter_mode min_filter{filter_mode::linear};
-            filter_mode mag_filter{filter_mode::linear};
-            mipmap_mode mipmap{mipmap_mode::none};
-            address_mode address_u{address_mode::repeat};
-            address_mode address_v{address_mode::repeat};
-            address_mode address_w{address_mode::repeat};
-        };
-    } // namespace gpu
-} // namespace rendering_engine
+    struct sampler_descriptor
+    {
+        filter_mode min_filter{filter_mode::linear};
+        filter_mode mag_filter{filter_mode::linear};
+        mipmap_mode mipmap{mipmap_mode::none};
+        address_mode address_u{address_mode::repeat};
+        address_mode address_v{address_mode::repeat};
+        address_mode address_w{address_mode::repeat};
+    };
+} // namespace rendering_engine::gpu

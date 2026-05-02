@@ -32,13 +32,10 @@
 
 #pragma once
 
-namespace rendering_engine
+namespace rendering_engine::gpu
 {
-    namespace gpu
-    {
-        struct render_pass_encoder;
-    }
-} // namespace rendering_engine
+    struct render_pass_encoder;
+}
 
 namespace event_engine
 {

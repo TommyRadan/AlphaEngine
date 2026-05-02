@@ -33,43 +33,34 @@
 
 #include <rendering_engine/gpu/types.hpp>
 
-namespace rendering_engine
+namespace rendering_engine::gpu::backend::opengl
 {
-    namespace gpu
+    GLenum to_gl_primitive(primitive_topology topology);
+    GLenum to_gl_blend_factor(blend_factor factor);
+    GLenum to_gl_blend_op(blend_op op);
+    GLenum to_gl_compare(compare_function fn);
+    GLenum to_gl_cull_face(cull_mode mode);
+    GLenum to_gl_front_face(front_face face);
+    GLenum to_gl_polygon_mode(polygon_mode mode);
+    GLenum to_gl_address_mode(address_mode mode);
+    GLenum to_gl_min_filter(filter_mode min, mipmap_mode mip);
+    GLenum to_gl_mag_filter(filter_mode mag);
+    GLenum to_gl_shader_stage(shader_stage stage);
+    GLenum to_gl_index_type(index_format format);
+    GLenum to_gl_scalar(scalar_type type);
+    GLenum to_gl_buffer_usage_hint(buffer_usage_hint hint);
+    GLenum to_gl_cube_face(cube_face face);
+
+    // For a texture create: returns the @c (internal_format,
+    // upload_format, upload_type) triple suitable for
+    // @c glTexImage2D. The internal format is what the GPU
+    // stores; the upload format/type describe @c data.
+    struct gl_texture_format
     {
-        namespace backend
-        {
-            namespace opengl
-            {
-                GLenum to_gl_primitive(primitive_topology topology);
-                GLenum to_gl_blend_factor(blend_factor factor);
-                GLenum to_gl_blend_op(blend_op op);
-                GLenum to_gl_compare(compare_function fn);
-                GLenum to_gl_cull_face(cull_mode mode);
-                GLenum to_gl_front_face(front_face face);
-                GLenum to_gl_polygon_mode(polygon_mode mode);
-                GLenum to_gl_address_mode(address_mode mode);
-                GLenum to_gl_min_filter(filter_mode min, mipmap_mode mip);
-                GLenum to_gl_mag_filter(filter_mode mag);
-                GLenum to_gl_shader_stage(shader_stage stage);
-                GLenum to_gl_index_type(index_format format);
-                GLenum to_gl_scalar(scalar_type type);
-                GLenum to_gl_buffer_usage_hint(buffer_usage_hint hint);
-                GLenum to_gl_cube_face(cube_face face);
+        GLint internal_format;
+        GLenum upload_format;
+        GLenum upload_type;
+    };
 
-                // For a texture create: returns the @c (internal_format,
-                // upload_format, upload_type) triple suitable for
-                // @c glTexImage2D. The internal format is what the GPU
-                // stores; the upload format/type describe @c data.
-                struct gl_texture_format
-                {
-                    GLint internal_format;
-                    GLenum upload_format;
-                    GLenum upload_type;
-                };
-
-                gl_texture_format to_gl_texture_format(texture_format format);
-            } // namespace opengl
-        } // namespace backend
-    } // namespace gpu
-} // namespace rendering_engine
+    gl_texture_format to_gl_texture_format(texture_format format);
+} // namespace rendering_engine::gpu::backend::opengl

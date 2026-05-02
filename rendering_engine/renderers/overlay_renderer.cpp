@@ -58,44 +58,41 @@ namespace
 )fs";
 } // namespace
 
-namespace rendering_engine
+namespace rendering_engine::renderers
 {
-    namespace renderers
+    overlay_renderer::overlay_renderer()
     {
-        overlay_renderer::overlay_renderer()
-        {
-            gpu::vertex_buffer_layout vertex_layout{};
-            vertex_layout.stride = 0; // panes use vertex_position_uv = 20 bytes; supplied per draw
-            vertex_layout.attributes.push_back({0, 3, gpu::scalar_type::float32, 0});
-            vertex_layout.attributes.push_back({1, 2, gpu::scalar_type::float32, sizeof(float) * 3});
+        gpu::vertex_buffer_layout vertex_layout{};
+        vertex_layout.stride = 0; // panes use vertex_position_uv = 20 bytes; supplied per draw
+        vertex_layout.attributes.push_back({0, 3, gpu::scalar_type::float32, 0});
+        vertex_layout.attributes.push_back({1, 2, gpu::scalar_type::float32, sizeof(float) * 3});
 
-            gpu::bind_group_layout_descriptor draw_layout{};
-            draw_layout.entries.push_back({0, gpu::binding_kind::float_value, "useTexture"});
-            draw_layout.entries.push_back({1, gpu::binding_kind::vec4_value, "color"});
-            draw_layout.entries.push_back({2, gpu::binding_kind::texture, "tex"});
+        gpu::bind_group_layout_descriptor draw_layout{};
+        draw_layout.entries.push_back({0, gpu::binding_kind::float_value, "useTexture"});
+        draw_layout.entries.push_back({1, gpu::binding_kind::vec4_value, "color"});
+        draw_layout.entries.push_back({2, gpu::binding_kind::texture, "tex"});
 
-            // Overlay pass disables depth testing entirely so 2D
-            // elements draw in submission order; depth writes also
-            // stay off so the overlay never trashes the scene's depth
-            // buffer.
-            gpu::depth_state depth{};
-            depth.test_enabled = false;
-            depth.write_enabled = false;
-            depth.compare = gpu::compare_function::always;
+        // Overlay pass disables depth testing entirely so 2D
+        // elements draw in submission order; depth writes also
+        // stay off so the overlay never trashes the scene's depth
+        // buffer.
+        gpu::depth_state depth{};
+        depth.test_enabled = false;
+        depth.write_enabled = false;
+        depth.compare = gpu::compare_function::always;
 
-            gpu::blend_state blend{};
-            blend.enabled = true;
-            blend.src = gpu::blend_factor::src_alpha;
-            blend.dst = gpu::blend_factor::one_minus_src_alpha;
+        gpu::blend_state blend{};
+        blend.enabled = true;
+        blend.src = gpu::blend_factor::src_alpha;
+        blend.dst = gpu::blend_factor::one_minus_src_alpha;
 
-            gpu::rasterizer_state rasterizer{};
-            rasterizer.cull = gpu::cull_mode::none;
-            rasterizer.front = gpu::front_face::counter_clockwise;
+        gpu::rasterizer_state rasterizer{};
+        rasterizer.cull = gpu::cull_mode::none;
+        rasterizer.front = gpu::front_face::counter_clockwise;
 
-            construct_pipeline(
-                vertex_shader, fragment_shader, vertex_layout, draw_layout, nullptr, depth, blend, rasterizer);
-        }
+        construct_pipeline(
+            vertex_shader, fragment_shader, vertex_layout, draw_layout, nullptr, depth, blend, rasterizer);
+    }
 
-        overlay_renderer::~overlay_renderer() = default;
-    } // namespace renderers
-} // namespace rendering_engine
+    overlay_renderer::~overlay_renderer() = default;
+} // namespace rendering_engine::renderers

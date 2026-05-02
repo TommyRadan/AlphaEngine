@@ -37,49 +37,46 @@
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/gpu/types.hpp>
 
-namespace rendering_engine
+namespace rendering_engine::gpu
 {
-    namespace gpu
+    struct render_target_descriptor
     {
-        struct render_target_descriptor
-        {
-            // Color attachment format and dimensions. For the swapchain
-            // these come from the window; for offscreen targets the
-            // caller fills them in.
-            texture_format color_format{texture_format::rgba8_unorm};
-            uint32_t width{0};
-            uint32_t height{0};
+        // Color attachment format and dimensions. For the swapchain
+        // these come from the window; for offscreen targets the
+        // caller fills them in.
+        texture_format color_format{texture_format::rgba8_unorm};
+        uint32_t width{0};
+        uint32_t height{0};
 
-            // Whether the target needs a depth attachment. The format
-            // defaults to a 24-bit depth buffer to match the existing
-            // swapchain configuration.
-            bool with_depth{true};
-            texture_format depth_format{texture_format::depth24};
-        };
+        // Whether the target needs a depth attachment. The format
+        // defaults to a 24-bit depth buffer to match the existing
+        // swapchain configuration.
+        bool with_depth{true};
+        texture_format depth_format{texture_format::depth24};
+    };
 
-        struct color_attachment_op
-        {
-            load_op load{load_op::clear};
-            store_op store{store_op::store};
-            std::array<float, 4> clear_color{0.0f, 0.0f, 0.0f, 1.0f};
-        };
+    struct color_attachment_op
+    {
+        load_op load{load_op::clear};
+        store_op store{store_op::store};
+        std::array<float, 4> clear_color{0.0f, 0.0f, 0.0f, 1.0f};
+    };
 
-        struct depth_attachment_op
-        {
-            load_op load{load_op::clear};
-            store_op store{store_op::store};
-            float clear_depth{1.0f};
-        };
+    struct depth_attachment_op
+    {
+        load_op load{load_op::clear};
+        store_op store{store_op::store};
+        float clear_depth{1.0f};
+    };
 
-        struct render_pass_descriptor
-        {
-            render_target target{};
-            color_attachment_op color;
-            depth_attachment_op depth;
+    struct render_pass_descriptor
+    {
+        render_target target{};
+        color_attachment_op color;
+        depth_attachment_op depth;
 
-            // When false the pass skips depth state changes regardless
-            // of the target's depth attachment (e.g. UI overlay pass).
-            bool use_depth{true};
-        };
-    } // namespace gpu
-} // namespace rendering_engine
+        // When false the pass skips depth state changes regardless
+        // of the target's depth attachment (e.g. UI overlay pass).
+        bool use_depth{true};
+    };
+} // namespace rendering_engine::gpu
