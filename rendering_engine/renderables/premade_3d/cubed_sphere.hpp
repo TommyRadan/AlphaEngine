@@ -22,43 +22,43 @@
 
 #pragma once
 
+#include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
-
-#include <rendering_engine/opengl/opengl.hpp>
 #include <rendering_engine/util/transform.hpp>
 
 namespace rendering_engine
 {
-    // Cubed sphere ("quad sphere"): six face grids of NxN quads, each vertex
-    // pushed out to the unit sphere. Eliminates the pole pinch of a UV sphere
-    // — there is no preferred axis, only six face patches that meet at the
-    // cube's corners with bounded distortion (~1.4x at corners). Pairs
-    // naturally with cube-map textures, which are sampled by the surface
-    // normal and are also free of the polar singularity.
-    //
-    // Vertex layout is the same `vertex_position_uv_normal` used by the UV
-    // sphere — UVs here are face-local [0,1] coords, but most cube-map
-    // workflows ignore them and sample with the world-space normal instead.
+    // Cubed sphere ("quad sphere"): six face grids of NxN quads, each
+    // vertex pushed out to the unit sphere. Eliminates the pole pinch
+    // of a UV sphere — there is no preferred axis, only six face
+    // patches that meet at the cube's corners with bounded distortion
+    // (~1.4x at corners). Pairs naturally with cube-map textures, which
+    // are sampled by the surface normal and are also free of the polar
+    // singularity.
     struct cubed_sphere : public renderable
     {
-        // @p subdivisions is the per-face grid resolution (NxN quads). Total
-        // mesh has 6*subdivisions*subdivisions quads = 12*N*N triangles.
+        // @p subdivisions is the per-face grid resolution (NxN quads).
+        // Total mesh has 6*subdivisions*subdivisions quads = 12*N*N
+        // triangles.
         cubed_sphere(unsigned int subdivisions = 32);
+        ~cubed_sphere() override;
 
         rendering_engine::util::transform transform;
 
         void upload() final;
-        void render() final;
+        void render(gpu::render_pass_encoder& encoder) final;
 
-        const opengl::vertex_array& get_vao() const;
+        gpu::buffer get_vertex_buffer() const;
+        gpu::buffer get_index_buffer() const;
         unsigned int get_index_count() const;
 
     private:
         unsigned int m_subdivisions;
-        unsigned int m_index_count;
+        unsigned int m_index_count{0};
+        uint32_t m_vertex_stride{0};
 
-        opengl::vertex_array* m_vertex_array_object;
-        opengl::vertex_buffer* m_vertex_buffer_object;
-        opengl::vertex_buffer* m_index_buffer_object;
+        gpu::buffer m_vertex_buffer{};
+        gpu::buffer m_index_buffer{};
+        gpu::bind_group m_draw_bind_group{};
     };
 } // namespace rendering_engine

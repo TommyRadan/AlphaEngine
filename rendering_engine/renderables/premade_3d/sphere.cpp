@@ -20,20 +20,37 @@
  * SOFTWARE.
  */
 
+#include <rendering_engine/renderables/premade_3d/sphere.hpp>
+
 #include <cmath>
 #include <vector>
 
 #include <control/engine.hpp>
 #include <infrastructure/log.hpp>
+#include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/mesh/vertex.hpp>
-#include <rendering_engine/renderables/premade_3d/sphere.hpp>
 #include <rendering_engine/renderers/renderer.hpp>
-#include <rendering_engine/rendering_engine.hpp>
 
-rendering_engine::sphere::sphere(unsigned int stacks, unsigned int slices)
-    : m_stacks{stacks}, m_slices{slices}, m_index_count{0}, m_vertex_array_object{nullptr},
-      m_vertex_buffer_object{nullptr}, m_index_buffer_object{nullptr}
+rendering_engine::sphere::sphere(unsigned int stacks, unsigned int slices) : m_stacks{stacks}, m_slices{slices} {}
+
+rendering_engine::sphere::~sphere()
 {
+    auto& gpu = *control::current_engine().gpu;
+    if (m_draw_bind_group.valid())
+    {
+        gpu.destroy(m_draw_bind_group);
+        m_draw_bind_group = {};
+    }
+    if (m_index_buffer.valid())
+    {
+        gpu.destroy(m_index_buffer);
+        m_index_buffer = {};
+    }
+    if (m_vertex_buffer.valid())
+    {
+        gpu.destroy(m_vertex_buffer);
+        m_vertex_buffer = {};
+    }
 }
 
 void rendering_engine::sphere::upload()
@@ -81,8 +98,9 @@ void rendering_engine::sphere::upload()
             const uint32_t d = c + 1;
 
             // CCW winding when viewed from outside the sphere — going
-            // top-left -> bottom-left -> bottom-right traces a CCW loop in
-            // screen space when the outward normal points toward the camera.
+            // top-left -> bottom-left -> bottom-right traces a CCW loop
+            // in screen space when the outward normal points toward
+            // the camera.
             indices.push_back(a);
             indices.push_back(c);
             indices.push_back(d);
@@ -94,75 +112,75 @@ void rendering_engine::sphere::upload()
     }
 
     m_index_count = static_cast<unsigned int>(indices.size());
+    m_vertex_stride = sizeof(vertex_position_uv_normal);
 
-    auto& gl = *control::current_engine().opengl;
+    auto& gpu = *control::current_engine().gpu;
 
-    // Order matters: create + bind the VAO before uploading the index buffer.
-    // vertex_buffer::element_data binds GL_ELEMENT_ARRAY_BUFFER, which is
-    // tracked as VAO state — if no VAO is bound (or the wrong one is bound),
-    // the binding either gets lost or, worse, corrupts a previously created
-    // sphere's VAO. Creating + binding our own VAO first guarantees the
-    // element buffer ends up associated with this sphere's VAO and nothing
-    // else is touched.
-    m_vertex_buffer_object = gl.create_vbo();
-    m_vertex_buffer_object->data(vertices.data(),
-                                 vertices.size() * sizeof(vertex_position_uv_normal),
-                                 rendering_engine::opengl::buffer_usage::static_draw);
+    gpu::buffer_descriptor vertex_descriptor{};
+    vertex_descriptor.size = vertices.size() * sizeof(vertex_position_uv_normal);
+    vertex_descriptor.usage = gpu::buffer_usage_vertex;
+    vertex_descriptor.hint = gpu::buffer_usage_hint::static_data;
+    vertex_descriptor.initial_data = vertices.data();
+    m_vertex_buffer = gpu.create_buffer(vertex_descriptor);
 
-    m_vertex_array_object = gl.create_vao();
-    m_vertex_array_object->bind_attribute(
-        0, *m_vertex_buffer_object, rendering_engine::opengl::type::Float, 3, sizeof(vertex_position_uv_normal), 0);
-    m_vertex_array_object->bind_attribute(1,
-                                          *m_vertex_buffer_object,
-                                          rendering_engine::opengl::type::Float,
-                                          2,
-                                          sizeof(vertex_position_uv_normal),
-                                          sizeof(infrastructure::math::vec3));
-    m_vertex_array_object->bind_attribute(2,
-                                          *m_vertex_buffer_object,
-                                          rendering_engine::opengl::type::Float,
-                                          3,
-                                          sizeof(vertex_position_uv_normal),
-                                          sizeof(infrastructure::math::vec3) + sizeof(infrastructure::math::vec2));
-
-    // VAO is bound now — element_data's glBindBuffer(GL_ELEMENT_ARRAY_BUFFER)
-    // will be captured into this VAO's state. bind_elements then re-asserts
-    // it (cheap, and makes intent explicit).
-    m_index_buffer_object = gl.create_vbo();
-    m_index_buffer_object->element_data(
-        indices.data(), indices.size() * sizeof(uint32_t), rendering_engine::opengl::buffer_usage::static_draw);
-    m_vertex_array_object->bind_elements(*m_index_buffer_object);
-
-    // Some GL drivers don't commit a freshly configured VAO's state to its
-    // saved state until the VAO is unbound at least once — without this,
-    // the very first draw of this VAO fails silently (no fragments) until
-    // something else binds and unbinds another VAO first.
-    gl.unbind_vao();
+    gpu::buffer_descriptor index_descriptor{};
+    index_descriptor.size = indices.size() * sizeof(uint32_t);
+    index_descriptor.usage = gpu::buffer_usage_index;
+    index_descriptor.hint = gpu::buffer_usage_hint::static_data;
+    index_descriptor.initial_data = indices.data();
+    m_index_buffer = gpu.create_buffer(index_descriptor);
 }
 
-void rendering_engine::sphere::render()
+void rendering_engine::sphere::render(gpu::render_pass_encoder& encoder)
 {
-    renderer* current_renderer{rendering_engine::renderer::get_current_renderer()};
-
-    if (!current_renderer)
+    auto* renderer = rendering_engine::renderer::get_current_renderer();
+    if (renderer == nullptr)
     {
         LOG_WRN("Attempted to render sphere without renderer attached");
         return;
     }
+    if (!m_vertex_buffer.valid() || !m_index_buffer.valid())
+    {
+        LOG_WRN("sphere::render: renderable not uploaded");
+        return;
+    }
 
-    current_renderer->upload_matrix4("modelMatrix", this->transform.get_transform_matrix());
-    current_renderer->setup_options(options);
+    auto& gpu = *control::current_engine().gpu;
 
-    control::current_engine().opengl->draw_elements(*m_vertex_array_object,
-                                                    rendering_engine::opengl::primitive::triangles,
-                                                    0,
-                                                    m_index_count,
-                                                    rendering_engine::opengl::type::unsigned_int);
+    if (!m_draw_bind_group.valid())
+    {
+        gpu::bind_group_descriptor bg_descriptor{};
+        bg_descriptor.layout = renderer->draw_bind_group_layout();
+        gpu::binding_value model_slot{};
+        model_slot.binding = 0;
+        model_slot.kind = gpu::binding_kind::mat4_value;
+        bg_descriptor.entries.push_back(model_slot);
+        m_draw_bind_group = gpu.create_bind_group(bg_descriptor);
+    }
+
+    std::vector<gpu::binding_value> entries;
+    entries.reserve(1);
+    gpu::binding_value model_slot{};
+    model_slot.binding = 0;
+    model_slot.kind = gpu::binding_kind::mat4_value;
+    model_slot.mat4_value = transform.get_transform_matrix();
+    entries.push_back(model_slot);
+    gpu.update_bind_group(m_draw_bind_group, entries);
+
+    encoder.set_vertex_buffer(0, m_vertex_buffer, 0, m_vertex_stride);
+    encoder.set_index_buffer(m_index_buffer, gpu::index_format::uint32);
+    encoder.set_bind_group(renderer->draw_bind_group_slot(), m_draw_bind_group);
+    encoder.draw_indexed(m_index_count, 0);
 }
 
-const rendering_engine::opengl::vertex_array& rendering_engine::sphere::get_vao() const
+rendering_engine::gpu::buffer rendering_engine::sphere::get_vertex_buffer() const
 {
-    return *m_vertex_array_object;
+    return m_vertex_buffer;
+}
+
+rendering_engine::gpu::buffer rendering_engine::sphere::get_index_buffer() const
+{
+    return m_index_buffer;
 }
 
 unsigned int rendering_engine::sphere::get_index_count() const

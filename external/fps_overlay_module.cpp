@@ -93,11 +93,11 @@ static void on_frame(const event_engine::frame& event)
 
 static void on_render_ui(const event_engine::render_ui& event)
 {
-    if (!fps_label)
+    if (!fps_label || event.encoder == nullptr)
     {
         return;
     }
-    fps_label->render();
+    fps_label->render(*event.encoder);
 }
 
 GAME_MODULE()

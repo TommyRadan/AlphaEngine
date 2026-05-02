@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2015-2019 Tomislav Radanovic
+ * Copyright (c) 2015-2026 Tomislav Radanovic
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -22,7 +22,11 @@
 
 #include <rendering_engine/renderers/overlay_renderer.hpp>
 
-static std::string vertex_shader = R"vs(
+#include <string>
+
+namespace
+{
+    const std::string vertex_shader = R"vs(
         #version 330
 
         layout(location=0) in vec3 position;
@@ -37,13 +41,13 @@ static std::string vertex_shader = R"vs(
         }
 )vs";
 
-static std::string fragment_shader = R"fs(
+    const std::string fragment_shader = R"fs(
         #version 330
 
         out vec4 fragColor;
         in vec2 texCoord;
 
-        uniform float useTexture = 0.0;
+        uniform float useTexture;
         uniform vec4 color;
         uniform sampler2D tex;
 
@@ -52,13 +56,46 @@ static std::string fragment_shader = R"fs(
             fragColor = (useTexture != 0.0) ? texture(tex, vec2(texCoord.x, 1.0 - texCoord.y)) : color;
         }
 )fs";
+} // namespace
 
-rendering_engine::renderers::overlay_renderer::overlay_renderer() : renderer{}
+namespace rendering_engine
 {
-    construct_program(vertex_shader, fragment_shader);
-}
+    namespace renderers
+    {
+        overlay_renderer::overlay_renderer()
+        {
+            gpu::vertex_buffer_layout vertex_layout{};
+            vertex_layout.stride = 0; // panes use vertex_position_uv = 20 bytes; supplied per draw
+            vertex_layout.attributes.push_back({0, 3, gpu::scalar_type::float32, 0});
+            vertex_layout.attributes.push_back({1, 2, gpu::scalar_type::float32, sizeof(float) * 3});
 
-rendering_engine::renderers::overlay_renderer::~overlay_renderer()
-{
-    destruct_program();
-}
+            gpu::bind_group_layout_descriptor draw_layout{};
+            draw_layout.entries.push_back({0, gpu::binding_kind::float_value, "useTexture"});
+            draw_layout.entries.push_back({1, gpu::binding_kind::vec4_value, "color"});
+            draw_layout.entries.push_back({2, gpu::binding_kind::texture, "tex"});
+
+            // Overlay pass disables depth testing entirely so 2D
+            // elements draw in submission order; depth writes also
+            // stay off so the overlay never trashes the scene's depth
+            // buffer.
+            gpu::depth_state depth{};
+            depth.test_enabled = false;
+            depth.write_enabled = false;
+            depth.compare = gpu::compare_function::always;
+
+            gpu::blend_state blend{};
+            blend.enabled = true;
+            blend.src = gpu::blend_factor::src_alpha;
+            blend.dst = gpu::blend_factor::one_minus_src_alpha;
+
+            gpu::rasterizer_state rasterizer{};
+            rasterizer.cull = gpu::cull_mode::none;
+            rasterizer.front = gpu::front_face::counter_clockwise;
+
+            construct_pipeline(
+                vertex_shader, fragment_shader, vertex_layout, draw_layout, nullptr, depth, blend, rasterizer);
+        }
+
+        overlay_renderer::~overlay_renderer() = default;
+    } // namespace renderers
+} // namespace rendering_engine

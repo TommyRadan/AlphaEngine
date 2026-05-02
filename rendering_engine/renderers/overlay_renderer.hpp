@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2015-2019 Tomislav Radanovic
+ * Copyright (c) 2015-2026 Tomislav Radanovic
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -28,11 +28,16 @@ namespace rendering_engine
 {
     namespace renderers
     {
+        // 2D UI renderer. Drives a position+uv vertex stream through a
+        // pass-through vertex shader (positions are already in NDC) and
+        // a fragment shader that picks between a flat colour and a 2D
+        // texture sample. No per-frame bind group — all per-draw state
+        // (colour, texture, useTexture flag) flows through the per-draw
+        // bind group at slot 0.
         struct overlay_renderer : public renderer
         {
             overlay_renderer();
-
-            ~overlay_renderer();
+            ~overlay_renderer() override;
         };
     } // namespace renderers
 } // namespace rendering_engine

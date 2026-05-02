@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2015-2019 Tomislav Radanovic
+ * Copyright (c) 2015-2026 Tomislav Radanovic
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -31,7 +31,7 @@ namespace rendering_engine
         infrastructure::math::vec3 pos;
     };
 
-    struct vertex_postion_color
+    struct vertex_position_color
     {
         infrastructure::math::vec3 pos;
         infrastructure::math::vec3 color;
@@ -43,7 +43,7 @@ namespace rendering_engine
         infrastructure::math::vec2 uv;
     };
 
-    struct vertex_postion_normal
+    struct vertex_position_normal
     {
         infrastructure::math::vec3 pos;
         infrastructure::math::vec3 normal;

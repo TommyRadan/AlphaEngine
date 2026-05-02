@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2015-2019 Tomislav Radanovic
+ * Copyright (c) 2015-2026 Tomislav Radanovic
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -22,61 +22,89 @@
 
 #pragma once
 
-#include <memory>
 #include <string>
 
-#include <infrastructure/math/math.hpp>
-#include <rendering_engine/renderers/render_options.hpp>
+#include <rendering_engine/gpu/bind_group.hpp>
+#include <rendering_engine/gpu/command_encoder.hpp>
+#include <rendering_engine/gpu/handle.hpp>
+#include <rendering_engine/gpu/pipeline.hpp>
+#include <rendering_engine/gpu/shader.hpp>
 
 namespace rendering_engine
 {
-    namespace opengl
+    namespace renderers
     {
-        class shader;
-        class program;
-    } // namespace opengl
+        // Common base for the engine's built-in renderers. Holds one
+        // pipeline plus the bind-group layouts that pipeline references.
+        // The frame driver in @c rendering_engine::context::render
+        // calls @ref begin to set the pipeline (and any per-frame bind
+        // group) on the active pass encoder, broadcasts the appropriate
+        // render event so renderables record draws against the encoder,
+        // then calls @ref end.
+        struct renderer
+        {
+            virtual ~renderer();
 
-    struct shader_deleter
-    {
-        void operator()(opengl::shader* s) const noexcept;
-    };
+            gpu::pipeline pipeline_handle() const
+            {
+                return m_pipeline;
+            }
 
-    struct program_deleter
-    {
-        void operator()(opengl::program* p) const noexcept;
-    };
+            // The bind-group layout for per-draw resources (model
+            // matrix, textures, options). Renderables build a fresh
+            // @c gpu::bind_group against this layout each frame and
+            // bind it at slot @ref draw_bind_group_slot.
+            gpu::bind_group_layout draw_bind_group_layout() const
+            {
+                return m_draw_layout;
+            }
 
-    struct renderer
-    {
-        void start_renderer();
-        void stop_renderer();
+            // Slot index used by the per-draw bind group when the
+            // renderer also has a per-frame bind group at slot 0.
+            uint32_t draw_bind_group_slot() const
+            {
+                return m_frame_layout.valid() ? 1u : 0u;
+            }
 
-        // Non-owning: points to the currently attached renderer, or nullptr.
-        static renderer* get_current_renderer();
+            // Bind the renderer's pipeline on @p encoder. Derived
+            // renderers also populate and bind their per-frame bind
+            // group here (e.g. camera matrices).
+            virtual void begin(gpu::render_pass_encoder& encoder);
 
-        void setup_camera();
-        void setup_options(const render_options& options);
+            // Counterpart to @ref begin. Default is a no-op; the GL
+            // backend's pipeline state stays bound until the next
+            // @c set_pipeline.
+            virtual void end(gpu::render_pass_encoder& encoder);
 
-        void upload_texture_reference(const std::string& texture_name, int position);
-        void upload_coefficient(const std::string& coefficient_name, float coefficient);
-        void upload_matrix3(const std::string& mat3_name, const infrastructure::math::mat3& matrix);
-        void upload_matrix4(const std::string& mat4_name, const infrastructure::math::mat4& matrix);
-        void upload_vector2(const std::string& vec2_name, const infrastructure::math::vec2& vector);
-        void upload_vector3(const std::string& vec3_name, const infrastructure::math::vec3& vector);
-        void upload_vector4(const std::string& vec4_name, const infrastructure::math::vec4& vector);
+            // Currently-active renderer for the main thread, or null
+            // when no scene/UI pass is being recorded.
+            static renderer* get_current_renderer();
 
-    protected:
-        renderer() = default;
-        ~renderer();
+        protected:
+            renderer() = default;
 
-        void construct_program(const std::string& vs_string, const std::string& fs_string);
-        void destruct_program();
+            // Construct the pipeline + layouts. Stores handles in the
+            // protected members below.
+            void construct_pipeline(const std::string& vertex_source,
+                                    const std::string& fragment_source,
+                                    const gpu::vertex_buffer_layout& vertex_layout,
+                                    const gpu::bind_group_layout_descriptor& draw_layout,
+                                    const gpu::bind_group_layout_descriptor* frame_layout,
+                                    const gpu::depth_state& depth,
+                                    const gpu::blend_state& blend,
+                                    const gpu::rasterizer_state& rasterizer);
 
-        std::unique_ptr<opengl::shader, shader_deleter> m_vertex_shader;
-        std::unique_ptr<opengl::shader, shader_deleter> m_fragment_shader;
-        std::unique_ptr<opengl::program, program_deleter> m_program;
+            void destruct_pipeline();
 
-        // Non-owning: points to the currently active renderer, or nullptr.
-        static renderer* m_current_renderer;
-    };
+            gpu::shader_module m_vertex_shader{};
+            gpu::shader_module m_fragment_shader{};
+            gpu::pipeline m_pipeline{};
+            gpu::bind_group_layout m_draw_layout{};
+            gpu::bind_group_layout m_frame_layout{};
+
+            static renderer* m_current_renderer;
+        };
+    } // namespace renderers
+
+    using renderers::renderer;
 } // namespace rendering_engine

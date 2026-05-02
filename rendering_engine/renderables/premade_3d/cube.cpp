@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2015-2019 Tomislav Radanovic
+ * Copyright (c) 2015-2026 Tomislav Radanovic
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -20,22 +20,37 @@
  * SOFTWARE.
  */
 
+#include <rendering_engine/renderables/premade_3d/cube.hpp>
+
 #include <control/engine.hpp>
 #include <infrastructure/log.hpp>
+#include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/mesh/vertex.hpp>
-#include <rendering_engine/opengl/opengl.hpp>
-#include <rendering_engine/renderables/premade_3d/cube.hpp>
 #include <rendering_engine/renderers/renderer.hpp>
-#include <rendering_engine/rendering_engine.hpp>
 
-rendering_engine::cube::cube() : m_vertex_count{0}, m_vertex_array_object{nullptr}, m_vertex_buffer_object{nullptr} {}
+rendering_engine::cube::cube() = default;
+
+rendering_engine::cube::~cube()
+{
+    auto& gpu = *control::current_engine().gpu;
+    if (m_draw_bind_group.valid())
+    {
+        gpu.destroy(m_draw_bind_group);
+        m_draw_bind_group = {};
+    }
+    if (m_vertex_buffer.valid())
+    {
+        gpu.destroy(m_vertex_buffer);
+        m_vertex_buffer = {};
+    }
+}
 
 void rendering_engine::cube::upload()
 {
-    this->m_vertex_count = 36;
+    m_vertex_count = 36;
+    m_vertex_stride = sizeof(vertex_position_normal);
 
-    vertex_postion_normal vertices[8];
-
+    vertex_position_normal vertices[8];
     vertices[0].pos = infrastructure::math::vec3{-1.0f, -1.0f, 1.0f};
     vertices[1].pos = infrastructure::math::vec3{1.0f, -1.0f, 1.0f};
     vertices[2].pos = infrastructure::math::vec3{1.0f, 1.0f, 1.0f};
@@ -45,17 +60,15 @@ void rendering_engine::cube::upload()
     vertices[6].pos = infrastructure::math::vec3{1.0f, 1.0f, -1.0f};
     vertices[7].pos = infrastructure::math::vec3{-1.0f, 1.0f, -1.0f};
 
-    uint32_t indicies[36] = {0, 1, 2, 2, 3, 0, 1, 5, 6, 6, 2, 1, 7, 6, 5, 5, 4, 7,
-                             4, 0, 3, 3, 7, 4, 4, 5, 1, 1, 0, 4, 3, 2, 6, 6, 7, 3};
+    const uint32_t indices[36] = {0, 1, 2, 2, 3, 0, 1, 5, 6, 6, 2, 1, 7, 6, 5, 5, 4, 7,
+                                  4, 0, 3, 3, 7, 4, 4, 5, 1, 1, 0, 4, 3, 2, 6, 6, 7, 3};
 
-    vertex_postion_normal expanded_vertices[36];
-
+    vertex_position_normal expanded_vertices[36];
     for (int i = 0; i < 36; i++)
     {
-        expanded_vertices[i].pos = vertices[indicies[i]].pos;
+        expanded_vertices[i].pos = vertices[indices[i]].pos;
 
-        int sector = i / 6;
-
+        const int sector = i / 6;
         switch (sector)
         {
         case 0:
@@ -81,36 +94,57 @@ void rendering_engine::cube::upload()
         }
     }
 
-    auto& gl = *control::current_engine().opengl;
-    m_vertex_buffer_object = gl.create_vbo();
-    m_vertex_buffer_object->data(
-        expanded_vertices, sizeof(expanded_vertices), rendering_engine::opengl::buffer_usage::static_draw);
+    auto& gpu = *control::current_engine().gpu;
 
-    m_vertex_array_object = gl.create_vao();
-    m_vertex_array_object->bind_attribute(
-        0, *m_vertex_buffer_object, rendering_engine::opengl::type::Float, 3, sizeof(vertex_postion_normal), 0);
+    gpu::buffer_descriptor vertex_descriptor{};
+    vertex_descriptor.size = sizeof(expanded_vertices);
+    vertex_descriptor.usage = gpu::buffer_usage_vertex;
+    vertex_descriptor.hint = gpu::buffer_usage_hint::static_data;
+    vertex_descriptor.initial_data = expanded_vertices;
+    m_vertex_buffer = gpu.create_buffer(vertex_descriptor);
 
-    m_vertex_array_object->bind_attribute(1,
-                                          *m_vertex_buffer_object,
-                                          rendering_engine::opengl::type::Float,
-                                          3,
-                                          sizeof(vertex_postion_normal),
-                                          sizeof(infrastructure::math::vec3));
+    // The bind group is created lazily on first render — at upload
+    // time the active renderer (and therefore the layout) is not yet
+    // known.
 }
 
-void rendering_engine::cube::render()
+void rendering_engine::cube::render(gpu::render_pass_encoder& encoder)
 {
-    renderer* current_renderer{rendering_engine::renderer::get_current_renderer()};
-
-    if (!current_renderer)
+    auto* renderer = rendering_engine::renderer::get_current_renderer();
+    if (renderer == nullptr)
     {
-        LOG_WRN("Attempted to render without renderer attached");
+        LOG_WRN("Attempted to render cube without renderer attached");
+        return;
+    }
+    if (!m_vertex_buffer.valid())
+    {
+        LOG_WRN("cube::render: renderable not uploaded");
         return;
     }
 
-    current_renderer->upload_matrix4("modelMatrix", this->transform.get_transform_matrix());
-    current_renderer->setup_options(options);
+    auto& gpu = *control::current_engine().gpu;
 
-    control::current_engine().opengl->draw_arrays(
-        *m_vertex_array_object, rendering_engine::opengl::primitive::triangles, 0, m_vertex_count);
+    if (!m_draw_bind_group.valid())
+    {
+        gpu::bind_group_descriptor bg_descriptor{};
+        bg_descriptor.layout = renderer->draw_bind_group_layout();
+        gpu::binding_value model_slot{};
+        model_slot.binding = 0;
+        model_slot.kind = gpu::binding_kind::mat4_value;
+        bg_descriptor.entries.push_back(model_slot);
+        m_draw_bind_group = gpu.create_bind_group(bg_descriptor);
+    }
+
+    std::vector<gpu::binding_value> entries;
+    entries.reserve(1);
+    gpu::binding_value model_slot{};
+    model_slot.binding = 0;
+    model_slot.kind = gpu::binding_kind::mat4_value;
+    model_slot.mat4_value = transform.get_transform_matrix();
+    entries.push_back(model_slot);
+    gpu.update_bind_group(m_draw_bind_group, entries);
+
+    encoder.set_vertex_buffer(0, m_vertex_buffer, 0, m_vertex_stride);
+    encoder.set_bind_group(renderer->draw_bind_group_slot(), m_draw_bind_group);
+    encoder.draw(m_vertex_count, 0);
 }

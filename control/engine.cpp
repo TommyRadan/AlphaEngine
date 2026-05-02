@@ -29,7 +29,7 @@
 #include <infrastructure/log.hpp>
 #include <infrastructure/settings.hpp>
 #include <infrastructure/time.hpp>
-#include <rendering_engine/opengl/opengl.hpp>
+#include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/renderers/basic_renderer.hpp>
 #include <rendering_engine/renderers/overlay_renderer.hpp>
 #include <rendering_engine/rendering_engine.hpp>
@@ -75,7 +75,7 @@ namespace control
         time = std::make_unique<infrastructure::time>();
         events = std::make_unique<event_engine::event_bus>();
         window = std::make_unique<rendering_engine::window>();
-        opengl = std::make_unique<rendering_engine::opengl::context>();
+        gpu = rendering_engine::gpu::create_device(rendering_engine::gpu::backend_type::opengl);
         // basic_renderer_ / overlay_renderer_ are deferred until init()
         // because they compile GL shader programs and need the GL
         // context to be live first.
@@ -92,7 +92,7 @@ namespace control
         renderer.reset();
         overlay_renderer.reset();
         basic_renderer.reset();
-        opengl.reset();
+        gpu.reset();
         window.reset();
         events.reset();
         time.reset();

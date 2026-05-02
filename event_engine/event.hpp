@@ -32,6 +32,14 @@
 
 #pragma once
 
+namespace rendering_engine
+{
+    namespace gpu
+    {
+        struct render_pass_encoder;
+    }
+} // namespace rendering_engine
+
 namespace event_engine
 {
     /**
@@ -86,14 +94,22 @@ namespace event_engine
         float m_delta_time;
     };
 
-    /** @brief Broadcast while the 3D scene pass is active; renderables should submit draw calls. */
+    /**
+     * @brief Broadcast while the 3D scene pass is active; renderables should
+     *        record draw calls against the carried pass encoder.
+     */
     struct render_scene
     {
+        rendering_engine::gpu::render_pass_encoder* encoder{nullptr};
     };
 
-    /** @brief Broadcast while the 2D overlay/UI pass is active. */
+    /**
+     * @brief Broadcast while the 2D overlay/UI pass is active. Renderables
+     *        record draws against the carried pass encoder.
+     */
     struct render_ui
     {
+        rendering_engine::gpu::render_pass_encoder* encoder{nullptr};
     };
 
     /** @brief Key release. @ref m_key_code is the released key. */

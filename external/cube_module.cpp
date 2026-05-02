@@ -27,8 +27,6 @@
 #include <infrastructure/log.hpp>
 #include <rendering_engine/renderables/premade_3d/cube.hpp>
 
-#include <rendering_engine/opengl/opengl.hpp>
-
 #include <memory>
 
 static std::unique_ptr<rendering_engine::cube> cube;
@@ -55,7 +53,10 @@ static void on_frame(const event_engine::frame& event)
 
 static void on_render_scene(const event_engine::render_scene& event)
 {
-    cube->render();
+    if (event.encoder != nullptr)
+    {
+        cube->render(*event.encoder);
+    }
 }
 
 GAME_MODULE()

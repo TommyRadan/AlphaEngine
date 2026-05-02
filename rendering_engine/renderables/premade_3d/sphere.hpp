@@ -22,37 +22,38 @@
 
 #pragma once
 
+#include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
-
-#include <rendering_engine/opengl/opengl.hpp>
 #include <rendering_engine/util/transform.hpp>
 
 namespace rendering_engine
 {
-    // UV-sphere with quad-based tessellation (each lat/lon cell is two triangles).
-    // Vertex format is position + uv + normal. Texturing is well-behaved away from
-    // the poles; near the poles UVs are pinched but per-vertex normals stay smooth.
+    // UV-sphere with quad-based tessellation (each lat/lon cell is two
+    // triangles). Vertex format is position + uv + normal. Texturing is
+    // well-behaved away from the poles; near the poles UVs pinch but
+    // per-vertex normals stay smooth.
     struct sphere : public renderable
     {
         sphere(unsigned int stacks = 64, unsigned int slices = 128);
+        ~sphere() override;
 
         rendering_engine::util::transform transform;
 
         void upload() final;
-        void render() final;
+        void render(gpu::render_pass_encoder& encoder) final;
 
-        // Direct accessors for callers that want to bind the VAO under a custom
-        // shader program rather than going through the active renderer.
-        const opengl::vertex_array& get_vao() const;
+        gpu::buffer get_vertex_buffer() const;
+        gpu::buffer get_index_buffer() const;
         unsigned int get_index_count() const;
 
     private:
         unsigned int m_stacks;
         unsigned int m_slices;
-        unsigned int m_index_count;
+        unsigned int m_index_count{0};
+        uint32_t m_vertex_stride{0};
 
-        opengl::vertex_array* m_vertex_array_object;
-        opengl::vertex_buffer* m_vertex_buffer_object;
-        opengl::vertex_buffer* m_index_buffer_object;
+        gpu::buffer m_vertex_buffer{};
+        gpu::buffer m_index_buffer{};
+        gpu::bind_group m_draw_bind_group{};
     };
 } // namespace rendering_engine
