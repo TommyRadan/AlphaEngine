@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2015-2019 Tomislav Radanovic
+ * Copyright (c) 2015-2026 Tomislav Radanovic
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -20,62 +20,85 @@
  * SOFTWARE.
  */
 
+#include <rendering_engine/renderables/model.hpp>
+
+#include <vector>
+
 #include <control/engine.hpp>
 #include <infrastructure/log.hpp>
-#include <rendering_engine/opengl/opengl.hpp>
-#include <rendering_engine/renderables/model.hpp>
+#include <rendering_engine/gpu/device.hpp>
+#include <rendering_engine/mesh/vertex.hpp>
 #include <rendering_engine/renderers/renderer.hpp>
-#include <rendering_engine/rendering_engine.hpp>
 
-rendering_engine::model::model() : m_vertex_count{0}, m_vertex_array_object{nullptr}, m_vertex_buffer_object{nullptr} {}
+rendering_engine::model::model() = default;
+
+rendering_engine::model::~model()
+{
+    auto& gpu = *control::current_engine().gpu;
+    if (m_draw_bind_group.valid())
+    {
+        gpu.destroy(m_draw_bind_group);
+        m_draw_bind_group = {};
+    }
+    if (m_vertex_buffer.valid())
+    {
+        gpu.destroy(m_vertex_buffer);
+        m_vertex_buffer = {};
+    }
+}
 
 void rendering_engine::model::upload_mesh(const rendering_engine::mesh& mesh)
 {
     m_vertex_count = mesh.vertex_count();
+    m_vertex_stride = sizeof(vertex_position_uv_normal);
 
-    m_vertex_buffer_object = control::current_engine().opengl->create_vbo();
+    auto& gpu = *control::current_engine().gpu;
 
-    m_vertex_buffer_object->data(mesh.vertices(),
-                                 m_vertex_count * sizeof(rendering_engine::vertex_position_uv_normal),
-                                 rendering_engine::opengl::buffer_usage::static_draw);
-
-    m_vertex_array_object = control::current_engine().opengl->create_vao();
-
-    m_vertex_array_object->bind_attribute(0,
-                                          *m_vertex_buffer_object,
-                                          rendering_engine::opengl::type::Float,
-                                          3,
-                                          sizeof(rendering_engine::vertex_position_uv_normal),
-                                          0);
-
-    m_vertex_array_object->bind_attribute(1,
-                                          *m_vertex_buffer_object,
-                                          rendering_engine::opengl::type::Float,
-                                          2,
-                                          sizeof(rendering_engine::vertex_position_uv_normal),
-                                          sizeof(infrastructure::math::vec3));
-
-    m_vertex_array_object->bind_attribute(2,
-                                          *m_vertex_buffer_object,
-                                          rendering_engine::opengl::type::Float,
-                                          3,
-                                          sizeof(rendering_engine::vertex_position_uv_normal),
-                                          sizeof(infrastructure::math::vec3) + sizeof(infrastructure::math::vec2));
+    gpu::buffer_descriptor vertex_descriptor{};
+    vertex_descriptor.size = m_vertex_count * sizeof(vertex_position_uv_normal);
+    vertex_descriptor.usage = gpu::buffer_usage_vertex;
+    vertex_descriptor.hint = gpu::buffer_usage_hint::static_data;
+    vertex_descriptor.initial_data = mesh.vertices();
+    m_vertex_buffer = gpu.create_buffer(vertex_descriptor);
 }
 
-void rendering_engine::model::render()
+void rendering_engine::model::render(gpu::render_pass_encoder& encoder)
 {
-    renderer* current_renderer{rendering_engine::renderer::get_current_renderer()};
-
-    if (!current_renderer)
+    auto* renderer = rendering_engine::renderer::get_current_renderer();
+    if (renderer == nullptr)
     {
-        LOG_WRN("Attempted to render without renderer attached");
+        LOG_WRN("Attempted to render model without renderer attached");
+        return;
+    }
+    if (!m_vertex_buffer.valid())
+    {
+        LOG_WRN("model::render: mesh not uploaded");
         return;
     }
 
-    current_renderer->upload_matrix4("modelMatrix", transform.get_transform_matrix());
-    current_renderer->setup_options(options);
+    auto& gpu = *control::current_engine().gpu;
 
-    control::current_engine().opengl->draw_arrays(
-        *m_vertex_array_object, rendering_engine::opengl::primitive::triangles, 0, m_vertex_count);
+    if (!m_draw_bind_group.valid())
+    {
+        gpu::bind_group_descriptor bg_descriptor{};
+        bg_descriptor.layout = renderer->draw_bind_group_layout();
+        gpu::binding_value model_slot{};
+        model_slot.binding = 0;
+        model_slot.kind = gpu::binding_kind::mat4_value;
+        bg_descriptor.entries.push_back(model_slot);
+        m_draw_bind_group = gpu.create_bind_group(bg_descriptor);
+    }
+
+    std::vector<gpu::binding_value> entries;
+    entries.reserve(1);
+    gpu::binding_value model_slot{};
+    model_slot.binding = 0;
+    model_slot.kind = gpu::binding_kind::mat4_value;
+    model_slot.mat4_value = transform.get_transform_matrix();
+    entries.push_back(model_slot);
+    gpu.update_bind_group(m_draw_bind_group, entries);
+
+    encoder.set_vertex_buffer(0, m_vertex_buffer, 0, m_vertex_stride);
+    encoder.set_bind_group(renderer->draw_bind_group_slot(), m_draw_bind_group);
+    encoder.draw(static_cast<uint32_t>(m_vertex_count), 0);
 }

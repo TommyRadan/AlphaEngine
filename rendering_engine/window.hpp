@@ -85,9 +85,6 @@ namespace rendering_engine
          */
         void tick();
 
-        /** @brief Clears the color and depth buffers to opaque black. */
-        void clear();
-
         /** @brief Presents the back buffer to the screen. */
         void swap_buffers();
 

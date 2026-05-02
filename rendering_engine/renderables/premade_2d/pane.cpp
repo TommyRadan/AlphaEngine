@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2015-2019 Tomislav Radanovic
+ * Copyright (c) 2015-2026 Tomislav Radanovic
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -20,18 +20,41 @@
  * SOFTWARE.
  */
 
+#include <rendering_engine/renderables/premade_2d/pane.hpp>
+
+#include <vector>
+
 #include <control/engine.hpp>
 #include <infrastructure/log.hpp>
+#include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/mesh/vertex.hpp>
-#include <rendering_engine/opengl/opengl.hpp>
-#include <rendering_engine/renderables/premade_2d/pane.hpp>
 #include <rendering_engine/renderers/renderer.hpp>
-#include <rendering_engine/rendering_engine.hpp>
 
-rendering_engine::pane::pane(const infrastructure::math::vec2& size)
-    : m_vertex_count{0}, m_vertex_array_object{nullptr}, m_vertex_buffer{nullptr}, m_indicies_buffer{nullptr},
-      m_size{size}, m_color{0, 0, 0, 0}, m_texture{nullptr}
+rendering_engine::pane::pane(const infrastructure::math::vec2& size) : m_size{size} {}
+
+rendering_engine::pane::~pane()
 {
+    auto& gpu = *control::current_engine().gpu;
+    if (m_draw_bind_group.valid())
+    {
+        gpu.destroy(m_draw_bind_group);
+        m_draw_bind_group = {};
+    }
+    if (m_texture.valid())
+    {
+        gpu.destroy(m_texture);
+        m_texture = {};
+    }
+    if (m_index_buffer.valid())
+    {
+        gpu.destroy(m_index_buffer);
+        m_index_buffer = {};
+    }
+    if (m_vertex_buffer.valid())
+    {
+        gpu.destroy(m_vertex_buffer);
+        m_vertex_buffer = {};
+    }
 }
 
 void rendering_engine::pane::set_color(const rendering_engine::util::color& color)
@@ -41,27 +64,38 @@ void rendering_engine::pane::set_color(const rendering_engine::util::color& colo
 
 void rendering_engine::pane::set_image(const rendering_engine::util::image& image)
 {
-    m_texture = control::current_engine().opengl->create_texture();
-    m_texture->image2_d(image.get_pixels(),
-                        rendering_engine::opengl::data_type::unsigned_byte,
-                        rendering_engine::opengl::format::rgba,
-                        image.get_width(),
-                        image.get_height(),
-                        rendering_engine::opengl::internal_format::rgba);
+    auto& gpu = *control::current_engine().gpu;
+    if (m_texture.valid())
+    {
+        gpu.destroy(m_texture);
+        m_texture = {};
+    }
 
-    m_texture->set_wrapping_r(opengl::wrapping::clamp_edge);
-    m_texture->set_wrapping_s(opengl::wrapping::clamp_edge);
-    m_texture->set_wrapping_t(opengl::wrapping::clamp_edge);
+    gpu::texture_descriptor descriptor{};
+    descriptor.dimension = gpu::texture_dimension::d2;
+    descriptor.format = gpu::texture_format::rgba8_unorm;
+    descriptor.width = image.get_width();
+    descriptor.height = image.get_height();
+    descriptor.mipmaps = true;
+    descriptor.min_filter = gpu::filter_mode::nearest;
+    descriptor.mag_filter = gpu::filter_mode::nearest;
+    descriptor.address_u = gpu::address_mode::clamp_edge;
+    descriptor.address_v = gpu::address_mode::clamp_edge;
+    descriptor.address_w = gpu::address_mode::clamp_edge;
+    m_texture = gpu.create_texture(descriptor);
 
-    m_texture->set_filters(opengl::filter::nearest, opengl::filter::nearest);
-    m_texture->generate_mipmaps();
+    const size_t pixel_bytes =
+        static_cast<size_t>(image.get_width()) * static_cast<size_t>(image.get_height()) * sizeof(util::color);
+    gpu.write_texture(m_texture, image.get_pixels(), pixel_bytes);
+    gpu.generate_mipmaps(m_texture);
 }
 
 void rendering_engine::pane::upload()
 {
-    this->m_vertex_count = 6;
+    m_vertex_count = 6;
+    m_vertex_stride = sizeof(vertex_position_uv);
 
-    infrastructure::math::vec3 position{this->transform.get_position()};
+    const infrastructure::math::vec3 position{transform.get_position()};
 
     vertex_position_uv vertex[4];
     vertex[0].pos = infrastructure::math::vec3{position.x, position.y - m_size.y, -1.0f};
@@ -73,52 +107,95 @@ void rendering_engine::pane::upload()
     vertex[3].pos = infrastructure::math::vec3{position.x, position.y, -1.0f};
     vertex[3].uv = infrastructure::math::vec2{0.0f, 1.0f};
 
-    uint32_t indicies[6] = {3, 0, 1, 3, 1, 2};
+    const uint32_t indices[6] = {3, 0, 1, 3, 1, 2};
 
-    auto& gl = *control::current_engine().opengl;
-    m_vertex_buffer = gl.create_vbo();
-    m_vertex_buffer->data(vertex, sizeof(vertex), rendering_engine::opengl::buffer_usage::static_draw);
+    auto& gpu = *control::current_engine().gpu;
 
-    m_indicies_buffer = gl.create_vbo();
-    m_indicies_buffer->element_data(indicies, sizeof(indicies), rendering_engine::opengl::buffer_usage::static_draw);
+    gpu::buffer_descriptor vertex_descriptor{};
+    vertex_descriptor.size = sizeof(vertex);
+    vertex_descriptor.usage = gpu::buffer_usage_vertex;
+    vertex_descriptor.hint = gpu::buffer_usage_hint::static_data;
+    vertex_descriptor.initial_data = vertex;
+    if (m_vertex_buffer.valid())
+    {
+        gpu.destroy(m_vertex_buffer);
+    }
+    m_vertex_buffer = gpu.create_buffer(vertex_descriptor);
 
-    m_vertex_array_object = gl.create_vao();
-    m_vertex_array_object->bind_attribute(
-        0, *m_vertex_buffer, rendering_engine::opengl::type::Float, 3, sizeof(vertex_position_uv), 0);
-    m_vertex_array_object->bind_attribute(1,
-                                          *m_vertex_buffer,
-                                          rendering_engine::opengl::type::Float,
-                                          2,
-                                          sizeof(vertex_position_uv),
-                                          sizeof(infrastructure::math::vec3));
-    m_vertex_array_object->bind_elements(*m_indicies_buffer);
+    gpu::buffer_descriptor index_descriptor{};
+    index_descriptor.size = sizeof(indices);
+    index_descriptor.usage = gpu::buffer_usage_index;
+    index_descriptor.hint = gpu::buffer_usage_hint::static_data;
+    index_descriptor.initial_data = indices;
+    if (m_index_buffer.valid())
+    {
+        gpu.destroy(m_index_buffer);
+    }
+    m_index_buffer = gpu.create_buffer(index_descriptor);
 }
 
-void rendering_engine::pane::render()
+void rendering_engine::pane::render(gpu::render_pass_encoder& encoder)
 {
-    renderer* current_renderer{rendering_engine::renderer::get_current_renderer()};
-
-    if (!current_renderer)
+    auto* renderer = rendering_engine::renderer::get_current_renderer();
+    if (renderer == nullptr)
     {
-        LOG_WRN("Attempted to render without renderer attached");
+        LOG_WRN("Attempted to render pane without renderer attached");
+        return;
+    }
+    if (!m_vertex_buffer.valid() || !m_index_buffer.valid())
+    {
         return;
     }
 
-    options.colors["color"] = this->m_color;
-    if (this->m_texture)
-    {
-        options.textures["tex"] = this->m_texture;
-        options.coefficients["useTexture"] = 1.0f;
-    }
-    else
-    {
-        options.coefficients["useTexture"] = 0.0f;
-    }
-    current_renderer->setup_options(options);
+    auto& gpu = *control::current_engine().gpu;
 
-    control::current_engine().opengl->draw_elements(*m_vertex_array_object,
-                                                    rendering_engine::opengl::primitive::triangles,
-                                                    0,
-                                                    m_vertex_count,
-                                                    rendering_engine::opengl::type::unsigned_int);
+    if (!m_draw_bind_group.valid())
+    {
+        gpu::bind_group_descriptor bg_descriptor{};
+        bg_descriptor.layout = renderer->draw_bind_group_layout();
+        gpu::binding_value use_texture_slot{};
+        use_texture_slot.binding = 0;
+        use_texture_slot.kind = gpu::binding_kind::float_value;
+        gpu::binding_value color_slot{};
+        color_slot.binding = 1;
+        color_slot.kind = gpu::binding_kind::vec4_value;
+        gpu::binding_value tex_slot{};
+        tex_slot.binding = 2;
+        tex_slot.kind = gpu::binding_kind::texture;
+        bg_descriptor.entries.push_back(use_texture_slot);
+        bg_descriptor.entries.push_back(color_slot);
+        bg_descriptor.entries.push_back(tex_slot);
+        m_draw_bind_group = gpu.create_bind_group(bg_descriptor);
+    }
+
+    std::vector<gpu::binding_value> entries;
+    entries.reserve(3);
+
+    gpu::binding_value use_texture_value{};
+    use_texture_value.binding = 0;
+    use_texture_value.kind = gpu::binding_kind::float_value;
+    use_texture_value.float_value = m_texture.valid() ? 1.0f : 0.0f;
+    entries.push_back(use_texture_value);
+
+    gpu::binding_value color_value{};
+    color_value.binding = 1;
+    color_value.kind = gpu::binding_kind::vec4_value;
+    color_value.vec4_value = infrastructure::math::vec4{static_cast<float>(m_color.r) / 255.0f,
+                                                        static_cast<float>(m_color.g) / 255.0f,
+                                                        static_cast<float>(m_color.b) / 255.0f,
+                                                        static_cast<float>(m_color.a) / 255.0f};
+    entries.push_back(color_value);
+
+    gpu::binding_value tex_value{};
+    tex_value.binding = 2;
+    tex_value.kind = gpu::binding_kind::texture;
+    tex_value.texture_value = m_texture;
+    entries.push_back(tex_value);
+
+    gpu.update_bind_group(m_draw_bind_group, entries);
+
+    encoder.set_vertex_buffer(0, m_vertex_buffer, 0, m_vertex_stride);
+    encoder.set_index_buffer(m_index_buffer, gpu::index_format::uint32);
+    encoder.set_bind_group(renderer->draw_bind_group_slot(), m_draw_bind_group);
+    encoder.draw_indexed(m_vertex_count, 0);
 }

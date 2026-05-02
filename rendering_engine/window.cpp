@@ -27,7 +27,6 @@
 #include <infrastructure/log.hpp>
 #include <infrastructure/settings.hpp>
 #include <infrastructure/time.hpp>
-#include <rendering_engine/opengl/opengl.hpp>
 #include <rendering_engine/util/color.hpp>
 #include <rendering_engine/window.hpp>
 #include <SDL3/SDL.h>
@@ -137,14 +136,6 @@ namespace rendering_engine
         SDL_QuitSubSystem(SDL_INIT_VIDEO);
 
         LOG_INF("Quit rendering_engine::window");
-    }
-
-    void window::clear()
-    {
-        auto& gl = *control::current_engine().opengl;
-        gl.clear_color(rendering_engine::util::color{0, 0, 0, 255});
-        gl.clear(opengl::buffer::color);
-        gl.clear(opengl::buffer::depth);
     }
 
     void window::swap_buffers()

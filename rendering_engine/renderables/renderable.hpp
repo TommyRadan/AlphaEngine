@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2015-2019 Tomislav Radanovic
+ * Copyright (c) 2015-2026 Tomislav Radanovic
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -22,14 +22,18 @@
 
 #pragma once
 
-#include <rendering_engine/renderers/render_options.hpp>
+#include <rendering_engine/gpu/command_encoder.hpp>
 
 namespace rendering_engine
 {
+    // Anything that can record a draw against the active render pass.
+    // @ref upload allocates GPU resources (buffers, bind groups) once
+    // GL is alive; @ref render is invoked from a render-pass listener
+    // and records draws on the encoder carried by the event.
     struct renderable
     {
+        virtual ~renderable() = default;
         virtual void upload() = 0;
-        virtual void render() = 0;
-        render_options options;
+        virtual void render(gpu::render_pass_encoder& encoder) = 0;
     };
 } // namespace rendering_engine

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2015-2019 Tomislav Radanovic
+ * Copyright (c) 2015-2026 Tomislav Radanovic
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -22,9 +22,8 @@
 
 #pragma once
 
+#include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
-
-#include <rendering_engine/opengl/opengl.hpp>
 #include <rendering_engine/util/transform.hpp>
 
 namespace rendering_engine
@@ -32,16 +31,18 @@ namespace rendering_engine
     struct cube : public renderable
     {
         cube();
+        ~cube() override;
 
         rendering_engine::util::transform transform;
 
         void upload() final;
-        void render() final;
+        void render(gpu::render_pass_encoder& encoder) final;
 
     private:
-        opengl::vertex_array* m_vertex_array_object;
-        opengl::vertex_buffer* m_vertex_buffer_object;
+        gpu::buffer m_vertex_buffer{};
+        gpu::bind_group m_draw_bind_group{};
 
-        unsigned int m_vertex_count;
+        unsigned int m_vertex_count{0};
+        uint32_t m_vertex_stride{0};
     };
 } // namespace rendering_engine

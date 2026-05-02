@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2015-2019 Tomislav Radanovic
+ * Copyright (c) 2015-2026 Tomislav Radanovic
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -20,20 +20,25 @@
  * SOFTWARE.
  */
 
-#pragma once
+#include <stdexcept>
 
-#include <map>
-#include <string>
-
-#include <rendering_engine/opengl/texture.hpp>
-#include <rendering_engine/util/color.hpp>
+#include <infrastructure/log.hpp>
+#include <rendering_engine/gpu/backend/opengl/gl_device.hpp>
+#include <rendering_engine/gpu/device.hpp>
 
 namespace rendering_engine
 {
-    struct render_options
+    namespace gpu
     {
-        std::map<std::string, float> coefficients;
-        std::map<std::string, opengl::texture*> textures;
-        std::map<std::string, rendering_engine::util::color> colors;
-    };
+        std::unique_ptr<device> create_device(backend_type type)
+        {
+            switch (type)
+            {
+            case backend_type::opengl:
+                return std::make_unique<backend::opengl::gl_device>();
+            }
+            LOG_FTL("create_device: unknown backend_type");
+            throw std::runtime_error{"create_device: unknown backend_type"};
+        }
+    } // namespace gpu
 } // namespace rendering_engine

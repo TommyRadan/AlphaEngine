@@ -88,7 +88,8 @@ file(GLOB RENDERING_ENGINE_FILES
         "rendering_engine/renderables/premade_3d/*.hpp" "rendering_engine/renderables/premade_3d/*.cpp"
         "rendering_engine/renderers/*.hpp" "rendering_engine/renderers/*.cpp"
         "rendering_engine/camera/*.hpp" "rendering_engine/camera/*.cpp"
-        "rendering_engine/opengl/*.hpp" "rendering_engine/opengl/*.cpp"
+        "rendering_engine/gpu/*.hpp" "rendering_engine/gpu/*.cpp"
+        "rendering_engine/gpu/backend/opengl/*.hpp" "rendering_engine/gpu/backend/opengl/*.cpp"
         "rendering_engine/util/*.hpp" "rendering_engine/util/*.cpp")
 file(GLOB EXTERNAL_FILES
         "external/*.hpp" "external/*.cpp"

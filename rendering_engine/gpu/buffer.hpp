@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2015-2019 Tomislav Radanovic
+ * Copyright (c) 2015-2026 Tomislav Radanovic
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -20,38 +20,40 @@
  * SOFTWARE.
  */
 
+/**
+ * @file buffer.hpp
+ * @brief @c gpu::buffer resource and its create-time descriptor.
+ */
+
 #pragma once
 
 #include <cstddef>
 
-#include <rendering_engine/opengl/typedef.hpp>
+#include <rendering_engine/gpu/handle.hpp>
+#include <rendering_engine/gpu/types.hpp>
 
 namespace rendering_engine
 {
-    namespace opengl
+    namespace gpu
     {
-        class vertex_buffer
+        struct buffer_descriptor
         {
-            friend class context;
-            vertex_buffer();
-            ~vertex_buffer();
+            // Length of the allocation in bytes.
+            size_t size{0};
 
-            vertex_buffer(const vertex_buffer& other) = delete;
-            vertex_buffer(const vertex_buffer&& other) = delete;
-            const vertex_buffer& operator=(const vertex_buffer& other) = delete;
-            const vertex_buffer&& operator=(const vertex_buffer&& other) = delete;
+            // Bitmask of @c buffer_usage_* flags describing which bind
+            // points the buffer must be valid for. A vertex buffer that
+            // also accepts streaming updates would set
+            // @c buffer_usage_vertex | @c buffer_usage_copy_dst.
+            buffer_usage usage{0};
 
-        public:
-            const unsigned int handle() const;
+            // Backend hint for memory placement / driver heuristics.
+            buffer_usage_hint hint{buffer_usage_hint::static_data};
 
-            void data(const void* data, size_t length, buffer_usage usage);
-            void element_data(const void* data, size_t length, buffer_usage usage);
-            void sub_data(const void* data, size_t offset, size_t length);
-
-            void get_sub_data(void* data, size_t offset, size_t length);
-
-        private:
-            unsigned int m_object_id;
+            // Optional initial contents. If non-null and @ref size > 0
+            // the backend uploads it during creation; otherwise the
+            // buffer starts uninitialized and must be written before use.
+            const void* initial_data{nullptr};
         };
-    } // namespace opengl
+    } // namespace gpu
 } // namespace rendering_engine

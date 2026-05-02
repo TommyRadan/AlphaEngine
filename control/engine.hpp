@@ -53,9 +53,9 @@ namespace infrastructure
 namespace rendering_engine
 {
     struct window;
-    namespace opengl
+    namespace gpu
     {
-        struct context;
+        struct device;
     }
     namespace renderers
     {
@@ -121,7 +121,7 @@ namespace control
         std::unique_ptr<infrastructure::time> time;
         std::unique_ptr<event_engine::event_bus> events;
         std::unique_ptr<rendering_engine::window> window;
-        std::unique_ptr<rendering_engine::opengl::context> opengl;
+        std::unique_ptr<rendering_engine::gpu::device> gpu;
         std::unique_ptr<rendering_engine::renderers::basic_renderer> basic_renderer;
         std::unique_ptr<rendering_engine::renderers::overlay_renderer> overlay_renderer;
         std::unique_ptr<rendering_engine::context> renderer;

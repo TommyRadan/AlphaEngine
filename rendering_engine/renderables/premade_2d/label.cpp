@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2015-2019 Tomislav Radanovic
+ * Copyright (c) 2015-2026 Tomislav Radanovic
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -20,11 +20,9 @@
  * SOFTWARE.
  */
 
-#include <infrastructure/log.hpp>
-#include <rendering_engine/mesh/vertex.hpp>
 #include <rendering_engine/renderables/premade_2d/label.hpp>
-#include <rendering_engine/renderers/renderer.hpp>
-#include <rendering_engine/rendering_engine.hpp>
+
+#include <infrastructure/log.hpp>
 #include <rendering_engine/util/image.hpp>
 
 rendering_engine::label::label(rendering_engine::util::font* font, float size, const std::string& text)
@@ -72,9 +70,12 @@ void rendering_engine::label::rebuild_panes()
             continue;
         }
 
-        int x0, y0, x1, y1;
+        int x0 = 0;
+        int y0 = 0;
+        int x1 = 0;
+        int y1 = 0;
         const rendering_engine::util::image* image = m_font->get_image(c, &x0, &y0, &x1, &y1);
-        const float width = ((float)image->get_width() / image->get_height()) * m_size;
+        const float width = (static_cast<float>(image->get_width()) / image->get_height()) * m_size;
         auto pane = std::make_unique<rendering_engine::pane>(infrastructure::math::vec2{width, m_size});
         pane->set_image(*image);
         pane->transform.set_position(infrastructure::math::vec3{m_position.x + cursor, m_position.y, m_position.z});
@@ -93,10 +94,10 @@ void rendering_engine::label::upload()
     }
 }
 
-void rendering_engine::label::render()
+void rendering_engine::label::render(gpu::render_pass_encoder& encoder)
 {
     for (auto& p : m_panes)
     {
-        p->render();
+        p->render(encoder);
     }
 }
