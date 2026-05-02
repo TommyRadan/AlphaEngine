@@ -45,26 +45,18 @@ namespace rendering_engine
         {
             virtual ~renderer();
 
-            gpu::pipeline pipeline_handle() const
-            {
-                return m_pipeline;
-            }
+            // The pipeline this renderer was built around.
+            gpu::pipeline pipeline_handle() const;
 
             // The bind-group layout for per-draw resources (model
             // matrix, textures, options). Renderables build a fresh
             // @c gpu::bind_group against this layout each frame and
             // bind it at slot @ref draw_bind_group_slot.
-            gpu::bind_group_layout draw_bind_group_layout() const
-            {
-                return m_draw_layout;
-            }
+            gpu::bind_group_layout draw_bind_group_layout() const;
 
             // Slot index used by the per-draw bind group when the
             // renderer also has a per-frame bind group at slot 0.
-            uint32_t draw_bind_group_slot() const
-            {
-                return m_frame_layout.valid() ? 1u : 0u;
-            }
+            uint32_t draw_bind_group_slot() const;
 
             // Bind the renderer's pipeline on @p encoder. Derived
             // renderers also populate and bind their per-frame bind
