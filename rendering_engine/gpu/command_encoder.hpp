@@ -46,7 +46,9 @@ namespace rendering_engine::gpu
 {
     struct render_pass_encoder
     {
-        virtual ~render_pass_encoder() = default;
+        // Out-of-line virtual destructor: pins the vtable and
+        // typeinfo to @c command_encoder.cpp.
+        virtual ~render_pass_encoder();
 
         // Bind the pipeline state object that subsequent draws will
         // execute against. Must be called before any draw.
@@ -92,7 +94,9 @@ namespace rendering_engine::gpu
 
     struct command_encoder
     {
-        virtual ~command_encoder() = default;
+        // Out-of-line virtual destructor: pins the vtable and
+        // typeinfo to @c command_encoder.cpp.
+        virtual ~command_encoder();
 
         // Open a new render pass scope. The returned encoder is
         // single-use: call its methods to record draws, then

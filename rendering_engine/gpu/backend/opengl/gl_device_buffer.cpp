@@ -21,7 +21,7 @@
  */
 
 /**
- * @file gl_buffer.cpp
+ * @file gl_device_buffer.cpp
  * @brief @c gl_device member functions that manage GL buffer objects:
  *        @c create_buffer, @c destroy(buffer), @c write_buffer.
  */

@@ -21,7 +21,7 @@
  */
 
 /**
- * @file gl_shader.cpp
+ * @file gl_device_shader.cpp
  * @brief @c gl_device member functions that compile shader stages:
  *        @c create_shader_module, @c destroy(shader_module).
  */

@@ -21,7 +21,7 @@
  */
 
 /**
- * @file gl_pipeline.cpp
+ * @file gl_device_pipeline.cpp
  * @brief @c gl_device member functions that build pipeline state
  *        objects, bind-group layouts, and bind groups.
  */
