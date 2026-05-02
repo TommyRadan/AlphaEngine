@@ -25,17 +25,18 @@
  * @brief OpenGL 3.3 implementation of @ref gpu::device.
  *
  * The @c gl_device class is declared here in full; its member function
- * definitions are split across translation units by resource family:
+ * definitions are split across translation units by resource family.
+ * Each split file is named @c gl_device_<resource>.cpp so the parent
+ * class is explicit:
  *
- *   - gl_device.cpp     ctor/dtor, init/quit, swapchain, encoders, lookup_*
- *   - gl_buffer.cpp     buffer create/destroy/write
- *   - gl_texture.cpp    texture/sampler create/destroy/write/mipmaps
- *   - gl_shader.cpp     shader_module create/destroy
- *   - gl_pipeline.cpp   pipeline + bind_group_layout + bind_group
+ *   - gl_device.cpp           ctor/dtor, init/quit, swapchain, encoders, lookup_*
+ *   - gl_device_buffer.cpp    buffer create/destroy/write
+ *   - gl_device_texture.cpp   texture/sampler create/destroy/write/mipmaps
+ *   - gl_device_shader.cpp    shader_module create/destroy
+ *   - gl_device_pipeline.cpp  pipeline + bind_group_layout + bind_group
  *
- * Each of those .cpp files can reach the private @c m_buffers,
- * @c m_textures, ... pools because they are defining members of the
- * same class.
+ * Each split file can reach the private @c m_buffers, @c m_textures,
+ * ... pools because they are defining members of the same class.
  */
 
 #pragma once

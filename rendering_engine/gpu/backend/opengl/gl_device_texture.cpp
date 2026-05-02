@@ -21,7 +21,7 @@
  */
 
 /**
- * @file gl_texture.cpp
+ * @file gl_device_texture.cpp
  * @brief @c gl_device member functions that manage GL textures and the
  *        forward-compat sampler resource: @c create_texture,
  *        @c create_sampler, @c destroy(texture), @c destroy(sampler),

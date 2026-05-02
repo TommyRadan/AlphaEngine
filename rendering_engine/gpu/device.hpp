@@ -60,7 +60,10 @@ namespace rendering_engine::gpu
     // Methods are main-thread-only — there is no internal locking.
     struct device
     {
-        virtual ~device() = default;
+        // Out-of-line virtual destructor: pins this class's vtable
+        // and typeinfo to @c device.cpp instead of emitting them in
+        // every translation unit that includes this header.
+        virtual ~device();
 
         // Bring the backend up. Must be called once after the
         // window/GL context is alive. Throws on failure.
