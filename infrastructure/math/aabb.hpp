@@ -20,30 +20,26 @@
  * SOFTWARE.
  */
 
-/**
- * @file math.hpp
- * @brief Umbrella include for the engine-owned math types.
- *
- * Each vector, matrix, and quaternion type lives in its own header next to
- * this one. The implementations are in matching @c .cpp files, which are
- * the only translation units that include and name @c glm:: . Including
- * this header pulls every public math type into scope while keeping GLM
- * out of the consumer's preprocessor input.
- */
-
 #pragma once
 
-#include <infrastructure/math/aabb.hpp>
-#include <infrastructure/math/frustum.hpp>
-#include <infrastructure/math/mat3.hpp>
-#include <infrastructure/math/mat4.hpp>
-#include <infrastructure/math/quat.hpp>
-#include <infrastructure/math/sphere.hpp>
-#include <infrastructure/math/vec2.hpp>
 #include <infrastructure/math/vec3.hpp>
-#include <infrastructure/math/vec4.hpp>
 
 namespace infrastructure::math
 {
-    float lerp(float a, float b, float t) noexcept;
+    /** @brief Axis-aligned bounding box defined by two corner points. */
+    struct aabb
+    {
+        vec3 min{0.0f, 0.0f, 0.0f};
+        vec3 max{0.0f, 0.0f, 0.0f};
+
+        constexpr aabb() noexcept = default;
+        constexpr aabb(const vec3& in_min, const vec3& in_max) noexcept : min{in_min}, max{in_max} {}
+
+        vec3 center() const noexcept;
+        vec3 extents() const noexcept;
+        bool contains(const vec3& point) const noexcept;
+    };
+
+    aabb merge(const aabb& a, const aabb& b) noexcept;
+    aabb merge(const aabb& a, const vec3& point) noexcept;
 } // namespace infrastructure::math

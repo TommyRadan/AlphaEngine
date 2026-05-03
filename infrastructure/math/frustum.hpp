@@ -20,30 +20,48 @@
  * SOFTWARE.
  */
 
-/**
- * @file math.hpp
- * @brief Umbrella include for the engine-owned math types.
- *
- * Each vector, matrix, and quaternion type lives in its own header next to
- * this one. The implementations are in matching @c .cpp files, which are
- * the only translation units that include and name @c glm:: . Including
- * this header pulls every public math type into scope while keeping GLM
- * out of the consumer's preprocessor input.
- */
-
 #pragma once
 
 #include <infrastructure/math/aabb.hpp>
-#include <infrastructure/math/frustum.hpp>
-#include <infrastructure/math/mat3.hpp>
 #include <infrastructure/math/mat4.hpp>
-#include <infrastructure/math/quat.hpp>
 #include <infrastructure/math/sphere.hpp>
-#include <infrastructure/math/vec2.hpp>
-#include <infrastructure/math/vec3.hpp>
 #include <infrastructure/math/vec4.hpp>
 
 namespace infrastructure::math
 {
-    float lerp(float a, float b, float t) noexcept;
+    /**
+     * @brief View frustum represented by six planes in world space.
+     *
+     * Each plane is stored as @c vec4(n.x, n.y, n.z, d) with the
+     * normal pointing into the visible volume; a point @c p is on
+     * the inside of a plane when @c dot(n, p) + d >= 0. Planes are
+     * normalized so signed-distance tests are valid.
+     *
+     * The @c near_p / @c far_p suffixes avoid the @c near / @c far
+     * macros that some Windows headers still define.
+     */
+    struct frustum
+    {
+        enum plane_index
+        {
+            left = 0,
+            right = 1,
+            bottom = 2,
+            top = 3,
+            near_p = 4,
+            far_p = 5,
+            count = 6
+        };
+
+        vec4 planes[count]{};
+
+        /**
+         * @brief Extract a frustum from a view-projection matrix using
+         *        the Gribb/Hartmann method (planes in world space).
+         */
+        static frustum from_view_projection(const mat4& view_projection) noexcept;
+
+        bool intersects(const aabb& box) const noexcept;
+        bool intersects(const sphere& s) const noexcept;
+    };
 } // namespace infrastructure::math
