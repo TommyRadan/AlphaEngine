@@ -27,16 +27,9 @@
 
 namespace rendering_engine::renderers
 {
-    renderer* renderer::m_current_renderer = nullptr;
-
     renderer::~renderer()
     {
         destruct_pipeline();
-    }
-
-    renderer* renderer::get_current_renderer()
-    {
-        return m_current_renderer;
     }
 
     gpu::pipeline renderer::pipeline_handle() const
@@ -56,14 +49,10 @@ namespace rendering_engine::renderers
 
     void renderer::begin(gpu::render_pass_encoder& encoder)
     {
-        m_current_renderer = this;
         encoder.set_pipeline(m_pipeline);
     }
 
-    void renderer::end(gpu::render_pass_encoder& /*encoder*/)
-    {
-        m_current_renderer = nullptr;
-    }
+    void renderer::end(gpu::render_pass_encoder& /*encoder*/) {}
 
     void renderer::construct_pipeline(const std::string& vertex_source,
                                       const std::string& fragment_source,
