@@ -57,11 +57,6 @@ namespace rendering_engine
     {
         struct device;
     }
-    namespace renderers
-    {
-        struct basic_renderer;
-        struct overlay_renderer;
-    } // namespace renderers
     struct context;
 } // namespace rendering_engine
 namespace scene_graph
@@ -122,8 +117,6 @@ namespace control
         std::unique_ptr<event_engine::event_bus> events;
         std::unique_ptr<rendering_engine::window> window;
         std::unique_ptr<rendering_engine::gpu::device> gpu;
-        std::unique_ptr<rendering_engine::renderers::basic_renderer> basic_renderer;
-        std::unique_ptr<rendering_engine::renderers::overlay_renderer> overlay_renderer;
         std::unique_ptr<rendering_engine::context> renderer;
         std::unique_ptr<scene_graph::context> scenes;
 

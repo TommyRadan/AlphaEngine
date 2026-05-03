@@ -25,8 +25,8 @@
 #include <infrastructure/log.hpp>
 #include <rendering_engine/util/image.hpp>
 
-rendering_engine::label::label(rendering_engine::util::font* font, float size, const std::string& text)
-    : m_font{font}, m_text{text}, m_size{size}
+rendering_engine::label::label(rendering_engine::util::font* font, float size, const std::string& text, material* mat)
+    : m_font{font}, m_material{mat}, m_text{text}, m_size{size}
 {
     rebuild_panes();
 }
@@ -76,7 +76,7 @@ void rendering_engine::label::rebuild_panes()
         int y1 = 0;
         const rendering_engine::util::image* image = m_font->get_image(c, &x0, &y0, &x1, &y1);
         const float width = (static_cast<float>(image->get_width()) / image->get_height()) * m_size;
-        auto pane = std::make_unique<rendering_engine::pane>(infrastructure::math::vec2{width, m_size});
+        auto pane = std::make_unique<rendering_engine::pane>(m_material, infrastructure::math::vec2{width, m_size});
         pane->set_image(*image);
         pane->transform.set_position(infrastructure::math::vec3{m_position.x + cursor, m_position.y, m_position.z});
         cursor += width + m_size * 0.1f;
@@ -94,10 +94,10 @@ void rendering_engine::label::upload()
     }
 }
 
-void rendering_engine::label::render(gpu::render_pass_encoder& encoder)
+void rendering_engine::label::collect_draw_items(std::vector<draw_item>& out)
 {
     for (auto& p : m_panes)
     {
-        p->render(encoder);
+        p->collect_draw_items(out);
     }
 }

@@ -28,6 +28,8 @@
 
 namespace rendering_engine
 {
+    struct material;
+
     // Cubed sphere ("quad sphere"): six face grids of NxN quads, each
     // vertex pushed out to the unit sphere. Eliminates the pole pinch
     // of a UV sphere — there is no preferred axis, only six face
@@ -40,19 +42,20 @@ namespace rendering_engine
         // @p subdivisions is the per-face grid resolution (NxN quads).
         // Total mesh has 6*subdivisions*subdivisions quads = 12*N*N
         // triangles.
-        cubed_sphere(unsigned int subdivisions = 32);
+        explicit cubed_sphere(material* mat, unsigned int subdivisions = 32);
         ~cubed_sphere() override;
 
         rendering_engine::util::transform transform;
 
         void upload() final;
-        void render(gpu::render_pass_encoder& encoder) final;
+        void collect_draw_items(std::vector<draw_item>& out) final;
 
         gpu::buffer get_vertex_buffer() const;
         gpu::buffer get_index_buffer() const;
         unsigned int get_index_count() const;
 
     private:
+        material* m_material{nullptr};
         unsigned int m_subdivisions;
         unsigned int m_index_count{0};
         uint32_t m_vertex_stride{0};

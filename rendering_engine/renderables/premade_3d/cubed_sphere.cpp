@@ -28,8 +28,8 @@
 #include <infrastructure/log.hpp>
 #include <infrastructure/math/math.hpp>
 #include <rendering_engine/gpu/device.hpp>
+#include <rendering_engine/materials/material.hpp>
 #include <rendering_engine/mesh/vertex.hpp>
-#include <rendering_engine/renderers/renderer.hpp>
 
 namespace
 {
@@ -74,7 +74,10 @@ namespace
     };
 } // namespace
 
-rendering_engine::cubed_sphere::cubed_sphere(unsigned int subdivisions) : m_subdivisions{subdivisions} {}
+rendering_engine::cubed_sphere::cubed_sphere(material* mat, unsigned int subdivisions)
+    : m_material{mat}, m_subdivisions{subdivisions}
+{
+}
 
 rendering_engine::cubed_sphere::~cubed_sphere()
 {
@@ -172,17 +175,15 @@ void rendering_engine::cubed_sphere::upload()
     m_index_buffer = gpu.create_buffer(index_descriptor);
 }
 
-void rendering_engine::cubed_sphere::render(gpu::render_pass_encoder& encoder)
+void rendering_engine::cubed_sphere::collect_draw_items(std::vector<draw_item>& out)
 {
-    auto* renderer = rendering_engine::renderer::get_current_renderer();
-    if (renderer == nullptr)
+    if (m_material == nullptr)
     {
-        LOG_WRN("Attempted to render cubed_sphere without renderer attached");
+        LOG_WRN("cubed_sphere::collect_draw_items: no material");
         return;
     }
     if (!m_vertex_buffer.valid() || !m_index_buffer.valid())
     {
-        LOG_WRN("cubed_sphere::render: renderable not uploaded");
         return;
     }
 
@@ -191,7 +192,7 @@ void rendering_engine::cubed_sphere::render(gpu::render_pass_encoder& encoder)
     if (!m_draw_bind_group.valid())
     {
         gpu::bind_group_descriptor bg_descriptor{};
-        bg_descriptor.layout = renderer->draw_bind_group_layout();
+        bg_descriptor.layout = m_material->per_draw_layout();
         gpu::binding_value model_slot{};
         model_slot.binding = 0;
         model_slot.kind = gpu::binding_kind::mat4_value;
@@ -208,10 +209,14 @@ void rendering_engine::cubed_sphere::render(gpu::render_pass_encoder& encoder)
     entries.push_back(model_slot);
     gpu.update_bind_group(m_draw_bind_group, entries);
 
-    encoder.set_vertex_buffer(0, m_vertex_buffer, 0, m_vertex_stride);
-    encoder.set_index_buffer(m_index_buffer, gpu::index_format::uint32);
-    encoder.set_bind_group(renderer->draw_bind_group_slot(), m_draw_bind_group);
-    encoder.draw_indexed(m_index_count, 0);
+    draw_item item{};
+    item.mat = m_material;
+    item.vertex_buffer = m_vertex_buffer;
+    item.index_buffer = m_index_buffer;
+    item.per_draw_bind_group = m_draw_bind_group;
+    item.index_count = m_index_count;
+    item.vertex_stride = m_vertex_stride;
+    out.push_back(item);
 }
 
 rendering_engine::gpu::buffer rendering_engine::cubed_sphere::get_vertex_buffer() const

@@ -28,12 +28,12 @@
 #include <rendering_engine/camera/camera.hpp>
 #include <rendering_engine/gpu/command_encoder.hpp>
 #include <rendering_engine/gpu/device.hpp>
+#include <rendering_engine/materials/lit_material.hpp>
+#include <rendering_engine/materials/ui_material.hpp>
 #include <rendering_engine/passes/pass.hpp>
 #include <rendering_engine/passes/scene_pass.hpp>
 #include <rendering_engine/passes/ui_pass.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
-#include <rendering_engine/renderers/basic_renderer.hpp>
-#include <rendering_engine/renderers/overlay_renderer.hpp>
 #include <rendering_engine/window.hpp>
 
 #include <algorithm>
@@ -56,17 +56,26 @@ void rendering_engine::context::init()
         eng.gpu->resize_swapchain(eng.settings->get_window_width(), eng.settings->get_window_height());
     }
 
-    // GL is live; construct the built-in renderers so their pipelines
-    // can be built against the active context.
-    eng.basic_renderer = std::make_unique<rendering_engine::renderers::basic_renderer>();
-    eng.overlay_renderer = std::make_unique<rendering_engine::renderers::overlay_renderer>();
-    LOG_INF("Rendering Engine: basic_renderer and overlay_renderer constructed");
+    // Construct the built-in passes first — each pass owns the
+    // per-frame bind-group layout its matching material reads at
+    // pipeline-create time.
+    auto scene = std::make_unique<scene_pass>(&m_scene_renderables);
+    const gpu::bind_group_layout scene_frame_layout = scene->frame_bind_group_layout();
+    auto ui = std::make_unique<ui_pass>(&m_ui_renderables);
+
+    // Construct the built-in materials against the per-frame layouts
+    // exposed by the passes. The lit material's pipeline reserves
+    // slot 0 for the scene_pass's per-frame group; the ui material
+    // has no per-frame group.
+    m_lit_material = std::make_unique<lit_material>(scene_frame_layout);
+    m_ui_material = std::make_unique<ui_material>();
+    LOG_INF("Rendering Engine: lit_material and ui_material constructed");
 
     // Register the built-in passes in render order. Future passes
     // (post-process, shadow, depth pre-pass, debug overlay) push
     // into this list at startup instead of editing render().
-    m_passes.push_back(std::make_unique<scene_pass>(&m_scene_renderables));
-    m_passes.push_back(std::make_unique<ui_pass>(&m_ui_renderables));
+    m_passes.push_back(std::move(scene));
+    m_passes.push_back(std::move(ui));
 }
 
 void rendering_engine::context::quit()
@@ -74,13 +83,14 @@ void rendering_engine::context::quit()
     auto& eng = control::current_engine();
 
     // Drop the passes first; their record() bodies reach for the
-    // renderers and event bus we're about to release.
+    // event bus we're about to release, and the passes own per-frame
+    // bind-group layouts referenced by the materials' pipelines.
     m_passes.clear();
 
-    // The renderers own pipelines that reference the device — release
-    // them before the device tears its pools down.
-    eng.overlay_renderer.reset();
-    eng.basic_renderer.reset();
+    // Then materials, which own pipelines that reference the device.
+    // Release them before the device tears its pools down.
+    m_ui_material.reset();
+    m_lit_material.reset();
 
     eng.gpu->quit();
     eng.window->quit();
@@ -131,4 +141,14 @@ void rendering_engine::context::register_ui_renderable(renderable* r)
 void rendering_engine::context::unregister_ui_renderable(renderable* r)
 {
     m_ui_renderables.erase(std::remove(m_ui_renderables.begin(), m_ui_renderables.end(), r), m_ui_renderables.end());
+}
+
+rendering_engine::lit_material& rendering_engine::context::get_lit_material()
+{
+    return *m_lit_material;
+}
+
+rendering_engine::ui_material& rendering_engine::context::get_ui_material()
+{
+    return *m_ui_material;
 }

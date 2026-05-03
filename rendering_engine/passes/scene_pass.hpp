@@ -24,7 +24,9 @@
 
 #include <vector>
 
+#include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/passes/pass.hpp>
+#include <rendering_engine/renderables/draw_item.hpp>
 
 namespace rendering_engine
 {
@@ -32,10 +34,15 @@ namespace rendering_engine
 
     /**
      * @brief 3D scene pass. Clears the swapchain colour and depth,
-     *        drives @c basic_renderer over the scene-renderable
-     *        registry, and broadcasts @ref event_engine::render_scene
-     *        as the documented escape hatch for debug / gizmo
-     *        callers.
+     *        collects draw items from the scene-renderable registry,
+     *        sorts them by pipeline, and dispatches them; broadcasts
+     *        @ref event_engine::render_scene as the documented escape
+     *        hatch for debug / gizmo callers.
+     *
+     * Owns the per-frame bind-group layout (camera @c viewMatrix /
+     * @c projectionMatrix at slot 0). The matching @c lit_material
+     * reads the layout via @ref frame_bind_group_layout so the
+     * pipeline and the runtime bind group agree on slot shape.
      *
      * Skipped when no camera is attached (matches the previous
      * @c if (camera != nullptr) gate).
@@ -43,13 +50,31 @@ namespace rendering_engine
     struct scene_pass : pass
     {
         explicit scene_pass(std::vector<renderable*>* registry);
+        ~scene_pass() override;
+
+        scene_pass(const scene_pass&) = delete;
+        scene_pass& operator=(const scene_pass&) = delete;
 
         void record(gpu::command_encoder& encoder, const frame_context& ctx) override;
+
+        // Layout for the per-frame bind group bound at slot 0 each
+        // frame. The matching material's pipeline_descriptor must
+        // reserve slot 0 for this layout.
+        gpu::bind_group_layout frame_bind_group_layout() const;
 
     private:
         // Non-owning back-pointer to the engine context's
         // scene-renderable registry. The context outlives every
         // pass so the pointer stays valid for the pass's lifetime.
         std::vector<renderable*>* m_registry;
+
+        // Per-frame state — owned by the pass; created once and
+        // refilled every record(). Released in the destructor before
+        // the device tears its pools down.
+        gpu::bind_group_layout m_frame_layout{};
+        gpu::bind_group m_frame_bind_group{};
+
+        // Reused across frames so the underlying allocation persists.
+        std::vector<draw_item> m_items;
     };
 } // namespace rendering_engine

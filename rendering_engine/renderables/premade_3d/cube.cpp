@@ -22,13 +22,15 @@
 
 #include <rendering_engine/renderables/premade_3d/cube.hpp>
 
+#include <vector>
+
 #include <control/engine.hpp>
 #include <infrastructure/log.hpp>
 #include <rendering_engine/gpu/device.hpp>
+#include <rendering_engine/materials/material.hpp>
 #include <rendering_engine/mesh/vertex.hpp>
-#include <rendering_engine/renderers/renderer.hpp>
 
-rendering_engine::cube::cube() = default;
+rendering_engine::cube::cube(material* mat) : m_material{mat} {}
 
 rendering_engine::cube::~cube()
 {
@@ -103,22 +105,19 @@ void rendering_engine::cube::upload()
     vertex_descriptor.initial_data = expanded_vertices;
     m_vertex_buffer = gpu.create_buffer(vertex_descriptor);
 
-    // The bind group is created lazily on first render — at upload
-    // time the active renderer (and therefore the layout) is not yet
-    // known.
+    // The bind group is created lazily in @ref collect_draw_items;
+    // at upload time the per-draw layout is known via @c m_material.
 }
 
-void rendering_engine::cube::render(gpu::render_pass_encoder& encoder)
+void rendering_engine::cube::collect_draw_items(std::vector<draw_item>& out)
 {
-    auto* renderer = rendering_engine::renderer::get_current_renderer();
-    if (renderer == nullptr)
+    if (m_material == nullptr)
     {
-        LOG_WRN("Attempted to render cube without renderer attached");
+        LOG_WRN("cube::collect_draw_items: no material");
         return;
     }
     if (!m_vertex_buffer.valid())
     {
-        LOG_WRN("cube::render: renderable not uploaded");
         return;
     }
 
@@ -127,7 +126,7 @@ void rendering_engine::cube::render(gpu::render_pass_encoder& encoder)
     if (!m_draw_bind_group.valid())
     {
         gpu::bind_group_descriptor bg_descriptor{};
-        bg_descriptor.layout = renderer->draw_bind_group_layout();
+        bg_descriptor.layout = m_material->per_draw_layout();
         gpu::binding_value model_slot{};
         model_slot.binding = 0;
         model_slot.kind = gpu::binding_kind::mat4_value;
@@ -144,7 +143,11 @@ void rendering_engine::cube::render(gpu::render_pass_encoder& encoder)
     entries.push_back(model_slot);
     gpu.update_bind_group(m_draw_bind_group, entries);
 
-    encoder.set_vertex_buffer(0, m_vertex_buffer, 0, m_vertex_stride);
-    encoder.set_bind_group(renderer->draw_bind_group_slot(), m_draw_bind_group);
-    encoder.draw(m_vertex_count, 0);
+    draw_item item{};
+    item.mat = m_material;
+    item.vertex_buffer = m_vertex_buffer;
+    item.per_draw_bind_group = m_draw_bind_group;
+    item.vertex_count = m_vertex_count;
+    item.vertex_stride = m_vertex_stride;
+    out.push_back(item);
 }

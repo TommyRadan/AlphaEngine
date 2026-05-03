@@ -27,10 +27,10 @@
 #include <control/engine.hpp>
 #include <infrastructure/log.hpp>
 #include <rendering_engine/gpu/device.hpp>
+#include <rendering_engine/materials/material.hpp>
 #include <rendering_engine/mesh/vertex.hpp>
-#include <rendering_engine/renderers/renderer.hpp>
 
-rendering_engine::pane::pane(const infrastructure::math::vec2& size) : m_size{size} {}
+rendering_engine::pane::pane(material* mat, const infrastructure::math::vec2& size) : m_material{mat}, m_size{size} {}
 
 rendering_engine::pane::~pane()
 {
@@ -134,12 +134,11 @@ void rendering_engine::pane::upload()
     m_index_buffer = gpu.create_buffer(index_descriptor);
 }
 
-void rendering_engine::pane::render(gpu::render_pass_encoder& encoder)
+void rendering_engine::pane::collect_draw_items(std::vector<draw_item>& out)
 {
-    auto* renderer = rendering_engine::renderer::get_current_renderer();
-    if (renderer == nullptr)
+    if (m_material == nullptr)
     {
-        LOG_WRN("Attempted to render pane without renderer attached");
+        LOG_WRN("pane::collect_draw_items: no material");
         return;
     }
     if (!m_vertex_buffer.valid() || !m_index_buffer.valid())
@@ -152,7 +151,7 @@ void rendering_engine::pane::render(gpu::render_pass_encoder& encoder)
     if (!m_draw_bind_group.valid())
     {
         gpu::bind_group_descriptor bg_descriptor{};
-        bg_descriptor.layout = renderer->draw_bind_group_layout();
+        bg_descriptor.layout = m_material->per_draw_layout();
         gpu::binding_value use_texture_slot{};
         use_texture_slot.binding = 0;
         use_texture_slot.kind = gpu::binding_kind::float_value;
@@ -194,8 +193,12 @@ void rendering_engine::pane::render(gpu::render_pass_encoder& encoder)
 
     gpu.update_bind_group(m_draw_bind_group, entries);
 
-    encoder.set_vertex_buffer(0, m_vertex_buffer, 0, m_vertex_stride);
-    encoder.set_index_buffer(m_index_buffer, gpu::index_format::uint32);
-    encoder.set_bind_group(renderer->draw_bind_group_slot(), m_draw_bind_group);
-    encoder.draw_indexed(m_vertex_count, 0);
+    draw_item item{};
+    item.mat = m_material;
+    item.vertex_buffer = m_vertex_buffer;
+    item.index_buffer = m_index_buffer;
+    item.per_draw_bind_group = m_draw_bind_group;
+    item.index_count = m_vertex_count;
+    item.vertex_stride = m_vertex_stride;
+    out.push_back(item);
 }
