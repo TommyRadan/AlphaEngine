@@ -32,9 +32,6 @@ namespace rendering_engine
     // based on the @c useTexture binding. No per-frame bind group; the
     // per-draw bind group at slot 0 carries @c useTexture / @c color /
     // @c tex.
-    //
-    // Replaces the pipeline that used to live in
-    // @c renderers::overlay_renderer.
     struct ui_material : public material
     {
         ui_material();

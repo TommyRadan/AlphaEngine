@@ -40,8 +40,8 @@ available today:
   `LOG_INF("Settings parsed: window=%ux%u ...");`
 - Module registration — `external/cube_module.cpp`:
   `LOG_INF("Registering external module: cube_module");`
-- Recoverable fault — `rendering_engine/renderers/renderer.cpp`:
-  `LOG_WRN("Cannot find uniform: %s", name.c_str());`
+- Recoverable fault — `rendering_engine/window.cpp`:
+  `LOG_WRN("Could not enable vsync: %s", SDL_GetError());`
 - Unrecoverable fault — `rendering_engine/opengl/shader.cpp`:
   `LOG_FTL("Cannot compile shader");`
 
