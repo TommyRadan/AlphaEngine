@@ -33,7 +33,7 @@
  *
  * Every post pass should construct its pipeline against this source
  * and an effect-specific fragment shader. Used today by
- * @ref passthrough_pass; reused by future tonemap / bloom / FXAA
+ * @ref tonemap_pass; reused by future bloom / FXAA / colour-grading
  * passes without re-authoring the geometry.
  */
 

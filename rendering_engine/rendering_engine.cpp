@@ -31,7 +31,7 @@
 #include <rendering_engine/materials/lit_material.hpp>
 #include <rendering_engine/materials/ui_material.hpp>
 #include <rendering_engine/passes/pass.hpp>
-#include <rendering_engine/passes/post/passthrough_pass.hpp>
+#include <rendering_engine/passes/post/tonemap_pass.hpp>
 #include <rendering_engine/passes/scene_pass.hpp>
 #include <rendering_engine/passes/ui_pass.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
@@ -80,7 +80,7 @@ void rendering_engine::context::init()
     // pipeline-create time.
     auto scene = std::make_unique<scene_pass>(&m_scene_renderables);
     const gpu::bind_group_layout scene_frame_layout = scene->frame_bind_group_layout();
-    auto post = std::make_unique<passthrough_pass>(m_scene_color_texture);
+    auto post = std::make_unique<tonemap_pass>(m_scene_color_texture);
     auto ui = std::make_unique<ui_pass>(&m_ui_renderables);
 
     // Construct the built-in materials against the per-frame layouts
@@ -92,7 +92,7 @@ void rendering_engine::context::init()
     LOG_INF("Rendering Engine: lit_material and ui_material constructed");
 
     // Register the built-in passes in render order: scene writes into
-    // the HDR target, the passthrough post pass copies it to the
+    // the HDR target, the tonemap post pass maps it to LDR on the
     // swapchain, then the UI pass composites on top. Future post
     // effects insert between scene and ui by pushing into this list.
     m_passes.push_back(std::move(scene));
