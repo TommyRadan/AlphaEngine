@@ -83,6 +83,9 @@ namespace rendering_engine::gpu::backend::opengl
 
         render_target swapchain_target() override;
         void resize_swapchain(uint32_t width, uint32_t height) override;
+        render_target create_render_target(const render_target_descriptor& descriptor) override;
+        void destroy(render_target handle) override;
+        texture render_target_color_texture(render_target handle) override;
 
         std::unique_ptr<command_encoder> create_command_encoder() override;
         void submit(std::unique_ptr<command_encoder> encoder) override;

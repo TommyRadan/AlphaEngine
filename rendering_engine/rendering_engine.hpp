@@ -30,6 +30,8 @@
 #include <memory>
 #include <vector>
 
+#include <rendering_engine/gpu/handle.hpp>
+
 namespace rendering_engine
 {
     struct pass;
@@ -119,5 +121,13 @@ namespace rendering_engine
         // layouts. Released after the passes in @ref quit.
         std::unique_ptr<lit_material> m_lit_material;
         std::unique_ptr<ui_material> m_ui_material;
+
+        // Off-screen HDR target the scene pass renders into.
+        // Created in @ref init at the current backbuffer size and
+        // released in @ref quit. Surfaced to passes via
+        // @ref frame_context::scene_color_target / @c scene_color_texture
+        // so the post chain can sample it as input.
+        gpu::render_target m_scene_color_target{};
+        gpu::texture m_scene_color_texture{};
     };
 } // namespace rendering_engine

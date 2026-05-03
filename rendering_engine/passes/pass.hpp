@@ -44,15 +44,21 @@ namespace rendering_engine
      */
     struct frame_context
     {
-        // Backbuffer the passes ultimately resolve to. Off-screen
-        // targets are owned by the passes that use them; this is
-        // the one shared output.
+        // Backbuffer the engine presents. The last post pass writes
+        // here; the UI pass composites on top of it.
         gpu::render_target swapchain_target{};
 
         // Active camera, or nullptr if none is attached. Passes that
         // require a camera (the scene pass today) early-return when
         // this is null.
         camera* active_camera{nullptr};
+
+        // Off-screen HDR colour target the scene pass renders into.
+        // Owned by @ref context; surfaced here so passes share the
+        // handle without reaching back through the engine. Post
+        // passes sample @ref scene_color_texture as their input.
+        gpu::render_target scene_color_target{};
+        gpu::texture scene_color_texture{};
     };
 
     /**
