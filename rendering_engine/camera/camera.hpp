@@ -46,6 +46,8 @@ namespace rendering_engine
         void invalidate_projection_matrix();
         virtual const infrastructure::math::mat4 get_projection_matrix() const = 0;
 
+        const infrastructure::math::frustum get_frustum() const;
+
     protected:
         mutable infrastructure::math::mat4 m_view_matrix;
         mutable bool m_is_view_matrix_dirty;

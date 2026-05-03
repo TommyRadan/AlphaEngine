@@ -73,3 +73,8 @@ void rendering_engine::camera::invalidate_projection_matrix()
 {
     m_is_projection_matrix_dirty = true;
 }
+
+const infrastructure::math::frustum rendering_engine::camera::get_frustum() const
+{
+    return infrastructure::math::frustum::from_view_projection(get_projection_matrix() * get_view_matrix());
+}
