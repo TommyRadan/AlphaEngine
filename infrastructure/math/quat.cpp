@@ -20,27 +20,25 @@
  * SOFTWARE.
  */
 
-/**
- * @file math.hpp
- * @brief Umbrella include for the engine-owned math types.
- *
- * Each vector, matrix, and quaternion type lives in its own header next to
- * this one. The implementations are in matching @c .cpp files, which are
- * the only translation units that include and name @c glm:: . Including
- * this header pulls every public math type into scope while keeping GLM
- * out of the consumer's preprocessor input.
- */
-
-#pragma once
-
-#include <infrastructure/math/mat3.hpp>
-#include <infrastructure/math/mat4.hpp>
 #include <infrastructure/math/quat.hpp>
-#include <infrastructure/math/vec2.hpp>
-#include <infrastructure/math/vec3.hpp>
-#include <infrastructure/math/vec4.hpp>
+
+#include <glm/glm.hpp>
+#include <glm/gtc/quaternion.hpp>
+
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/quaternion.hpp>
 
 namespace infrastructure::math
 {
-    float lerp(float a, float b, float t) noexcept;
+    quat normalize(const quat& q) noexcept
+    {
+        glm::quat result = glm::normalize(glm::quat{q.w, q.x, q.y, q.z});
+        return quat{result.w, result.x, result.y, result.z};
+    }
+
+    quat inverse(const quat& q) noexcept
+    {
+        glm::quat result = glm::inverse(glm::quat{q.w, q.x, q.y, q.z});
+        return quat{result.w, result.x, result.y, result.z};
+    }
 } // namespace infrastructure::math

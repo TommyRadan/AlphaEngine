@@ -20,27 +20,39 @@
  * SOFTWARE.
  */
 
-/**
- * @file math.hpp
- * @brief Umbrella include for the engine-owned math types.
- *
- * Each vector, matrix, and quaternion type lives in its own header next to
- * this one. The implementations are in matching @c .cpp files, which are
- * the only translation units that include and name @c glm:: . Including
- * this header pulls every public math type into scope while keeping GLM
- * out of the consumer's preprocessor input.
- */
-
 #pragma once
 
-#include <infrastructure/math/mat3.hpp>
-#include <infrastructure/math/mat4.hpp>
-#include <infrastructure/math/quat.hpp>
-#include <infrastructure/math/vec2.hpp>
 #include <infrastructure/math/vec3.hpp>
-#include <infrastructure/math/vec4.hpp>
 
 namespace infrastructure::math
 {
-    float lerp(float a, float b, float t) noexcept;
+    /** @brief 3x3 float matrix (column-major). Layout-compatible with @c glm::mat3. */
+    struct mat3
+    {
+        // Column-major storage: m[col * 3 + row].
+        float m[9]{1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f};
+
+        constexpr mat3() noexcept = default;
+        constexpr explicit mat3(float diagonal) noexcept
+            : m{diagonal, 0.0f, 0.0f, 0.0f, diagonal, 0.0f, 0.0f, 0.0f, diagonal}
+        {
+        }
+
+        const float* data() const noexcept
+        {
+            return m;
+        }
+        float* data() noexcept
+        {
+            return m;
+        }
+    };
+
+    mat3 operator*(const mat3& a, const mat3& b) noexcept;
+    vec3 operator*(const mat3& m, const vec3& v) noexcept;
+    bool operator==(const mat3& a, const mat3& b) noexcept;
+    bool operator!=(const mat3& a, const mat3& b) noexcept;
+
+    mat3 inverse(const mat3& m) noexcept;
+    mat3 transpose(const mat3& m) noexcept;
 } // namespace infrastructure::math
