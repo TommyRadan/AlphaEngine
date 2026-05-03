@@ -31,6 +31,8 @@
 
 namespace rendering_engine
 {
+    struct renderable;
+
     /**
      * @brief Orchestrates the rendering subsystem (window, GL context, renderers).
      *
@@ -54,12 +56,36 @@ namespace rendering_engine
         /**
          * @brief Renders one frame.
          *
-         * Runs the scene pass (broadcasting @ref event_engine::render_scene
-         * if a camera is active) followed by the UI overlay pass
-         * (broadcasting @ref event_engine::render_ui). Depth testing is
-         * disabled for the overlay and restored afterwards. Does not
-         * swap buffers — callers are responsible for presenting.
+         * Walks the scene-pass renderable registry and the UI-pass
+         * registry, recording draws for each entry. Each pass also
+         * broadcasts the matching event (@ref event_engine::render_scene
+         * after the scene walk, @ref event_engine::render_ui after the
+         * UI walk) so debug/gizmo callers can still subscribe. The
+         * scene pass is skipped if no camera is active. Does not swap
+         * buffers — callers are responsible for presenting.
          */
         void render();
+
+        /**
+         * @brief Adds @p r to the scene-pass registry.
+         *
+         * The pointer is non-owning; callers must @ref unregister_scene_renderable
+         * before destroying the renderable. Registration order is
+         * preserved and is the dispatch order during the scene pass.
+         */
+        void register_scene_renderable(renderable* r);
+
+        /** @brief Removes @p r from the scene-pass registry; no-op if absent. */
+        void unregister_scene_renderable(renderable* r);
+
+        /** @brief Adds @p r to the UI-pass registry; same ownership rules as the scene variant. */
+        void register_ui_renderable(renderable* r);
+
+        /** @brief Removes @p r from the UI-pass registry; no-op if absent. */
+        void unregister_ui_renderable(renderable* r);
+
+    private:
+        std::vector<renderable*> m_scene_renderables;
+        std::vector<renderable*> m_ui_renderables;
     };
 } // namespace rendering_engine

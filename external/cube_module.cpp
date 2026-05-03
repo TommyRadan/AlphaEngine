@@ -24,8 +24,10 @@
 #include "api/log.hpp"
 #include "api/time.hpp"
 
+#include <control/engine.hpp>
 #include <infrastructure/log.hpp>
 #include <rendering_engine/renderables/premade_3d/cube.hpp>
+#include <rendering_engine/rendering_engine.hpp>
 
 #include <memory>
 
@@ -38,10 +40,12 @@ static void on_engine_start(const event_engine::engine_start& event)
 {
     cube = std::make_unique<rendering_engine::cube>();
     cube->upload();
+    control::current_engine().renderer->register_scene_renderable(cube.get());
 }
 
 static void on_engine_stop(const event_engine::engine_stop& event)
 {
+    control::current_engine().renderer->unregister_scene_renderable(cube.get());
     cube.reset();
 }
 
@@ -51,21 +55,12 @@ static void on_frame(const event_engine::frame& event)
     cube->transform.set_rotation(infrastructure::math::vec3{0.f, 0.f, rotation});
 }
 
-static void on_render_scene(const event_engine::render_scene& event)
-{
-    if (event.encoder != nullptr)
-    {
-        cube->render(*event.encoder);
-    }
-}
-
 GAME_MODULE()
 {
     LOG_INF("Registering external module: cube_module");
     struct game_module_info info;
     info.on_engine_start = on_engine_start;
     info.on_engine_stop = on_engine_stop;
-    info.on_render_scene = on_render_scene;
     info.on_frame = on_frame;
     register_game_module(info);
     return true;

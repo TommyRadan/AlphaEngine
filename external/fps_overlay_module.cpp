@@ -24,9 +24,11 @@
 #include "api/log.hpp"
 #include "api/time.hpp"
 
+#include <control/engine.hpp>
 #include <infrastructure/log.hpp>
 #include <infrastructure/math/math.hpp>
 #include <rendering_engine/renderables/premade_2d/label.hpp>
+#include <rendering_engine/rendering_engine.hpp>
 #include <rendering_engine/util/font.hpp>
 
 #include <exception>
@@ -57,6 +59,7 @@ static void on_engine_start(const event_engine::engine_start& event)
         fps_label = std::make_unique<rendering_engine::label>(font.get(), font_size, "FPS: ---");
         fps_label->upload();
         reposition_top_right();
+        control::current_engine().renderer->register_ui_renderable(fps_label.get());
     }
     catch (const std::exception& e)
     {
@@ -68,6 +71,10 @@ static void on_engine_start(const event_engine::engine_start& event)
 
 static void on_engine_stop(const event_engine::engine_stop& event)
 {
+    if (fps_label)
+    {
+        control::current_engine().renderer->unregister_ui_renderable(fps_label.get());
+    }
     fps_label.reset();
     font.reset();
 }
@@ -91,15 +98,6 @@ static void on_frame(const event_engine::frame& event)
     reposition_top_right();
 }
 
-static void on_render_ui(const event_engine::render_ui& event)
-{
-    if (!fps_label || event.encoder == nullptr)
-    {
-        return;
-    }
-    fps_label->render(*event.encoder);
-}
-
 GAME_MODULE()
 {
     LOG_INF("Registering external module: fps_overlay_module");
@@ -107,7 +105,6 @@ GAME_MODULE()
     info.on_engine_start = on_engine_start;
     info.on_engine_stop = on_engine_stop;
     info.on_frame = on_frame;
-    info.on_render_ui = on_render_ui;
     register_game_module(info);
     return true;
 }

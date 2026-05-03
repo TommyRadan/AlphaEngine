@@ -30,9 +30,12 @@
 #include <rendering_engine/gpu/command_encoder.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/gpu/render_target.hpp>
+#include <rendering_engine/renderables/renderable.hpp>
 #include <rendering_engine/renderers/basic_renderer.hpp>
 #include <rendering_engine/renderers/overlay_renderer.hpp>
 #include <rendering_engine/window.hpp>
+
+#include <algorithm>
 
 void rendering_engine::context::init()
 {
@@ -90,6 +93,10 @@ void rendering_engine::context::render()
 
         auto pass = encoder->begin_render_pass(scene_pass);
         eng.basic_renderer->begin(*pass);
+        for (auto* r : m_scene_renderables)
+        {
+            r->render(*pass);
+        }
         eng.events->emit<event_engine::render_scene>(pass.get());
         eng.basic_renderer->end(*pass);
         pass->end();
@@ -108,10 +115,41 @@ void rendering_engine::context::render()
 
         auto pass = encoder->begin_render_pass(ui_pass);
         eng.overlay_renderer->begin(*pass);
+        for (auto* r : m_ui_renderables)
+        {
+            r->render(*pass);
+        }
         eng.events->emit<event_engine::render_ui>(pass.get());
         eng.overlay_renderer->end(*pass);
         pass->end();
     }
 
     gpu.submit(std::move(encoder));
+}
+
+void rendering_engine::context::register_scene_renderable(renderable* r)
+{
+    if (r != nullptr)
+    {
+        m_scene_renderables.push_back(r);
+    }
+}
+
+void rendering_engine::context::unregister_scene_renderable(renderable* r)
+{
+    m_scene_renderables.erase(std::remove(m_scene_renderables.begin(), m_scene_renderables.end(), r),
+                              m_scene_renderables.end());
+}
+
+void rendering_engine::context::register_ui_renderable(renderable* r)
+{
+    if (r != nullptr)
+    {
+        m_ui_renderables.push_back(r);
+    }
+}
+
+void rendering_engine::context::unregister_ui_renderable(renderable* r)
+{
+    m_ui_renderables.erase(std::remove(m_ui_renderables.begin(), m_ui_renderables.end(), r), m_ui_renderables.end());
 }
