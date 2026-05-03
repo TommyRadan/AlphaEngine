@@ -117,5 +117,13 @@ namespace rendering_engine::gpu::backend::opengl
         uint32_t width{0};
         uint32_t height{0};
         bool has_depth{true};
+
+        // Texture handles for the attachments owned by this target.
+        // Both invalid for the swapchain (FBO 0); for an off-screen
+        // target the colour handle is exposed to callers via
+        // @ref device::render_target_color_texture so the next pass
+        // can sample the colour attachment as input.
+        texture color_attachment{};
+        texture depth_attachment{};
     };
 } // namespace rendering_engine::gpu::backend::opengl

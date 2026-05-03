@@ -143,6 +143,15 @@ namespace rendering_engine::gpu::backend::opengl
                     b.object_id = 0;
                 }
             });
+        m_render_targets.for_each(
+            [](gl_render_target& rt)
+            {
+                if (rt.framebuffer_id != 0)
+                {
+                    glDeleteFramebuffers(1, &rt.framebuffer_id);
+                    rt.framebuffer_id = 0;
+                }
+            });
 
         m_pipelines.clear();
         m_shader_modules.clear();
@@ -171,6 +180,114 @@ namespace rendering_engine::gpu::backend::opengl
             record->width = width;
             record->height = height;
         }
+    }
+
+    render_target gl_device::create_render_target(const render_target_descriptor& descriptor)
+    {
+        // Allocate the colour attachment as a regular sampled texture
+        // so post passes can read it as input. clamp_edge keeps the
+        // fullscreen pass from wrapping at the seam.
+        texture_descriptor color_descriptor{};
+        color_descriptor.dimension = texture_dimension::d2;
+        color_descriptor.format = descriptor.color_format;
+        color_descriptor.width = descriptor.width;
+        color_descriptor.height = descriptor.height;
+        color_descriptor.mipmaps = false;
+        color_descriptor.min_filter = filter_mode::linear;
+        color_descriptor.mag_filter = filter_mode::linear;
+        color_descriptor.mipmap_filter = mipmap_mode::none;
+        color_descriptor.address_u = address_mode::clamp_edge;
+        color_descriptor.address_v = address_mode::clamp_edge;
+        color_descriptor.address_w = address_mode::clamp_edge;
+        const texture color = create_texture(color_descriptor);
+
+        texture depth{};
+        if (descriptor.with_depth)
+        {
+            texture_descriptor depth_descriptor{};
+            depth_descriptor.dimension = texture_dimension::d2;
+            depth_descriptor.format = descriptor.depth_format;
+            depth_descriptor.width = descriptor.width;
+            depth_descriptor.height = descriptor.height;
+            depth_descriptor.mipmaps = false;
+            depth_descriptor.min_filter = filter_mode::nearest;
+            depth_descriptor.mag_filter = filter_mode::nearest;
+            depth_descriptor.mipmap_filter = mipmap_mode::none;
+            depth_descriptor.address_u = address_mode::clamp_edge;
+            depth_descriptor.address_v = address_mode::clamp_edge;
+            depth_descriptor.address_w = address_mode::clamp_edge;
+            depth = create_texture(depth_descriptor);
+        }
+
+        gl_render_target record{};
+        record.width = descriptor.width;
+        record.height = descriptor.height;
+        record.has_depth = descriptor.with_depth;
+        record.color_attachment = color;
+        record.depth_attachment = depth;
+
+        glGenFramebuffers(1, &record.framebuffer_id);
+        glBindFramebuffer(GL_FRAMEBUFFER, record.framebuffer_id);
+
+        if (auto* color_record = m_textures.lookup(color.id))
+        {
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, color_record->object_id, 0);
+        }
+        if (descriptor.with_depth)
+        {
+            if (auto* depth_record = m_textures.lookup(depth.id))
+            {
+                glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depth_record->object_id, 0);
+            }
+        }
+
+        const GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+        if (status != GL_FRAMEBUFFER_COMPLETE)
+        {
+            LOG_ERR("create_render_target: incomplete framebuffer (status 0x%x)", status);
+        }
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+        render_target h{};
+        h.id = m_render_targets.insert(record);
+        return h;
+    }
+
+    void gl_device::destroy(render_target handle)
+    {
+        // The swapchain is owned by the device and survives until quit.
+        if (handle.id == m_swapchain.id)
+        {
+            return;
+        }
+        if (auto* record = m_render_targets.lookup(handle.id))
+        {
+            if (record->framebuffer_id != 0)
+            {
+                glDeleteFramebuffers(1, &record->framebuffer_id);
+                record->framebuffer_id = 0;
+            }
+            if (record->color_attachment.valid())
+            {
+                destroy(record->color_attachment);
+                record->color_attachment = {};
+            }
+            if (record->depth_attachment.valid())
+            {
+                destroy(record->depth_attachment);
+                record->depth_attachment = {};
+            }
+            m_render_targets.remove(handle.id);
+        }
+    }
+
+    texture gl_device::render_target_color_texture(render_target handle)
+    {
+        if (auto* record = m_render_targets.lookup(handle.id))
+        {
+            return record->color_attachment;
+        }
+        return {};
     }
 
     // -- Command recording ----------------------------------------

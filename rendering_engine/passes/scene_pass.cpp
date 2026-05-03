@@ -79,18 +79,14 @@ namespace rendering_engine
 
     void scene_pass::record(gpu::command_encoder& encoder, const frame_context& ctx)
     {
-        // No camera, no scene. The UI pass still runs against the
-        // raw backbuffer.
-        if (ctx.active_camera == nullptr)
-        {
-            return;
-        }
-
         auto& eng = control::current_engine();
         auto& gpu = *eng.gpu;
 
+        // Render into the HDR scene-colour target so the post chain
+        // can sample real luminance. The passthrough post pass copies
+        // the result into the swapchain before the UI composites.
         gpu::render_pass_descriptor descriptor{};
-        descriptor.target = ctx.swapchain_target;
+        descriptor.target = ctx.scene_color_target;
         descriptor.color.load = gpu::load_op::clear;
         descriptor.color.clear_color = {0.0f, 0.0f, 0.0f, 1.0f};
         descriptor.use_depth = true;
@@ -98,6 +94,16 @@ namespace rendering_engine
         descriptor.depth.clear_depth = 1.0f;
 
         auto pass_encoder = encoder.begin_render_pass(descriptor);
+
+        // No camera, no scene — but we still opened the pass so the
+        // HDR target gets cleared to black. Otherwise the passthrough
+        // would copy stale or driver-uninitialised contents into the
+        // swapchain on no-camera frames.
+        if (ctx.active_camera == nullptr)
+        {
+            pass_encoder->end();
+            return;
+        }
 
         // Collect every renderable's draw items into a single per-frame
         // list, then sort by pipeline id so the dispatch loop only

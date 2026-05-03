@@ -130,6 +130,23 @@ namespace rendering_engine::gpu
         // pass viewport defaults match the window.
         virtual void resize_swapchain(uint32_t width, uint32_t height) = 0;
 
+        // Allocate an off-screen render target. The device owns the
+        // colour texture (and the optional depth texture) so the
+        // attachments are released together with the target. The
+        // colour texture is exposed via @ref render_target_color_texture
+        // so the next pass in the chain can sample it; the depth
+        // attachment is internal.
+        virtual render_target create_render_target(const render_target_descriptor& descriptor) = 0;
+
+        // Release a previously created off-screen render target and
+        // its owned attachments. No-op for the swapchain handle.
+        virtual void destroy(render_target handle) = 0;
+
+        // Texture handle wrapping the colour attachment of @p handle,
+        // or an invalid handle for the swapchain. Used by post-process
+        // passes to bind the previous pass's output as a sampled input.
+        virtual texture render_target_color_texture(render_target handle) = 0;
+
         // -- Command recording --------------------------------------------
 
         // Allocate a new command encoder. Each encoder records one

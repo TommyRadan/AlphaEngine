@@ -31,6 +31,7 @@
 #include <rendering_engine/materials/lit_material.hpp>
 #include <rendering_engine/materials/ui_material.hpp>
 #include <rendering_engine/passes/pass.hpp>
+#include <rendering_engine/passes/post/passthrough_pass.hpp>
 #include <rendering_engine/passes/scene_pass.hpp>
 #include <rendering_engine/passes/ui_pass.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
@@ -51,16 +52,35 @@ void rendering_engine::context::init()
 
     // Tell the device about the initial backbuffer dimensions so that
     // begin_render_pass can default the viewport to the full window.
+    uint32_t width = 0;
+    uint32_t height = 0;
     if (eng.settings != nullptr)
     {
-        eng.gpu->resize_swapchain(eng.settings->get_window_width(), eng.settings->get_window_height());
+        width = eng.settings->get_window_width();
+        height = eng.settings->get_window_height();
+        eng.gpu->resize_swapchain(width, height);
     }
+
+    // Allocate the off-screen HDR scene-colour target. The scene pass
+    // renders into rgba16f instead of straight to the swapchain so
+    // tonemap, bloom and any other post effect can sample real HDR
+    // luminance. Sized at the current backbuffer; resize handling is
+    // a follow-up.
+    gpu::render_target_descriptor scene_color_descriptor{};
+    scene_color_descriptor.color_format = gpu::texture_format::rgba16_float;
+    scene_color_descriptor.width = width;
+    scene_color_descriptor.height = height;
+    scene_color_descriptor.with_depth = true;
+    scene_color_descriptor.depth_format = gpu::texture_format::depth24;
+    m_scene_color_target = eng.gpu->create_render_target(scene_color_descriptor);
+    m_scene_color_texture = eng.gpu->render_target_color_texture(m_scene_color_target);
 
     // Construct the built-in passes first — each pass owns the
     // per-frame bind-group layout its matching material reads at
     // pipeline-create time.
     auto scene = std::make_unique<scene_pass>(&m_scene_renderables);
     const gpu::bind_group_layout scene_frame_layout = scene->frame_bind_group_layout();
+    auto post = std::make_unique<passthrough_pass>(m_scene_color_texture);
     auto ui = std::make_unique<ui_pass>(&m_ui_renderables);
 
     // Construct the built-in materials against the per-frame layouts
@@ -71,10 +91,12 @@ void rendering_engine::context::init()
     m_ui_material = std::make_unique<ui_material>();
     LOG_INF("Rendering Engine: lit_material and ui_material constructed");
 
-    // Register the built-in passes in render order. Future passes
-    // (post-process, shadow, depth pre-pass, debug overlay) push
-    // into this list at startup instead of editing render().
+    // Register the built-in passes in render order: scene writes into
+    // the HDR target, the passthrough post pass copies it to the
+    // swapchain, then the UI pass composites on top. Future post
+    // effects insert between scene and ui by pushing into this list.
     m_passes.push_back(std::move(scene));
+    m_passes.push_back(std::move(post));
     m_passes.push_back(std::move(ui));
 }
 
@@ -92,6 +114,16 @@ void rendering_engine::context::quit()
     m_ui_material.reset();
     m_lit_material.reset();
 
+    // Release the off-screen HDR target before the device tears its
+    // pools down. The colour and depth attachments are owned by the
+    // target so destroy() releases all three.
+    if (m_scene_color_target.valid())
+    {
+        eng.gpu->destroy(m_scene_color_target);
+        m_scene_color_target = {};
+        m_scene_color_texture = {};
+    }
+
     eng.gpu->quit();
     eng.window->quit();
 
@@ -106,7 +138,8 @@ void rendering_engine::context::render()
     // Capture per-frame state once so passes cannot disagree about
     // which camera or backbuffer is active mid-frame, and so they
     // do not have to re-query the camera singleton on every entry.
-    frame_context ctx{gpu.swapchain_target(), camera::get_current_camera()};
+    frame_context ctx{
+        gpu.swapchain_target(), camera::get_current_camera(), m_scene_color_target, m_scene_color_texture};
 
     auto encoder = gpu.create_command_encoder();
     for (auto& p : m_passes)
