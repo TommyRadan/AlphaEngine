@@ -34,15 +34,18 @@ namespace rendering_engine
 {
     struct pass;
     struct renderable;
+    struct lit_material;
+    struct ui_material;
 
     /**
-     * @brief Orchestrates the rendering subsystem (window, GL context, renderers).
+     * @brief Orchestrates the rendering subsystem (window, GL context, materials, passes).
      *
      * Owned by @ref control::engine. @ref init brings up the window
-     * and OpenGL context and constructs the built-in renderers;
-     * @ref quit tears the GL context and window down in reverse order.
-     * All methods must be called from the main thread that owns the GL
-     * context.
+     * and OpenGL context, constructs the built-in passes (which own
+     * their per-frame bind-group layouts) and the built-in materials
+     * (which read those layouts when building their pipelines);
+     * @ref quit tears them down in reverse order. All methods must be
+     * called from the main thread that owns the GL context.
      */
     struct context
     {
@@ -54,12 +57,12 @@ namespace rendering_engine
         ~context();
 
         /**
-         * @brief Initializes the window, GL context and built-in renderers.
+         * @brief Initializes the window, GL context and built-in passes / materials.
          *        Must be called once before @ref render.
          */
         void init();
 
-        /** @brief Tears the renderers, GL context and window down. */
+        /** @brief Tears the materials, passes, GL context and window down. */
         void quit();
 
         /**
@@ -95,14 +98,26 @@ namespace rendering_engine
         /** @brief Removes @p r from the UI-pass registry; no-op if absent. */
         void unregister_ui_renderable(renderable* r);
 
+        /** @brief Built-in 3D scene material. Constructed in @ref init. */
+        lit_material& get_lit_material();
+
+        /** @brief Built-in 2D overlay material. Constructed in @ref init. */
+        ui_material& get_ui_material();
+
     private:
         std::vector<renderable*> m_scene_renderables;
         std::vector<renderable*> m_ui_renderables;
 
         // Ordered pass list walked once per frame in @ref render.
         // Populated by @ref init with the built-in scene + UI passes
-        // and torn down first in @ref quit, before the renderers and
+        // and torn down first in @ref quit, before the materials and
         // GPU device the passes reference.
         std::vector<std::unique_ptr<pass>> m_passes;
+
+        // Built-in materials, constructed after the passes in
+        // @ref init so they can read the passes' per-frame bind-group
+        // layouts. Released after the passes in @ref quit.
+        std::unique_ptr<lit_material> m_lit_material;
+        std::unique_ptr<ui_material> m_ui_material;
     };
 } // namespace rendering_engine

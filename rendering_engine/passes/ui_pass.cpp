@@ -22,12 +22,14 @@
 
 #include <rendering_engine/passes/ui_pass.hpp>
 
+#include <algorithm>
+
 #include <control/engine.hpp>
 #include <event_engine/event.hpp>
 #include <event_engine/event_engine.hpp>
 #include <rendering_engine/gpu/render_target.hpp>
+#include <rendering_engine/materials/material.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
-#include <rendering_engine/renderers/overlay_renderer.hpp>
 
 namespace rendering_engine
 {
@@ -48,13 +50,45 @@ namespace rendering_engine
         auto& eng = control::current_engine();
 
         auto pass_encoder = encoder.begin_render_pass(descriptor);
-        eng.overlay_renderer->begin(*pass_encoder);
+
+        m_items.clear();
         for (auto* r : *m_registry)
         {
-            r->render(*pass_encoder);
+            r->collect_draw_items(m_items);
         }
+        std::stable_sort(m_items.begin(),
+                         m_items.end(),
+                         [](const draw_item& a, const draw_item& b)
+                         { return a.mat->pipeline().id < b.mat->pipeline().id; });
+
+        uint64_t last_pipeline_id = 0;
+        for (const auto& item : m_items)
+        {
+            const uint64_t pid = item.mat->pipeline().id;
+            if (pid != last_pipeline_id)
+            {
+                pass_encoder->set_pipeline(item.mat->pipeline());
+                if (item.mat->per_material_bind_group().valid())
+                {
+                    pass_encoder->set_bind_group(item.mat->per_material_slot(), item.mat->per_material_bind_group());
+                }
+                last_pipeline_id = pid;
+            }
+
+            pass_encoder->set_bind_group(item.mat->per_draw_slot(), item.per_draw_bind_group);
+            pass_encoder->set_vertex_buffer(0, item.vertex_buffer, 0, item.vertex_stride);
+            if (item.index_buffer.valid())
+            {
+                pass_encoder->set_index_buffer(item.index_buffer, item.index_format);
+                pass_encoder->draw_indexed(item.index_count, 0);
+            }
+            else
+            {
+                pass_encoder->draw(item.vertex_count, 0);
+            }
+        }
+
         eng.events->emit<event_engine::render_ui>(pass_encoder.get());
-        eng.overlay_renderer->end(*pass_encoder);
         pass_encoder->end();
     }
 } // namespace rendering_engine

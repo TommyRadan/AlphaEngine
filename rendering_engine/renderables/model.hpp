@@ -29,9 +29,14 @@
 
 namespace rendering_engine
 {
+    struct material;
+
     struct model : public renderable
     {
-        model();
+        // The material is non-owning; it is created once by
+        // @ref rendering_engine::context (e.g. @c lit_material) and
+        // shared by every renderable that draws under it.
+        explicit model(material* mat);
         ~model() override;
 
         rendering_engine::util::transform transform;
@@ -42,9 +47,10 @@ namespace rendering_engine
         // entry point @c model uses instead of @ref renderable::upload.
         void upload() final {}
 
-        void render(gpu::render_pass_encoder& encoder) final;
+        void collect_draw_items(std::vector<draw_item>& out) final;
 
     private:
+        material* m_material{nullptr};
         gpu::buffer m_vertex_buffer{};
         gpu::bind_group m_draw_bind_group{};
 

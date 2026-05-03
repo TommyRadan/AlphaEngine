@@ -20,7 +20,7 @@
  * SOFTWARE.
  */
 
-#include <rendering_engine/renderers/overlay_renderer.hpp>
+#include <rendering_engine/materials/lit_material.hpp>
 
 #include <string>
 
@@ -30,14 +30,15 @@ namespace
         #version 330
 
         layout(location=0) in vec3 position;
-        layout(location=1) in vec2 uv;
 
-        out vec2 texCoord;
+        uniform mat4 modelMatrix;
+        uniform mat4 viewMatrix;
+        uniform mat4 projectionMatrix;
 
         void main()
         {
-            texCoord = uv;
-            gl_Position = vec4(position, 1.0);
+            mat4 MVP = projectionMatrix * viewMatrix * modelMatrix;
+            gl_Position = MVP * vec4(position, 1.0);
         }
 )vs";
 
@@ -45,41 +46,33 @@ namespace
         #version 330
 
         out vec4 fragColor;
-        in vec2 texCoord;
-
-        uniform float useTexture;
-        uniform vec4 color;
-        uniform sampler2D tex;
 
         void main()
         {
-            fragColor = (useTexture != 0.0) ? texture(tex, vec2(texCoord.x, 1.0 - texCoord.y)) : color;
+            fragColor = vec4(1.0, 1.0, 1.0, 1.0);
         }
 )fs";
 } // namespace
 
-namespace rendering_engine::renderers
+namespace rendering_engine
 {
-    overlay_renderer::overlay_renderer()
+    lit_material::lit_material(gpu::bind_group_layout frame_layout)
     {
         gpu::vertex_buffer_layout vertex_layout{};
-        vertex_layout.stride = 0; // panes use vertex_position_uv = 20 bytes; supplied per draw
+        // Stride = 0 — per-renderable strides are passed at
+        // @c set_vertex_buffer time. The shader only reads position,
+        // so attribute offset 0 stays correct across every renderable
+        // that fronts this pipeline regardless of trailing attributes.
+        vertex_layout.stride = 0;
         vertex_layout.attributes.push_back({0, 3, gpu::scalar_type::float32, 0});
-        vertex_layout.attributes.push_back({1, 2, gpu::scalar_type::float32, sizeof(float) * 3});
 
         gpu::bind_group_layout_descriptor draw_layout{};
-        draw_layout.entries.push_back({0, gpu::binding_kind::float_value, "useTexture"});
-        draw_layout.entries.push_back({1, gpu::binding_kind::vec4_value, "color"});
-        draw_layout.entries.push_back({2, gpu::binding_kind::texture, "tex"});
+        draw_layout.entries.push_back({0, gpu::binding_kind::mat4_value, "modelMatrix"});
 
-        // Overlay pass disables depth testing entirely so 2D
-        // elements draw in submission order; depth writes also
-        // stay off so the overlay never trashes the scene's depth
-        // buffer.
         gpu::depth_state depth{};
-        depth.test_enabled = false;
-        depth.write_enabled = false;
-        depth.compare = gpu::compare_function::always;
+        depth.test_enabled = true;
+        depth.write_enabled = true;
+        depth.compare = gpu::compare_function::less;
 
         gpu::blend_state blend{};
         blend.enabled = true;
@@ -87,12 +80,10 @@ namespace rendering_engine::renderers
         blend.dst = gpu::blend_factor::one_minus_src_alpha;
 
         gpu::rasterizer_state rasterizer{};
-        rasterizer.cull = gpu::cull_mode::none;
+        rasterizer.cull = gpu::cull_mode::back;
         rasterizer.front = gpu::front_face::counter_clockwise;
 
         construct_pipeline(
-            vertex_shader, fragment_shader, vertex_layout, draw_layout, nullptr, depth, blend, rasterizer);
+            vertex_shader, fragment_shader, vertex_layout, draw_layout, frame_layout, depth, blend, rasterizer);
     }
-
-    overlay_renderer::~overlay_renderer() = default;
-} // namespace rendering_engine::renderers
+} // namespace rendering_engine

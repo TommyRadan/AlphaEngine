@@ -30,8 +30,6 @@
 #include <infrastructure/settings.hpp>
 #include <infrastructure/time.hpp>
 #include <rendering_engine/gpu/device.hpp>
-#include <rendering_engine/renderers/basic_renderer.hpp>
-#include <rendering_engine/renderers/overlay_renderer.hpp>
 #include <rendering_engine/rendering_engine.hpp>
 #include <rendering_engine/window.hpp>
 #include <scene_graph/scene_graph.hpp>
@@ -76,9 +74,9 @@ namespace control
         events = std::make_unique<event_engine::event_bus>();
         window = std::make_unique<rendering_engine::window>();
         gpu = rendering_engine::gpu::create_device(rendering_engine::gpu::backend_type::opengl);
-        // basic_renderer_ / overlay_renderer_ are deferred until init()
-        // because they compile GL shader programs and need the GL
-        // context to be live first.
+        // The built-in materials inside @c renderer are deferred
+        // until init() because they compile GL shader programs and
+        // need the GL context to be live first.
         renderer = std::make_unique<rendering_engine::context>();
         scenes = std::make_unique<scene_graph::context>();
     }
@@ -90,8 +88,6 @@ namespace control
         // that reach for current_engine() still see a valid engine.
         scenes.reset();
         renderer.reset();
-        overlay_renderer.reset();
-        basic_renderer.reset();
         gpu.reset();
         window.reset();
         events.reset();
@@ -105,7 +101,8 @@ namespace control
         // Matches the old main_loop.cpp init sequence: events,
         // rendering, scene graph. The window/GL context is brought up
         // inside rendering_engine::context::init(); it in turn
-        // constructs the two built-in renderers once GL is alive.
+        // constructs the built-in passes and materials once GL is
+        // alive.
         events->init();
 
         // Game modules self-register at static-init time (before the

@@ -27,6 +27,7 @@
 #include <control/engine.hpp>
 #include <infrastructure/log.hpp>
 #include <infrastructure/math/math.hpp>
+#include <rendering_engine/materials/ui_material.hpp>
 #include <rendering_engine/renderables/premade_2d/label.hpp>
 #include <rendering_engine/rendering_engine.hpp>
 #include <rendering_engine/util/font.hpp>
@@ -56,7 +57,8 @@ static void on_engine_start(const event_engine::engine_start& event)
     try
     {
         font = std::make_unique<rendering_engine::util::font>(font_path, 64.0f);
-        fps_label = std::make_unique<rendering_engine::label>(font.get(), font_size, "FPS: ---");
+        fps_label = std::make_unique<rendering_engine::label>(
+            font.get(), font_size, "FPS: ---", &control::current_engine().renderer->get_ui_material());
         fps_label->upload();
         reposition_top_right();
         control::current_engine().renderer->register_ui_renderable(fps_label.get());

@@ -34,20 +34,25 @@
 
 namespace rendering_engine
 {
+    struct material;
+
     struct label : public renderable
     {
-        label(rendering_engine::util::font* font, float size, const std::string& text);
+        label(rendering_engine::util::font* font, float size, const std::string& text, material* mat);
 
         void set_text(const std::string& text);
         void set_position(const infrastructure::math::vec3& position);
         float get_width() const;
 
         void upload() final;
-        void render(gpu::render_pass_encoder& encoder) final;
+        void collect_draw_items(std::vector<draw_item>& out) final;
 
     private:
-        // Non-owning: font lifetime is managed by the caller.
+        // Non-owning: font and material lifetimes are managed by the
+        // caller (font by the game module that created it; material by
+        // @ref rendering_engine::context).
         rendering_engine::util::font* m_font;
+        material* m_material;
         std::string m_text;
         float m_size;
         infrastructure::math::vec3 m_position{0.0f};

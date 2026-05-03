@@ -25,6 +25,7 @@
 #include <vector>
 
 #include <rendering_engine/passes/pass.hpp>
+#include <rendering_engine/renderables/draw_item.hpp>
 
 namespace rendering_engine
 {
@@ -32,9 +33,13 @@ namespace rendering_engine
 
     /**
      * @brief 2D overlay pass. Loads the previous colour, disables
-     *        depth, drives @c overlay_renderer over the UI-renderable
-     *        registry, and broadcasts @ref event_engine::render_ui
-     *        as the documented escape hatch for ImGui-style overlays.
+     *        depth, collects draw items from the UI-renderable
+     *        registry, sorts them by pipeline, and dispatches them;
+     *        broadcasts @ref event_engine::render_ui as the
+     *        documented escape hatch for ImGui-style overlays.
+     *
+     * The matching @c ui_material has no per-frame bind group, so this
+     * pass owns no per-frame state of its own.
      *
      * Always runs; there is no camera gate. When the scene pass was
      * skipped, the UI is composited over the swapchain's initial
@@ -43,6 +48,10 @@ namespace rendering_engine
     struct ui_pass : pass
     {
         explicit ui_pass(std::vector<renderable*>* registry);
+        ~ui_pass() override = default;
+
+        ui_pass(const ui_pass&) = delete;
+        ui_pass& operator=(const ui_pass&) = delete;
 
         void record(gpu::command_encoder& encoder, const frame_context& ctx) override;
 
@@ -51,5 +60,8 @@ namespace rendering_engine
         // ui-renderable registry. Same lifetime guarantee as
         // @ref scene_pass::m_registry.
         std::vector<renderable*>* m_registry;
+
+        // Reused across frames so the underlying allocation persists.
+        std::vector<draw_item> m_items;
     };
 } // namespace rendering_engine

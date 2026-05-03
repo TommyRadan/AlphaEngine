@@ -22,19 +22,30 @@
 
 #pragma once
 
-#include <rendering_engine/renderers/renderer.hpp>
+#include <cstdint>
 
-namespace rendering_engine::renderers
+#include <rendering_engine/gpu/handle.hpp>
+#include <rendering_engine/gpu/types.hpp>
+
+namespace rendering_engine
 {
-    // 2D UI renderer. Drives a position+uv vertex stream through a
-    // pass-through vertex shader (positions are already in NDC) and
-    // a fragment shader that picks between a flat colour and a 2D
-    // texture sample. No per-frame bind group — all per-draw state
-    // (colour, texture, useTexture flag) flows through the per-draw
-    // bind group at slot 0.
-    struct overlay_renderer : public renderer
+    struct material;
+
+    // One draw the pass can dispatch. Renderables fill this struct in
+    // @ref renderable::collect_draw_items; the pass then sorts the
+    // collected items by @c mat->pipeline().id and walks them, issuing
+    // @c set_pipeline only when the pipeline changes. An invalid
+    // @ref index_buffer means non-indexed draw — the pass calls
+    // @c draw(vertex_count) instead of @c draw_indexed(index_count).
+    struct draw_item
     {
-        overlay_renderer();
-        ~overlay_renderer() override;
+        material* mat{nullptr};
+        gpu::buffer vertex_buffer{};
+        gpu::buffer index_buffer{};
+        gpu::bind_group per_draw_bind_group{};
+        uint32_t vertex_count{0};
+        uint32_t index_count{0};
+        uint32_t vertex_stride{0};
+        gpu::index_format index_format{gpu::index_format::uint32};
     };
-} // namespace rendering_engine::renderers
+} // namespace rendering_engine

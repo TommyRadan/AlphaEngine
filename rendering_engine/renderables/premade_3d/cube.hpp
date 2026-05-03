@@ -28,17 +28,20 @@
 
 namespace rendering_engine
 {
+    struct material;
+
     struct cube : public renderable
     {
-        cube();
+        explicit cube(material* mat);
         ~cube() override;
 
         rendering_engine::util::transform transform;
 
         void upload() final;
-        void render(gpu::render_pass_encoder& encoder) final;
+        void collect_draw_items(std::vector<draw_item>& out) final;
 
     private:
+        material* m_material{nullptr};
         gpu::buffer m_vertex_buffer{};
         gpu::bind_group m_draw_bind_group{};
 

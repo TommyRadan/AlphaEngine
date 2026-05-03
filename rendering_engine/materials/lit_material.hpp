@@ -22,25 +22,26 @@
 
 #pragma once
 
-#include <rendering_engine/renderers/renderer.hpp>
+#include <rendering_engine/gpu/handle.hpp>
+#include <rendering_engine/materials/material.hpp>
 
-namespace rendering_engine::renderers
+namespace rendering_engine
 {
-    // 3D scene renderer. Drives a position-only vertex stream
-    // through an MVP-transform vertex shader and a flat-white
-    // fragment shader. Per-frame bind group at slot 0 carries the
-    // camera @c viewMatrix and @c projectionMatrix; per-draw bind
-    // group at slot 1 carries the @c modelMatrix.
-    struct basic_renderer : public renderer
+    // Built-in 3D scene material. Position-only vertex stream, MVP
+    // transform in the vertex shader, flat-white fragment. Per-draw
+    // bind group at slot 1 carries @c modelMatrix; the per-frame group
+    // (camera @c viewMatrix / @c projectionMatrix) at slot 0 is owned
+    // and bound by the @ref scene_pass.
+    //
+    // Replaces the pipeline that used to live in
+    // @c renderers::basic_renderer.
+    struct lit_material : public material
     {
-        basic_renderer();
-        ~basic_renderer() override;
-
-        void begin(gpu::render_pass_encoder& encoder) override;
-
-    private:
-        // Cached frame bind group, refilled with the current
-        // camera's matrices in @ref begin and reused thereafter.
-        gpu::bind_group m_frame_bind_group{};
+        // @p frame_layout is the per-frame bind-group layout owned by
+        // the @ref scene_pass. It must match the layout the pass binds
+        // at slot 0 every frame, so the pipeline and the runtime bind
+        // group agree on slot shape.
+        explicit lit_material(gpu::bind_group_layout frame_layout);
+        ~lit_material() override = default;
     };
-} // namespace rendering_engine::renderers
+} // namespace rendering_engine

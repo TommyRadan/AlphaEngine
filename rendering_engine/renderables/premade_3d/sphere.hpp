@@ -28,25 +28,28 @@
 
 namespace rendering_engine
 {
+    struct material;
+
     // UV-sphere with quad-based tessellation (each lat/lon cell is two
     // triangles). Vertex format is position + uv + normal. Texturing is
     // well-behaved away from the poles; near the poles UVs pinch but
     // per-vertex normals stay smooth.
     struct sphere : public renderable
     {
-        sphere(unsigned int stacks = 64, unsigned int slices = 128);
+        explicit sphere(material* mat, unsigned int stacks = 64, unsigned int slices = 128);
         ~sphere() override;
 
         rendering_engine::util::transform transform;
 
         void upload() final;
-        void render(gpu::render_pass_encoder& encoder) final;
+        void collect_draw_items(std::vector<draw_item>& out) final;
 
         gpu::buffer get_vertex_buffer() const;
         gpu::buffer get_index_buffer() const;
         unsigned int get_index_count() const;
 
     private:
+        material* m_material{nullptr};
         unsigned int m_stacks;
         unsigned int m_slices;
         unsigned int m_index_count{0};

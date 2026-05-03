@@ -22,18 +22,27 @@
 
 #pragma once
 
-#include <rendering_engine/gpu/command_encoder.hpp>
+#include <vector>
+
+#include <rendering_engine/renderables/draw_item.hpp>
 
 namespace rendering_engine
 {
-    // Anything that can record a draw against the active render pass.
-    // @ref upload allocates GPU resources (buffers, bind groups) once
-    // GL is alive; @ref render is invoked from a render-pass listener
-    // and records draws on the encoder carried by the event.
+    // Anything that can contribute draws to a render pass. @ref upload
+    // allocates GPU resources (buffers, bind groups) once GL is alive;
+    // @ref collect_draw_items appends one or more @ref draw_item values
+    // describing what to draw this frame. The pass sorts the collected
+    // items by material and dispatches them in one place — renderables
+    // never call @c set_pipeline / @c set_bind_group / @c draw_indexed
+    // themselves.
+    //
+    // The output vector is provided by the caller so the pass can reuse
+    // a single allocation across frames; composite renderables (e.g.
+    // @c label) push N items into the same vector.
     struct renderable
     {
         virtual ~renderable() = default;
         virtual void upload() = 0;
-        virtual void render(gpu::render_pass_encoder& encoder) = 0;
+        virtual void collect_draw_items(std::vector<draw_item>& out) = 0;
     };
 } // namespace rendering_engine

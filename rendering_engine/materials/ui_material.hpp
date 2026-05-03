@@ -22,40 +22,22 @@
 
 #pragma once
 
-#include <rendering_engine/gpu/handle.hpp>
-#include <rendering_engine/renderables/renderable.hpp>
-#include <rendering_engine/util/color.hpp>
-#include <rendering_engine/util/image.hpp>
-#include <rendering_engine/util/transform.hpp>
+#include <rendering_engine/materials/material.hpp>
 
 namespace rendering_engine
 {
-    struct material;
-
-    struct pane : public renderable
+    // Built-in 2D overlay material. Position+UV vertex stream, identity
+    // vertex transform (the renderable bakes screen positions into the
+    // mesh), fragment shader chooses a sampled texture or a flat colour
+    // based on the @c useTexture binding. No per-frame bind group; the
+    // per-draw bind group at slot 0 carries @c useTexture / @c color /
+    // @c tex.
+    //
+    // Replaces the pipeline that used to live in
+    // @c renderers::overlay_renderer.
+    struct ui_material : public material
     {
-        pane(material* mat, const infrastructure::math::vec2& size);
-        ~pane() override;
-
-        void set_color(const rendering_engine::util::color& color);
-        void set_image(const rendering_engine::util::image& image);
-
-        rendering_engine::util::transform transform;
-
-        void upload() final;
-        void collect_draw_items(std::vector<draw_item>& out) final;
-
-    private:
-        material* m_material{nullptr};
-        gpu::buffer m_vertex_buffer{};
-        gpu::buffer m_index_buffer{};
-        gpu::texture m_texture{};
-        gpu::bind_group m_draw_bind_group{};
-
-        unsigned int m_vertex_count{0};
-        uint32_t m_vertex_stride{0};
-
-        infrastructure::math::vec2 m_size;
-        rendering_engine::util::color m_color{0, 0, 0, 0};
+        ui_material();
+        ~ui_material() override = default;
     };
 } // namespace rendering_engine
