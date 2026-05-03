@@ -27,10 +27,12 @@
 
 #pragma once
 
+#include <memory>
 #include <vector>
 
 namespace rendering_engine
 {
+    struct pass;
     struct renderable;
 
     /**
@@ -56,13 +58,15 @@ namespace rendering_engine
         /**
          * @brief Renders one frame.
          *
-         * Walks the scene-pass renderable registry and the UI-pass
-         * registry, recording draws for each entry. Each pass also
-         * broadcasts the matching event (@ref event_engine::render_scene
-         * after the scene walk, @ref event_engine::render_ui after the
-         * UI walk) so debug/gizmo callers can still subscribe. The
-         * scene pass is skipped if no camera is active. Does not swap
-         * buffers — callers are responsible for presenting.
+         * Walks the ordered pass list registered in @ref init,
+         * giving each pass the same per-frame @ref frame_context
+         * (active camera + swapchain target) so they cannot
+         * disagree mid-frame. The built-in scene and UI passes
+         * each broadcast their matching event
+         * (@ref event_engine::render_scene / @ref event_engine::render_ui)
+         * after the registry walk so debug / gizmo callers can
+         * still subscribe. Does not swap buffers — callers are
+         * responsible for presenting.
          */
         void render();
 
@@ -87,5 +91,11 @@ namespace rendering_engine
     private:
         std::vector<renderable*> m_scene_renderables;
         std::vector<renderable*> m_ui_renderables;
+
+        // Ordered pass list walked once per frame in @ref render.
+        // Populated by @ref init with the built-in scene + UI passes
+        // and torn down first in @ref quit, before the renderers and
+        // GPU device the passes reference.
+        std::vector<std::unique_ptr<pass>> m_passes;
     };
 } // namespace rendering_engine

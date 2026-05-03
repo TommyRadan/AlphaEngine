@@ -87,6 +87,7 @@ file(GLOB RENDERING_ENGINE_FILES
         "rendering_engine/renderables/premade_2d/*.hpp" "rendering_engine/renderables/premade_2d/*.cpp"
         "rendering_engine/renderables/premade_3d/*.hpp" "rendering_engine/renderables/premade_3d/*.cpp"
         "rendering_engine/renderers/*.hpp" "rendering_engine/renderers/*.cpp"
+        "rendering_engine/passes/*.hpp" "rendering_engine/passes/*.cpp"
         "rendering_engine/camera/*.hpp" "rendering_engine/camera/*.cpp"
         "rendering_engine/gpu/*.hpp" "rendering_engine/gpu/*.cpp"
         "rendering_engine/gpu/backend/opengl/*.hpp" "rendering_engine/gpu/backend/opengl/*.cpp"
