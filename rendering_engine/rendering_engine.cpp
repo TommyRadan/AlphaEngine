@@ -38,6 +38,9 @@
 
 #include <algorithm>
 
+rendering_engine::context::context() = default;
+rendering_engine::context::~context() = default;
+
 void rendering_engine::context::init()
 {
     LOG_INF("Init Rendering Engine");
