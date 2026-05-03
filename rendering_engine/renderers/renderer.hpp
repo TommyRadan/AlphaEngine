@@ -68,10 +68,6 @@ namespace rendering_engine
             // @c set_pipeline.
             virtual void end(gpu::render_pass_encoder& encoder);
 
-            // Currently-active renderer for the main thread, or null
-            // when no scene/UI pass is being recorded.
-            static renderer* get_current_renderer();
-
         protected:
             renderer() = default;
 
@@ -93,8 +89,6 @@ namespace rendering_engine
             gpu::pipeline m_pipeline{};
             gpu::bind_group_layout m_draw_layout{};
             gpu::bind_group_layout m_frame_layout{};
-
-            static renderer* m_current_renderer;
         };
     } // namespace renderers
 
