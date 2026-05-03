@@ -28,24 +28,34 @@
 namespace rendering_engine
 {
     /**
-     * @brief Trivial post pass that copies the HDR scene-colour
-     *        target into the swapchain via a fullscreen triangle.
+     * @brief Maps the HDR scene-colour target into LDR for the
+     *        swapchain via an ACES filmic curve and gamma encode.
      *
-     * Acts as the proof-of-life for the post-pass scaffold: the
-     * scene pass renders into an off-screen rgba16f target, this
-     * pass samples it and writes to the swapchain, then the UI
-     * pass composites on top. The shape (input bind group + shared
-     * fullscreen vertex shader + effect-specific fragment shader +
-     * @c draw(3)) is the template the first real effect — tonemap —
-     * builds on.
+     * Reads the rgba16f scene target produced by @ref scene_pass,
+     * applies @c exposure as a pre-curve scale, runs Krzysztof
+     * Narkowicz's 5-line ACES filmic approximation per channel,
+     * and gamma-2.2 encodes the result before writing to the
+     * swapchain. Without this pass HDR luminance > 1.0 saturates
+     * to white as soon as it hits the 8-bit backbuffer.
+     *
+     * Slots into the post chain between @ref scene_pass and
+     * @ref ui_pass. Pipeline state mirrors any other fullscreen-
+     * triangle post pass (depth off, blend off, no culling, no
+     * vertex buffers); the shared
+     * @ref fullscreen_triangle_vertex_shader emits the geometry
+     * from @c gl_VertexID.
+     *
+     * @c exposure defaults to 1.0 and is captured into the input
+     * bind group at construction. It exists today as scaffold for
+     * a future auto-exposure stage; live tuning is out of scope.
      */
-    struct passthrough_pass : pass
+    struct tonemap_pass : pass
     {
-        explicit passthrough_pass(gpu::texture input_color);
-        ~passthrough_pass() override;
+        explicit tonemap_pass(gpu::texture input_color);
+        ~tonemap_pass() override;
 
-        passthrough_pass(const passthrough_pass&) = delete;
-        passthrough_pass& operator=(const passthrough_pass&) = delete;
+        tonemap_pass(const tonemap_pass&) = delete;
+        tonemap_pass& operator=(const tonemap_pass&) = delete;
 
         void record(gpu::command_encoder& encoder, const frame_context& ctx) override;
 
