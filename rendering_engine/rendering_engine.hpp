@@ -46,6 +46,13 @@ namespace rendering_engine
      */
     struct context
     {
+        context();
+        // Defined out-of-line in rendering_engine.cpp so the
+        // std::vector<std::unique_ptr<pass>> destructor is only
+        // instantiated where @ref pass is a complete type. The
+        // header keeps @c pass forward-declared.
+        ~context();
+
         /**
          * @brief Initializes the window, GL context and built-in renderers.
          *        Must be called once before @ref render.
