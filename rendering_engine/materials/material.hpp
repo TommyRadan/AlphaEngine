@@ -38,10 +38,6 @@ namespace rendering_engine
     // optional per-material bind group is reserved for shared
     // resources (textures, parameter UBOs) that don't change between
     // draws — none of the built-in materials use it yet.
-    //
-    // Replaces the @c rendering_engine::renderers::renderer base
-    // class for pipeline ownership; @c renderer::begin's per-frame
-    // bind-group setup moves to the corresponding @ref pass.
     struct material
     {
         virtual ~material();

@@ -32,9 +32,6 @@ namespace rendering_engine
     // bind group at slot 1 carries @c modelMatrix; the per-frame group
     // (camera @c viewMatrix / @c projectionMatrix) at slot 0 is owned
     // and bound by the @ref scene_pass.
-    //
-    // Replaces the pipeline that used to live in
-    // @c renderers::basic_renderer.
     struct lit_material : public material
     {
         // @p frame_layout is the per-frame bind-group layout owned by
