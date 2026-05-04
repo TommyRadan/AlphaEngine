@@ -109,6 +109,20 @@ namespace event_engine
         rendering_engine::gpu::render_pass_encoder* encoder{nullptr};
     };
 
+    /**
+     * @brief Broadcast while the debug-overlay pass is active. Documented
+     *        escape hatch for debug-line, gizmo, frustum and bounds
+     *        visualisations whose draw cadence does not match the
+     *        debug-renderable registry walk.
+     *
+     * The pass is gated on @ref settings::is_debug_overlays_enabled, so
+     * the event only fires while debug overlays are turned on.
+     */
+    struct render_debug
+    {
+        rendering_engine::gpu::render_pass_encoder* encoder{nullptr};
+    };
+
     /** @brief Key release. @ref m_key_code is the released key. */
     struct key_up
     {

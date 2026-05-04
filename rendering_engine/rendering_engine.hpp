@@ -100,6 +100,18 @@ namespace rendering_engine
         /** @brief Removes @p r from the UI-pass registry; no-op if absent. */
         void unregister_ui_renderable(renderable* r);
 
+        /**
+         * @brief Adds @p r to the debug-pass registry.
+         *
+         * Renderables registered here are drawn after the UI pass and
+         * are gated on @ref settings::is_debug_overlays_enabled.
+         * Same ownership rules as the scene variant.
+         */
+        void register_debug_renderable(renderable* r);
+
+        /** @brief Removes @p r from the debug-pass registry; no-op if absent. */
+        void unregister_debug_renderable(renderable* r);
+
         /** @brief Built-in 3D scene material. Constructed in @ref init. */
         lit_material& get_lit_material();
 
@@ -109,6 +121,7 @@ namespace rendering_engine
     private:
         std::vector<renderable*> m_scene_renderables;
         std::vector<renderable*> m_ui_renderables;
+        std::vector<renderable*> m_debug_renderables;
 
         // Ordered pass list walked once per frame in @ref render.
         // Populated by @ref init with the built-in scene + UI passes

@@ -62,6 +62,16 @@ struct settings
 
     const bool is_mouse_reversed() const noexcept;
 
+    /**
+     * @brief Whether the debug-overlay pass should run.
+     *
+     * Read once per frame by @ref rendering_engine::debug_pass::record;
+     * when @c false the pass early-returns and skips both the registry
+     * walk and the @ref event_engine::render_debug broadcast. Defaults
+     * to @c true.
+     */
+    const bool is_debug_overlays_enabled() const noexcept;
+
 private:
     unsigned int m_window_width;
     unsigned int m_window_height;
@@ -71,4 +81,5 @@ private:
     float m_field_of_view;
     float m_mouse_sensitivity;
     bool m_is_mouse_reversed;
+    bool m_is_debug_overlays_enabled;
 };

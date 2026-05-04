@@ -61,7 +61,7 @@ static void on_engine_start(const event_engine::engine_start& event)
             font.get(), font_size, "FPS: ---", &control::current_engine().renderer->get_ui_material());
         fps_label->upload();
         reposition_top_right();
-        control::current_engine().renderer->register_ui_renderable(fps_label.get());
+        control::current_engine().renderer->register_debug_renderable(fps_label.get());
     }
     catch (const std::exception& e)
     {
@@ -75,7 +75,7 @@ static void on_engine_stop(const event_engine::engine_stop& event)
 {
     if (fps_label)
     {
-        control::current_engine().renderer->unregister_ui_renderable(fps_label.get());
+        control::current_engine().renderer->unregister_debug_renderable(fps_label.get());
     }
     fps_label.reset();
     font.reset();
