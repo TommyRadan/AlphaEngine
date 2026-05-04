@@ -59,10 +59,9 @@ settings::settings()
     m_field_of_view = 70.0f;
     m_mouse_sensitivity = 0.005f;
     m_is_mouse_reversed = false;
-    m_is_debug_overlays_enabled = true;
 
     LOG_INF("Settings parsed: window=%ux%u type=%d double_buffered=%d fov=%.1f "
-            "mouse_sensitivity=%.4f mouse_reversed=%d debug_overlays=%d name='%s'",
+            "mouse_sensitivity=%.4f mouse_reversed=%d name='%s'",
             m_window_width,
             m_window_height,
             static_cast<int>(m_window_type),
@@ -70,7 +69,6 @@ settings::settings()
             m_field_of_view,
             m_mouse_sensitivity,
             m_is_mouse_reversed ? 1 : 0,
-            m_is_debug_overlays_enabled ? 1 : 0,
             m_window_name.c_str());
 }
 
@@ -117,9 +115,4 @@ const float settings::get_aspect_ratio() const noexcept
 const bool settings::is_mouse_reversed() const noexcept
 {
     return m_is_mouse_reversed;
-}
-
-const bool settings::is_debug_overlays_enabled() const noexcept
-{
-    return m_is_debug_overlays_enabled;
 }

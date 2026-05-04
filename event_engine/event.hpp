@@ -115,8 +115,8 @@ namespace event_engine
      *        visualisations whose draw cadence does not match the
      *        debug-renderable registry walk.
      *
-     * The pass is gated on @ref settings::is_debug_overlays_enabled, so
-     * the event only fires while debug overlays are turned on.
+     * The debug pass is only appended to the pass list in debug builds,
+     * so subscribers will not see this event in release configurations.
      */
     struct render_debug
     {

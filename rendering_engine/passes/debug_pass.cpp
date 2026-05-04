@@ -27,7 +27,6 @@
 #include <control/engine.hpp>
 #include <event_engine/event.hpp>
 #include <event_engine/event_engine.hpp>
-#include <infrastructure/settings.hpp>
 #include <rendering_engine/gpu/render_target.hpp>
 #include <rendering_engine/materials/material.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
@@ -39,17 +38,6 @@ namespace rendering_engine
     void debug_pass::record(gpu::command_encoder& encoder, const frame_context& ctx)
     {
         auto& eng = control::current_engine();
-
-        // Settings-gated. With debug overlays off the pass emits
-        // nothing — no render pass is opened, no draw items are
-        // collected, and the @ref event_engine::render_debug event is
-        // not broadcast, so subscribers do not see ghost frames while
-        // the toggle is off. A render-graph-based enable/disable is
-        // out of scope per #78.
-        if (eng.settings == nullptr || !eng.settings->is_debug_overlays_enabled())
-        {
-            return;
-        }
 
         gpu::render_pass_descriptor descriptor{};
         descriptor.target = ctx.swapchain_target;

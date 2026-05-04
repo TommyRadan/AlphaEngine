@@ -40,12 +40,12 @@ namespace rendering_engine
      *        / bounds visualisations whose cadence does not match the
      *        registry walk.
      *
-     * Runs last in the pass list (after the UI pass) so debug visuals
-     * always read on top of the game UI. Gated on
-     * @ref settings::is_debug_overlays_enabled — when the toggle is
-     * off, @ref record early-returns without opening a render pass or
-     * emitting the event, so the debug stage costs effectively
-     * nothing.
+     * Only appended to the engine's pass list in debug builds — the
+     * `#if _DEBUG` gate at the construction site in
+     * @ref context::init drops it from release entirely, so the
+     * stage costs nothing in shipping configurations. Inside a debug
+     * build it runs last (after the UI pass) so debug visuals always
+     * read on top of the game UI.
      *
      * Like @ref ui_pass the matching draw items use @ref ui_material,
      * which has no per-frame bind group, so this pass owns no

@@ -103,9 +103,10 @@ namespace rendering_engine
         /**
          * @brief Adds @p r to the debug-pass registry.
          *
-         * Renderables registered here are drawn after the UI pass and
-         * are gated on @ref settings::is_debug_overlays_enabled.
-         * Same ownership rules as the scene variant.
+         * Renderables registered here are drawn after the UI pass in
+         * debug builds; release builds drop the debug pass from the
+         * pass list entirely so registrations are inert. Same
+         * ownership rules as the scene variant.
          */
         void register_debug_renderable(renderable* r);
 

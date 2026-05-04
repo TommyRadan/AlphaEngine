@@ -83,7 +83,9 @@ void rendering_engine::context::init()
     const gpu::bind_group_layout scene_frame_layout = scene->frame_bind_group_layout();
     auto post = std::make_unique<tonemap_pass>(m_scene_color_texture);
     auto ui = std::make_unique<ui_pass>(&m_ui_renderables);
+#if _DEBUG
     auto debug = std::make_unique<debug_pass>(&m_debug_renderables);
+#endif
 
     // Construct the built-in materials against the per-frame layouts
     // exposed by the passes. The lit material's pipeline reserves
@@ -95,8 +97,10 @@ void rendering_engine::context::init()
 
     // Register the built-in passes in render order: scene writes into
     // the HDR target, the tonemap post pass maps it to LDR on the
-    // swapchain, the UI pass composites on top, and the debug pass
-    // runs last so debug visuals always read on top of the game UI.
+    // swapchain, and the UI pass composites on top. The debug pass is
+    // appended in debug builds only so debug visuals always read on
+    // top of the game UI; release builds drop it entirely so the
+    // overlay registry has no consumer and the stage costs nothing.
     // Future post effects insert between scene and ui by pushing into
     // this list; future debug consumers (wireframe, gizmos, frustum
     // visualisations) register with the debug-renderable registry
@@ -104,7 +108,9 @@ void rendering_engine::context::init()
     m_passes.push_back(std::move(scene));
     m_passes.push_back(std::move(post));
     m_passes.push_back(std::move(ui));
+#if _DEBUG
     m_passes.push_back(std::move(debug));
+#endif
 }
 
 void rendering_engine::context::quit()
