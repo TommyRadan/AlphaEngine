@@ -30,6 +30,7 @@
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/materials/lit_material.hpp>
 #include <rendering_engine/materials/ui_material.hpp>
+#include <rendering_engine/passes/debug_pass.hpp>
 #include <rendering_engine/passes/pass.hpp>
 #include <rendering_engine/passes/post/tonemap_pass.hpp>
 #include <rendering_engine/passes/scene_pass.hpp>
@@ -82,6 +83,7 @@ void rendering_engine::context::init()
     const gpu::bind_group_layout scene_frame_layout = scene->frame_bind_group_layout();
     auto post = std::make_unique<tonemap_pass>(m_scene_color_texture);
     auto ui = std::make_unique<ui_pass>(&m_ui_renderables);
+    auto debug = std::make_unique<debug_pass>(&m_debug_renderables);
 
     // Construct the built-in materials against the per-frame layouts
     // exposed by the passes. The lit material's pipeline reserves
@@ -93,11 +95,16 @@ void rendering_engine::context::init()
 
     // Register the built-in passes in render order: scene writes into
     // the HDR target, the tonemap post pass maps it to LDR on the
-    // swapchain, then the UI pass composites on top. Future post
-    // effects insert between scene and ui by pushing into this list.
+    // swapchain, the UI pass composites on top, and the debug pass
+    // runs last so debug visuals always read on top of the game UI.
+    // Future post effects insert between scene and ui by pushing into
+    // this list; future debug consumers (wireframe, gizmos, frustum
+    // visualisations) register with the debug-renderable registry
+    // rather than adding new passes.
     m_passes.push_back(std::move(scene));
     m_passes.push_back(std::move(post));
     m_passes.push_back(std::move(ui));
+    m_passes.push_back(std::move(debug));
 }
 
 void rendering_engine::context::quit()
@@ -174,6 +181,20 @@ void rendering_engine::context::register_ui_renderable(renderable* r)
 void rendering_engine::context::unregister_ui_renderable(renderable* r)
 {
     m_ui_renderables.erase(std::remove(m_ui_renderables.begin(), m_ui_renderables.end(), r), m_ui_renderables.end());
+}
+
+void rendering_engine::context::register_debug_renderable(renderable* r)
+{
+    if (r != nullptr)
+    {
+        m_debug_renderables.push_back(r);
+    }
+}
+
+void rendering_engine::context::unregister_debug_renderable(renderable* r)
+{
+    m_debug_renderables.erase(std::remove(m_debug_renderables.begin(), m_debug_renderables.end(), r),
+                              m_debug_renderables.end());
 }
 
 rendering_engine::lit_material& rendering_engine::context::get_lit_material()
