@@ -92,6 +92,14 @@ namespace rendering_engine
         fs_descriptor.spirv = gpu::compile_glsl_to_spirv(fragment_shader, gpu::shader_stage::fragment);
         m_fragment_shader = gpu.create_shader_module(fs_descriptor);
 
+        // Three vec2 vertices for the oversized fullscreen triangle.
+        gpu::buffer_descriptor vb_descriptor{};
+        vb_descriptor.size = fullscreen_triangle_vertices.size() * sizeof(float);
+        vb_descriptor.usage = gpu::buffer_usage_vertex;
+        vb_descriptor.hint = gpu::buffer_usage_hint::static_data;
+        vb_descriptor.initial_data = fullscreen_triangle_vertices.data();
+        m_vertex_buffer = gpu.create_buffer(vb_descriptor);
+
         // Captured once at construction; live tuning is out of
         // scope per the issue. A future auto-exposure pass will
         // update this UBO per-frame via write_buffer. std140 rounds
@@ -128,8 +136,12 @@ namespace rendering_engine
 
         // Fullscreen triangle: depth disabled, blend disabled, no
         // culling so the triangle's winding is irrelevant. The
-        // vertex shader emits positions from gl_VertexIndex, so the
-        // pipeline declares no vertex buffer layout.
+        // vertex shader reads a single vec2 attribute from
+        // @ref m_vertex_buffer.
+        gpu::vertex_buffer_layout vertex_layout{};
+        vertex_layout.stride = sizeof(float) * 2;
+        vertex_layout.attributes.push_back({0, 2, gpu::scalar_type::float32, 0});
+
         gpu::depth_state depth{};
         depth.test_enabled = false;
         depth.write_enabled = false;
@@ -146,6 +158,7 @@ namespace rendering_engine
         gpu::pipeline_descriptor pipeline_descriptor{};
         pipeline_descriptor.vertex_shader = m_vertex_shader;
         pipeline_descriptor.fragment_shader = m_fragment_shader;
+        pipeline_descriptor.vertex_buffers.push_back(vertex_layout);
         pipeline_descriptor.depth = depth;
         pipeline_descriptor.blend = blend;
         pipeline_descriptor.rasterizer = rasterizer;
@@ -177,6 +190,11 @@ namespace rendering_engine
             gpu.destroy(m_exposure_ubo);
             m_exposure_ubo = {};
         }
+        if (m_vertex_buffer.valid())
+        {
+            gpu.destroy(m_vertex_buffer);
+            m_vertex_buffer = {};
+        }
         if (m_fragment_shader.valid())
         {
             gpu.destroy(m_fragment_shader);
@@ -203,6 +221,7 @@ namespace rendering_engine
         auto pass_encoder = encoder.begin_render_pass(descriptor);
         pass_encoder->set_pipeline(m_pipeline);
         pass_encoder->set_bind_group(0, m_input_bind_group);
+        pass_encoder->set_vertex_buffer(0, m_vertex_buffer, 0, 0);
         pass_encoder->draw(3, 0);
         pass_encoder->end();
     }

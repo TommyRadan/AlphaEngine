@@ -49,6 +49,30 @@ namespace rendering_engine::gpu::backend::opengl
         }
     }
 
+#if _DEBUG
+    static void GLAPIENTRY gl_debug_callback(GLenum /*source*/,
+                                             GLenum type,
+                                             GLuint /*id*/,
+                                             GLenum severity,
+                                             GLsizei /*length*/,
+                                             const GLchar* message,
+                                             const void* /*user*/)
+    {
+        if (severity == GL_DEBUG_SEVERITY_NOTIFICATION)
+        {
+            return;
+        }
+        if (type == GL_DEBUG_TYPE_ERROR)
+        {
+            LOG_ERR("GL: %s", message);
+        }
+        else
+        {
+            LOG_WRN("GL: %s", message);
+        }
+    }
+#endif
+
     void gl_device::init()
     {
         LOG_INF("Init gpu::backend::opengl::gl_device");
@@ -58,6 +82,12 @@ namespace rendering_engine::gpu::backend::opengl
             LOG_FTL("Could not initialize OpenGL (glad failed to load GL functions)");
             throw std::runtime_error{"Could not initialize OpenGL"};
         }
+
+#if _DEBUG
+        glEnable(GL_DEBUG_OUTPUT);
+        glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
+        glDebugMessageCallback(gl_debug_callback, nullptr);
+#endif
 
         int version_major = 0;
         int version_minor = 0;
