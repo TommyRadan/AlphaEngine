@@ -29,7 +29,6 @@
 #pragma once
 
 #include <cstdint>
-#include <string>
 #include <vector>
 
 #include <rendering_engine/gpu/handle.hpp>
@@ -41,12 +40,12 @@ namespace rendering_engine::gpu
     {
         shader_stage stage{shader_stage::vertex};
 
-        // Source text, in whatever language the active backend
-        // accepts. The OpenGL backend takes GLSL #version 330 source
-        // verbatim. A future cross-backend pipeline (SPIR-V cross,
-        // glslang) would replace this string with a byte blob, but
-        // the descriptor shape stays the same.
-        std::string source;
+        // SPIR-V byte blob, produced upstream by
+        // @ref rendering_engine::gpu::compile_glsl_to_spirv. Vulkan
+        // backends consume this natively; the OpenGL 4.6 backend
+        // uploads it via @c glShaderBinary +
+        // @c glSpecializeShaderARB (core ARB_gl_spirv).
+        std::vector<uint32_t> spirv;
     };
 
     // One attribute fed into the vertex shader. @ref location is the

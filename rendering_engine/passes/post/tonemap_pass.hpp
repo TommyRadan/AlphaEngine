@@ -62,6 +62,7 @@ namespace rendering_engine
     private:
         gpu::shader_module m_vertex_shader{};
         gpu::shader_module m_fragment_shader{};
+        gpu::buffer m_exposure_ubo{};
         gpu::bind_group_layout m_input_layout{};
         gpu::bind_group m_input_bind_group{};
         gpu::pipeline m_pipeline{};

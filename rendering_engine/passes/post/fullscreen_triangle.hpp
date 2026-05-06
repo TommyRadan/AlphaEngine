@@ -25,16 +25,15 @@
  * @brief Shared vertex shader source for post-process passes.
  *
  * Emits a single oversized triangle that covers the entire screen
- * from three vertices indexed by @c gl_VertexID — no vertex buffer
+ * from three vertices indexed by @c gl_VertexIndex — no vertex buffer
  * needed. The triangle's clipped extent inside the viewport is the
  * full [-1, 1] NDC quad, so the fragment shader sees every pixel
  * exactly once. UVs are emitted in [0, 1] with origin at the bottom
  * left, matching the convention the engine's textures sample with.
  *
- * Every post pass should construct its pipeline against this source
- * and an effect-specific fragment shader. Used today by
- * @ref tonemap_pass; reused by future bloom / FXAA / colour-grading
- * passes without re-authoring the geometry.
+ * Vulkan-style GLSL: targets @c #version 450 and uses
+ * @c gl_VertexIndex (the SPIR-V built-in spelling) so glslang's
+ * Vulkan client accepts the source unmodified.
  */
 
 #pragma once
@@ -44,15 +43,15 @@
 namespace rendering_engine
 {
     inline const std::string fullscreen_triangle_vertex_shader = R"vs(
-        #version 330
+        #version 450
 
-        out vec2 texCoord;
+        layout(location = 0) out vec2 texCoord;
 
         void main()
         {
             // Three vertices, clip-space coords (-1,-1) (3,-1) (-1,3).
             // The slice inside the viewport is the full [-1,1] quad.
-            vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
+            vec2 p = vec2(float((gl_VertexIndex << 1) & 2), float(gl_VertexIndex & 2));
             texCoord = p;
             gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
         }

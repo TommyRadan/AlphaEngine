@@ -24,6 +24,7 @@
 
 #include <control/engine.hpp>
 #include <rendering_engine/gpu/device.hpp>
+#include <rendering_engine/gpu/shader_compiler.hpp>
 
 namespace rendering_engine
 {
@@ -70,12 +71,12 @@ namespace rendering_engine
 
         gpu::shader_module_descriptor vs_descriptor{};
         vs_descriptor.stage = gpu::shader_stage::vertex;
-        vs_descriptor.source = vertex_source;
+        vs_descriptor.spirv = gpu::compile_glsl_to_spirv(vertex_source, gpu::shader_stage::vertex);
         m_vertex_shader = gpu.create_shader_module(vs_descriptor);
 
         gpu::shader_module_descriptor fs_descriptor{};
         fs_descriptor.stage = gpu::shader_stage::fragment;
-        fs_descriptor.source = fragment_source;
+        fs_descriptor.spirv = gpu::compile_glsl_to_spirv(fragment_source, gpu::shader_stage::fragment);
         m_fragment_shader = gpu.create_shader_module(fs_descriptor);
 
         m_per_draw_layout = gpu.create_bind_group_layout(draw_layout);

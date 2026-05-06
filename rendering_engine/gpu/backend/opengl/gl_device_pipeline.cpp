@@ -117,47 +117,6 @@ namespace rendering_engine::gpu::backend::opengl
         }
         glBindVertexArray(0);
 
-        // Resolve and cache uniform locations / texture-unit
-        // ordinals for every bind-group layout entry. After
-        // this, set_bind_group is a flat array lookup.
-        record.cached_locations.resize(descriptor.bind_group_layouts.size());
-        int next_texture_unit = 0;
-        for (size_t group_index = 0; group_index < descriptor.bind_group_layouts.size(); ++group_index)
-        {
-            const auto layout_handle = descriptor.bind_group_layouts[group_index];
-            const auto* layout = m_bind_group_layouts.lookup(layout_handle.id);
-            if (layout == nullptr)
-            {
-                continue;
-            }
-            auto& slots = record.cached_locations[group_index];
-            slots.resize(layout->descriptor.entries.size(), -1);
-
-            for (size_t entry_index = 0; entry_index < layout->descriptor.entries.size(); ++entry_index)
-            {
-                const auto& entry = layout->descriptor.entries[entry_index];
-                if (entry.kind == binding_kind::texture)
-                {
-                    // Cache: high 16 bits = uniform location of
-                    // the sampler uniform, low 16 bits = texture
-                    // unit ordinal. Assigned in declaration
-                    // order across all groups so the assignment
-                    // is deterministic per pipeline.
-                    const GLint uniform_loc = glGetUniformLocation(record.program_id, entry.name.c_str());
-                    const int unit = next_texture_unit++;
-                    slots[entry_index] = (uniform_loc << 8) | (unit & 0xFF);
-                }
-                else if (entry.kind == binding_kind::sampler)
-                {
-                    slots[entry_index] = -1; // ignored on the GL backend
-                }
-                else
-                {
-                    slots[entry_index] = glGetUniformLocation(record.program_id, entry.name.c_str());
-                }
-            }
-        }
-
         LOG_INF("Pipeline linked id=%u vao=%u", record.program_id, record.vao_id);
 
         pipeline h{};
@@ -194,13 +153,5 @@ namespace rendering_engine::gpu::backend::opengl
     void gl_device::destroy(bind_group handle)
     {
         m_bind_groups.remove(handle.id);
-    }
-
-    void gl_device::update_bind_group(bind_group handle, const std::vector<binding_value>& entries)
-    {
-        if (auto* record = m_bind_groups.lookup(handle.id))
-        {
-            record->entries = entries;
-        }
     }
 } // namespace rendering_engine::gpu::backend::opengl

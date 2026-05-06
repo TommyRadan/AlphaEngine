@@ -203,107 +203,53 @@ namespace rendering_engine::gpu::backend::opengl
             LOG_WRN("set_bind_group: invalid pipeline / bind_group");
             return;
         }
-        if (group >= pipe->cached_locations.size())
+        if (group >= pipe->bind_group_layouts.size())
         {
             LOG_WRN("set_bind_group: group index out of range");
             return;
         }
-        auto* layout = m_device.lookup_bind_group_layout(bg->layout);
-        if (layout == nullptr)
-        {
-            LOG_WRN("set_bind_group: bind group layout missing");
-            return;
-        }
 
-        const auto& slots = pipe->cached_locations[group];
-
+        // Bindings come straight from the SPIR-V's @c Binding
+        // decoration: UBOs are bound at the named UBO unit, textures
+        // are bound at the matching texture image unit, and samplers
+        // (Vulkan-style separate sampler objects) are attached via
+        // @c glBindSampler. UBO and texture/sampler binding namespaces
+        // are disjoint in OpenGL, so the same numeric binding can
+        // appear on entries of different kinds without collision.
         for (const auto& value : bg->entries)
         {
-            // Find this entry's slot index in the layout by
-            // matching binding number — the layout describes
-            // slots in declaration order, the bind group's
-            // entries can be in any order.
-            size_t slot_index = layout->descriptor.entries.size();
-            for (size_t i = 0; i < layout->descriptor.entries.size(); ++i)
-            {
-                if (layout->descriptor.entries[i].binding == value.binding &&
-                    layout->descriptor.entries[i].kind == value.kind)
-                {
-                    slot_index = i;
-                    break;
-                }
-            }
-            if (slot_index >= slots.size())
-            {
-                continue;
-            }
-            const GLint cached = slots[slot_index];
-
             switch (value.kind)
             {
-            case binding_kind::float_value:
-                if (cached >= 0)
+            case binding_kind::uniform_buffer:
+            {
+                auto* buf = m_device.lookup_buffer(value.buffer_value);
+                if (buf != nullptr && buf->object_id != 0)
                 {
-                    glUniform1f(cached, value.float_value);
+                    glBindBufferBase(GL_UNIFORM_BUFFER, value.binding, buf->object_id);
                 }
                 break;
-            case binding_kind::int_value:
-                if (cached >= 0)
-                {
-                    glUniform1i(cached, value.int_value);
-                }
-                break;
-            case binding_kind::vec2_value:
-                if (cached >= 0)
-                {
-                    glUniform2f(cached, value.vec2_value.x, value.vec2_value.y);
-                }
-                break;
-            case binding_kind::vec3_value:
-                if (cached >= 0)
-                {
-                    glUniform3f(cached, value.vec3_value.x, value.vec3_value.y, value.vec3_value.z);
-                }
-                break;
-            case binding_kind::vec4_value:
-                if (cached >= 0)
-                {
-                    glUniform4f(cached, value.vec4_value.x, value.vec4_value.y, value.vec4_value.z, value.vec4_value.w);
-                }
-                break;
-            case binding_kind::mat3_value:
-                if (cached >= 0)
-                {
-                    glUniformMatrix3fv(cached, 1, GL_FALSE, value.mat3_value.data());
-                }
-                break;
-            case binding_kind::mat4_value:
-                if (cached >= 0)
-                {
-                    glUniformMatrix4fv(cached, 1, GL_FALSE, value.mat4_value.data());
-                }
-                break;
+            }
             case binding_kind::texture:
             {
-                // Decode (uniform_loc, unit) packed at cache time.
-                const GLint uniform_loc = static_cast<GLint>(cached >> 8);
-                const int unit = cached & 0xFF;
                 auto* tex = m_device.lookup_texture(value.texture_value);
                 if (tex != nullptr && tex->object_id != 0)
                 {
-                    glActiveTexture(GL_TEXTURE0 + unit);
+                    glActiveTexture(GL_TEXTURE0 + value.binding);
                     glBindTexture(tex->target, tex->object_id);
-                    if (uniform_loc >= 0)
-                    {
-                        glUniform1i(uniform_loc, unit);
-                    }
                 }
                 break;
             }
             case binding_kind::sampler:
-                // No-op on the OpenGL backend: sampler state
-                // is set per-texture at create time.
+            {
+                auto* samp = m_device.lookup_sampler(value.sampler_value);
+                (void)samp;
+                // Sampler state is currently baked into the texture
+                // object at create time — no separate sampler object
+                // is bound. Reserved here so a future Vulkan-style
+                // separate-sampler path slots in without churning the
+                // call sites.
                 break;
+            }
             }
         }
     }

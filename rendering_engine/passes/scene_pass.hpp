@@ -70,8 +70,11 @@ namespace rendering_engine
 
         // Per-frame state — owned by the pass; created once and
         // refilled every record(). Released in the destructor before
-        // the device tears its pools down.
+        // the device tears its pools down. The UBO carries the
+        // {viewMatrix, projectionMatrix} pair packed std140 (two
+        // mat4s = 128 bytes).
         gpu::bind_group_layout m_frame_layout{};
+        gpu::buffer m_frame_ubo{};
         gpu::bind_group m_frame_bind_group{};
 
         // Reused across frames so the underlying allocation persists.

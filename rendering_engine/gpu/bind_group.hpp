@@ -24,56 +24,42 @@
  * @file bind_group.hpp
  * @brief Typed binding tables — the per-draw resource binding model.
  *
- * Replaces the old string-keyed @c set_uniform("modelMatrix", ...) path.
- * A @ref bind_group_layout declares the shape of a binding table at
- * pipeline-create time; concrete @ref bind_group values are constructed
- * once and bound at draw time without name lookups.
+ * Layouts identify slots purely by binding number; the engine ships
+ * SPIR-V with explicit Vulkan-style @c layout(set, binding) decorations,
+ * so the OpenGL backend's @c glBindBufferBase / @c glActiveTexture calls
+ * use the binding number verbatim and no @c glGetUniformLocation
+ * reflection happens at create-pipeline time.
  *
- * The supported value kinds are intentionally narrow: typed scalars and
- * vectors / matrices for legacy non-UBO uniforms, plus textures and
- * samplers. This is enough to host every existing renderer/renderable
- * draw without re-authoring shaders to use UBO blocks. A future pass can
- * fold the scalar/vector/matrix entries into a single @c uniform_buffer
- * binding kind once shaders are migrated.
+ * The supported value kinds are intentionally narrow: a single
+ * @c uniform_buffer kind for plain-data uniforms (a UBO managed by the
+ * caller), plus @c texture and @c sampler.
  */
 
 #pragma once
 
-#include <string>
 #include <vector>
 
-#include <infrastructure/math/math.hpp>
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/gpu/types.hpp>
 
 namespace rendering_engine::gpu
 {
-    // What a single binding entry stores. Value kinds map to
-    // single-uniform writes on the GL backend; @c texture and
-    // @c sampler resolve to a texture-unit assignment.
+    // What a single binding entry stores.
     enum class binding_kind
     {
-        float_value,
-        int_value,
-        vec2_value,
-        vec3_value,
-        vec4_value,
-        mat3_value,
-        mat4_value,
+        uniform_buffer,
         texture,
         sampler,
     };
 
-    // One slot in a layout. @ref name is the shader-side identifier
-    // the backend uses to resolve the slot at pipeline-create time
-    // (e.g. @c glGetUniformLocation for the GL backend). Once the
-    // pipeline is built, slot resolution is cached and string keys
-    // are not consulted again.
+    // One slot in a layout. The binding number maps directly onto
+    // the SPIR-V @c Binding decoration and onto the OpenGL binding
+    // point (UBO unit for @c uniform_buffer, texture image unit for
+    // @c texture / @c sampler).
     struct bind_group_layout_entry
     {
         uint32_t binding{0};
-        binding_kind kind{binding_kind::float_value};
-        std::string name;
+        binding_kind kind{binding_kind::uniform_buffer};
     };
 
     struct bind_group_layout_descriptor
@@ -88,15 +74,9 @@ namespace rendering_engine::gpu
     struct binding_value
     {
         uint32_t binding{0};
-        binding_kind kind{binding_kind::float_value};
+        binding_kind kind{binding_kind::uniform_buffer};
 
-        float float_value{0.0f};
-        int int_value{0};
-        infrastructure::math::vec2 vec2_value{};
-        infrastructure::math::vec3 vec3_value{};
-        infrastructure::math::vec4 vec4_value{};
-        infrastructure::math::mat3 mat3_value{};
-        infrastructure::math::mat4 mat4_value{};
+        gpu::buffer buffer_value{};
         gpu::texture texture_value{};
         gpu::sampler sampler_value{};
     };

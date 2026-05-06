@@ -22,13 +22,22 @@
 
 #include <rendering_engine/renderables/premade_2d/pane.hpp>
 
-#include <vector>
+#include <array>
 
 #include <control/engine.hpp>
 #include <infrastructure/log.hpp>
+#include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/materials/material.hpp>
 #include <rendering_engine/mesh/vertex.hpp>
+
+namespace
+{
+    // std140 layout for the ui_material per-draw UBO. @c useTexture
+    // is a single float at offset 0; @c color is a vec4 at offset 16
+    // because std140 rounds vec4 alignment up to 16. Total size 32.
+    constexpr size_t pane_draw_ubo_size = 32;
+} // namespace
 
 rendering_engine::pane::pane(material* mat, const infrastructure::math::vec2& size) : m_material{mat}, m_size{size} {}
 
@@ -39,6 +48,11 @@ rendering_engine::pane::~pane()
     {
         gpu.destroy(m_draw_bind_group);
         m_draw_bind_group = {};
+    }
+    if (m_draw_ubo.valid())
+    {
+        gpu.destroy(m_draw_ubo);
+        m_draw_ubo = {};
     }
     if (m_texture.valid())
     {
@@ -88,6 +102,15 @@ void rendering_engine::pane::set_image(const rendering_engine::util::image& imag
         static_cast<size_t>(image.get_width()) * static_cast<size_t>(image.get_height()) * sizeof(util::color);
     gpu.write_texture(m_texture, image.get_pixels(), pixel_bytes);
     gpu.generate_mipmaps(m_texture);
+
+    // The bind group caches the texture handle at create time, so a
+    // late set_image call needs the bind group rebuilt before the
+    // next draw. Drop it here; collect_draw_items recreates it.
+    if (m_draw_bind_group.valid())
+    {
+        gpu.destroy(m_draw_bind_group);
+        m_draw_bind_group = {};
+    }
 }
 
 void rendering_engine::pane::upload()
@@ -148,50 +171,43 @@ void rendering_engine::pane::collect_draw_items(std::vector<draw_item>& out)
 
     auto& gpu = *control::current_engine().gpu;
 
+    if (!m_draw_ubo.valid())
+    {
+        gpu::buffer_descriptor ubo_descriptor{};
+        ubo_descriptor.size = pane_draw_ubo_size;
+        ubo_descriptor.usage = gpu::buffer_usage_uniform | gpu::buffer_usage_copy_dst;
+        ubo_descriptor.hint = gpu::buffer_usage_hint::dynamic_data;
+        m_draw_ubo = gpu.create_buffer(ubo_descriptor);
+    }
+
     if (!m_draw_bind_group.valid())
     {
         gpu::bind_group_descriptor bg_descriptor{};
         bg_descriptor.layout = m_material->per_draw_layout();
-        gpu::binding_value use_texture_slot{};
-        use_texture_slot.binding = 0;
-        use_texture_slot.kind = gpu::binding_kind::float_value;
-        gpu::binding_value color_slot{};
-        color_slot.binding = 1;
-        color_slot.kind = gpu::binding_kind::vec4_value;
+
+        gpu::binding_value ubo_slot{};
+        ubo_slot.binding = 0;
+        ubo_slot.kind = gpu::binding_kind::uniform_buffer;
+        ubo_slot.buffer_value = m_draw_ubo;
+        bg_descriptor.entries.push_back(ubo_slot);
+
         gpu::binding_value tex_slot{};
-        tex_slot.binding = 2;
+        tex_slot.binding = 1;
         tex_slot.kind = gpu::binding_kind::texture;
-        bg_descriptor.entries.push_back(use_texture_slot);
-        bg_descriptor.entries.push_back(color_slot);
+        tex_slot.texture_value = m_texture;
         bg_descriptor.entries.push_back(tex_slot);
+
         m_draw_bind_group = gpu.create_bind_group(bg_descriptor);
     }
 
-    std::vector<gpu::binding_value> entries;
-    entries.reserve(3);
-
-    gpu::binding_value use_texture_value{};
-    use_texture_value.binding = 0;
-    use_texture_value.kind = gpu::binding_kind::float_value;
-    use_texture_value.float_value = m_texture.valid() ? 1.0f : 0.0f;
-    entries.push_back(use_texture_value);
-
-    gpu::binding_value color_value{};
-    color_value.binding = 1;
-    color_value.kind = gpu::binding_kind::vec4_value;
-    color_value.vec4_value = infrastructure::math::vec4{static_cast<float>(m_color.r) / 255.0f,
-                                                        static_cast<float>(m_color.g) / 255.0f,
-                                                        static_cast<float>(m_color.b) / 255.0f,
-                                                        static_cast<float>(m_color.a) / 255.0f};
-    entries.push_back(color_value);
-
-    gpu::binding_value tex_value{};
-    tex_value.binding = 2;
-    tex_value.kind = gpu::binding_kind::texture;
-    tex_value.texture_value = m_texture;
-    entries.push_back(tex_value);
-
-    gpu.update_bind_group(m_draw_bind_group, entries);
+    // std140-packed payload: float useTexture; vec4 color (offset 16).
+    std::array<float, 8> ubo_payload{};
+    ubo_payload[0] = m_texture.valid() ? 1.0f : 0.0f;
+    ubo_payload[4] = static_cast<float>(m_color.r) / 255.0f;
+    ubo_payload[5] = static_cast<float>(m_color.g) / 255.0f;
+    ubo_payload[6] = static_cast<float>(m_color.b) / 255.0f;
+    ubo_payload[7] = static_cast<float>(m_color.a) / 255.0f;
+    gpu.write_buffer(m_draw_ubo, ubo_payload.data(), pane_draw_ubo_size, 0);
 
     draw_item item{};
     item.mat = m_material;

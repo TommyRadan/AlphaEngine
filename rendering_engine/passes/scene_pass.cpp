@@ -23,11 +23,15 @@
 #include <rendering_engine/passes/scene_pass.hpp>
 
 #include <algorithm>
+#include <array>
+#include <cstring>
 
 #include <control/engine.hpp>
 #include <event_engine/event.hpp>
 #include <event_engine/event_engine.hpp>
+#include <infrastructure/math/math.hpp>
 #include <rendering_engine/camera/camera.hpp>
+#include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/gpu/render_target.hpp>
 #include <rendering_engine/materials/material.hpp>
@@ -35,25 +39,36 @@
 
 namespace rendering_engine
 {
+    namespace
+    {
+        // std140 layout for the per-frame UBO: mat4 viewMatrix at
+        // offset 0, mat4 projectionMatrix at offset 64. mat4 is
+        // 16-byte aligned and 64 bytes; no padding needed between
+        // the two members.
+        constexpr size_t per_frame_ubo_size = 2 * sizeof(infrastructure::math::mat4);
+    } // namespace
+
     scene_pass::scene_pass(std::vector<renderable*>* registry) : m_registry(registry)
     {
         auto& gpu = *control::current_engine().gpu;
 
         gpu::bind_group_layout_descriptor frame_layout_descriptor{};
-        frame_layout_descriptor.entries.push_back({0, gpu::binding_kind::mat4_value, "viewMatrix"});
-        frame_layout_descriptor.entries.push_back({1, gpu::binding_kind::mat4_value, "projectionMatrix"});
+        frame_layout_descriptor.entries.push_back({0, gpu::binding_kind::uniform_buffer});
         m_frame_layout = gpu.create_bind_group_layout(frame_layout_descriptor);
+
+        gpu::buffer_descriptor ubo_descriptor{};
+        ubo_descriptor.size = per_frame_ubo_size;
+        ubo_descriptor.usage = gpu::buffer_usage_uniform | gpu::buffer_usage_copy_dst;
+        ubo_descriptor.hint = gpu::buffer_usage_hint::dynamic_data;
+        m_frame_ubo = gpu.create_buffer(ubo_descriptor);
 
         gpu::bind_group_descriptor frame_bind_group_descriptor{};
         frame_bind_group_descriptor.layout = m_frame_layout;
-        gpu::binding_value view_slot{};
-        view_slot.binding = 0;
-        view_slot.kind = gpu::binding_kind::mat4_value;
-        gpu::binding_value projection_slot{};
-        projection_slot.binding = 1;
-        projection_slot.kind = gpu::binding_kind::mat4_value;
-        frame_bind_group_descriptor.entries.push_back(view_slot);
-        frame_bind_group_descriptor.entries.push_back(projection_slot);
+        gpu::binding_value frame_slot{};
+        frame_slot.binding = 0;
+        frame_slot.kind = gpu::binding_kind::uniform_buffer;
+        frame_slot.buffer_value = m_frame_ubo;
+        frame_bind_group_descriptor.entries.push_back(frame_slot);
         m_frame_bind_group = gpu.create_bind_group(frame_bind_group_descriptor);
     }
 
@@ -64,6 +79,11 @@ namespace rendering_engine
         {
             gpu.destroy(m_frame_bind_group);
             m_frame_bind_group = {};
+        }
+        if (m_frame_ubo.valid())
+        {
+            gpu.destroy(m_frame_ubo);
+            m_frame_ubo = {};
         }
         if (m_frame_layout.valid())
         {
@@ -105,6 +125,16 @@ namespace rendering_engine
             return;
         }
 
+        // Refill the per-frame UBO before any draw consults it.
+        // Layout matches the GLSL @c PerFrame block: viewMatrix at
+        // offset 0, projectionMatrix at offset sizeof(mat4).
+        std::array<float, 32> ubo_payload{};
+        const auto view = ctx.active_camera->get_view_matrix();
+        const auto projection = ctx.active_camera->get_projection_matrix();
+        std::memcpy(ubo_payload.data(), view.data(), sizeof(infrastructure::math::mat4));
+        std::memcpy(ubo_payload.data() + 16, projection.data(), sizeof(infrastructure::math::mat4));
+        gpu.write_buffer(m_frame_ubo, ubo_payload.data(), per_frame_ubo_size, 0);
+
         // Collect every renderable's draw items into a single per-frame
         // list, then sort by pipeline id so the dispatch loop only
         // calls @c set_pipeline when the active material changes. The
@@ -130,27 +160,12 @@ namespace rendering_engine
             {
                 pass_encoder->set_pipeline(item.mat->pipeline());
 
-                // Per-frame bind group must be bound after a pipeline
-                // is active (the GL backend caches uniform locations
-                // against the current program). Update the camera
-                // matrices and bind the group on the first pipeline
-                // change of the frame; the binding sticks across
-                // subsequent set_pipeline calls within the same pass.
+                // Per-frame bind group bound once per frame after
+                // the first pipeline change; the binding sticks
+                // across subsequent set_pipeline calls within the
+                // same pass.
                 if (first_iter)
                 {
-                    std::vector<gpu::binding_value> entries;
-                    entries.reserve(2);
-                    gpu::binding_value view{};
-                    view.binding = 0;
-                    view.kind = gpu::binding_kind::mat4_value;
-                    view.mat4_value = ctx.active_camera->get_view_matrix();
-                    entries.push_back(view);
-                    gpu::binding_value projection{};
-                    projection.binding = 1;
-                    projection.kind = gpu::binding_kind::mat4_value;
-                    projection.mat4_value = ctx.active_camera->get_projection_matrix();
-                    entries.push_back(projection);
-                    gpu.update_bind_group(m_frame_bind_group, entries);
                     pass_encoder->set_bind_group(0, m_frame_bind_group);
                     first_iter = false;
                 }

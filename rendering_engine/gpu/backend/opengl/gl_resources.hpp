@@ -96,13 +96,6 @@ namespace rendering_engine::gpu::backend::opengl
 
         std::vector<vertex_buffer_layout> vertex_buffers;
         std::vector<bind_group_layout> bind_group_layouts;
-
-        // Cached per-bind-group, per-binding uniform / texture-unit
-        // assignment, indexed as cached_locations[group][slot_index].
-        // For texture / sampler entries the value is a texture
-        // unit ordinal; for value entries it is the GL uniform
-        // location returned by @c glGetUniformLocation.
-        std::vector<std::vector<GLint>> cached_locations;
     };
 
     struct gl_bind_group
