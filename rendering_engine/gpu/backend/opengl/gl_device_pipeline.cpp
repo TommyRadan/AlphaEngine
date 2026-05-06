@@ -51,10 +51,34 @@ namespace rendering_engine::gpu::backend::opengl
         m_bind_group_layouts.remove(handle.id);
     }
 
+    namespace
+    {
+        void check_program_link(GLuint program_id)
+        {
+            GLint linked = 0;
+            glGetProgramiv(program_id, GL_LINK_STATUS, &linked);
+            if (linked == GL_TRUE)
+            {
+                return;
+            }
+            GLint log_length = 0;
+            glGetProgramiv(program_id, GL_INFO_LOG_LENGTH, &log_length);
+            std::string info_log(log_length > 0 ? static_cast<size_t>(log_length) : 1u, '\0');
+            if (log_length > 0)
+            {
+                glGetProgramInfoLog(program_id, log_length, nullptr, info_log.data());
+            }
+            LOG_ERR("Program link failed: %s", info_log.c_str());
+            glDeleteProgram(program_id);
+            throw std::runtime_error{info_log};
+        }
+    } // namespace
+
     pipeline gl_device::create_pipeline(const pipeline_descriptor& descriptor)
     {
         gl_pipeline record{};
         record.topology = descriptor.topology;
+        record.patch_control_points = descriptor.patch_control_points;
         record.blend = descriptor.blend;
         record.depth = descriptor.depth;
         record.rasterizer = descriptor.rasterizer;
@@ -83,23 +107,11 @@ namespace rendering_engine::gpu::backend::opengl
         attach(descriptor.vertex_shader);
         attach(descriptor.fragment_shader);
         attach(descriptor.geometry_shader);
+        attach(descriptor.tessellation_control_shader);
+        attach(descriptor.tessellation_evaluation_shader);
 
         glLinkProgram(record.program_id);
-        GLint linked = 0;
-        glGetProgramiv(record.program_id, GL_LINK_STATUS, &linked);
-        if (linked != GL_TRUE)
-        {
-            GLint log_length = 0;
-            glGetProgramiv(record.program_id, GL_INFO_LOG_LENGTH, &log_length);
-            std::string info_log(log_length > 0 ? static_cast<size_t>(log_length) : 1u, '\0');
-            if (log_length > 0)
-            {
-                glGetProgramInfoLog(record.program_id, log_length, nullptr, info_log.data());
-            }
-            LOG_ERR("Program link failed: %s", info_log.c_str());
-            glDeleteProgram(record.program_id);
-            throw std::runtime_error{info_log};
-        }
+        check_program_link(record.program_id);
 
         // Build a VAO that owns the vertex format declared by
         // the pipeline. Vertex buffers bound at draw time
@@ -118,6 +130,44 @@ namespace rendering_engine::gpu::backend::opengl
         glBindVertexArray(0);
 
         LOG_INF("Pipeline linked id=%u vao=%u", record.program_id, record.vao_id);
+
+        pipeline h{};
+        h.id = m_pipelines.insert(record);
+        return h;
+    }
+
+    pipeline gl_device::create_compute_pipeline(const compute_pipeline_descriptor& descriptor)
+    {
+        gl_pipeline record{};
+        record.is_compute = true;
+        record.bind_group_layouts = descriptor.bind_group_layouts;
+
+        record.program_id = glCreateProgram();
+        if (record.program_id == 0)
+        {
+            LOG_FTL("create_compute_pipeline: glCreateProgram returned 0");
+            throw std::runtime_error{"program creation failed"};
+        }
+
+        if (!descriptor.compute_shader.valid())
+        {
+            LOG_FTL("create_compute_pipeline: compute_shader is required");
+            glDeleteProgram(record.program_id);
+            throw std::runtime_error{"compute_shader missing"};
+        }
+        auto* shader_record = m_shader_modules.lookup(descriptor.compute_shader.id);
+        if (shader_record == nullptr || shader_record->object_id == 0)
+        {
+            LOG_FTL("create_compute_pipeline: invalid compute shader handle");
+            glDeleteProgram(record.program_id);
+            throw std::runtime_error{"invalid compute shader handle"};
+        }
+        glAttachShader(record.program_id, shader_record->object_id);
+
+        glLinkProgram(record.program_id);
+        check_program_link(record.program_id);
+
+        LOG_INF("Compute pipeline linked id=%u", record.program_id);
 
         pipeline h{};
         h.id = m_pipelines.insert(record);

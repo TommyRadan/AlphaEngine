@@ -40,6 +40,13 @@ namespace rendering_engine::gpu::backend::opengl
         gl_buffer record{};
         record.size = descriptor.size;
         record.usage = descriptor.usage;
+        // Picking a default bind target is purely about which
+        // target @c glBufferData / @c glBufferSubData target during
+        // create / write — buffers are bound by name through
+        // @c glBindBufferBase at draw time, so any target works
+        // for the underlying object. The order below prefers
+        // targets that don't share state with vertex / index
+        // submission to keep the create / write path tidy.
         if ((descriptor.usage & buffer_usage_index) != 0u)
         {
             record.default_target = GL_ELEMENT_ARRAY_BUFFER;
@@ -47,6 +54,14 @@ namespace rendering_engine::gpu::backend::opengl
         else if ((descriptor.usage & buffer_usage_uniform) != 0u)
         {
             record.default_target = GL_UNIFORM_BUFFER;
+        }
+        else if ((descriptor.usage & buffer_usage_storage) != 0u)
+        {
+            record.default_target = GL_SHADER_STORAGE_BUFFER;
+        }
+        else if ((descriptor.usage & buffer_usage_indirect) != 0u)
+        {
+            record.default_target = GL_DRAW_INDIRECT_BUFFER;
         }
         else
         {

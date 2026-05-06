@@ -36,5 +36,7 @@ namespace rendering_engine::gpu
 {
     render_pass_encoder::~render_pass_encoder() = default;
 
+    compute_pass_encoder::~compute_pass_encoder() = default;
+
     command_encoder::~command_encoder() = default;
 } // namespace rendering_engine::gpu

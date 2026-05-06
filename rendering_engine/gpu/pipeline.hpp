@@ -69,9 +69,23 @@ namespace rendering_engine::gpu
         shader_module fragment_shader{};
         shader_module geometry_shader{};
 
+        // Optional tessellation pair. Both must be either set or
+        // both empty. Pipelines that bind tessellation must also
+        // set @c topology to @c primitive_topology::patches and
+        // give @c patch_control_points a non-zero value.
+        shader_module tessellation_control_shader{};
+        shader_module tessellation_evaluation_shader{};
+
         std::vector<vertex_buffer_layout> vertex_buffers;
 
         primitive_topology topology{primitive_topology::triangles};
+
+        // Number of vertices per patch when @c topology is
+        // @c patches. Maps to @c GL_PATCH_VERTICES on the OpenGL
+        // backend and to the equivalent @c VkPipelineTessellationStateCreateInfo
+        // field on Vulkan. Ignored for non-patch topologies.
+        uint32_t patch_control_points{0};
+
         blend_state blend;
         depth_state depth;
         rasterizer_state rasterizer;
@@ -79,6 +93,19 @@ namespace rendering_engine::gpu
         // Bind-group layouts referenced by this pipeline. The index
         // into this vector is the slot number passed to
         // @c render_pass_encoder::set_bind_group.
+        std::vector<bind_group_layout> bind_group_layouts;
+    };
+
+    // Compute-pipeline descriptor. Returned as the same
+    // @c pipeline handle as graphics pipelines but bound only
+    // through @c compute_pass_encoder::set_pipeline.
+    struct compute_pipeline_descriptor
+    {
+        shader_module compute_shader{};
+
+        // Bind-group layouts referenced by this pipeline. The
+        // index into this vector is the slot number passed to
+        // @c compute_pass_encoder::set_bind_group.
         std::vector<bind_group_layout> bind_group_layouts;
     };
 } // namespace rendering_engine::gpu

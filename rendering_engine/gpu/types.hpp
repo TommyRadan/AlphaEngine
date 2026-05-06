@@ -71,12 +71,16 @@ namespace rendering_engine::gpu
         uint32,
     };
 
-    // Draw-call primitive topology.
+    // Draw-call primitive topology. @c patches feeds the
+    // tessellation control stage when the pipeline binds tess
+    // shaders; the per-patch vertex count comes from
+    // @c pipeline_descriptor::patch_control_points.
     enum class primitive_topology
     {
         triangles,
         lines,
         points,
+        patches,
     };
 
     enum class blend_factor
@@ -165,12 +169,26 @@ namespace rendering_engine::gpu
         vertex,
         fragment,
         geometry,
+        tessellation_control,
+        tessellation_evaluation,
+        compute,
     };
 
     enum class texture_dimension
     {
         d2,
+        d3,
         cube,
+    };
+
+    // Shader-side access mode for a storage image binding. Maps to
+    // GL @c access in @c glBindImageTexture and to the SPIR-V
+    // image @c NonReadable / @c NonWritable decorations.
+    enum class storage_access
+    {
+        read_only,
+        write_only,
+        read_write,
     };
 
     // Cube-map face index. Order matches GL convention; the backend
@@ -218,4 +236,51 @@ namespace rendering_engine::gpu
     constexpr buffer_usage buffer_usage_index = 1u << 1;
     constexpr buffer_usage buffer_usage_uniform = 1u << 2;
     constexpr buffer_usage buffer_usage_copy_dst = 1u << 3;
+    constexpr buffer_usage buffer_usage_storage = 1u << 4;
+    constexpr buffer_usage buffer_usage_indirect = 1u << 5;
+    constexpr buffer_usage buffer_usage_copy_src = 1u << 6;
+
+    // Pipeline stages used by @c command_encoder::barrier. A barrier
+    // orders prior @c src_stage work against subsequent @c dst_stage
+    // work; the matching @c access_flag mask selects which memory
+    // accesses are synchronised. Combine with @c |.
+    using pipeline_stage = uint32_t;
+    constexpr pipeline_stage pipeline_stage_none = 0u;
+    constexpr pipeline_stage pipeline_stage_vertex_input = 1u << 0;
+    constexpr pipeline_stage pipeline_stage_vertex_shader = 1u << 1;
+    constexpr pipeline_stage pipeline_stage_tessellation_control_shader = 1u << 2;
+    constexpr pipeline_stage pipeline_stage_tessellation_evaluation_shader = 1u << 3;
+    constexpr pipeline_stage pipeline_stage_geometry_shader = 1u << 4;
+    constexpr pipeline_stage pipeline_stage_fragment_shader = 1u << 5;
+    constexpr pipeline_stage pipeline_stage_compute_shader = 1u << 6;
+    constexpr pipeline_stage pipeline_stage_color_attachment_output = 1u << 7;
+    constexpr pipeline_stage pipeline_stage_early_fragment_tests = 1u << 8;
+    constexpr pipeline_stage pipeline_stage_late_fragment_tests = 1u << 9;
+    constexpr pipeline_stage pipeline_stage_transfer = 1u << 10;
+    constexpr pipeline_stage pipeline_stage_draw_indirect = 1u << 11;
+    constexpr pipeline_stage pipeline_stage_all_graphics = 0x0FFFu;
+    constexpr pipeline_stage pipeline_stage_all_commands = 0xFFFFu;
+
+    // Memory-access categories used by @c command_encoder::barrier.
+    // The OpenGL backend folds @c dst_access into a bitmask of
+    // @c GL_*_BARRIER_BIT flags; a future Vulkan backend uses both
+    // @c src_access and @c dst_access verbatim. Combine with @c |.
+    using access_flag = uint32_t;
+    constexpr access_flag access_none = 0u;
+    constexpr access_flag access_indirect_command_read = 1u << 0;
+    constexpr access_flag access_index_read = 1u << 1;
+    constexpr access_flag access_vertex_attribute_read = 1u << 2;
+    constexpr access_flag access_uniform_read = 1u << 3;
+    constexpr access_flag access_shader_read = 1u << 4;
+    constexpr access_flag access_shader_write = 1u << 5;
+    constexpr access_flag access_color_attachment_read = 1u << 6;
+    constexpr access_flag access_color_attachment_write = 1u << 7;
+    constexpr access_flag access_depth_stencil_attachment_read = 1u << 8;
+    constexpr access_flag access_depth_stencil_attachment_write = 1u << 9;
+    constexpr access_flag access_transfer_read = 1u << 10;
+    constexpr access_flag access_transfer_write = 1u << 11;
+    constexpr access_flag access_storage_buffer_read = 1u << 12;
+    constexpr access_flag access_storage_buffer_write = 1u << 13;
+    constexpr access_flag access_storage_image_read = 1u << 14;
+    constexpr access_flag access_storage_image_write = 1u << 15;
 } // namespace rendering_engine::gpu

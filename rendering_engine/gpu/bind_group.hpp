@@ -50,16 +50,28 @@ namespace rendering_engine::gpu
         uniform_buffer,
         texture,
         sampler,
+        storage_buffer,
+        storage_texture,
     };
 
     // One slot in a layout. The binding number maps directly onto
     // the SPIR-V @c Binding decoration and onto the OpenGL binding
-    // point (UBO unit for @c uniform_buffer, texture image unit for
-    // @c texture / @c sampler).
+    // point (UBO / SSBO unit for @c uniform_buffer / @c storage_buffer,
+    // texture image unit for @c texture / @c sampler, image unit for
+    // @c storage_texture).
     struct bind_group_layout_entry
     {
         uint32_t binding{0};
         binding_kind kind{binding_kind::uniform_buffer};
+
+        // For @c storage_texture only: the image format used by
+        // @c glBindImageTexture and matched against the SPIR-V
+        // image @c Format decoration. Ignored for other kinds.
+        texture_format storage_format{texture_format::rgba8_unorm};
+
+        // For @c storage_texture only: shader-side access mode.
+        // Ignored for other kinds.
+        storage_access storage_access_mode{storage_access::read_write};
     };
 
     struct bind_group_layout_descriptor

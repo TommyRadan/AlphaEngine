@@ -50,6 +50,15 @@ namespace rendering_engine::gpu::backend::opengl
     GLenum to_gl_scalar(scalar_type type);
     GLenum to_gl_buffer_usage_hint(buffer_usage_hint hint);
     GLenum to_gl_cube_face(cube_face face);
+    GLenum to_gl_texture_target(texture_dimension dimension);
+    GLenum to_gl_storage_access(storage_access access);
+
+    // Translate the engine's @c access_flag bitmask into the
+    // matching @c GL_*_BARRIER_BIT bitmask consumed by
+    // @c glMemoryBarrier. Only the @c dst_access mask drives the
+    // result; on OpenGL the source mask is implicit (the API
+    // orders all prior writes against the requested category).
+    GLbitfield to_gl_memory_barrier_bits(access_flag dst_access);
 
     // For a texture create: returns the @c (internal_format,
     // upload_format, upload_type) triple suitable for

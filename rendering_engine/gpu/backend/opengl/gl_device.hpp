@@ -65,6 +65,7 @@ namespace rendering_engine::gpu::backend::opengl
         shader_module create_shader_module(const shader_module_descriptor& descriptor) override;
         bind_group_layout create_bind_group_layout(const bind_group_layout_descriptor& descriptor) override;
         pipeline create_pipeline(const pipeline_descriptor& descriptor) override;
+        pipeline create_compute_pipeline(const compute_pipeline_descriptor& descriptor) override;
         bind_group create_bind_group(const bind_group_descriptor& descriptor) override;
 
         void destroy(buffer handle) override;
@@ -77,6 +78,7 @@ namespace rendering_engine::gpu::backend::opengl
 
         void write_buffer(buffer buffer_handle, const void* data, size_t size, size_t offset) override;
         void write_texture(texture texture_handle, const void* data, size_t size) override;
+        void write_texture_3d(texture texture_handle, const void* data, size_t size) override;
         void write_cube_face(texture texture_handle, cube_face face, const void* data, size_t size) override;
         void generate_mipmaps(texture texture_handle) override;
 

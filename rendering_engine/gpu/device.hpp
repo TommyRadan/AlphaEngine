@@ -81,6 +81,7 @@ namespace rendering_engine::gpu
         virtual shader_module create_shader_module(const shader_module_descriptor& descriptor) = 0;
         virtual bind_group_layout create_bind_group_layout(const bind_group_layout_descriptor& descriptor) = 0;
         virtual pipeline create_pipeline(const pipeline_descriptor& descriptor) = 0;
+        virtual pipeline create_compute_pipeline(const compute_pipeline_descriptor& descriptor) = 0;
         virtual bind_group create_bind_group(const bind_group_descriptor& descriptor) = 0;
 
         // -- Resource destruction -----------------------------------------
@@ -103,6 +104,11 @@ namespace rendering_engine::gpu
         // match the @c format the texture was created with. Required
         // before the texture is sampled.
         virtual void write_texture(texture texture_handle, const void* data, size_t size) = 0;
+
+        // Upload pixel data for a 3D texture. @p data lays out the
+        // full volume in slice-major order: each z slice is a 2D
+        // image of @c width * @c height texels.
+        virtual void write_texture_3d(texture texture_handle, const void* data, size_t size) = 0;
 
         // Upload pixel data for one face of a cube-map texture.
         virtual void write_cube_face(texture texture_handle, cube_face face, const void* data, size_t size) = 0;

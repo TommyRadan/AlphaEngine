@@ -53,6 +53,11 @@ namespace rendering_engine::gpu::backend::opengl
         void set_viewport(int x, int y, int width, int height) override;
         void draw(uint32_t vertex_count, uint32_t first_vertex) override;
         void draw_indexed(uint32_t index_count, uint32_t first_index) override;
+        void draw_indexed_indirect(buffer indirect_buffer, size_t offset) override;
+        void multi_draw_indexed_indirect(buffer indirect_buffer,
+                                         size_t offset,
+                                         uint32_t draw_count,
+                                         uint32_t stride) override;
         void end() override;
 
     private:
@@ -70,12 +75,38 @@ namespace rendering_engine::gpu::backend::opengl
         bool m_active{false};
     };
 
+    struct gl_compute_pass_encoder : public compute_pass_encoder
+    {
+        explicit gl_compute_pass_encoder(gl_device& device);
+        ~gl_compute_pass_encoder() override;
+
+        void set_pipeline(pipeline pipeline_handle) override;
+        void set_bind_group(uint32_t group, bind_group bind_group_handle) override;
+        void dispatch(uint32_t group_count_x, uint32_t group_count_y, uint32_t group_count_z) override;
+        void end() override;
+
+    private:
+        gl_device& m_device;
+
+        pipeline m_pipeline_handle{};
+        GLuint m_program_id{0};
+        bool m_active{false};
+    };
+
     struct gl_command_encoder : public command_encoder
     {
         explicit gl_command_encoder(gl_device& device);
         ~gl_command_encoder() override = default;
 
         std::unique_ptr<render_pass_encoder> begin_render_pass(const render_pass_descriptor& descriptor) override;
+        std::unique_ptr<compute_pass_encoder> begin_compute_pass() override;
+
+        void copy_buffer_to_buffer(buffer src, size_t src_offset, buffer dst, size_t dst_offset, size_t size) override;
+        void clear_buffer(buffer buffer_handle, size_t offset, size_t size, uint32_t value) override;
+        void barrier(pipeline_stage src_stage,
+                     pipeline_stage dst_stage,
+                     access_flag src_access,
+                     access_flag dst_access) override;
 
     private:
         gl_device& m_device;

@@ -58,10 +58,11 @@ namespace rendering_engine::gpu::backend::opengl
     texture gl_device::create_texture(const texture_descriptor& descriptor)
     {
         gl_texture record{};
-        record.target = descriptor.dimension == texture_dimension::cube ? GL_TEXTURE_CUBE_MAP : GL_TEXTURE_2D;
+        record.target = to_gl_texture_target(descriptor.dimension);
         record.format = descriptor.format;
         record.width = descriptor.width;
         record.height = descriptor.height;
+        record.depth = descriptor.dimension == texture_dimension::d3 ? descriptor.depth : 1u;
         record.mipmaps = descriptor.mipmaps;
 
         glGenTextures(1, &record.object_id);
@@ -75,12 +76,11 @@ namespace rendering_engine::gpu::backend::opengl
                             descriptor.address_v,
                             descriptor.address_w);
 
-        // Allocate storage. For 2D textures we allocate
-        // mip-0 directly via @c glTexImage2D with a null
-        // pointer; the caller fills it via
-        // @ref write_texture or @ref write_cube_face. For
-        // cube maps we allocate all six faces with null data
-        // so each face can be uploaded independently later.
+        // Allocate storage with null data. The caller fills
+        // each level via @ref write_texture, @ref write_texture_3d,
+        // or @ref write_cube_face. 2D and 3D textures get a
+        // single level-0 allocation; cube maps get all six
+        // faces so each can be uploaded independently.
         const auto fmt = to_gl_texture_format(descriptor.format);
         if (record.target == GL_TEXTURE_2D)
         {
@@ -89,6 +89,19 @@ namespace rendering_engine::gpu::backend::opengl
                          fmt.internal_format,
                          static_cast<GLsizei>(descriptor.width),
                          static_cast<GLsizei>(descriptor.height),
+                         0,
+                         fmt.upload_format,
+                         fmt.upload_type,
+                         nullptr);
+        }
+        else if (record.target == GL_TEXTURE_3D)
+        {
+            glTexImage3D(GL_TEXTURE_3D,
+                         0,
+                         fmt.internal_format,
+                         static_cast<GLsizei>(descriptor.width),
+                         static_cast<GLsizei>(descriptor.height),
+                         static_cast<GLsizei>(record.depth),
                          0,
                          fmt.upload_format,
                          fmt.upload_type,
@@ -149,6 +162,30 @@ namespace rendering_engine::gpu::backend::opengl
                         fmt.upload_type,
                         data);
         glBindTexture(GL_TEXTURE_2D, 0);
+    }
+
+    void gl_device::write_texture_3d(texture handle, const void* data, size_t /*size*/)
+    {
+        auto* record = m_textures.lookup(handle.id);
+        if (record == nullptr || record->object_id == 0 || record->target != GL_TEXTURE_3D)
+        {
+            LOG_WRN("write_texture_3d: invalid 3D texture handle");
+            return;
+        }
+        const auto fmt = to_gl_texture_format(record->format);
+        glBindTexture(GL_TEXTURE_3D, record->object_id);
+        glTexSubImage3D(GL_TEXTURE_3D,
+                        0,
+                        0,
+                        0,
+                        0,
+                        static_cast<GLsizei>(record->width),
+                        static_cast<GLsizei>(record->height),
+                        static_cast<GLsizei>(record->depth),
+                        fmt.upload_format,
+                        fmt.upload_type,
+                        data);
+        glBindTexture(GL_TEXTURE_3D, 0);
     }
 
     void gl_device::write_cube_face(texture handle, cube_face face, const void* data, size_t /*size*/)
