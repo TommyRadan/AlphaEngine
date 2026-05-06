@@ -138,6 +138,31 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(glm)
 target_link_libraries(AlphaEngine glm::glm)
 
+# glslang — fetched and built statically. Compiles GLSL to SPIR-V at
+# runtime so both the OpenGL backend (via ARB_gl_spirv) and a future
+# Vulkan backend can consume the same byte blobs. ENABLE_OPT=OFF
+# drops the SPIRV-Tools optimizer dependency; the engine ships
+# unoptimised SPIR-V for now.
+set(GLSLANG_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
+set(ENABLE_OPT OFF CACHE BOOL "" FORCE)
+set(ENABLE_HLSL OFF CACHE BOOL "" FORCE)
+set(ENABLE_RTTI OFF CACHE BOOL "" FORCE)
+set(ENABLE_CTEST OFF CACHE BOOL "" FORCE)
+set(BUILD_EXTERNAL OFF CACHE BOOL "" FORCE)
+set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
+set(ENABLE_GLSLANG_BINARIES OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(
+    glslang
+    GIT_REPOSITORY https://github.com/KhronosGroup/glslang.git
+    GIT_TAG 15.0.0
+    GIT_SHALLOW TRUE
+)
+FetchContent_MakeAvailable(glslang)
+target_link_libraries(AlphaEngine
+    glslang::glslang
+    glslang::SPIRV
+    glslang::glslang-default-resource-limits)
+
 target_include_directories(AlphaEngine PRIVATE ${VENDOR_ROOT}stb/)
 
 # glad — OpenGL loader (generated for GL 4.6 Core, no extensions)
