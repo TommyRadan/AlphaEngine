@@ -34,6 +34,8 @@ namespace rendering_engine::gpu::backend::opengl
             return GL_LINES;
         case primitive_topology::points:
             return GL_POINTS;
+        case primitive_topology::patches:
+            return GL_PATCHES;
         }
         return GL_TRIANGLES;
     }
@@ -192,6 +194,12 @@ namespace rendering_engine::gpu::backend::opengl
             return GL_FRAGMENT_SHADER;
         case shader_stage::geometry:
             return GL_GEOMETRY_SHADER;
+        case shader_stage::tessellation_control:
+            return GL_TESS_CONTROL_SHADER;
+        case shader_stage::tessellation_evaluation:
+            return GL_TESS_EVALUATION_SHADER;
+        case shader_stage::compute:
+            return GL_COMPUTE_SHADER;
         }
         return GL_VERTEX_SHADER;
     }
@@ -255,6 +263,88 @@ namespace rendering_engine::gpu::backend::opengl
             return GL_TEXTURE_CUBE_MAP_NEGATIVE_Z;
         }
         return GL_TEXTURE_CUBE_MAP_POSITIVE_X;
+    }
+
+    GLenum to_gl_texture_target(texture_dimension dimension)
+    {
+        switch (dimension)
+        {
+        case texture_dimension::d2:
+            return GL_TEXTURE_2D;
+        case texture_dimension::d3:
+            return GL_TEXTURE_3D;
+        case texture_dimension::cube:
+            return GL_TEXTURE_CUBE_MAP;
+        }
+        return GL_TEXTURE_2D;
+    }
+
+    GLenum to_gl_storage_access(storage_access access)
+    {
+        switch (access)
+        {
+        case storage_access::read_only:
+            return GL_READ_ONLY;
+        case storage_access::write_only:
+            return GL_WRITE_ONLY;
+        case storage_access::read_write:
+            return GL_READ_WRITE;
+        }
+        return GL_READ_WRITE;
+    }
+
+    GLbitfield to_gl_memory_barrier_bits(access_flag dst_access)
+    {
+        GLbitfield bits = 0;
+        if ((dst_access & access_indirect_command_read) != 0u)
+        {
+            bits |= GL_COMMAND_BARRIER_BIT;
+        }
+        if ((dst_access & access_index_read) != 0u)
+        {
+            bits |= GL_ELEMENT_ARRAY_BARRIER_BIT;
+        }
+        if ((dst_access & access_vertex_attribute_read) != 0u)
+        {
+            bits |= GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT;
+        }
+        if ((dst_access & access_uniform_read) != 0u)
+        {
+            bits |= GL_UNIFORM_BARRIER_BIT;
+        }
+        if ((dst_access & access_shader_read) != 0u)
+        {
+            bits |= GL_TEXTURE_FETCH_BARRIER_BIT;
+        }
+        if ((dst_access & (access_storage_buffer_read | access_storage_buffer_write)) != 0u)
+        {
+            bits |= GL_SHADER_STORAGE_BARRIER_BIT;
+        }
+        if ((dst_access & (access_storage_image_read | access_storage_image_write)) != 0u)
+        {
+            bits |= GL_SHADER_IMAGE_ACCESS_BARRIER_BIT;
+        }
+        if ((dst_access & (access_color_attachment_read | access_color_attachment_write |
+                           access_depth_stencil_attachment_read | access_depth_stencil_attachment_write)) != 0u)
+        {
+            bits |= GL_FRAMEBUFFER_BARRIER_BIT;
+        }
+        if ((dst_access & access_transfer_read) != 0u)
+        {
+            bits |= GL_BUFFER_UPDATE_BARRIER_BIT | GL_PIXEL_BUFFER_BARRIER_BIT;
+        }
+        if ((dst_access & access_transfer_write) != 0u)
+        {
+            bits |= GL_BUFFER_UPDATE_BARRIER_BIT | GL_TEXTURE_UPDATE_BARRIER_BIT;
+        }
+        if (bits == 0)
+        {
+            // The caller asked for a barrier with no recognised
+            // category — fall back to the conservative all-bits
+            // form so dependent work observes prior writes.
+            bits = GL_ALL_BARRIER_BITS;
+        }
+        return bits;
     }
 
     gl_texture_format to_gl_texture_format(texture_format format)

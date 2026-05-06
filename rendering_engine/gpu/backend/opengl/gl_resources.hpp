@@ -49,7 +49,10 @@ namespace rendering_engine::gpu::backend::opengl
     struct gl_buffer
     {
         GLuint object_id{0};
-        GLenum default_target{0}; // GL_ARRAY_BUFFER / _ELEMENT_ARRAY_BUFFER / _UNIFORM_BUFFER
+        // Default bind target; one of @c GL_ARRAY_BUFFER,
+        // @c GL_ELEMENT_ARRAY_BUFFER, @c GL_UNIFORM_BUFFER,
+        // @c GL_SHADER_STORAGE_BUFFER, or @c GL_DRAW_INDIRECT_BUFFER.
+        GLenum default_target{0};
         size_t size{0};
         buffer_usage usage{0};
     };
@@ -57,10 +60,14 @@ namespace rendering_engine::gpu::backend::opengl
     struct gl_texture
     {
         GLuint object_id{0};
-        GLenum target{0}; // GL_TEXTURE_2D or GL_TEXTURE_CUBE_MAP
+        // @c GL_TEXTURE_2D, @c GL_TEXTURE_3D, or
+        // @c GL_TEXTURE_CUBE_MAP.
+        GLenum target{0};
         texture_format format{texture_format::rgba8_unorm};
         uint32_t width{0};
         uint32_t height{0};
+        // Slice count for 3D textures; 1 for 2D / cube.
+        uint32_t depth{1};
         bool mipmaps{false};
     };
 
@@ -87,9 +94,21 @@ namespace rendering_engine::gpu::backend::opengl
     struct gl_pipeline
     {
         GLuint program_id{0};
+        // 0 for compute pipelines — compute dispatches don't need
+        // a vertex array.
         GLuint vao_id{0};
 
+        // True for pipelines built via
+        // @c gl_device::create_compute_pipeline. These are bound
+        // through @c gl_compute_pass_encoder, never through
+        // @c gl_render_pass_encoder.
+        bool is_compute{false};
+
         primitive_topology topology{primitive_topology::triangles};
+        // Per-patch vertex count for tessellation pipelines; 0 if
+        // no tessellation stage is bound.
+        uint32_t patch_control_points{0};
+
         blend_state blend;
         depth_state depth;
         rasterizer_state rasterizer;

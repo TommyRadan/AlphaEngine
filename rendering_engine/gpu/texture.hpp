@@ -41,6 +41,10 @@ namespace rendering_engine::gpu
         uint32_t width{0};
         uint32_t height{0};
 
+        // Volume slice count for @c texture_dimension::d3. Ignored
+        // for 2D and cube textures.
+        uint32_t depth{1};
+
         // When true, the backend allocates a full mip chain and the
         // caller may invoke @c device::generate_mipmaps after
         // uploading the level-0 data. @c false leaves the texture
