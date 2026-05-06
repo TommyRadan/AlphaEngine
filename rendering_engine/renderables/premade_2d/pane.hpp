@@ -49,6 +49,7 @@ namespace rendering_engine
         material* m_material{nullptr};
         gpu::buffer m_vertex_buffer{};
         gpu::buffer m_index_buffer{};
+        gpu::buffer m_draw_ubo{};
         gpu::texture m_texture{};
         gpu::bind_group m_draw_bind_group{};
 

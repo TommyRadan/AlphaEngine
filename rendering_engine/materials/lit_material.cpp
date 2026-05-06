@@ -27,25 +27,32 @@
 namespace
 {
     const std::string vertex_shader = R"vs(
-        #version 330
+        #version 450
 
-        layout(location=0) in vec3 position;
+        layout(location = 0) in vec3 position;
 
-        uniform mat4 modelMatrix;
-        uniform mat4 viewMatrix;
-        uniform mat4 projectionMatrix;
+        layout(set = 0, binding = 0, std140) uniform PerFrame
+        {
+            mat4 viewMatrix;
+            mat4 projectionMatrix;
+        } u_frame;
+
+        layout(set = 1, binding = 1, std140) uniform PerDraw
+        {
+            mat4 modelMatrix;
+        } u_draw;
 
         void main()
         {
-            mat4 MVP = projectionMatrix * viewMatrix * modelMatrix;
+            mat4 MVP = u_frame.projectionMatrix * u_frame.viewMatrix * u_draw.modelMatrix;
             gl_Position = MVP * vec4(position, 1.0);
         }
 )vs";
 
     const std::string fragment_shader = R"fs(
-        #version 330
+        #version 450
 
-        out vec4 fragColor;
+        layout(location = 0) out vec4 fragColor;
 
         void main()
         {
@@ -66,8 +73,12 @@ namespace rendering_engine
         vertex_layout.stride = 0;
         vertex_layout.attributes.push_back({0, 3, gpu::scalar_type::float32, 0});
 
+        // Per-draw layout: a single UBO at binding=1. The binding
+        // number must be unique across both descriptor sets in the
+        // pipeline because OpenGL flattens UBO bindings into a single
+        // namespace through ARB_gl_spirv.
         gpu::bind_group_layout_descriptor draw_layout{};
-        draw_layout.entries.push_back({0, gpu::binding_kind::mat4_value, "modelMatrix"});
+        draw_layout.entries.push_back({1, gpu::binding_kind::uniform_buffer});
 
         gpu::depth_state depth{};
         depth.test_enabled = true;

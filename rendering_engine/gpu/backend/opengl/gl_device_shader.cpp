@@ -24,6 +24,14 @@
  * @file gl_device_shader.cpp
  * @brief @c gl_device member functions that compile shader stages:
  *        @c create_shader_module, @c destroy(shader_module).
+ *
+ * Shader modules consume SPIR-V byte blobs produced upstream by
+ * @ref rendering_engine::gpu::compile_glsl_to_spirv. The blob is
+ * uploaded via @c glShaderBinary with the
+ * @c GL_SHADER_BINARY_FORMAT_SPIR_V format and specialised into the
+ * shader object via @c glSpecializeShader (core in OpenGL 4.6 — the
+ * ARB_gl_spirv path). No GLSL source ever reaches the driver from
+ * this layer.
  */
 
 #include <rendering_engine/gpu/backend/opengl/gl_device.hpp>
@@ -40,6 +48,12 @@ namespace rendering_engine::gpu::backend::opengl
 {
     shader_module gl_device::create_shader_module(const shader_module_descriptor& descriptor)
     {
+        if (descriptor.spirv.empty())
+        {
+            LOG_FTL("create_shader_module: SPIR-V blob is empty");
+            throw std::runtime_error{"empty SPIR-V blob"};
+        }
+
         gl_shader_module record{};
         record.stage = descriptor.stage;
         record.object_id = glCreateShader(to_gl_shader_stage(descriptor.stage));
@@ -49,10 +63,9 @@ namespace rendering_engine::gpu::backend::opengl
             throw std::runtime_error{"shader creation failed"};
         }
 
-        const char* source = descriptor.source.c_str();
-        const auto length = static_cast<GLint>(descriptor.source.length());
-        glShaderSource(record.object_id, 1, &source, &length);
-        glCompileShader(record.object_id);
+        const GLsizei blob_bytes = static_cast<GLsizei>(descriptor.spirv.size() * sizeof(uint32_t));
+        glShaderBinary(1, &record.object_id, GL_SHADER_BINARY_FORMAT_SPIR_V, descriptor.spirv.data(), blob_bytes);
+        glSpecializeShader(record.object_id, "main", 0, nullptr, nullptr);
 
         GLint compiled = 0;
         glGetShaderiv(record.object_id, GL_COMPILE_STATUS, &compiled);
@@ -65,12 +78,15 @@ namespace rendering_engine::gpu::backend::opengl
             {
                 glGetShaderInfoLog(record.object_id, log_length, nullptr, info_log.data());
             }
-            LOG_ERR("Shader compile failed: %s", info_log.c_str());
+            LOG_ERR("Shader specialization failed: %s", info_log.c_str());
             glDeleteShader(record.object_id);
             throw std::runtime_error{info_log};
         }
 
-        LOG_INF("Compiled shader id=%u stage=%i", record.object_id, static_cast<int>(descriptor.stage));
+        LOG_INF("Specialized shader id=%u stage=%i (%i SPIR-V bytes)",
+                record.object_id,
+                static_cast<int>(descriptor.stage),
+                static_cast<int>(blob_bytes));
 
         shader_module h{};
         h.id = m_shader_modules.insert(record);

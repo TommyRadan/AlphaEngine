@@ -27,12 +27,12 @@
 namespace
 {
     const std::string vertex_shader = R"vs(
-        #version 330
+        #version 450
 
-        layout(location=0) in vec3 position;
-        layout(location=1) in vec2 uv;
+        layout(location = 0) in vec3 position;
+        layout(location = 1) in vec2 uv;
 
-        out vec2 texCoord;
+        layout(location = 0) out vec2 texCoord;
 
         void main()
         {
@@ -42,18 +42,24 @@ namespace
 )vs";
 
     const std::string fragment_shader = R"fs(
-        #version 330
+        #version 450
 
-        out vec4 fragColor;
-        in vec2 texCoord;
+        layout(location = 0) in vec2 texCoord;
+        layout(location = 0) out vec4 fragColor;
 
-        uniform float useTexture;
-        uniform vec4 color;
-        uniform sampler2D tex;
+        layout(set = 0, binding = 0, std140) uniform UiDraw
+        {
+            float useTexture;
+            vec4 color;
+        } u_draw;
+
+        layout(set = 0, binding = 1) uniform sampler2D tex;
 
         void main()
         {
-            fragColor = (useTexture != 0.0) ? texture(tex, vec2(texCoord.x, 1.0 - texCoord.y)) : color;
+            fragColor = (u_draw.useTexture != 0.0)
+                ? texture(tex, vec2(texCoord.x, 1.0 - texCoord.y))
+                : u_draw.color;
         }
 )fs";
 } // namespace
@@ -67,10 +73,14 @@ namespace rendering_engine
         vertex_layout.attributes.push_back({0, 3, gpu::scalar_type::float32, 0});
         vertex_layout.attributes.push_back({1, 2, gpu::scalar_type::float32, sizeof(float) * 3});
 
+        // Per-draw layout: UBO with the {useTexture, color} pair at
+        // binding=0; sampler at binding=1. UBOs and samplers live in
+        // disjoint binding namespaces in OpenGL, but Vulkan treats
+        // them as one descriptor set so the binding numbers must
+        // still differ — they do.
         gpu::bind_group_layout_descriptor draw_layout{};
-        draw_layout.entries.push_back({0, gpu::binding_kind::float_value, "useTexture"});
-        draw_layout.entries.push_back({1, gpu::binding_kind::vec4_value, "color"});
-        draw_layout.entries.push_back({2, gpu::binding_kind::texture, "tex"});
+        draw_layout.entries.push_back({0, gpu::binding_kind::uniform_buffer});
+        draw_layout.entries.push_back({1, gpu::binding_kind::texture});
 
         // Overlay pass disables depth testing entirely so 2D elements
         // draw in submission order; depth writes also stay off so the

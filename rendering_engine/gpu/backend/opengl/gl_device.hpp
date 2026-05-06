@@ -66,7 +66,6 @@ namespace rendering_engine::gpu::backend::opengl
         bind_group_layout create_bind_group_layout(const bind_group_layout_descriptor& descriptor) override;
         pipeline create_pipeline(const pipeline_descriptor& descriptor) override;
         bind_group create_bind_group(const bind_group_descriptor& descriptor) override;
-        void update_bind_group(bind_group bind_group_handle, const std::vector<binding_value>& entries) override;
 
         void destroy(buffer handle) override;
         void destroy(texture handle) override;

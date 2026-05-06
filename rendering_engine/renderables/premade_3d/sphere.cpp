@@ -27,6 +27,8 @@
 
 #include <control/engine.hpp>
 #include <infrastructure/log.hpp>
+#include <infrastructure/math/math.hpp>
+#include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/materials/material.hpp>
 #include <rendering_engine/mesh/vertex.hpp>
@@ -43,6 +45,11 @@ rendering_engine::sphere::~sphere()
     {
         gpu.destroy(m_draw_bind_group);
         m_draw_bind_group = {};
+    }
+    if (m_draw_ubo.valid())
+    {
+        gpu.destroy(m_draw_ubo);
+        m_draw_ubo = {};
     }
     if (m_index_buffer.valid())
     {
@@ -148,25 +155,29 @@ void rendering_engine::sphere::collect_draw_items(std::vector<draw_item>& out)
 
     auto& gpu = *control::current_engine().gpu;
 
+    if (!m_draw_ubo.valid())
+    {
+        gpu::buffer_descriptor ubo_descriptor{};
+        ubo_descriptor.size = sizeof(infrastructure::math::mat4);
+        ubo_descriptor.usage = gpu::buffer_usage_uniform | gpu::buffer_usage_copy_dst;
+        ubo_descriptor.hint = gpu::buffer_usage_hint::dynamic_data;
+        m_draw_ubo = gpu.create_buffer(ubo_descriptor);
+    }
+
     if (!m_draw_bind_group.valid())
     {
         gpu::bind_group_descriptor bg_descriptor{};
         bg_descriptor.layout = m_material->per_draw_layout();
         gpu::binding_value model_slot{};
-        model_slot.binding = 0;
-        model_slot.kind = gpu::binding_kind::mat4_value;
+        model_slot.binding = 1;
+        model_slot.kind = gpu::binding_kind::uniform_buffer;
+        model_slot.buffer_value = m_draw_ubo;
         bg_descriptor.entries.push_back(model_slot);
         m_draw_bind_group = gpu.create_bind_group(bg_descriptor);
     }
 
-    std::vector<gpu::binding_value> entries;
-    entries.reserve(1);
-    gpu::binding_value model_slot{};
-    model_slot.binding = 0;
-    model_slot.kind = gpu::binding_kind::mat4_value;
-    model_slot.mat4_value = transform.get_transform_matrix();
-    entries.push_back(model_slot);
-    gpu.update_bind_group(m_draw_bind_group, entries);
+    const auto model_matrix = transform.get_transform_matrix();
+    gpu.write_buffer(m_draw_ubo, model_matrix.data(), sizeof(infrastructure::math::mat4), 0);
 
     draw_item item{};
     item.mat = m_material;

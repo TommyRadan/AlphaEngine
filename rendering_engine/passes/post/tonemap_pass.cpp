@@ -26,10 +26,12 @@
 
 #include <control/engine.hpp>
 #include <rendering_engine/gpu/bind_group.hpp>
+#include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/gpu/pipeline.hpp>
 #include <rendering_engine/gpu/render_target.hpp>
 #include <rendering_engine/gpu/shader.hpp>
+#include <rendering_engine/gpu/shader_compiler.hpp>
 #include <rendering_engine/passes/post/fullscreen_triangle.hpp>
 
 namespace
@@ -42,13 +44,17 @@ namespace
     // from the piecewise sRGB curve at these magnitudes and is
     // the standard chain partner for ACES.
     const std::string fragment_shader = R"fs(
-        #version 330
+        #version 450
 
-        in vec2 texCoord;
-        out vec4 fragColor;
+        layout(location = 0) in vec2 texCoord;
+        layout(location = 0) out vec4 fragColor;
 
-        uniform sampler2D sceneColor;
-        uniform float exposure;
+        layout(set = 0, binding = 0) uniform sampler2D sceneColor;
+
+        layout(set = 0, binding = 1, std140) uniform Tonemap
+        {
+            float exposure;
+        } u_tonemap;
 
         vec3 aces_filmic(vec3 x)
         {
@@ -62,7 +68,7 @@ namespace
 
         void main()
         {
-            vec3 hdr = texture(sceneColor, texCoord).rgb * exposure;
+            vec3 hdr = texture(sceneColor, texCoord).rgb * u_tonemap.exposure;
             vec3 ldr = aces_filmic(hdr);
             vec3 srgb = pow(ldr, vec3(1.0 / 2.2));
             fragColor = vec4(srgb, 1.0);
@@ -78,17 +84,29 @@ namespace rendering_engine
 
         gpu::shader_module_descriptor vs_descriptor{};
         vs_descriptor.stage = gpu::shader_stage::vertex;
-        vs_descriptor.source = fullscreen_triangle_vertex_shader;
+        vs_descriptor.spirv = gpu::compile_glsl_to_spirv(fullscreen_triangle_vertex_shader, gpu::shader_stage::vertex);
         m_vertex_shader = gpu.create_shader_module(vs_descriptor);
 
         gpu::shader_module_descriptor fs_descriptor{};
         fs_descriptor.stage = gpu::shader_stage::fragment;
-        fs_descriptor.source = fragment_shader;
+        fs_descriptor.spirv = gpu::compile_glsl_to_spirv(fragment_shader, gpu::shader_stage::fragment);
         m_fragment_shader = gpu.create_shader_module(fs_descriptor);
 
+        // Captured once at construction; live tuning is out of
+        // scope per the issue. A future auto-exposure pass will
+        // update this UBO per-frame via write_buffer. std140 rounds
+        // a single float UBO up to a 16-byte allocation.
+        const float exposure = 1.0f;
+        gpu::buffer_descriptor ubo_descriptor{};
+        ubo_descriptor.size = 16;
+        ubo_descriptor.usage = gpu::buffer_usage_uniform | gpu::buffer_usage_copy_dst;
+        ubo_descriptor.hint = gpu::buffer_usage_hint::static_data;
+        ubo_descriptor.initial_data = &exposure;
+        m_exposure_ubo = gpu.create_buffer(ubo_descriptor);
+
         gpu::bind_group_layout_descriptor input_layout{};
-        input_layout.entries.push_back({0, gpu::binding_kind::texture, "sceneColor"});
-        input_layout.entries.push_back({1, gpu::binding_kind::float_value, "exposure"});
+        input_layout.entries.push_back({0, gpu::binding_kind::texture});
+        input_layout.entries.push_back({1, gpu::binding_kind::uniform_buffer});
         m_input_layout = gpu.create_bind_group_layout(input_layout);
 
         gpu::bind_group_descriptor input_bind_group_descriptor{};
@@ -100,20 +118,17 @@ namespace rendering_engine
         scene_color_slot.texture_value = input_color;
         input_bind_group_descriptor.entries.push_back(scene_color_slot);
 
-        // Captured once at construction; live tuning is out of
-        // scope per the issue. A future auto-exposure pass will
-        // update this slot per-frame via update_bind_group.
         gpu::binding_value exposure_slot{};
         exposure_slot.binding = 1;
-        exposure_slot.kind = gpu::binding_kind::float_value;
-        exposure_slot.float_value = 1.0f;
+        exposure_slot.kind = gpu::binding_kind::uniform_buffer;
+        exposure_slot.buffer_value = m_exposure_ubo;
         input_bind_group_descriptor.entries.push_back(exposure_slot);
 
         m_input_bind_group = gpu.create_bind_group(input_bind_group_descriptor);
 
         // Fullscreen triangle: depth disabled, blend disabled, no
         // culling so the triangle's winding is irrelevant. The
-        // vertex shader emits positions from gl_VertexID, so the
+        // vertex shader emits positions from gl_VertexIndex, so the
         // pipeline declares no vertex buffer layout.
         gpu::depth_state depth{};
         depth.test_enabled = false;
@@ -156,6 +171,11 @@ namespace rendering_engine
         {
             gpu.destroy(m_input_layout);
             m_input_layout = {};
+        }
+        if (m_exposure_ubo.valid())
+        {
+            gpu.destroy(m_exposure_ubo);
+            m_exposure_ubo = {};
         }
         if (m_fragment_shader.valid())
         {

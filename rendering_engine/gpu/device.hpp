@@ -83,13 +83,6 @@ namespace rendering_engine::gpu
         virtual pipeline create_pipeline(const pipeline_descriptor& descriptor) = 0;
         virtual bind_group create_bind_group(const bind_group_descriptor& descriptor) = 0;
 
-        // Replace the entries of a previously created bind group.
-        // The layout is not changed; only the values bound to each
-        // slot. Lets renderables hold one bind group across frames
-        // and re-fill it cheaply each draw without churning the
-        // resource pool.
-        virtual void update_bind_group(bind_group bind_group_handle, const std::vector<binding_value>& entries) = 0;
-
         // -- Resource destruction -----------------------------------------
 
         virtual void destroy(buffer handle) = 0;
