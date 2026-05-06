@@ -140,7 +140,7 @@ target_link_libraries(AlphaEngine glm::glm)
 
 target_include_directories(AlphaEngine PRIVATE ${VENDOR_ROOT}stb/)
 
-# glad — OpenGL loader (generated for GL 3.3 Core, no extensions)
+# glad — OpenGL loader (generated for GL 4.6 Core, no extensions)
 add_library(glad STATIC ${VENDOR_ROOT}glad/src/gl.c)
 target_include_directories(glad PUBLIC ${VENDOR_ROOT}glad/include)
 target_link_libraries(AlphaEngine glad)
