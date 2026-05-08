@@ -30,9 +30,7 @@
 #include <rendering_engine/util/color.hpp>
 #include <rendering_engine/window.hpp>
 #include <SDL3/SDL.h>
-#ifdef ALPHAENGINE_BACKEND_VULKAN
 #include <SDL3/SDL_vulkan.h>
-#endif
 
 namespace rendering_engine
 {
@@ -66,11 +64,8 @@ namespace rendering_engine
         }
 
         ::settings& s{*control::current_engine().settings};
-#ifdef ALPHAENGINE_BACKEND_VULKAN
-        SDL_WindowFlags window_flags{SDL_WINDOW_VULKAN};
-#else
-        SDL_WindowFlags window_flags{SDL_WINDOW_OPENGL};
-#endif
+        m_is_vulkan = s.get_graphics_backend() == graphics_backend::vulkan;
+        SDL_WindowFlags window_flags{m_is_vulkan ? SDL_WINDOW_VULKAN : SDL_WINDOW_OPENGL};
         auto type{s.get_window_type()};
 
         const char* type_name = "windowed";
@@ -95,18 +90,19 @@ namespace rendering_engine
                 type_name,
                 s.is_double_buffered() ? "true" : "false");
 
-#ifndef ALPHAENGINE_BACKEND_VULKAN
-        SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 8);
-        SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 8);
-        SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 8);
-        SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE, 8);
-        SDL_GL_SetAttribute(SDL_GL_BUFFER_SIZE, 32);
-        SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 16);
-        SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, s.is_double_buffered());
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 6);
-#endif
+        if (!m_is_vulkan)
+        {
+            SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 8);
+            SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 8);
+            SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 8);
+            SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE, 8);
+            SDL_GL_SetAttribute(SDL_GL_BUFFER_SIZE, 32);
+            SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 16);
+            SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, s.is_double_buffered());
+            SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+            SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
+            SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 6);
+        }
 
         m_window.reset(
             SDL_CreateWindow(s.get_window_name(), s.get_window_width(), s.get_window_height(), window_flags));
@@ -124,23 +120,26 @@ namespace rendering_engine
             SDL_SetWindowRelativeMouseMode(m_window.get(), true);
         }
 
-#ifdef ALPHAENGINE_BACKEND_VULKAN
-        // Vulkan owns presentation through vkQueuePresentKHR; the
-        // window stays an SDL_WINDOW_VULKAN container only.
-        LOG_INF("SDL window created (Vulkan presentation)");
-#else
-        m_gl_context.reset(SDL_GL_CreateContext(m_window.get()));
-        if (m_gl_context == nullptr)
+        if (m_is_vulkan)
         {
-            LOG_FTL("Could not create SDL GL context: %s", SDL_GetError());
-            throw std::runtime_error{SDL_GetError()};
+            // Vulkan owns presentation through vkQueuePresentKHR; the
+            // window stays an SDL_WINDOW_VULKAN container only.
+            LOG_INF("SDL window created (Vulkan presentation)");
         }
-        LOG_INF("SDL window and GL context created successfully");
-        if (!SDL_GL_SetSwapInterval(1))
+        else
         {
-            LOG_WRN("Could not enable vsync: %s", SDL_GetError());
+            m_gl_context.reset(SDL_GL_CreateContext(m_window.get()));
+            if (m_gl_context == nullptr)
+            {
+                LOG_FTL("Could not create SDL GL context: %s", SDL_GetError());
+                throw std::runtime_error{SDL_GetError()};
+            }
+            LOG_INF("SDL window and GL context created successfully");
+            if (!SDL_GL_SetSwapInterval(1))
+            {
+                LOG_WRN("Could not enable vsync: %s", SDL_GetError());
+            }
         }
-#endif
     }
 
     void window::quit()
@@ -155,12 +154,12 @@ namespace rendering_engine
 
     void window::swap_buffers()
     {
-#ifdef ALPHAENGINE_BACKEND_VULKAN
         // Vulkan presents through vkQueuePresentKHR inside
-        // gpu::device::submit; nothing to do here.
-#else
-        SDL_GL_SwapWindow(m_window.get());
-#endif
+        // gpu::device::submit; nothing to do here on that path.
+        if (!m_is_vulkan)
+        {
+            SDL_GL_SwapWindow(m_window.get());
+        }
     }
 
     SDL_Window* window::sdl_window() const noexcept

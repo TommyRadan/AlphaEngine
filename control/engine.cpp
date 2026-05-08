@@ -47,6 +47,18 @@ namespace control
         // Accessed by every translation unit that used to reach for the
         // old singleton::get_instance() hooks.
         engine* g_current_engine = nullptr;
+
+        rendering_engine::gpu::backend_type to_backend_type(graphics_backend b)
+        {
+            switch (b)
+            {
+            case graphics_backend::opengl:
+                return rendering_engine::gpu::backend_type::opengl;
+            case graphics_backend::vulkan:
+                return rendering_engine::gpu::backend_type::vulkan;
+            }
+            throw std::logic_error{"to_backend_type: unknown graphics_backend"};
+        }
     } // namespace
 
     engine& current_engine()
@@ -73,11 +85,7 @@ namespace control
         time = std::make_unique<infrastructure::time>();
         events = std::make_unique<event_engine::event_bus>();
         window = std::make_unique<rendering_engine::window>();
-#ifdef ALPHAENGINE_BACKEND_VULKAN
-        gpu = rendering_engine::gpu::create_device(rendering_engine::gpu::backend_type::vulkan);
-#else
-        gpu = rendering_engine::gpu::create_device(rendering_engine::gpu::backend_type::opengl);
-#endif
+        gpu = rendering_engine::gpu::create_device(to_backend_type(settings->get_graphics_backend()));
         // The built-in materials inside @c renderer are deferred
         // until init() because they compile GL shader programs and
         // need the GL context to be live first.

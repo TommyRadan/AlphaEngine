@@ -20,10 +20,47 @@
  * SOFTWARE.
  */
 
+#include <cstdlib>
+#include <cstring>
+
 #include <infrastructure/log.hpp>
 #include <infrastructure/settings.hpp>
 #include <infrastructure/version.hpp>
 #include <SDL3/SDL.h>
+
+namespace
+{
+    const char* graphics_backend_name(graphics_backend b) noexcept
+    {
+        switch (b)
+        {
+        case graphics_backend::opengl:
+            return "opengl";
+        case graphics_backend::vulkan:
+            return "vulkan";
+        }
+        return "unknown";
+    }
+
+    graphics_backend parse_graphics_backend()
+    {
+        const char* value = std::getenv("ALPHAENGINE_GRAPHICS_BACKEND");
+        if (value == nullptr || value[0] == '\0')
+        {
+            return graphics_backend::opengl;
+        }
+        if (std::strcmp(value, "opengl") == 0)
+        {
+            return graphics_backend::opengl;
+        }
+        if (std::strcmp(value, "vulkan") == 0)
+        {
+            return graphics_backend::vulkan;
+        }
+        LOG_ERR("settings: unknown ALPHAENGINE_GRAPHICS_BACKEND='%s'; falling back to opengl", value);
+        return graphics_backend::opengl;
+    }
+} // namespace
 
 settings::settings()
 {
@@ -59,9 +96,10 @@ settings::settings()
     m_field_of_view = 70.0f;
     m_mouse_sensitivity = 0.005f;
     m_is_mouse_reversed = false;
+    m_graphics_backend = parse_graphics_backend();
 
     LOG_INF("Settings parsed: window=%ux%u type=%d double_buffered=%d fov=%.1f "
-            "mouse_sensitivity=%.4f mouse_reversed=%d name='%s'",
+            "mouse_sensitivity=%.4f mouse_reversed=%d graphics_backend=%s name='%s'",
             m_window_width,
             m_window_height,
             static_cast<int>(m_window_type),
@@ -69,6 +107,7 @@ settings::settings()
             m_field_of_view,
             m_mouse_sensitivity,
             m_is_mouse_reversed ? 1 : 0,
+            graphics_backend_name(m_graphics_backend),
             m_window_name.c_str());
 }
 
@@ -115,4 +154,9 @@ const float settings::get_aspect_ratio() const noexcept
 const bool settings::is_mouse_reversed() const noexcept
 {
     return m_is_mouse_reversed;
+}
+
+const graphics_backend settings::get_graphics_backend() const noexcept
+{
+    return m_graphics_backend;
 }
