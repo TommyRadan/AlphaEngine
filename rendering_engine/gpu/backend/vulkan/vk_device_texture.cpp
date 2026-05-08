@@ -1,0 +1,366 @@
+/**
+ * Copyright (c) 2015-2026 Tomislav Radanovic
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+/**
+ * @file vk_device_texture.cpp
+ * @brief @c vk_device member functions that manage @c VkImage,
+ *        @c VkImageView and @c VkSampler objects.
+ */
+
+#include <rendering_engine/gpu/backend/vulkan/vk_device.hpp>
+
+#include <cstring>
+
+#include <infrastructure/log.hpp>
+#include <rendering_engine/gpu/backend/vulkan/vk_translate.hpp>
+
+namespace rendering_engine::gpu::backend::vulkan
+{
+    namespace
+    {
+        VkSamplerCreateInfo make_sampler_create_info(
+            filter_mode min_f, filter_mode mag_f, mipmap_mode mip_f, address_mode u, address_mode v, address_mode w)
+        {
+            VkSamplerCreateInfo si{};
+            si.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+            si.minFilter = to_vk_filter(min_f);
+            si.magFilter = to_vk_filter(mag_f);
+            si.mipmapMode = to_vk_mipmap_mode(mip_f);
+            si.addressModeU = to_vk_address_mode(u);
+            si.addressModeV = to_vk_address_mode(v);
+            si.addressModeW = to_vk_address_mode(w);
+            si.minLod = 0.0f;
+            si.maxLod = (mip_f == mipmap_mode::none) ? 0.0f : VK_LOD_CLAMP_NONE;
+            si.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK;
+            si.anisotropyEnable = VK_FALSE;
+            si.maxAnisotropy = 1.0f;
+            return si;
+        }
+
+        void transition_image(VkCommandBuffer cmd,
+                              VkImage image,
+                              VkImageAspectFlags aspect,
+                              VkImageLayout old_layout,
+                              VkImageLayout new_layout,
+                              uint32_t mip_levels,
+                              uint32_t layer_count)
+        {
+            VkImageMemoryBarrier b{};
+            b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            b.oldLayout = old_layout;
+            b.newLayout = new_layout;
+            b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            b.image = image;
+            b.subresourceRange.aspectMask = aspect;
+            b.subresourceRange.levelCount = mip_levels;
+            b.subresourceRange.layerCount = layer_count;
+            b.srcAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
+            b.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
+            vkCmdPipelineBarrier(cmd,
+                                 VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                                 VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                                 0,
+                                 0,
+                                 nullptr,
+                                 0,
+                                 nullptr,
+                                 1,
+                                 &b);
+        }
+    } // namespace
+
+    texture vk_device::create_texture(const texture_descriptor& descriptor)
+    {
+        vk_texture record{};
+        record.format = descriptor.format;
+        record.vk_format = to_vk_format(descriptor.format);
+        record.width = descriptor.width;
+        record.height = descriptor.height;
+        record.depth = (descriptor.dimension == texture_dimension::d3) ? descriptor.depth : 1u;
+        record.mipmaps = descriptor.mipmaps;
+        record.is_cube = descriptor.dimension == texture_dimension::cube;
+        record.is_3d = descriptor.dimension == texture_dimension::d3;
+        record.is_depth = is_depth_format(descriptor.format);
+        record.array_layers = record.is_cube ? 6u : 1u;
+        record.mip_levels = 1;
+
+        VkImageUsageFlags usage =
+            VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+        if (record.is_depth)
+        {
+            usage |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+        }
+        else
+        {
+            usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+        }
+
+        VkImageCreateInfo ii{};
+        ii.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+        ii.imageType = record.is_3d ? VK_IMAGE_TYPE_3D : VK_IMAGE_TYPE_2D;
+        ii.format = record.vk_format;
+        ii.extent = {record.width, record.height, record.depth};
+        ii.mipLevels = record.mip_levels;
+        ii.arrayLayers = record.array_layers;
+        ii.samples = VK_SAMPLE_COUNT_1_BIT;
+        ii.tiling = VK_IMAGE_TILING_OPTIMAL;
+        ii.usage = usage;
+        ii.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        ii.flags = record.is_cube ? VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT : 0;
+        if (vkCreateImage(m_device, &ii, nullptr, &record.image) != VK_SUCCESS)
+        {
+            return {};
+        }
+
+        VkMemoryRequirements mr{};
+        vkGetImageMemoryRequirements(m_device, record.image, &mr);
+        VkMemoryAllocateInfo ai{};
+        ai.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+        ai.allocationSize = mr.size;
+        ai.memoryTypeIndex = find_memory_type(mr.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+        if (vkAllocateMemory(m_device, &ai, nullptr, &record.memory) != VK_SUCCESS)
+        {
+            vkDestroyImage(m_device, record.image, nullptr);
+            return {};
+        }
+        vkBindImageMemory(m_device, record.image, record.memory, 0);
+
+        VkImageViewCreateInfo vi{};
+        vi.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        vi.image = record.image;
+        vi.viewType =
+            record.is_cube ? VK_IMAGE_VIEW_TYPE_CUBE : (record.is_3d ? VK_IMAGE_VIEW_TYPE_3D : VK_IMAGE_VIEW_TYPE_2D);
+        vi.format = record.vk_format;
+        vi.subresourceRange.aspectMask = aspect_for_format(descriptor.format);
+        vi.subresourceRange.levelCount = record.mip_levels;
+        vi.subresourceRange.layerCount = record.array_layers;
+        if (vkCreateImageView(m_device, &vi, nullptr, &record.view) != VK_SUCCESS)
+        {
+            vkDestroyImage(m_device, record.image, nullptr);
+            vkFreeMemory(m_device, record.memory, nullptr);
+            return {};
+        }
+
+        VkSamplerCreateInfo si = make_sampler_create_info(descriptor.min_filter,
+                                                          descriptor.mag_filter,
+                                                          descriptor.mipmap_filter,
+                                                          descriptor.address_u,
+                                                          descriptor.address_v,
+                                                          descriptor.address_w);
+        vkCreateSampler(m_device, &si, nullptr, &record.default_sampler);
+
+        record.layout = VK_IMAGE_LAYOUT_UNDEFINED;
+        VkCommandBuffer cmd = begin_one_shot();
+        const VkImageLayout target = record.is_depth ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+                                                     : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        transition_image(cmd,
+                         record.image,
+                         aspect_for_format(descriptor.format),
+                         VK_IMAGE_LAYOUT_UNDEFINED,
+                         target,
+                         record.mip_levels,
+                         record.array_layers);
+        end_one_shot(cmd);
+        record.layout = target;
+
+        texture h{};
+        h.id = m_textures.insert(record);
+        return h;
+    }
+
+    void vk_device::destroy(texture handle)
+    {
+        auto* record = m_textures.lookup(handle.id);
+        if (record == nullptr)
+        {
+            return;
+        }
+        VkDevice dev = m_device;
+        VkSampler sampler = record->default_sampler;
+        VkImageView view = record->view;
+        VkImage image = record->external ? VK_NULL_HANDLE : record->image;
+        VkDeviceMemory memory = record->memory;
+        // Deferred for the same reason as destroy(buffer): a texture
+        // sampled by an in-flight command buffer must outlive the
+        // submission that referenced it.
+        enqueue_destroy(
+            [dev, sampler, view, image, memory]
+            {
+                if (sampler != VK_NULL_HANDLE)
+                {
+                    vkDestroySampler(dev, sampler, nullptr);
+                }
+                if (view != VK_NULL_HANDLE)
+                {
+                    vkDestroyImageView(dev, view, nullptr);
+                }
+                if (image != VK_NULL_HANDLE)
+                {
+                    vkDestroyImage(dev, image, nullptr);
+                }
+                if (memory != VK_NULL_HANDLE)
+                {
+                    vkFreeMemory(dev, memory, nullptr);
+                }
+            });
+        record->default_sampler = VK_NULL_HANDLE;
+        record->view = VK_NULL_HANDLE;
+        record->image = VK_NULL_HANDLE;
+        record->memory = VK_NULL_HANDLE;
+        m_textures.remove(handle.id);
+    }
+
+    namespace
+    {
+        void upload_region(vk_device& device,
+                           vk_texture& record,
+                           uint32_t base_layer,
+                           const VkExtent3D& extent,
+                           const void* data,
+                           size_t size)
+        {
+            const VkDevice dev = device.vk_handle();
+
+            VkBufferCreateInfo bi{};
+            bi.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+            bi.size = size;
+            bi.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+            bi.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+            VkBuffer staging = VK_NULL_HANDLE;
+            vkCreateBuffer(dev, &bi, nullptr, &staging);
+            VkMemoryRequirements mr{};
+            vkGetBufferMemoryRequirements(dev, staging, &mr);
+            VkMemoryAllocateInfo ai{};
+            ai.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+            ai.allocationSize = mr.size;
+            ai.memoryTypeIndex = device.find_memory_type(
+                mr.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+            VkDeviceMemory mem = VK_NULL_HANDLE;
+            vkAllocateMemory(dev, &ai, nullptr, &mem);
+            vkBindBufferMemory(dev, staging, mem, 0);
+
+            void* mapped = nullptr;
+            vkMapMemory(dev, mem, 0, size, 0, &mapped);
+            std::memcpy(mapped, data, size);
+            vkUnmapMemory(dev, mem);
+
+            VkCommandBuffer cmd = device.begin_one_shot();
+            transition_image(cmd,
+                             record.image,
+                             VK_IMAGE_ASPECT_COLOR_BIT,
+                             record.layout,
+                             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                             record.mip_levels,
+                             record.array_layers);
+
+            VkBufferImageCopy region{};
+            region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            region.imageSubresource.layerCount = 1;
+            region.imageSubresource.baseArrayLayer = base_layer;
+            region.imageExtent = extent;
+            vkCmdCopyBufferToImage(cmd, staging, record.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+
+            transition_image(cmd,
+                             record.image,
+                             VK_IMAGE_ASPECT_COLOR_BIT,
+                             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                             VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                             record.mip_levels,
+                             record.array_layers);
+            device.end_one_shot(cmd);
+            record.layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+            vkDestroyBuffer(dev, staging, nullptr);
+            vkFreeMemory(dev, mem, nullptr);
+        }
+    } // namespace
+
+    void vk_device::write_texture(texture handle, const void* data, size_t size)
+    {
+        auto* record = m_textures.lookup(handle.id);
+        if (record == nullptr || record->image == VK_NULL_HANDLE || record->is_cube || record->is_3d)
+        {
+            return;
+        }
+        upload_region(*this, *record, 0, {record->width, record->height, 1}, data, size);
+    }
+
+    void vk_device::write_texture_3d(texture handle, const void* data, size_t size)
+    {
+        auto* record = m_textures.lookup(handle.id);
+        if (record == nullptr || record->image == VK_NULL_HANDLE || !record->is_3d)
+        {
+            return;
+        }
+        upload_region(*this, *record, 0, {record->width, record->height, record->depth}, data, size);
+    }
+
+    void vk_device::write_cube_face(texture handle, cube_face face, const void* data, size_t size)
+    {
+        auto* record = m_textures.lookup(handle.id);
+        if (record == nullptr || record->image == VK_NULL_HANDLE || !record->is_cube)
+        {
+            return;
+        }
+        upload_region(*this, *record, static_cast<uint32_t>(face), {record->width, record->height, 1}, data, size);
+    }
+
+    void vk_device::generate_mipmaps(texture /*handle*/)
+    {
+        // Stub: textures currently allocate one mip level. Full mip
+        // chain generation via vkCmdBlitImage is a follow-up that the
+        // engine's existing call sites do not exercise.
+    }
+
+    sampler vk_device::create_sampler(const sampler_descriptor& descriptor)
+    {
+        vk_sampler record{};
+        record.descriptor = descriptor;
+        VkSamplerCreateInfo si = make_sampler_create_info(descriptor.min_filter,
+                                                          descriptor.mag_filter,
+                                                          descriptor.mipmap,
+                                                          descriptor.address_u,
+                                                          descriptor.address_v,
+                                                          descriptor.address_w);
+        if (vkCreateSampler(m_device, &si, nullptr, &record.object) != VK_SUCCESS)
+        {
+            return {};
+        }
+        sampler h{};
+        h.id = m_samplers.insert(record);
+        return h;
+    }
+
+    void vk_device::destroy(sampler handle)
+    {
+        if (auto* record = m_samplers.lookup(handle.id))
+        {
+            if (record->object != VK_NULL_HANDLE)
+            {
+                vkDestroySampler(m_device, record->object, nullptr);
+                record->object = VK_NULL_HANDLE;
+            }
+            m_samplers.remove(handle.id);
+        }
+    }
+} // namespace rendering_engine::gpu::backend::vulkan

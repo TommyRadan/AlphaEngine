@@ -45,7 +45,7 @@
 #include <memory>
 #include <vector>
 
-#include <rendering_engine/gpu/backend/opengl/gl_pool.hpp>
+#include <rendering_engine/gpu/backend/handle_pool.hpp>
 #include <rendering_engine/gpu/backend/opengl/gl_resources.hpp>
 #include <rendering_engine/gpu/device.hpp>
 
@@ -103,14 +103,14 @@ namespace rendering_engine::gpu::backend::opengl
         gl_bind_group_layout* lookup_bind_group_layout(bind_group_layout h);
 
     private:
-        gl_pool<gl_buffer> m_buffers;
-        gl_pool<gl_texture> m_textures;
-        gl_pool<gl_sampler> m_samplers;
-        gl_pool<gl_shader_module> m_shader_modules;
-        gl_pool<gl_bind_group_layout> m_bind_group_layouts;
-        gl_pool<gl_pipeline> m_pipelines;
-        gl_pool<gl_bind_group> m_bind_groups;
-        gl_pool<gl_render_target> m_render_targets;
+        handle_pool<gl_buffer> m_buffers;
+        handle_pool<gl_texture> m_textures;
+        handle_pool<gl_sampler> m_samplers;
+        handle_pool<gl_shader_module> m_shader_modules;
+        handle_pool<gl_bind_group_layout> m_bind_group_layouts;
+        handle_pool<gl_pipeline> m_pipelines;
+        handle_pool<gl_bind_group> m_bind_groups;
+        handle_pool<gl_render_target> m_render_targets;
 
         render_target m_swapchain{};
 

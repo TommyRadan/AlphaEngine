@@ -21,9 +21,9 @@
  */
 
 /**
- * @file gl_pool.hpp
- * @brief Generation-counted slot allocator that backs every opaque
- *        @ref gpu::handle in the OpenGL backend.
+ * @file handle_pool.hpp
+ * @brief Generation-counted slot allocator shared by every concrete
+ *        @ref rendering_engine::gpu::device backend.
  *
  * Header-only because it is a template. The encoded handle ID is
  * @c (generation << 32 | (slot_index + 1)) — the @c +1 reserves zero as
@@ -37,10 +37,10 @@
 #include <utility>
 #include <vector>
 
-namespace rendering_engine::gpu::backend::opengl
+namespace rendering_engine::gpu::backend
 {
     template<typename T>
-    class gl_pool
+    class handle_pool
     {
     public:
         uint64_t insert(T value)
@@ -92,7 +92,7 @@ namespace rendering_engine::gpu::backend::opengl
         }
 
         // Iterate live entries. Used during quit() to release
-        // any GL objects that callers leaked.
+        // any backend objects that callers leaked.
         template<typename Fn>
         void for_each(Fn&& fn)
         {
@@ -135,4 +135,4 @@ namespace rendering_engine::gpu::backend::opengl
         std::vector<bool> m_alive;
         std::vector<uint32_t> m_free;
     };
-} // namespace rendering_engine::gpu::backend::opengl
+} // namespace rendering_engine::gpu::backend

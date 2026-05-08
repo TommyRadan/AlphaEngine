@@ -21,22 +21,22 @@
  */
 
 /**
- * @file gl_factory.cpp
- * @brief OpenGL backend entry point. The shared
+ * @file vk_factory.cpp
+ * @brief Vulkan backend entry point. The shared
  *        @ref rendering_engine::gpu::create_device dispatch in
  *        @c rendering_engine/gpu/factory.cpp calls into here for
- *        @c backend_type::opengl.
+ *        @c backend_type::vulkan when the backend is compiled in.
  */
 
 #include <memory>
 
-#include <rendering_engine/gpu/backend/opengl/gl_device.hpp>
+#include <rendering_engine/gpu/backend/vulkan/vk_device.hpp>
 #include <rendering_engine/gpu/device.hpp>
 
-namespace rendering_engine::gpu::backend::opengl
+namespace rendering_engine::gpu::backend::vulkan
 {
-    std::unique_ptr<device> make_gl_device()
+    std::unique_ptr<device> make_vk_device()
     {
-        return std::make_unique<gl_device>();
+        return std::make_unique<vk_device>();
     }
-} // namespace rendering_engine::gpu::backend::opengl
+} // namespace rendering_engine::gpu::backend::vulkan

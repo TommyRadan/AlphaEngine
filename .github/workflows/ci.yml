@@ -171,6 +171,115 @@ jobs:
           retention-days: 14
 
   # ---------------------------------------------------------------------------
+  # build-vulkan: Windows MSVC build matrix (Debug + Release) with the Vulkan
+  # backend turned on (issue #67). Mirrors the GL `build` job so reviewers
+  # get a directly comparable Vulkan binary alongside the OpenGL one. The
+  # Vulkan SDK comes from the LunarG installer at a pinned version so the
+  # job is reproducible; CMake's find_package(Vulkan) picks it up through
+  # the VULKAN_SDK environment variable. glslang is still fetched from
+  # source by CMake (already wired in for the GL ARB_gl_spirv path).
+  # ---------------------------------------------------------------------------
+  build-vulkan:
+    name: build (windows-msvc-vulkan ${{ matrix.configuration }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        configuration: [Debug, Release]
+    env:
+      VULKAN_SDK_VERSION: "1.3.296.0"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Vulkan SDK
+        shell: pwsh
+        run: |
+          $version = "${env:VULKAN_SDK_VERSION}"
+          $url = "https://sdk.lunarg.com/sdk/download/$version/windows/VulkanSDK-$version-Installer.exe"
+          Write-Host "Downloading Vulkan SDK $version from $url"
+          Invoke-WebRequest -Uri $url -OutFile VulkanSDK.exe -UseBasicParsing
+          # Silent install: --accept-licenses --default-answer --confirm-command
+          # are the LunarG installer's unattended flags.
+          Start-Process -FilePath .\VulkanSDK.exe `
+            -ArgumentList "--accept-licenses","--default-answer","--confirm-command","install" `
+            -Wait -NoNewWindow
+          $sdk = "C:\VulkanSDK\$version"
+          if (-not (Test-Path $sdk)) { throw "Vulkan SDK install failed: $sdk missing" }
+          # Publish VULKAN_SDK + PATH so subsequent steps' find_package(Vulkan)
+          # locates the headers and loader.
+          "VULKAN_SDK=$sdk" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "$sdk\Bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          Write-Host "Installed Vulkan SDK at $sdk"
+
+      - name: Cache CMake build
+        uses: actions/cache@v4
+        with:
+          path: build-vk
+          key: build-vk-msvc-${{ matrix.configuration }}-${{ env.VULKAN_SDK_VERSION }}-${{ hashFiles('CMakeLists.txt', 'cmake/**') }}-${{ github.sha }}
+          restore-keys: |
+            build-vk-msvc-${{ matrix.configuration }}-${{ env.VULKAN_SDK_VERSION }}-${{ hashFiles('CMakeLists.txt', 'cmake/**') }}-
+            build-vk-msvc-${{ matrix.configuration }}-${{ env.VULKAN_SDK_VERSION }}-
+
+      - name: Configure (MSVC + ALPHAENGINE_BACKEND_VULKAN=ON)
+        shell: pwsh
+        run: |
+          cmake -S . -B build-vk `
+            -G "Visual Studio 17 2022" `
+            -A x64 `
+            -DALPHAENGINE_BACKEND_VULKAN=ON
+          if ($LASTEXITCODE -ne 0) { throw "cmake configure failed" }
+
+      - name: Build
+        shell: pwsh
+        run: |
+          cmake --build build-vk --config ${{ matrix.configuration }}
+          if ($LASTEXITCODE -ne 0) { throw "cmake build failed" }
+
+      - name: Verify output
+        shell: pwsh
+        run: |
+          $exe = "Binaries\${{ matrix.configuration }}\AlphaEngine.exe"
+          if (-not (Test-Path $exe)) { throw "Missing $exe" }
+          Write-Host "Built $exe ($((Get-Item $exe).Length) bytes)"
+
+      # Stage the Khronos validation layer alongside the executable so
+      # the artifact is debuggable on a machine that does not have the
+      # LunarG SDK installed. vk_device::create_instance() points
+      # VK_LAYER_PATH at the executable directory when it spots the
+      # bundled manifest, so dropping these files next to
+      # AlphaEngine.exe is enough to enable validation at runtime.
+      # Staged in both configurations because Release builds may also
+      # be run with VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation for
+      # ad-hoc validation.
+      - name: Stage validation layer
+        shell: pwsh
+        run: |
+          $sdkBin = "$env:VULKAN_SDK\Bin"
+          $outDir = "Binaries\${{ matrix.configuration }}"
+          $files = @(
+            "VkLayer_khronos_validation.dll",
+            "VkLayer_khronos_validation.json"
+          )
+          foreach ($f in $files) {
+            $src = Join-Path $sdkBin $f
+            if (-not (Test-Path $src)) { throw "Missing $src" }
+            Copy-Item $src $outDir -Force
+            Write-Host "Staged $f"
+          }
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AlphaEngine-windows-vulkan-${{ matrix.configuration }}
+          path: |
+            Binaries/${{ matrix.configuration }}/AlphaEngine.exe
+            Binaries/${{ matrix.configuration }}/VkLayer_khronos_validation.dll
+            Binaries/${{ matrix.configuration }}/VkLayer_khronos_validation.json
+          if-no-files-found: error
+          retention-days: 14
+
+  # ---------------------------------------------------------------------------
   # comment-artifacts: on pull requests, post (or update) a sticky comment
   # linking to the workflow run summary where the uploaded Debug/Release
   # artifacts can be downloaded. Gated on successful build.

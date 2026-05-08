@@ -73,7 +73,11 @@ namespace control
         time = std::make_unique<infrastructure::time>();
         events = std::make_unique<event_engine::event_bus>();
         window = std::make_unique<rendering_engine::window>();
+#ifdef ALPHAENGINE_BACKEND_VULKAN
+        gpu = rendering_engine::gpu::create_device(rendering_engine::gpu::backend_type::vulkan);
+#else
         gpu = rendering_engine::gpu::create_device(rendering_engine::gpu::backend_type::opengl);
+#endif
         // The built-in materials inside @c renderer are deferred
         // until init() because they compile GL shader programs and
         // need the GL context to be live first.

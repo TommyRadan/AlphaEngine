@@ -20,6 +20,7 @@
  * SOFTWARE.
  */
 
+#include <SDL3/SDL_filesystem.h>
 #include <SDL3/SDL_log.h>
 
 #include <chrono>
@@ -28,6 +29,7 @@
 #include <cstdlib>
 #include <ctime>
 #include <sstream>
+#include <string>
 #include <thread>
 
 #include <infrastructure/log.hpp>
@@ -41,6 +43,14 @@ namespace
     // single SDL_LogMessageV() invocation.
     thread_local const char* tls_file = nullptr;
     thread_local unsigned tls_line = 0;
+
+    // Optional secondary sink. When the process is launched by double-click on
+    // Windows the console closes the moment AlphaEngine.exe exits, so any
+    // shutdown-time logs flash by unread; mirroring stderr to a file beside
+    // the executable lets us recover the full trace post-mortem. Opened lazily
+    // on the first message so init() ordering doesn't matter.
+    std::FILE* g_log_file = nullptr;
+    bool g_log_file_attempted = false;
 
     const char* priority_label(SDL_LogPriority priority)
     {
@@ -117,15 +127,36 @@ namespace
         const char* file = tls_file != nullptr ? tls_file : "?";
         const unsigned line = tls_line;
 
-        std::fprintf(stderr,
-                     "%s [%s] [tid=%s] %s:%u | %s\n",
-                     timestamp,
-                     priority_label(priority),
-                     tid_stream.str().c_str(),
-                     file,
-                     line,
-                     message);
-        std::fflush(stderr);
+        const auto write_to = [&](std::FILE* dst)
+        {
+            if (dst == nullptr)
+            {
+                return;
+            }
+            std::fprintf(dst,
+                         "%s [%s] [tid=%s] %s:%u | %s\n",
+                         timestamp,
+                         priority_label(priority),
+                         tid_stream.str().c_str(),
+                         file,
+                         line,
+                         message);
+            std::fflush(dst);
+        };
+
+        write_to(stderr);
+
+        if (!g_log_file_attempted)
+        {
+            g_log_file_attempted = true;
+            const char* base_path = SDL_GetBasePath();
+            if (base_path != nullptr)
+            {
+                const std::string path = std::string{base_path} + "engine.log";
+                g_log_file = std::fopen(path.c_str(), "w");
+            }
+        }
+        write_to(g_log_file);
     }
 } // namespace
 
