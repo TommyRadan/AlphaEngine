@@ -77,7 +77,8 @@ jobs:
             cmake \
             ninja-build \
             libsdl2-dev \
-            libgl1-mesa-dev
+            libgl1-mesa-dev \
+            libvulkan-dev
           sudo update-alternatives --install /usr/bin/clang-tidy clang-tidy /usr/bin/clang-tidy-${CLANG_VERSION} 100
           sudo update-alternatives --install /usr/bin/run-clang-tidy run-clang-tidy /usr/bin/run-clang-tidy-${CLANG_VERSION} 100
           sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-${CLANG_VERSION} 100
@@ -106,81 +107,19 @@ jobs:
           run-clang-tidy -p build -quiet "${pattern}"
 
   # ---------------------------------------------------------------------------
-  # build: Windows MSVC build matrix (Debug + Release). Uses the vcpkg
-  # pre-installed on GitHub-hosted windows-latest runners (VCPKG_INSTALLATION_ROOT).
-  # Uploads the built executable + SDL2.dll as an artifact so reviewers can
-  # download a runnable copy from the run summary.
+  # build: Windows MSVC build matrix (Debug + Release). Both the OpenGL and
+  # Vulkan backends are compiled into the same binary and the runtime choice
+  # is driven by settings::get_graphics_backend(); the Vulkan SDK is therefore
+  # an unconditional build dependency. The SDK comes from the LunarG installer
+  # at a pinned version so the job is reproducible; CMake's find_package(Vulkan)
+  # picks it up through the VULKAN_SDK environment variable. glslang is fetched
+  # from source by CMake (used both for the OpenGL ARB_gl_spirv path and the
+  # Vulkan backend's shader compile). The Khronos validation layer is staged
+  # alongside the executable so reviewers can run with VK validation enabled
+  # without a system-wide SDK install.
   # ---------------------------------------------------------------------------
   build:
     name: build (windows-msvc ${{ matrix.configuration }})
-    runs-on: windows-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        configuration: [Debug, Release]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install SDL2 via vcpkg
-        shell: pwsh
-        run: |
-          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install sdl2:x64-windows
-          if ($LASTEXITCODE -ne 0) { throw "vcpkg install failed" }
-
-      - name: Cache CMake build
-        uses: actions/cache@v4
-        with:
-          path: build
-          key: build-msvc-${{ matrix.configuration }}-${{ hashFiles('CMakeLists.txt', 'cmake/**') }}-${{ github.sha }}
-          restore-keys: |
-            build-msvc-${{ matrix.configuration }}-${{ hashFiles('CMakeLists.txt', 'cmake/**') }}-
-            build-msvc-${{ matrix.configuration }}-
-
-      - name: Configure (MSVC + vcpkg)
-        shell: pwsh
-        run: |
-          $vcpkgFwd = $env:VCPKG_INSTALLATION_ROOT -replace '\\','/'
-          cmake -S . -B build `
-            -G "Visual Studio 17 2022" `
-            -A x64 `
-            "-DCMAKE_TOOLCHAIN_FILE=$vcpkgFwd/scripts/buildsystems/vcpkg.cmake"
-          if ($LASTEXITCODE -ne 0) { throw "cmake configure failed" }
-
-      - name: Build
-        shell: pwsh
-        run: |
-          cmake --build build --config ${{ matrix.configuration }}
-          if ($LASTEXITCODE -ne 0) { throw "cmake build failed" }
-
-      - name: Verify output
-        shell: pwsh
-        run: |
-          $exe = "Binaries\${{ matrix.configuration }}\AlphaEngine.exe"
-          if (-not (Test-Path $exe)) { throw "Missing $exe" }
-          Write-Host "Built $exe ($((Get-Item $exe).Length) bytes)"
-
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: AlphaEngine-windows-${{ matrix.configuration }}
-          path: |
-            Binaries/${{ matrix.configuration }}/AlphaEngine.exe
-            Binaries/${{ matrix.configuration }}/SDL2.dll
-          if-no-files-found: error
-          retention-days: 14
-
-  # ---------------------------------------------------------------------------
-  # build-vulkan: Windows MSVC build matrix (Debug + Release) with the Vulkan
-  # backend turned on (issue #67). Mirrors the GL `build` job so reviewers
-  # get a directly comparable Vulkan binary alongside the OpenGL one. The
-  # Vulkan SDK comes from the LunarG installer at a pinned version so the
-  # job is reproducible; CMake's find_package(Vulkan) picks it up through
-  # the VULKAN_SDK environment variable. glslang is still fetched from
-  # source by CMake (already wired in for the GL ARB_gl_spirv path).
-  # ---------------------------------------------------------------------------
-  build-vulkan:
-    name: build (windows-msvc-vulkan ${{ matrix.configuration }})
     runs-on: windows-latest
     strategy:
       fail-fast: false
@@ -215,25 +154,24 @@ jobs:
       - name: Cache CMake build
         uses: actions/cache@v4
         with:
-          path: build-vk
-          key: build-vk-msvc-${{ matrix.configuration }}-${{ env.VULKAN_SDK_VERSION }}-${{ hashFiles('CMakeLists.txt', 'cmake/**') }}-${{ github.sha }}
+          path: build
+          key: build-msvc-${{ matrix.configuration }}-${{ env.VULKAN_SDK_VERSION }}-${{ hashFiles('CMakeLists.txt', 'cmake/**') }}-${{ github.sha }}
           restore-keys: |
-            build-vk-msvc-${{ matrix.configuration }}-${{ env.VULKAN_SDK_VERSION }}-${{ hashFiles('CMakeLists.txt', 'cmake/**') }}-
-            build-vk-msvc-${{ matrix.configuration }}-${{ env.VULKAN_SDK_VERSION }}-
+            build-msvc-${{ matrix.configuration }}-${{ env.VULKAN_SDK_VERSION }}-${{ hashFiles('CMakeLists.txt', 'cmake/**') }}-
+            build-msvc-${{ matrix.configuration }}-${{ env.VULKAN_SDK_VERSION }}-
 
-      - name: Configure (MSVC + ALPHAENGINE_BACKEND_VULKAN=ON)
+      - name: Configure (MSVC)
         shell: pwsh
         run: |
-          cmake -S . -B build-vk `
+          cmake -S . -B build `
             -G "Visual Studio 17 2022" `
-            -A x64 `
-            -DALPHAENGINE_BACKEND_VULKAN=ON
+            -A x64
           if ($LASTEXITCODE -ne 0) { throw "cmake configure failed" }
 
       - name: Build
         shell: pwsh
         run: |
-          cmake --build build-vk --config ${{ matrix.configuration }}
+          cmake --build build --config ${{ matrix.configuration }}
           if ($LASTEXITCODE -ne 0) { throw "cmake build failed" }
 
       - name: Verify output
@@ -271,7 +209,7 @@ jobs:
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: AlphaEngine-windows-vulkan-${{ matrix.configuration }}
+          name: AlphaEngine-windows-${{ matrix.configuration }}
           path: |
             Binaries/${{ matrix.configuration }}/AlphaEngine.exe
             Binaries/${{ matrix.configuration }}/VkLayer_khronos_validation.dll
@@ -303,8 +241,8 @@ jobs:
               '',
               `Windows Debug and Release builds are attached to the [workflow run summary](${runUrl}) under **Artifacts**:`,
               '',
-              '- `AlphaEngine-windows-Debug` — Debug `AlphaEngine.exe` + `SDL2.dll`',
-              '- `AlphaEngine-windows-Release` — Release `AlphaEngine.exe` + `SDL2.dll`',
+              '- `AlphaEngine-windows-Debug` — Debug `AlphaEngine.exe` + Khronos validation layer',
+              '- `AlphaEngine-windows-Release` — Release `AlphaEngine.exe` + Khronos validation layer',
               '',
               `_Run [#${context.runNumber}](${runUrl}) — commit \`${context.sha.slice(0, 7)}\`._`,
             ].join('\n');
