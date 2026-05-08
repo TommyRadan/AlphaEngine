@@ -3,7 +3,4 @@ target_sources(AlphaEngine PRIVATE
 )
 
 add_subdirectory(opengl)
-
-if(ALPHAENGINE_BACKEND_VULKAN)
-    add_subdirectory(vulkan)
-endif()
+add_subdirectory(vulkan)

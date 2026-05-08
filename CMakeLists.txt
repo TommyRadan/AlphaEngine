@@ -66,11 +66,6 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 # Vendor options
 set(VENDOR_ROOT ${CMAKE_SOURCE_DIR}/vendor/)
 
-# Optional graphics backends. The OpenGL 4.6 backend is always built;
-# additional backends are gated behind their own option so contributors
-# without the relevant SDK can still build the engine.
-option(ALPHAENGINE_BACKEND_VULKAN "Build the Vulkan backend" OFF)
-
 # Make output directory if it doesn't exist
 add_custom_target(build-time-make-directory ALL
     COMMAND ${CMAKE_COMMAND} -E make_directory Binaries)
@@ -159,16 +154,15 @@ target_link_libraries(AlphaEngine glad)
 find_package(OpenGL REQUIRED)
 target_link_libraries(AlphaEngine ${OPENGL_LIBRARIES})
 
-# Vulkan — gated by ALPHAENGINE_BACKEND_VULKAN. The Vulkan backend at
+# Vulkan — always linked. Both the OpenGL and Vulkan backends are
+# compiled into the binary; the runtime choice is driven by
+# settings::get_graphics_backend(). The Vulkan backend at
 # rendering_engine/gpu/backend/vulkan/ links against the loader from
 # the system Vulkan SDK; the engine already pulls glslang in for the
 # OpenGL ARB_gl_spirv path, so the Vulkan backend reuses that for its
 # shader compile.
-if(ALPHAENGINE_BACKEND_VULKAN)
-    find_package(Vulkan REQUIRED)
-    target_link_libraries(AlphaEngine Vulkan::Vulkan)
-    target_compile_definitions(AlphaEngine PRIVATE ALPHAENGINE_BACKEND_VULKAN)
-endif()
+find_package(Vulkan REQUIRED)
+target_link_libraries(AlphaEngine Vulkan::Vulkan)
 
 # Post-build
 if(APPLE)
