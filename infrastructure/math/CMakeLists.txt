@@ -1,0 +1,22 @@
+target_sources(AlphaEngine PRIVATE
+    aabb.cpp
+    aabb.hpp
+    frustum.cpp
+    frustum.hpp
+    mat3.cpp
+    mat3.hpp
+    mat4.cpp
+    mat4.hpp
+    math.cpp
+    math.hpp
+    quat.cpp
+    quat.hpp
+    sphere.cpp
+    sphere.hpp
+    vec2.cpp
+    vec2.hpp
+    vec3.cpp
+    vec3.hpp
+    vec4.cpp
+    vec4.hpp
+)
