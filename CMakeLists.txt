@@ -66,6 +66,11 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 # Vendor options
 set(VENDOR_ROOT ${CMAKE_SOURCE_DIR}/vendor/)
 
+# Optional graphics backends. The OpenGL 4.6 backend is always built;
+# additional backends are gated behind their own option so contributors
+# without the relevant SDK can still build the engine.
+option(ALPHAENGINE_BACKEND_VULKAN "Build the Vulkan backend" OFF)
+
 # Make output directory if it doesn't exist
 add_custom_target(build-time-make-directory ALL
     COMMAND ${CMAKE_COMMAND} -E make_directory Binaries)
@@ -91,8 +96,15 @@ file(GLOB RENDERING_ENGINE_FILES
         "rendering_engine/passes/post/*.hpp" "rendering_engine/passes/post/*.cpp"
         "rendering_engine/camera/*.hpp" "rendering_engine/camera/*.cpp"
         "rendering_engine/gpu/*.hpp" "rendering_engine/gpu/*.cpp"
+        "rendering_engine/gpu/backend/*.hpp"
         "rendering_engine/gpu/backend/opengl/*.hpp" "rendering_engine/gpu/backend/opengl/*.cpp"
         "rendering_engine/util/*.hpp" "rendering_engine/util/*.cpp")
+if(ALPHAENGINE_BACKEND_VULKAN)
+    file(GLOB RENDERING_ENGINE_VULKAN_FILES
+            "rendering_engine/gpu/backend/vulkan/*.hpp"
+            "rendering_engine/gpu/backend/vulkan/*.cpp")
+    list(APPEND RENDERING_ENGINE_FILES ${RENDERING_ENGINE_VULKAN_FILES})
+endif()
 file(GLOB EXTERNAL_FILES
         "external/*.hpp" "external/*.cpp"
         "external/api/*.hpp" "external/api/*.cpp")
@@ -172,6 +184,17 @@ target_link_libraries(AlphaEngine glad)
 
 find_package(OpenGL REQUIRED)
 target_link_libraries(AlphaEngine ${OPENGL_LIBRARIES})
+
+# Vulkan — gated by ALPHAENGINE_BACKEND_VULKAN. The Vulkan backend at
+# rendering_engine/gpu/backend/vulkan/ links against the loader from
+# the system Vulkan SDK; the engine already pulls glslang in for the
+# OpenGL ARB_gl_spirv path, so the Vulkan backend reuses that for its
+# shader compile.
+if(ALPHAENGINE_BACKEND_VULKAN)
+    find_package(Vulkan REQUIRED)
+    target_link_libraries(AlphaEngine Vulkan::Vulkan)
+    target_compile_definitions(AlphaEngine PRIVATE ALPHAENGINE_BACKEND_VULKAN)
+endif()
 
 # Post-build
 if(APPLE)

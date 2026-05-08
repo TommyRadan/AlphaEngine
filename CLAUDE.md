@@ -42,7 +42,7 @@ Game modules must include the **public API headers** under `external/api/` — `
 
 ### Adding sources
 
-`CMakeLists.txt` uses `file(GLOB ...)` across each subsystem's top-level directory plus the known `rendering_engine/*` subdirectories. New files in those locations are picked up on reconfigure. **New rendering subdirectories** (beyond `mesh/`, `renderables/`, `renderables/premade_2d/`, `renderables/premade_3d/`, `materials/`, `passes/`, `passes/post/`, `camera/`, `gpu/`, `gpu/backend/opengl/`, `util/`) require a matching GLOB in `CMakeLists.txt`.
+`CMakeLists.txt` uses `file(GLOB ...)` across each subsystem's top-level directory plus the known `rendering_engine/*` subdirectories. New files in those locations are picked up on reconfigure. **New rendering subdirectories** (beyond `mesh/`, `renderables/`, `renderables/premade_2d/`, `renderables/premade_3d/`, `materials/`, `passes/`, `passes/post/`, `camera/`, `gpu/`, `gpu/backend/`, `gpu/backend/opengl/`, `gpu/backend/vulkan/`, `util/`) require a matching GLOB in `CMakeLists.txt`. The Vulkan backend at `gpu/backend/vulkan/` is gated behind the `ALPHAENGINE_BACKEND_VULKAN` CMake option (off by default); when on, CMake adds `find_package(Vulkan)` and the engine + window subsystem switch from the OpenGL path (`SDL_WINDOW_OPENGL`, `SDL_GL_CreateContext`, `SDL_GL_SwapWindow`) to the Vulkan path (`SDL_WINDOW_VULKAN`, `SDL_Vulkan_CreateSurface`, `vkQueuePresentKHR`).
 
 ## Logging
 

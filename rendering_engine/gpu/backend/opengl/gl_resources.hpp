@@ -24,7 +24,7 @@
  * @file gl_resources.hpp
  * @brief Per-resource GL-side record types.
  *
- * Each @c gl_pool<T> in @ref gl_device stores values of one of these
+ * Each @c handle_pool<T> in @ref gl_device stores values of one of these
  * structs. They live in their own header so individual resource impl
  * files (gl_buffer.cpp, gl_texture.cpp, ...) can consume them without
  * pulling in the full @ref gl_device declaration.

@@ -101,6 +101,16 @@ namespace rendering_engine
         /** @brief Hides the OS cursor and enables relative mouse mode. */
         void hide_cursor();
 
+        /**
+         * @brief Returns the underlying @c SDL_Window pointer.
+         *
+         * Exposed so the active GPU backend can plumb the window into
+         * its own surface-creation path (e.g. @c SDL_Vulkan_CreateSurface).
+         * Ownership stays with the @ref window — callers must not
+         * destroy or hold the pointer beyond @ref quit.
+         */
+        SDL_Window* sdl_window() const noexcept;
+
     private:
         sdl_window_handle m_window;
         sdl_gl_context_handle m_gl_context;
