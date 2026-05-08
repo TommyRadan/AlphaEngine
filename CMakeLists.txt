@@ -78,43 +78,17 @@ add_custom_target(build-time-make-directory ALL
 # Set top level directory to be searched for includes
 include_directories(${CMAKE_SOURCE_DIR})
 
-# Main executable
-file(GLOB CONTROL_FILES "control/*.hpp" "control/*.cpp")
-file(GLOB EVENT_ENGINE_FILES "event_engine/*.hpp" "event_engine/*.cpp")
-file(GLOB INFRASTRUCTURE_FILES
-        "infrastructure/*.hpp" "infrastructure/*.cpp"
-        "infrastructure/math/*.hpp" "infrastructure/math/*.cpp")
-file(GLOB SCENE_GRAPH_FILES "scene_graph/*.hpp" "scene_graph/*.cpp")
-file(GLOB RENDERING_ENGINE_FILES
-        "rendering_engine/*.hpp" "rendering_engine/*.cpp"
-        "rendering_engine/mesh/*.hpp" "rendering_engine/mesh/*.cpp"
-        "rendering_engine/renderables/*.hpp" "rendering_engine/renderables/*.cpp"
-        "rendering_engine/renderables/premade_2d/*.hpp" "rendering_engine/renderables/premade_2d/*.cpp"
-        "rendering_engine/renderables/premade_3d/*.hpp" "rendering_engine/renderables/premade_3d/*.cpp"
-        "rendering_engine/materials/*.hpp" "rendering_engine/materials/*.cpp"
-        "rendering_engine/passes/*.hpp" "rendering_engine/passes/*.cpp"
-        "rendering_engine/passes/post/*.hpp" "rendering_engine/passes/post/*.cpp"
-        "rendering_engine/camera/*.hpp" "rendering_engine/camera/*.cpp"
-        "rendering_engine/gpu/*.hpp" "rendering_engine/gpu/*.cpp"
-        "rendering_engine/gpu/backend/*.hpp"
-        "rendering_engine/gpu/backend/opengl/*.hpp" "rendering_engine/gpu/backend/opengl/*.cpp"
-        "rendering_engine/util/*.hpp" "rendering_engine/util/*.cpp")
-if(ALPHAENGINE_BACKEND_VULKAN)
-    file(GLOB RENDERING_ENGINE_VULKAN_FILES
-            "rendering_engine/gpu/backend/vulkan/*.hpp"
-            "rendering_engine/gpu/backend/vulkan/*.cpp")
-    list(APPEND RENDERING_ENGINE_FILES ${RENDERING_ENGINE_VULKAN_FILES})
-endif()
-file(GLOB EXTERNAL_FILES
-        "external/*.hpp" "external/*.cpp"
-        "external/api/*.hpp" "external/api/*.cpp")
-add_executable(AlphaEngine
-    ${CONTROL_FILES}
-    ${EXTERNAL_FILES}
-    ${EVENT_ENGINE_FILES}
-    ${INFRASTRUCTURE_FILES}
-    ${SCENE_GRAPH_FILES}
-    ${RENDERING_ENGINE_FILES})
+# Main executable. Sources are contributed by per-directory CMakeLists.txt
+# files via target_sources(). The initial source is supplied here so the
+# target is well-formed before subdirectories extend it.
+add_executable(AlphaEngine control/main_loop.cpp)
+
+add_subdirectory(control)
+add_subdirectory(event_engine)
+add_subdirectory(infrastructure)
+add_subdirectory(scene_graph)
+add_subdirectory(rendering_engine)
+add_subdirectory(external)
 
 # Use C++ standard library
 if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
