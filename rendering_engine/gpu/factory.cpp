@@ -26,10 +26,10 @@
  *
  * Each concrete backend lives behind a small @c make_*_device free
  * function in its own translation unit (@c gl_factory.cpp,
- * @c vk_factory.cpp). This file is the only place that knows about the
- * full @c backend_type set and decides which one to construct. The
- * Vulkan branch is guarded by @c ALPHAENGINE_BACKEND_VULKAN so the
- * engine still links on platforms without the SDK.
+ * @c vk_factory.cpp). Both backends are always linked into the
+ * binary; the runtime choice is driven by
+ * @c settings::get_graphics_backend(), which the engine consults at
+ * construction time.
  */
 
 #include <stdexcept>
@@ -42,12 +42,10 @@ namespace rendering_engine::gpu::backend::opengl
     std::unique_ptr<device> make_gl_device();
 } // namespace rendering_engine::gpu::backend::opengl
 
-#ifdef ALPHAENGINE_BACKEND_VULKAN
 namespace rendering_engine::gpu::backend::vulkan
 {
     std::unique_ptr<device> make_vk_device();
 } // namespace rendering_engine::gpu::backend::vulkan
-#endif
 
 namespace rendering_engine::gpu
 {
@@ -58,13 +56,7 @@ namespace rendering_engine::gpu
         case backend_type::opengl:
             return backend::opengl::make_gl_device();
         case backend_type::vulkan:
-#ifdef ALPHAENGINE_BACKEND_VULKAN
             return backend::vulkan::make_vk_device();
-#else
-            LOG_FTL("create_device: vulkan backend requested but not compiled in "
-                    "(rebuild with -DALPHAENGINE_BACKEND_VULKAN=ON)");
-            throw std::runtime_error{"vulkan backend not compiled in"};
-#endif
         }
         LOG_FTL("create_device: unknown backend_type");
         throw std::runtime_error{"create_device: unknown backend_type"};

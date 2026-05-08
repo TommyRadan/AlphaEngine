@@ -47,11 +47,9 @@
 
 namespace rendering_engine::gpu
 {
-    // Backends supported by @ref create_device. The OpenGL 4.6
-    // backend is always built; the Vulkan backend is gated behind
-    // the @c ALPHAENGINE_BACKEND_VULKAN CMake option and is only
-    // valid to request when the engine was compiled with that flag
-    // on.
+    // Backends supported by @ref create_device. Both backends are
+    // always compiled into the binary; the runtime choice is driven
+    // by @c settings::get_graphics_backend() at engine construction.
     enum class backend_type
     {
         opengl,

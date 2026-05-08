@@ -37,6 +37,13 @@ enum class win_type
     win_type_fullscreen  /**< Exclusive fullscreen. */
 };
 
+/** @brief GPU backend selected by @ref settings. */
+enum class graphics_backend
+{
+    opengl, /**< OpenGL 4.6 core. */
+    vulkan, /**< Vulkan. */
+};
+
 /**
  * @brief Engine-wide configuration, owned by @ref control::engine.
  *
@@ -62,6 +69,16 @@ struct settings
 
     const bool is_mouse_reversed() const noexcept;
 
+    /**
+     * @brief GPU backend the engine should bring up at startup.
+     *
+     * Read once during @ref control::engine construction. The default
+     * is @ref graphics_backend::opengl; the value can be overridden
+     * via the @c ALPHAENGINE_GRAPHICS_BACKEND environment variable
+     * (`opengl` or `vulkan`).
+     */
+    const graphics_backend get_graphics_backend() const noexcept;
+
 private:
     unsigned int m_window_width;
     unsigned int m_window_height;
@@ -71,4 +88,5 @@ private:
     float m_field_of_view;
     float m_mouse_sensitivity;
     bool m_is_mouse_reversed;
+    graphics_backend m_graphics_backend;
 };

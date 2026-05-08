@@ -114,5 +114,6 @@ namespace rendering_engine
     private:
         sdl_window_handle m_window;
         sdl_gl_context_handle m_gl_context;
+        bool m_is_vulkan{false};
     };
 } // namespace rendering_engine
