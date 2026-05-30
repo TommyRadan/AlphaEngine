@@ -34,6 +34,8 @@
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/gpu/render_target.hpp>
+#include <rendering_engine/lighting/light.hpp>
+#include <rendering_engine/lighting/lights_ubo.hpp>
 #include <rendering_engine/materials/material.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
 
@@ -41,11 +43,20 @@ namespace rendering_engine
 {
     namespace
     {
-        // std140 layout for the per-frame UBO: mat4 viewMatrix at
-        // offset 0, mat4 projectionMatrix at offset 64. mat4 is
+        // std140 layout for the per-frame camera UBO: mat4 viewMatrix
+        // at offset 0, mat4 projectionMatrix at offset 64. mat4 is
         // 16-byte aligned and 64 bytes; no padding needed between
         // the two members.
         constexpr size_t per_frame_ubo_size = 2 * sizeof(infrastructure::math::mat4);
+
+        // Binding numbers within the per-frame bind group (slot 0). The
+        // numbers must stay unique across both descriptor sets in a lit
+        // pipeline because OpenGL flattens UBO bindings into a single
+        // namespace through ARB_gl_spirv: binding 0 = camera here,
+        // binding 1 = the per-draw model matrix (set 1), so the lights
+        // block takes binding 2.
+        constexpr uint32_t camera_binding = 0;
+        constexpr uint32_t lights_binding = 2;
     } // namespace
 
     scene_pass::scene_pass(std::vector<renderable*>* registry) : m_registry(registry)
@@ -53,7 +64,8 @@ namespace rendering_engine
         auto& gpu = *control::current_engine().gpu;
 
         gpu::bind_group_layout_descriptor frame_layout_descriptor{};
-        frame_layout_descriptor.entries.push_back({0, gpu::binding_kind::uniform_buffer});
+        frame_layout_descriptor.entries.push_back({camera_binding, gpu::binding_kind::uniform_buffer});
+        frame_layout_descriptor.entries.push_back({lights_binding, gpu::binding_kind::uniform_buffer});
         m_frame_layout = gpu.create_bind_group_layout(frame_layout_descriptor);
 
         gpu::buffer_descriptor ubo_descriptor{};
@@ -62,13 +74,27 @@ namespace rendering_engine
         ubo_descriptor.hint = gpu::buffer_usage_hint::dynamic_data;
         m_frame_ubo = gpu.create_buffer(ubo_descriptor);
 
+        gpu::buffer_descriptor lights_descriptor{};
+        lights_descriptor.size = sizeof(gpu_lights);
+        lights_descriptor.usage = gpu::buffer_usage_uniform | gpu::buffer_usage_copy_dst;
+        lights_descriptor.hint = gpu::buffer_usage_hint::dynamic_data;
+        m_lights_ubo = gpu.create_buffer(lights_descriptor);
+
         gpu::bind_group_descriptor frame_bind_group_descriptor{};
         frame_bind_group_descriptor.layout = m_frame_layout;
-        gpu::binding_value frame_slot{};
-        frame_slot.binding = 0;
-        frame_slot.kind = gpu::binding_kind::uniform_buffer;
-        frame_slot.buffer_value = m_frame_ubo;
-        frame_bind_group_descriptor.entries.push_back(frame_slot);
+
+        gpu::binding_value camera_slot{};
+        camera_slot.binding = camera_binding;
+        camera_slot.kind = gpu::binding_kind::uniform_buffer;
+        camera_slot.buffer_value = m_frame_ubo;
+        frame_bind_group_descriptor.entries.push_back(camera_slot);
+
+        gpu::binding_value lights_slot{};
+        lights_slot.binding = lights_binding;
+        lights_slot.kind = gpu::binding_kind::uniform_buffer;
+        lights_slot.buffer_value = m_lights_ubo;
+        frame_bind_group_descriptor.entries.push_back(lights_slot);
+
         m_frame_bind_group = gpu.create_bind_group(frame_bind_group_descriptor);
     }
 
@@ -79,6 +105,11 @@ namespace rendering_engine
         {
             gpu.destroy(m_frame_bind_group);
             m_frame_bind_group = {};
+        }
+        if (m_lights_ubo.valid())
+        {
+            gpu.destroy(m_lights_ubo);
+            m_lights_ubo = {};
         }
         if (m_frame_ubo.valid())
         {
@@ -134,6 +165,14 @@ namespace rendering_engine
         std::memcpy(ubo_payload.data(), view.data(), sizeof(infrastructure::math::mat4));
         std::memcpy(ubo_payload.data() + 16, projection.data(), sizeof(infrastructure::math::mat4));
         gpu.write_buffer(m_frame_ubo, ubo_payload.data(), per_frame_ubo_size, 0);
+
+        // Pack every live light into the std140 lights block and upload
+        // it alongside the camera UBO. Lit materials read this from the
+        // per-frame group; the scene pass owns it so light objects never
+        // touch the GPU directly.
+        gpu_lights lights_payload{};
+        pack_lights(registered_lights(), lights_payload);
+        gpu.write_buffer(m_lights_ubo, &lights_payload, sizeof(gpu_lights), 0);
 
         // Collect every renderable's draw items into a single per-frame
         // list, then sort by pipeline id so the dispatch loop only

@@ -40,9 +40,10 @@ namespace rendering_engine
      *        hatch for debug / gizmo callers.
      *
      * Owns the per-frame bind-group layout (camera @c viewMatrix /
-     * @c projectionMatrix at slot 0). The matching @c lit_material
-     * reads the layout via @ref frame_bind_group_layout so the
-     * pipeline and the runtime bind group agree on slot shape.
+     * @c projectionMatrix at binding 0 and the packed lights block at
+     * binding 2, both in slot 0). The matching @c lit_material reads the
+     * layout via @ref frame_bind_group_layout so the pipeline and the
+     * runtime bind group agree on slot shape.
      *
      * Skipped when no camera is attached (matches the previous
      * @c if (camera != nullptr) gate).
@@ -70,11 +71,14 @@ namespace rendering_engine
 
         // Per-frame state — owned by the pass; created once and
         // refilled every record(). Released in the destructor before
-        // the device tears its pools down. The UBO carries the
+        // the device tears its pools down. The camera UBO carries the
         // {viewMatrix, projectionMatrix} pair packed std140 (two
-        // mat4s = 128 bytes).
+        // mat4s = 128 bytes) at binding 0; the lights UBO carries the
+        // packed @ref gpu_lights block at binding 2. Both live in the
+        // single per-frame bind group bound at slot 0.
         gpu::bind_group_layout m_frame_layout{};
         gpu::buffer m_frame_ubo{};
+        gpu::buffer m_lights_ubo{};
         gpu::bind_group m_frame_bind_group{};
 
         // Reused across frames so the underlying allocation persists.
