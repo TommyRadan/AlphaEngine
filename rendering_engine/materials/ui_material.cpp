@@ -84,28 +84,16 @@ namespace rendering_engine
 
         // Overlay pass disables depth testing entirely so 2D elements
         // draw in submission order; depth writes also stay off so the
-        // overlay never trashes the scene's depth buffer.
-        gpu::depth_state depth{};
-        depth.test_enabled = false;
-        depth.write_enabled = false;
-        depth.compare = gpu::compare_function::always;
+        // overlay never trashes the scene's depth buffer. Double-sided
+        // so panes are visible regardless of winding.
+        material_params params{};
+        params.transparent = true;
+        params.blending = blend_mode::normal;
+        params.double_sided = true;
+        params.depth_test = false;
+        params.depth_write = false;
 
-        gpu::blend_state blend{};
-        blend.enabled = true;
-        blend.src = gpu::blend_factor::src_alpha;
-        blend.dst = gpu::blend_factor::one_minus_src_alpha;
-
-        gpu::rasterizer_state rasterizer{};
-        rasterizer.cull = gpu::cull_mode::none;
-        rasterizer.front = gpu::front_face::counter_clockwise;
-
-        construct_pipeline(vertex_shader,
-                           fragment_shader,
-                           vertex_layout,
-                           draw_layout,
-                           gpu::bind_group_layout{},
-                           depth,
-                           blend,
-                           rasterizer);
+        construct_pipeline(
+            vertex_shader, fragment_shader, vertex_layout, draw_layout, gpu::bind_group_layout{}, params);
     }
 } // namespace rendering_engine

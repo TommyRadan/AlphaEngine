@@ -26,6 +26,64 @@
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/gpu/shader_compiler.hpp>
 
+namespace
+{
+    using rendering_engine::blend_mode;
+    using rendering_engine::material_params;
+    namespace gpu = rendering_engine::gpu;
+
+    gpu::depth_state to_depth_state(const material_params& params)
+    {
+        gpu::depth_state depth{};
+        depth.test_enabled = params.depth_test;
+        depth.write_enabled = params.depth_write;
+        depth.compare = params.depth_test ? gpu::compare_function::less : gpu::compare_function::always;
+        return depth;
+    }
+
+    gpu::blend_state to_blend_state(const material_params& params)
+    {
+        gpu::blend_state blend{};
+        blend.enabled = params.transparent && params.blending != blend_mode::none;
+        if (!blend.enabled)
+        {
+            return blend;
+        }
+
+        blend.op = gpu::blend_op::add;
+        switch (params.blending)
+        {
+        case blend_mode::additive:
+            blend.src = gpu::blend_factor::src_alpha;
+            blend.dst = gpu::blend_factor::one;
+            break;
+        case blend_mode::subtractive:
+            blend.src = gpu::blend_factor::zero;
+            blend.dst = gpu::blend_factor::one_minus_src_color;
+            break;
+        case blend_mode::multiply:
+            blend.src = gpu::blend_factor::zero;
+            blend.dst = gpu::blend_factor::src_color;
+            break;
+        case blend_mode::normal:
+        case blend_mode::none:
+            blend.src = gpu::blend_factor::src_alpha;
+            blend.dst = gpu::blend_factor::one_minus_src_alpha;
+            break;
+        }
+        return blend;
+    }
+
+    gpu::rasterizer_state to_rasterizer_state(const material_params& params)
+    {
+        gpu::rasterizer_state rasterizer{};
+        rasterizer.cull = params.double_sided ? gpu::cull_mode::none : gpu::cull_mode::back;
+        rasterizer.front = gpu::front_face::counter_clockwise;
+        rasterizer.polygon = params.wireframe ? gpu::polygon_mode::line : gpu::polygon_mode::fill;
+        return rasterizer;
+    }
+} // namespace
+
 namespace rendering_engine
 {
     material::~material()
@@ -36,6 +94,11 @@ namespace rendering_engine
     gpu::pipeline material::pipeline() const
     {
         return m_pipeline;
+    }
+
+    const material_params& material::params() const
+    {
+        return m_params;
     }
 
     gpu::bind_group_layout material::per_draw_layout() const
@@ -56,6 +119,24 @@ namespace rendering_engine
     uint32_t material::per_material_slot() const
     {
         return per_draw_slot();
+    }
+
+    void material::construct_pipeline(const std::string& vertex_source,
+                                      const std::string& fragment_source,
+                                      const gpu::vertex_buffer_layout& vertex_layout,
+                                      const gpu::bind_group_layout_descriptor& draw_layout,
+                                      gpu::bind_group_layout frame_layout,
+                                      const material_params& params)
+    {
+        m_params = params;
+        construct_pipeline(vertex_source,
+                           fragment_source,
+                           vertex_layout,
+                           draw_layout,
+                           frame_layout,
+                           to_depth_state(params),
+                           to_blend_state(params),
+                           to_rasterizer_state(params));
     }
 
     void material::construct_pipeline(const std::string& vertex_source,
