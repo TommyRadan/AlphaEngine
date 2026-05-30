@@ -62,4 +62,17 @@ namespace rendering_engine
         infrastructure::math::vec2 uv;
         infrastructure::math::vec3 normal;
     };
+
+    // The @c tangent is stored as a @c vec4 so the bitangent can be
+    // reconstructed in the shader as @c cross(normal, tangent.xyz) *
+    // tangent.w. The @c .w component carries the handedness sign
+    // (+1 or -1) of the UV winding so mirrored geometry flips the
+    // bitangent correctly.
+    struct vertex_position_uv_normal_tangent
+    {
+        infrastructure::math::vec3 pos;
+        infrastructure::math::vec2 uv;
+        infrastructure::math::vec3 normal;
+        infrastructure::math::vec4 tangent;
+    };
 } // namespace rendering_engine
