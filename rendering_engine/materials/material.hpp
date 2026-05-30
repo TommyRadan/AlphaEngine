@@ -32,6 +32,54 @@
 
 namespace rendering_engine
 {
+    // Named blend equation presets. @c normal is straight alpha
+    // compositing; the rest map onto the matching source/destination
+    // factors. @c none leaves blending disabled regardless of
+    // @c transparent.
+    enum class blend_mode
+    {
+        none,
+        normal,
+        additive,
+        subtractive,
+        multiply,
+    };
+
+    // The shared parameter surface every material inherits. These are
+    // data-only knobs; the base translates them onto the @c gpu::depth_state /
+    // @c gpu::blend_state / @c gpu::rasterizer_state baked into the
+    // pipeline (see @ref material::construct_pipeline). @c opacity is
+    // stored for materials whose shaders consume it; the fixed-function
+    // mapping does not read it on its own.
+    struct material_params
+    {
+        // Whether the surface participates in alpha blending. When
+        // false the pipeline blend stage stays disabled (the object
+        // is opaque) no matter what @c blending selects.
+        bool transparent{false};
+
+        // Surface opacity in [0, 1]. Pure data — consumed by shaders
+        // that read it, not by the blend state.
+        float opacity{1.0f};
+
+        // Disable back-face culling so both faces rasterize. Maps to
+        // @c cull_mode::none; otherwise back faces are culled.
+        bool double_sided{false};
+
+        // Blend equation preset applied when @c transparent is set.
+        blend_mode blending{blend_mode::normal};
+
+        // Rasterize edges only. Maps to @c polygon_mode::line.
+        bool wireframe{false};
+
+        // Depth comparison against the existing buffer. When off the
+        // surface always passes the depth test.
+        bool depth_test{true};
+
+        // Whether passing fragments write their depth back.
+        bool depth_write{true};
+    };
+
     // A material owns a @ref gpu::pipeline (shader + fixed-function
     // state + bind-group layouts) and the per-draw bind-group layout
     // that renderables build their @ref draw_item against. The
@@ -46,6 +94,11 @@ namespace rendering_engine
         material& operator=(const material&) = delete;
 
         gpu::pipeline pipeline() const;
+
+        // The shared base parameters this material was built with.
+        // Reflects whatever @ref construct_pipeline baked; mutating
+        // it does not re-bake the pipeline.
+        const material_params& params() const;
 
         // Layout renderables build their per-draw bind group
         // against (model matrix, per-draw textures, options).
@@ -74,6 +127,18 @@ namespace rendering_engine
     protected:
         material() = default;
 
+        // Build the pipeline + per-draw layout from the shared
+        // @ref material_params surface. The params are stored (see
+        // @ref params) and translated onto the fixed-function depth /
+        // blend / rasterizer state before delegating to the explicit
+        // overload below. Prefer this entry point for new materials.
+        void construct_pipeline(const std::string& vertex_source,
+                                const std::string& fragment_source,
+                                const gpu::vertex_buffer_layout& vertex_layout,
+                                const gpu::bind_group_layout_descriptor& draw_layout,
+                                gpu::bind_group_layout frame_layout,
+                                const material_params& params);
+
         // Build the pipeline + per-draw layout from source. When
         // @p frame_layout is valid, slot 0 is reserved for a
         // per-frame bind group owned by the corresponding pass and
@@ -90,6 +155,7 @@ namespace rendering_engine
 
         void destruct_pipeline();
 
+        material_params m_params{};
         gpu::shader_module m_vertex_shader{};
         gpu::shader_module m_fragment_shader{};
         gpu::pipeline m_pipeline{};

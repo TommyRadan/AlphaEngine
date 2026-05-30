@@ -80,21 +80,12 @@ namespace rendering_engine
         gpu::bind_group_layout_descriptor draw_layout{};
         draw_layout.entries.push_back({1, gpu::binding_kind::uniform_buffer});
 
-        gpu::depth_state depth{};
-        depth.test_enabled = true;
-        depth.write_enabled = true;
-        depth.compare = gpu::compare_function::less;
+        material_params params{};
+        params.transparent = true;
+        params.blending = blend_mode::normal;
+        params.depth_test = true;
+        params.depth_write = true;
 
-        gpu::blend_state blend{};
-        blend.enabled = true;
-        blend.src = gpu::blend_factor::src_alpha;
-        blend.dst = gpu::blend_factor::one_minus_src_alpha;
-
-        gpu::rasterizer_state rasterizer{};
-        rasterizer.cull = gpu::cull_mode::back;
-        rasterizer.front = gpu::front_face::counter_clockwise;
-
-        construct_pipeline(
-            vertex_shader, fragment_shader, vertex_layout, draw_layout, frame_layout, depth, blend, rasterizer);
+        construct_pipeline(vertex_shader, fragment_shader, vertex_layout, draw_layout, frame_layout, params);
     }
 } // namespace rendering_engine
