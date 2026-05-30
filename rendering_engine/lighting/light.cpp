@@ -20,27 +20,43 @@
  * SOFTWARE.
  */
 
-#pragma once
+#include <rendering_engine/lighting/light.hpp>
 
-#include <rendering_engine/gpu/handle.hpp>
-#include <rendering_engine/materials/material.hpp>
+#include <algorithm>
 
 namespace rendering_engine
 {
-    // Built-in 3D scene material. Position-only vertex stream, MVP
-    // transform in the vertex shader, flat-white fragment. Per-draw
-    // bind group at slot 1 carries @c modelMatrix; the per-frame group
-    // at slot 0 (camera @c viewMatrix / @c projectionMatrix at binding 0
-    // plus the packed lights block at binding 2) is owned and bound by
-    // the @ref scene_pass. The shading pass that consumes the lights
-    // block is a follow-up; this material still outputs flat white.
-    struct lit_material : public material
+    namespace
     {
-        // @p frame_layout is the per-frame bind-group layout owned by
-        // the @ref scene_pass. It must match the layout the pass binds
-        // at slot 0 every frame, so the pipeline and the runtime bind
-        // group agree on slot shape.
-        explicit lit_material(gpu::bind_group_layout frame_layout);
-        ~lit_material() override = default;
-    };
+        // Function-local static so the registry is alive before any
+        // light's static/global constructor runs and survives until the
+        // last light is destroyed — game modules may create lights at
+        // static-init time through the module pattern.
+        std::vector<light*>& light_registry()
+        {
+            static std::vector<light*> lights;
+            return lights;
+        }
+    } // namespace
+
+    light::light(light_type type) : m_type(type)
+    {
+        light_registry().push_back(this);
+    }
+
+    light::~light()
+    {
+        auto& lights = light_registry();
+        lights.erase(std::remove(lights.begin(), lights.end(), this), lights.end());
+    }
+
+    light_type light::type() const noexcept
+    {
+        return m_type;
+    }
+
+    const std::vector<light*>& registered_lights()
+    {
+        return light_registry();
+    }
 } // namespace rendering_engine

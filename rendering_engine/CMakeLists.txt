@@ -7,6 +7,7 @@ target_sources(AlphaEngine PRIVATE
 
 add_subdirectory(camera)
 add_subdirectory(gpu)
+add_subdirectory(lighting)
 add_subdirectory(materials)
 add_subdirectory(mesh)
 add_subdirectory(passes)

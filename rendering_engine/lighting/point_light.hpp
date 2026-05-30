@@ -22,25 +22,29 @@
 
 #pragma once
 
-#include <rendering_engine/gpu/handle.hpp>
-#include <rendering_engine/materials/material.hpp>
+#include <infrastructure/math/math.hpp>
+#include <rendering_engine/lighting/light.hpp>
 
 namespace rendering_engine
 {
-    // Built-in 3D scene material. Position-only vertex stream, MVP
-    // transform in the vertex shader, flat-white fragment. Per-draw
-    // bind group at slot 1 carries @c modelMatrix; the per-frame group
-    // at slot 0 (camera @c viewMatrix / @c projectionMatrix at binding 0
-    // plus the packed lights block at binding 2) is owned and bound by
-    // the @ref scene_pass. The shading pass that consumes the lights
-    // block is a follow-up; this material still outputs flat white.
-    struct lit_material : public material
+    // Omni-directional light radiating from a world-space point and
+    // falling off with distance. Three.js analog: THREE.PointLight.
+    struct point_light : light
     {
-        // @p frame_layout is the per-frame bind-group layout owned by
-        // the @ref scene_pass. It must match the layout the pass binds
-        // at slot 0 every frame, so the pipeline and the runtime bind
-        // group agree on slot shape.
-        explicit lit_material(gpu::bind_group_layout frame_layout);
-        ~lit_material() override = default;
+        point_light();
+
+        // World-space position the light radiates from.
+        infrastructure::math::vec3 position{0.0f, 0.0f, 0.0f};
+
+        // Distance past which the light contributes nothing. 0 means no
+        // hard cutoff (falloff still applies). Three.js analog:
+        // PointLight.distance.
+        float range{0.0f};
+
+        // Classic constant / linear / quadratic attenuation
+        // coefficients: 1 / (constant + linear*d + quadratic*d*d).
+        float constant_attenuation{1.0f};
+        float linear_attenuation{0.0f};
+        float quadratic_attenuation{1.0f};
     };
 } // namespace rendering_engine

@@ -20,27 +20,9 @@
  * SOFTWARE.
  */
 
-#pragma once
-
-#include <rendering_engine/gpu/handle.hpp>
-#include <rendering_engine/materials/material.hpp>
+#include <rendering_engine/lighting/ambient_light.hpp>
 
 namespace rendering_engine
 {
-    // Built-in 3D scene material. Position-only vertex stream, MVP
-    // transform in the vertex shader, flat-white fragment. Per-draw
-    // bind group at slot 1 carries @c modelMatrix; the per-frame group
-    // at slot 0 (camera @c viewMatrix / @c projectionMatrix at binding 0
-    // plus the packed lights block at binding 2) is owned and bound by
-    // the @ref scene_pass. The shading pass that consumes the lights
-    // block is a follow-up; this material still outputs flat white.
-    struct lit_material : public material
-    {
-        // @p frame_layout is the per-frame bind-group layout owned by
-        // the @ref scene_pass. It must match the layout the pass binds
-        // at slot 0 every frame, so the pipeline and the runtime bind
-        // group agree on slot shape.
-        explicit lit_material(gpu::bind_group_layout frame_layout);
-        ~lit_material() override = default;
-    };
+    ambient_light::ambient_light() : light(light_type::ambient) {}
 } // namespace rendering_engine
