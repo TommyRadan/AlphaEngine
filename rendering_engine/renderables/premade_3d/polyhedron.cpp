@@ -22,6 +22,7 @@
 
 #include <rendering_engine/renderables/premade_3d/polyhedron.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <utility>
 #include <vector>
