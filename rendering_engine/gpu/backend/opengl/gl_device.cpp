@@ -109,6 +109,13 @@ namespace rendering_engine::gpu::backend::opengl
         LOG_INF("OpenGL version:  %s", gl_version ? gl_version : "<unknown>");
         LOG_INF("GLSL version:    %s", gl_glsl ? gl_glsl : "<unknown>");
 
+        // Filter cube-map samples across face boundaries instead of
+        // clamping within each face. Without this, sampling near a face
+        // edge (and every mip of a prefiltered IBL cube) shows hard seams,
+        // and a moving camera makes a mirror reflection pop as the
+        // reflection vector crosses them. Core since OpenGL 3.2.
+        glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
+
         // The default swapchain target is just framebuffer
         // 0 with the window's current dimensions; the engine
         // updates dimensions through @ref resize_swapchain.
