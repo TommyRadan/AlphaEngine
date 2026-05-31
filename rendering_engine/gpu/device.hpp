@@ -74,6 +74,20 @@ namespace rendering_engine::gpu
         // point are released by the backend.
         virtual void quit() = 0;
 
+        // -- Capabilities -------------------------------------------------
+
+        // Whether the backend can convolve image-based-lighting tables on
+        // the GPU: compute pipelines writing storage images into specific
+        // cube-map mip levels, plus a real mip chain to sample. Backends
+        // that lack these (the Vulkan backend's mip generation and storage
+        // images are still stubs) return false and the IBL builder falls
+        // back to the CPU convolution. Defaults to false; the OpenGL
+        // backend overrides it.
+        virtual bool supports_compute_prefilter() const
+        {
+            return false;
+        }
+
         // -- Resource creation --------------------------------------------
 
         virtual buffer create_buffer(const buffer_descriptor& descriptor) = 0;

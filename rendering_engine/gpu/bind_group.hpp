@@ -91,6 +91,13 @@ namespace rendering_engine::gpu
         gpu::buffer buffer_value{};
         gpu::texture texture_value{};
         gpu::sampler sampler_value{};
+
+        // For @c storage_texture only: the mip level to bind as the
+        // image. Cube and 3D storage images bind every layer (the IBL
+        // compute writes a whole cube level through an @c imageCube), so
+        // only the level needs selecting. Ignored for other kinds and
+        // defaults to the base level to preserve existing bindings.
+        uint32_t storage_level{0};
     };
 
     struct bind_group_descriptor

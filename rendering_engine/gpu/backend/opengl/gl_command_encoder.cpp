@@ -99,9 +99,12 @@ namespace rendering_engine::gpu::backend::opengl
                     const auto fmt = to_gl_texture_format(entry->storage_format);
                     const GLboolean layered =
                         (tex->target == GL_TEXTURE_3D || tex->target == GL_TEXTURE_CUBE_MAP) ? GL_TRUE : GL_FALSE;
+                    // Bind the requested mip level; layered binds every
+                    // cube face / volume slice so a compute shader writes
+                    // the whole level through an imageCube / image3D.
                     glBindImageTexture(value.binding,
                                        tex->object_id,
-                                       0,
+                                       static_cast<GLint>(value.storage_level),
                                        layered,
                                        0,
                                        to_gl_storage_access(entry->storage_access_mode),

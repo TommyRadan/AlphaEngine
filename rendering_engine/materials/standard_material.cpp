@@ -667,7 +667,8 @@ namespace rendering_engine
         // leaves the shadow map invalid until a caster exists.
         const std::array<std::pair<uint32_t, gpu::texture>, 3> ibl_maps = {{
             {material_irradiance_map_binding, m_environment != nullptr ? m_environment->irradiance() : gpu::texture{}},
-            {material_prefiltered_map_binding, m_environment != nullptr ? m_environment->skybox() : gpu::texture{}},
+            {material_prefiltered_map_binding,
+             m_environment != nullptr ? m_environment->prefiltered() : gpu::texture{}},
             {material_brdf_lut_binding, m_environment != nullptr ? m_environment->brdf_lut() : gpu::texture{}},
         }};
         for (const auto& [binding, texture] : ibl_maps)

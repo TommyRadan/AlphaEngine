@@ -59,6 +59,14 @@ namespace rendering_engine::gpu::backend::opengl
         void init() override;
         void quit() override;
 
+        // The OpenGL backend has core compute shaders, image load/store
+        // into cube-map mip levels, and glGenerateMipmap, so it convolves
+        // the IBL tables on the GPU.
+        bool supports_compute_prefilter() const override
+        {
+            return true;
+        }
+
         buffer create_buffer(const buffer_descriptor& descriptor) override;
         texture create_texture(const texture_descriptor& descriptor) override;
         sampler create_sampler(const sampler_descriptor& descriptor) override;

@@ -41,13 +41,19 @@ namespace rendering_engine
     // output that @c scene.environment feeds into a standard material.
     //
     // Constructing an @ref environment uploads the source cube map (HDR,
-    // with a mip chain) and convolves two derived tables on the CPU:
+    // with a mip chain) and derives:
     //  - the @ref skybox cube, which the @ref skybox_pass samples as the
-    //    background and which lit materials sample as the prefiltered
-    //    specular source (perceptual roughness selects the mip level);
+    //    background;
+    //  - the @ref prefiltered specular cube, GGX-convolved per roughness
+    //    (one roughness per mip level);
     //  - the @ref irradiance cube, a cosine-convolved diffuse table;
     //  - the @ref brdf_lut, the split-sum environment BRDF integration
     //    (a 2D scale/bias table independent of the environment).
+    //
+    // When the backend reports @c supports_compute_prefilter the three
+    // derived tables are convolved on the GPU through compute shaders;
+    // otherwise they are built on the CPU and the prefiltered specular
+    // falls back to the source cube's box-filtered mip chain.
     //
     // All three are owned by the object and released in the destructor, so
     // an @ref environment must outlive every pass and material that binds
@@ -72,10 +78,15 @@ namespace rendering_engine
         environment(const environment&) = delete;
         environment& operator=(const environment&) = delete;
 
-        // The source skybox cube map: HDR rgba16f with a full mip chain.
-        // The skybox pass samples mip 0 for the background; lit materials
-        // sample @c roughness * maxMip for the prefiltered specular lobe.
+        // The source skybox cube map: HDR rgba16f with a full mip chain,
+        // sampled by the skybox pass for the background.
         gpu::texture skybox() const;
+
+        // The prefiltered specular cube map sampled by lit materials at
+        // @c roughness * maxMip. On the GPU path this is a dedicated cube
+        // whose every mip is GGX-convolved for its roughness; on the CPU
+        // fallback it is the source cube's box-filtered mip chain.
+        gpu::texture prefiltered() const;
 
         // The diffuse irradiance cube map: the source convolved against a
         // cosine-weighted hemisphere, sampled by the surface normal.
@@ -87,11 +98,24 @@ namespace rendering_engine
         gpu::texture brdf_lut() const;
 
     private:
-        // Shared build path: upload the source cube + mips, convolve the
-        // irradiance cube, and integrate the BRDF LUT.
+        // Upload the source cube + mip chain, then derive the tables on
+        // the GPU or the CPU depending on backend support.
         void build(uint32_t face_size, const std::array<std::vector<float>, 6>& faces);
 
+        // Allocate @ref m_skybox and upload the six source faces + mips.
+        void upload_source(uint32_t face_size, const std::array<std::vector<float>, 6>& faces);
+
+        // GPU compute path: dispatch the irradiance, prefilter and BRDF
+        // convolutions into freshly allocated storage textures.
+        void build_derived_gpu(uint32_t face_size);
+
+        // CPU fallback path: convolve the irradiance cube and integrate
+        // the BRDF LUT on the host; prefiltered specular reuses the source
+        // mip chain (see @ref prefiltered).
+        void build_derived_cpu(uint32_t face_size, const std::array<std::vector<float>, 6>& faces);
+
         gpu::texture m_skybox{};
+        gpu::texture m_prefiltered{};
         gpu::texture m_irradiance{};
         gpu::texture m_brdf_lut{};
     };
