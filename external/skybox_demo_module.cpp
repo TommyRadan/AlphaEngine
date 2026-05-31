@@ -106,11 +106,14 @@ namespace
             color = math::lerp(horizon, ground, std::pow(-dir.z, 0.35f));
         }
 
-        // Sun toward +X so it faces the default camera at -X.
+        // Sun toward +X so it faces the default camera at -X. The disk is
+        // deliberately broad (a few degrees) rather than a pinpoint: a
+        // sub-texel sun aliases badly once reflected in a near-mirror
+        // surface, so it is widened and its peak kept modest.
         const math::vec3 sun_dir = math::normalize(math::vec3{1.0f, -0.35f, 0.5f});
         const float s = std::max(math::dot(dir, sun_dir), 0.0f);
-        const float disk = std::pow(s, 1200.0f) * 18.0f;
-        const float glow = std::pow(s, 24.0f) * 0.5f;
+        const float disk = std::pow(s, 250.0f) * 6.0f;
+        const float glow = std::pow(s, 16.0f) * 0.4f;
         color += math::vec3{1.0f, 0.95f, 0.85f} * (disk + glow);
         return color;
     }

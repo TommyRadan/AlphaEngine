@@ -386,7 +386,7 @@ namespace
             vec3 N = dir_for_face(face, uv);
             vec3 V = N;
 
-            const uint SAMPLE_COUNT = 128u;
+            const uint SAMPLE_COUNT = 1024u;
             vec3 prefiltered = vec3(0.0);
             float totalWeight = 0.0;
             for (uint i = 0u; i < SAMPLE_COUNT; ++i)
