@@ -36,6 +36,8 @@ namespace rendering_engine
 {
     struct pass;
     struct renderable;
+    struct skybox_pass;
+    struct environment;
     struct basic_material;
     struct phong_material;
     struct standard_material;
@@ -127,6 +129,20 @@ namespace rendering_engine
         /** @brief Built-in 2D overlay material. Constructed in @ref init. */
         ui_material& get_ui_material();
 
+        /**
+         * @brief Sets (or clears) the scene's image-based-lighting
+         *        environment — the analogue of @c THREE.Scene.environment
+         *        plus @c background.
+         *
+         * Points the skybox pass at @p env's cube map so it draws as the
+         * background, and attaches the same environment to the built-in
+         * @ref standard_material so its surfaces pick up image-based
+         * ambient. Pass @c nullptr to drop the skybox and revert the
+         * material to flat ambient. The @ref environment is non-owning and
+         * must outlive the scene (or be cleared first).
+         */
+        void set_environment(const environment* env);
+
     private:
         std::vector<renderable*> m_scene_renderables;
         std::vector<renderable*> m_ui_renderables;
@@ -137,6 +153,11 @@ namespace rendering_engine
         // and torn down first in @ref quit, before the materials and
         // GPU device the passes reference.
         std::vector<std::unique_ptr<pass>> m_passes;
+
+        // Non-owning back-pointer to the skybox pass owned by
+        // @ref m_passes. Kept so @ref set_environment can swap its cube
+        // map after construction. Null until @ref init runs.
+        skybox_pass* m_skybox{nullptr};
 
         // Built-in materials, constructed after the passes in
         // @ref init so they can read the passes' per-frame bind-group

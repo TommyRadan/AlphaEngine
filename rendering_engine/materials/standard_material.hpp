@@ -29,6 +29,8 @@
 
 namespace rendering_engine
 {
+    struct environment;
+
     // Built-in physically-based lit 3D scene material — the analogue of
     // @c THREE.MeshStandardMaterial (metallic-roughness workflow). Cook-
     // Torrance specular (GGX distribution, Smith geometry, Schlick-
@@ -45,8 +47,10 @@ namespace rendering_engine
     // optional albedo / normal / metalness / roughness / emissive maps
     // live in the per-material group at slot 2 owned by this material.
     //
-    // Ambient is a flat term for now (@c ambient * albedo); image-based
-    // lighting is layered in by the skybox/IBL issue.
+    // Ambient comes from image-based lighting when an @ref environment is
+    // attached (diffuse irradiance + prefiltered specular weighted by the
+    // split-sum BRDF LUT); otherwise it falls back to the flat
+    // @c ambient * albedo term driven by the per-frame ambient light.
     struct standard_material : public material
     {
         // @p frame_layout is the per-frame bind-group layout owned by
@@ -104,6 +108,17 @@ namespace rendering_engine
         void set_emissive_map(const util::image& image);
         void clear_emissive_map();
 
+        // Attach an image-based-lighting environment. Its irradiance,
+        // prefiltered specular (the skybox mip chain) and BRDF LUT replace
+        // the flat ambient term. The @ref environment must outlive the
+        // material (or be cleared first); only the texture handles are
+        // referenced, not owned. Three.js analog: material.envMap /
+        // scene.environment.
+        void set_environment(const environment& env);
+
+        // Detach the environment and revert to the flat ambient term.
+        void clear_environment();
+
         // The per-material group trails the per-frame and per-draw
         // groups, so it occupies slot 2 (per-frame at 0, per-draw at 1).
         uint32_t per_material_slot() const override;
@@ -137,5 +152,11 @@ namespace rendering_engine
         gpu::texture m_metalness_map{};
         gpu::texture m_roughness_map{};
         gpu::texture m_emissive_map{};
+
+        // Image-based-lighting source, or null for the flat ambient
+        // fallback. Non-owning: the caller keeps the @ref environment
+        // alive. Only its texture handles are bound into the per-material
+        // group; the @c iblParams flag in the UBO gates the shader path.
+        const environment* m_environment{nullptr};
     };
 } // namespace rendering_engine

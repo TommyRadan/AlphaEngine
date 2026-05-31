@@ -28,6 +28,7 @@
 #include <rendering_engine/camera/camera.hpp>
 #include <rendering_engine/gpu/command_encoder.hpp>
 #include <rendering_engine/gpu/device.hpp>
+#include <rendering_engine/ibl/environment.hpp>
 #include <rendering_engine/materials/basic_material.hpp>
 #include <rendering_engine/materials/phong_material.hpp>
 #include <rendering_engine/materials/standard_material.hpp>
@@ -39,6 +40,7 @@
 #include <rendering_engine/passes/post/tonemap_pass.hpp>
 #include <rendering_engine/passes/scene_pass.hpp>
 #include <rendering_engine/passes/shadow_pass.hpp>
+#include <rendering_engine/passes/skybox_pass.hpp>
 #include <rendering_engine/passes/ui_pass.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
 #include <rendering_engine/window.hpp>
@@ -103,6 +105,11 @@ void rendering_engine::context::init()
     auto shadow = std::make_unique<shadow_pass>(&m_scene_renderables);
     auto scene = std::make_unique<scene_pass>(&m_scene_renderables, shadow.get());
     const gpu::bind_group_layout scene_frame_layout = scene->frame_bind_group_layout();
+    // The skybox pass runs after the scene pass and composites the cube-map
+    // background into the HDR target where no geometry was drawn. It stays
+    // dormant until set_environment supplies a cube map.
+    auto skybox = std::make_unique<skybox_pass>();
+    m_skybox = skybox.get();
     // Bloom runs between the scene and tonemap passes: it reads the HDR
     // scene colour, blurs the bright pixels and additively composites the
     // glow back into the same target, so tonemap maps the bloomed result.
@@ -127,7 +134,9 @@ void rendering_engine::context::init()
     LOG_INF("Rendering Engine: basic_material, phong_material, standard_material and ui_material constructed");
 
     // Register the built-in passes in render order: scene writes into
-    // the HDR target, the bloom post pass blurs its bright pixels back
+    // the HDR target, the skybox pass fills the untouched background of
+    // that target with the environment cube map, the bloom post pass
+    // blurs its bright pixels back
     // into that target, the tonemap post pass maps the result to LDR in
     // the off-screen LDR target, the FXAA post pass anti-aliases that LDR
     // image onto the swapchain, and the UI pass composites on top. The
@@ -142,6 +151,7 @@ void rendering_engine::context::init()
     // pass can sample it the same frame.
     m_passes.push_back(std::move(shadow));
     m_passes.push_back(std::move(scene));
+    m_passes.push_back(std::move(skybox));
     m_passes.push_back(std::move(bloom));
     m_passes.push_back(std::move(post));
     m_passes.push_back(std::move(fxaa));
@@ -159,6 +169,7 @@ void rendering_engine::context::quit()
     // event bus we're about to release, and the passes own per-frame
     // bind-group layouts referenced by the materials' pipelines.
     m_passes.clear();
+    m_skybox = nullptr;
 
     // Then materials, which own pipelines that reference the device.
     // Release them before the device tears its pools down.
@@ -271,4 +282,26 @@ rendering_engine::standard_material& rendering_engine::context::get_standard_mat
 rendering_engine::ui_material& rendering_engine::context::get_ui_material()
 {
     return *m_ui_material;
+}
+
+void rendering_engine::context::set_environment(const environment* env)
+{
+    // Point the skybox pass at the cube map (or clear it) and mirror the
+    // choice onto the built-in standard material so its surfaces pick up
+    // the matching image-based ambient.
+    if (m_skybox != nullptr)
+    {
+        m_skybox->set_cubemap(env != nullptr ? env->skybox() : gpu::texture{});
+    }
+    if (m_standard_material != nullptr)
+    {
+        if (env != nullptr)
+        {
+            m_standard_material->set_environment(*env);
+        }
+        else
+        {
+            m_standard_material->clear_environment();
+        }
+    }
 }
