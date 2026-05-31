@@ -5,4 +5,6 @@ target_sources(AlphaEngine PRIVATE
     cubed_sphere.hpp
     sphere.cpp
     sphere.hpp
+    torus.cpp
+    torus.hpp
 )
