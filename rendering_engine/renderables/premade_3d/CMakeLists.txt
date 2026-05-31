@@ -3,6 +3,8 @@ target_sources(AlphaEngine PRIVATE
     box.hpp
     capsule.cpp
     capsule.hpp
+    circle.cpp
+    circle.hpp
     cubed_sphere.cpp
     cubed_sphere.hpp
     dodecahedron.cpp
@@ -15,6 +17,8 @@ target_sources(AlphaEngine PRIVATE
     plane.hpp
     polyhedron.cpp
     polyhedron.hpp
+    ring.cpp
+    ring.hpp
     sphere.cpp
     sphere.hpp
     tetrahedron.cpp
