@@ -84,7 +84,7 @@ void rendering_engine::model::collect_draw_items(std::vector<draw_item>& out)
     if (!m_draw_ubo.valid())
     {
         // Per-draw UBO matches the @c PerDraw block in the
-        // lit_material vertex shader: a single mat4 modelMatrix
+        // basic_material vertex shader: a single mat4 modelMatrix
         // packed std140 (64 bytes, no padding).
         gpu::buffer_descriptor ubo_descriptor{};
         ubo_descriptor.size = sizeof(infrastructure::math::mat4);

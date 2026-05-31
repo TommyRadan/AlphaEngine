@@ -26,9 +26,10 @@
 
 #include <control/engine.hpp>
 #include <infrastructure/log.hpp>
-#include <rendering_engine/materials/lit_material.hpp>
+#include <rendering_engine/materials/basic_material.hpp>
 #include <rendering_engine/renderables/premade_3d/cube.hpp>
 #include <rendering_engine/rendering_engine.hpp>
+#include <rendering_engine/util/color.hpp>
 
 #include <memory>
 
@@ -39,7 +40,10 @@ float rotation_speed = 3.14f / 2;
 
 static void on_engine_start(const event_engine::engine_start& event)
 {
-    cube = std::make_unique<rendering_engine::cube>(&control::current_engine().renderer->get_lit_material());
+    auto& material = control::current_engine().renderer->get_basic_material();
+    material.set_color(rendering_engine::util::color{230, 126, 34, 255});
+
+    cube = std::make_unique<rendering_engine::cube>(&material);
     cube->upload();
     control::current_engine().renderer->register_scene_renderable(cube.get());
 }

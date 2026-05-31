@@ -28,7 +28,7 @@
 #include <rendering_engine/camera/camera.hpp>
 #include <rendering_engine/gpu/command_encoder.hpp>
 #include <rendering_engine/gpu/device.hpp>
-#include <rendering_engine/materials/lit_material.hpp>
+#include <rendering_engine/materials/basic_material.hpp>
 #include <rendering_engine/materials/ui_material.hpp>
 #include <rendering_engine/passes/debug_pass.hpp>
 #include <rendering_engine/passes/pass.hpp>
@@ -88,12 +88,12 @@ void rendering_engine::context::init()
 #endif
 
     // Construct the built-in materials against the per-frame layouts
-    // exposed by the passes. The lit material's pipeline reserves
+    // exposed by the passes. The basic material's pipeline reserves
     // slot 0 for the scene_pass's per-frame group; the ui material
     // has no per-frame group.
-    m_lit_material = std::make_unique<lit_material>(scene_frame_layout);
+    m_basic_material = std::make_unique<basic_material>(scene_frame_layout);
     m_ui_material = std::make_unique<ui_material>();
-    LOG_INF("Rendering Engine: lit_material and ui_material constructed");
+    LOG_INF("Rendering Engine: basic_material and ui_material constructed");
 
     // Register the built-in passes in render order: scene writes into
     // the HDR target, the tonemap post pass maps it to LDR on the
@@ -125,7 +125,7 @@ void rendering_engine::context::quit()
     // Then materials, which own pipelines that reference the device.
     // Release them before the device tears its pools down.
     m_ui_material.reset();
-    m_lit_material.reset();
+    m_basic_material.reset();
 
     // Release the off-screen HDR target before the device tears its
     // pools down. The colour and depth attachments are owned by the
@@ -203,9 +203,9 @@ void rendering_engine::context::unregister_debug_renderable(renderable* r)
                               m_debug_renderables.end());
 }
 
-rendering_engine::lit_material& rendering_engine::context::get_lit_material()
+rendering_engine::basic_material& rendering_engine::context::get_basic_material()
 {
-    return *m_lit_material;
+    return *m_basic_material;
 }
 
 rendering_engine::ui_material& rendering_engine::context::get_ui_material()
