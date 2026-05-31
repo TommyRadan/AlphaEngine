@@ -3,10 +3,20 @@ target_sources(AlphaEngine PRIVATE
     box.hpp
     cubed_sphere.cpp
     cubed_sphere.hpp
+    dodecahedron.cpp
+    dodecahedron.hpp
+    icosahedron.cpp
+    icosahedron.hpp
+    octahedron.cpp
+    octahedron.hpp
     plane.cpp
     plane.hpp
+    polyhedron.cpp
+    polyhedron.hpp
     sphere.cpp
     sphere.hpp
+    tetrahedron.cpp
+    tetrahedron.hpp
     torus.cpp
     torus.hpp
 )
