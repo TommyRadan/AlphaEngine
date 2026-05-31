@@ -41,7 +41,7 @@ namespace rendering_engine
      *
      * Owns the per-frame bind-group layout (camera @c viewMatrix /
      * @c projectionMatrix at binding 0 and the packed lights block at
-     * binding 2, both in slot 0). The matching @c lit_material reads the
+     * binding 2, both in slot 0). The matching @c basic_material reads the
      * layout via @ref frame_bind_group_layout so the pipeline and the
      * runtime bind group agree on slot shape.
      *

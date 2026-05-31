@@ -132,18 +132,27 @@ namespace rendering_engine
         // @ref params) and translated onto the fixed-function depth /
         // blend / rasterizer state before delegating to the explicit
         // overload below. Prefer this entry point for new materials.
+        //
+        // When @p material_layout has entries the pipeline reserves an
+        // additional descriptor set for the optional per-material bind
+        // group (see @ref m_per_material_layout); the layout is created,
+        // stored, and exposed to the subclass so it can build its
+        // @ref m_per_material_bind_group against it. Leave it empty for
+        // materials with no shared per-material resources.
         void construct_pipeline(const std::string& vertex_source,
                                 const std::string& fragment_source,
                                 const gpu::vertex_buffer_layout& vertex_layout,
                                 const gpu::bind_group_layout_descriptor& draw_layout,
                                 gpu::bind_group_layout frame_layout,
-                                const material_params& params);
+                                const material_params& params,
+                                const gpu::bind_group_layout_descriptor& material_layout = {});
 
         // Build the pipeline + per-draw layout from source. When
         // @p frame_layout is valid, slot 0 is reserved for a
         // per-frame bind group owned by the corresponding pass and
         // @ref per_draw_slot returns 1; otherwise the per-draw
-        // group occupies slot 0.
+        // group occupies slot 0. When @p material_layout has entries
+        // it becomes the trailing descriptor set (per-material).
         void construct_pipeline(const std::string& vertex_source,
                                 const std::string& fragment_source,
                                 const gpu::vertex_buffer_layout& vertex_layout,
@@ -151,7 +160,8 @@ namespace rendering_engine
                                 gpu::bind_group_layout frame_layout,
                                 const gpu::depth_state& depth,
                                 const gpu::blend_state& blend,
-                                const gpu::rasterizer_state& rasterizer);
+                                const gpu::rasterizer_state& rasterizer,
+                                const gpu::bind_group_layout_descriptor& material_layout = {});
 
         void destruct_pipeline();
 
@@ -160,6 +170,13 @@ namespace rendering_engine
         gpu::shader_module m_fragment_shader{};
         gpu::pipeline m_pipeline{};
         gpu::bind_group_layout m_per_draw_layout{};
+
+        // Optional trailing descriptor-set layout for shared
+        // per-material resources. Valid only when @ref construct_pipeline
+        // was handed a non-empty material layout; subclasses build
+        // @ref m_per_material_bind_group against it. Released in
+        // @ref destruct_pipeline.
+        gpu::bind_group_layout m_per_material_layout{};
         gpu::bind_group m_per_material_bind_group{};
 
         // Whether the pipeline reserves slot 0 for a per-frame

@@ -1,6 +1,6 @@
 target_sources(AlphaEngine PRIVATE
-    lit_material.cpp
-    lit_material.hpp
+    basic_material.cpp
+    basic_material.hpp
     material.cpp
     material.hpp
     ui_material.cpp

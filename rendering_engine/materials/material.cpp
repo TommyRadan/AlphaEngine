@@ -126,7 +126,8 @@ namespace rendering_engine
                                       const gpu::vertex_buffer_layout& vertex_layout,
                                       const gpu::bind_group_layout_descriptor& draw_layout,
                                       gpu::bind_group_layout frame_layout,
-                                      const material_params& params)
+                                      const material_params& params,
+                                      const gpu::bind_group_layout_descriptor& material_layout)
     {
         m_params = params;
         construct_pipeline(vertex_source,
@@ -136,7 +137,8 @@ namespace rendering_engine
                            frame_layout,
                            to_depth_state(params),
                            to_blend_state(params),
-                           to_rasterizer_state(params));
+                           to_rasterizer_state(params),
+                           material_layout);
     }
 
     void material::construct_pipeline(const std::string& vertex_source,
@@ -146,7 +148,8 @@ namespace rendering_engine
                                       gpu::bind_group_layout frame_layout,
                                       const gpu::depth_state& depth,
                                       const gpu::blend_state& blend,
-                                      const gpu::rasterizer_state& rasterizer)
+                                      const gpu::rasterizer_state& rasterizer,
+                                      const gpu::bind_group_layout_descriptor& material_layout)
     {
         auto& gpu = *control::current_engine().gpu;
 
@@ -163,6 +166,16 @@ namespace rendering_engine
         m_per_draw_layout = gpu.create_bind_group_layout(draw_layout);
         m_has_frame_layout = frame_layout.valid();
 
+        // The trailing per-material descriptor set is optional; only
+        // create it when the subclass asked for one. Its set index is
+        // whatever comes after the per-frame (if any) and per-draw
+        // layouts, so subclasses must report that slot via
+        // @ref per_material_slot.
+        if (!material_layout.entries.empty())
+        {
+            m_per_material_layout = gpu.create_bind_group_layout(material_layout);
+        }
+
         gpu::pipeline_descriptor pipeline_descriptor{};
         pipeline_descriptor.vertex_shader = m_vertex_shader;
         pipeline_descriptor.fragment_shader = m_fragment_shader;
@@ -175,6 +188,10 @@ namespace rendering_engine
             pipeline_descriptor.bind_group_layouts.push_back(frame_layout);
         }
         pipeline_descriptor.bind_group_layouts.push_back(m_per_draw_layout);
+        if (m_per_material_layout.valid())
+        {
+            pipeline_descriptor.bind_group_layouts.push_back(m_per_material_layout);
+        }
 
         m_pipeline = gpu.create_pipeline(pipeline_descriptor);
     }
@@ -195,6 +212,11 @@ namespace rendering_engine
         {
             gpu.destroy(m_pipeline);
             m_pipeline = {};
+        }
+        if (m_per_material_layout.valid())
+        {
+            gpu.destroy(m_per_material_layout);
+            m_per_material_layout = {};
         }
         if (m_per_draw_layout.valid())
         {

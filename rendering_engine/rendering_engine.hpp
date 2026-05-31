@@ -36,7 +36,7 @@ namespace rendering_engine
 {
     struct pass;
     struct renderable;
-    struct lit_material;
+    struct basic_material;
     struct ui_material;
 
     /**
@@ -113,8 +113,8 @@ namespace rendering_engine
         /** @brief Removes @p r from the debug-pass registry; no-op if absent. */
         void unregister_debug_renderable(renderable* r);
 
-        /** @brief Built-in 3D scene material. Constructed in @ref init. */
-        lit_material& get_lit_material();
+        /** @brief Built-in unlit 3D scene material. Constructed in @ref init. */
+        basic_material& get_basic_material();
 
         /** @brief Built-in 2D overlay material. Constructed in @ref init. */
         ui_material& get_ui_material();
@@ -133,7 +133,7 @@ namespace rendering_engine
         // Built-in materials, constructed after the passes in
         // @ref init so they can read the passes' per-frame bind-group
         // layouts. Released after the passes in @ref quit.
-        std::unique_ptr<lit_material> m_lit_material;
+        std::unique_ptr<basic_material> m_basic_material;
         std::unique_ptr<ui_material> m_ui_material;
 
         // Off-screen HDR target the scene pass renders into.
