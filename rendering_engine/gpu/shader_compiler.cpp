@@ -66,6 +66,12 @@ namespace rendering_engine::gpu
                 return EShLangFragment;
             case shader_stage::geometry:
                 return EShLangGeometry;
+            case shader_stage::tessellation_control:
+                return EShLangTessControl;
+            case shader_stage::tessellation_evaluation:
+                return EShLangTessEvaluation;
+            case shader_stage::compute:
+                return EShLangCompute;
             }
             return EShLangVertex;
         }

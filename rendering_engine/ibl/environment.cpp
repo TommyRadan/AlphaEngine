@@ -25,11 +25,20 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include <control/engine.hpp>
 #include <infrastructure/log.hpp>
 #include <infrastructure/math/math.hpp>
+#include <rendering_engine/gpu/bind_group.hpp>
+#include <rendering_engine/gpu/buffer.hpp>
+#include <rendering_engine/gpu/command_encoder.hpp>
 #include <rendering_engine/gpu/device.hpp>
+#include <rendering_engine/gpu/pipeline.hpp>
+#include <rendering_engine/gpu/shader.hpp>
+#include <rendering_engine/gpu/shader_compiler.hpp>
 #include <rendering_engine/gpu/texture.hpp>
 #include <rendering_engine/gpu/types.hpp>
 
@@ -246,6 +255,222 @@ namespace
         const float c = static_cast<float>(channel) / 255.0f;
         return c <= 0.04045f ? c / 12.92f : std::pow((c + 0.055f) / 1.055f, 2.4f);
     }
+
+    // ---- GPU compute path -------------------------------------------------
+    //
+    // Three compute shaders convolve the derived tables directly into
+    // storage images. dir_for_face mirrors the CPU @ref dir_for_face_uv so
+    // the hardware samplerCube and the written cube agree on orientation.
+
+    // Shared GLSL helpers: the cube-face direction mapping, Hammersley
+    // sequence and GGX importance sampling. Prepended to each shader.
+    const std::string compute_prelude = R"glsl(
+        #version 450
+        const float PI = 3.14159265359;
+
+        vec3 dir_for_face(int face, vec2 uv)
+        {
+            float sc = 2.0 * uv.x - 1.0;
+            float tc = 2.0 * uv.y - 1.0;
+            if (face == 0) return normalize(vec3(1.0, -tc, -sc));
+            if (face == 1) return normalize(vec3(-1.0, -tc, sc));
+            if (face == 2) return normalize(vec3(sc, 1.0, tc));
+            if (face == 3) return normalize(vec3(sc, -1.0, -tc));
+            if (face == 4) return normalize(vec3(sc, -tc, 1.0));
+            return normalize(vec3(-sc, -tc, -1.0));
+        }
+
+        float radical_inverse_vdc(uint bits)
+        {
+            bits = (bits << 16u) | (bits >> 16u);
+            bits = ((bits & 0x55555555u) << 1u) | ((bits & 0xAAAAAAAAu) >> 1u);
+            bits = ((bits & 0x33333333u) << 2u) | ((bits & 0xCCCCCCCCu) >> 2u);
+            bits = ((bits & 0x0F0F0F0Fu) << 4u) | ((bits & 0xF0F0F0F0u) >> 4u);
+            bits = ((bits & 0x00FF00FFu) << 8u) | ((bits & 0xFF00FF00u) >> 8u);
+            return float(bits) * 2.3283064365386963e-10;
+        }
+
+        vec2 hammersley(uint i, uint n)
+        {
+            return vec2(float(i) / float(n), radical_inverse_vdc(i));
+        }
+
+        // GGX lobe sample around an arbitrary normal N.
+        vec3 importance_sample_ggx(vec2 xi, vec3 N, float roughness)
+        {
+            float a = roughness * roughness;
+            float phi = 2.0 * PI * xi.x;
+            float cosTheta = sqrt((1.0 - xi.y) / (1.0 + (a * a - 1.0) * xi.y));
+            float sinTheta = sqrt(max(0.0, 1.0 - cosTheta * cosTheta));
+            vec3 H = vec3(cos(phi) * sinTheta, sin(phi) * sinTheta, cosTheta);
+            vec3 up = abs(N.z) < 0.999 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
+            vec3 tangent = normalize(cross(up, N));
+            vec3 bitangent = cross(N, tangent);
+            return normalize(tangent * H.x + bitangent * H.y + N * H.z);
+        }
+    )glsl";
+
+    // Diffuse irradiance: cosine-weighted hemisphere convolution per output
+    // texel, written into an imageCube (z = face).
+    const std::string irradiance_body = R"glsl(
+        layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+        layout(set = 0, binding = 0) uniform samplerCube envMap;
+        layout(rgba16f, set = 0, binding = 1) uniform writeonly imageCube outIrradiance;
+
+        void main()
+        {
+            ivec2 size = imageSize(outIrradiance);
+            ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+            int face = int(gl_GlobalInvocationID.z);
+            if (p.x >= size.x || p.y >= size.y)
+            {
+                return;
+            }
+            vec2 uv = (vec2(p) + 0.5) / vec2(size);
+            vec3 N = dir_for_face(face, uv);
+
+            vec3 up = abs(N.z) < 0.999 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
+            vec3 right = normalize(cross(up, N));
+            up = cross(N, right);
+
+            vec3 irradiance = vec3(0.0);
+            float samples = 0.0;
+            const float sampleDelta = 0.025;
+            for (float phi = 0.0; phi < 2.0 * PI; phi += sampleDelta)
+            {
+                for (float theta = 0.0; theta < 0.5 * PI; theta += sampleDelta)
+                {
+                    vec3 tangent = vec3(sin(theta) * cos(phi), sin(theta) * sin(phi), cos(theta));
+                    vec3 dir = tangent.x * right + tangent.y * up + tangent.z * N;
+                    irradiance += texture(envMap, dir).rgb * cos(theta) * sin(theta);
+                    samples += 1.0;
+                }
+            }
+            irradiance = PI * irradiance / max(samples, 1.0);
+            imageStore(outIrradiance, ivec3(p, face), vec4(irradiance, 1.0));
+        }
+    )glsl";
+
+    // Prefiltered specular: GGX importance sampling per output texel, with
+    // a mip bias on the source lookup to suppress fireflies. One dispatch
+    // per mip level supplies the roughness via the Params UBO.
+    const std::string prefilter_body = R"glsl(
+        layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+        layout(set = 0, binding = 0) uniform samplerCube envMap;
+        layout(rgba16f, set = 0, binding = 1) uniform writeonly imageCube outPrefiltered;
+        layout(set = 0, binding = 2, std140) uniform Params
+        {
+            vec4 data; // x roughness, y source resolution
+        } u;
+
+        float distribution_ggx(float nDotH, float roughness)
+        {
+            float a = roughness * roughness;
+            float a2 = a * a;
+            float d = (nDotH * nDotH * (a2 - 1.0) + 1.0);
+            return a2 / (PI * d * d);
+        }
+
+        void main()
+        {
+            ivec2 size = imageSize(outPrefiltered);
+            ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+            int face = int(gl_GlobalInvocationID.z);
+            if (p.x >= size.x || p.y >= size.y)
+            {
+                return;
+            }
+            float roughness = u.data.x;
+            float resolution = u.data.y;
+            vec2 uv = (vec2(p) + 0.5) / vec2(size);
+            vec3 N = dir_for_face(face, uv);
+            vec3 V = N;
+
+            const uint SAMPLE_COUNT = 128u;
+            vec3 prefiltered = vec3(0.0);
+            float totalWeight = 0.0;
+            for (uint i = 0u; i < SAMPLE_COUNT; ++i)
+            {
+                vec2 xi = hammersley(i, SAMPLE_COUNT);
+                vec3 H = importance_sample_ggx(xi, N, roughness);
+                vec3 L = normalize(2.0 * dot(V, H) * H - V);
+                float nDotL = max(dot(N, L), 0.0);
+                if (nDotL > 0.0)
+                {
+                    float nDotH = max(dot(N, H), 0.0);
+                    float hDotV = max(dot(H, V), 0.0);
+                    float d = distribution_ggx(nDotH, roughness);
+                    float pdf = (d * nDotH / (4.0 * hDotV)) + 0.0001;
+                    float saTexel = 4.0 * PI / (6.0 * resolution * resolution);
+                    float saSample = 1.0 / (float(SAMPLE_COUNT) * pdf + 0.0001);
+                    float mip = roughness == 0.0 ? 0.0 : 0.5 * log2(saSample / saTexel);
+                    prefiltered += textureLod(envMap, L, mip).rgb * nDotL;
+                    totalWeight += nDotL;
+                }
+            }
+            prefiltered = prefiltered / max(totalWeight, 0.001);
+            imageStore(outPrefiltered, ivec3(p, face), vec4(prefiltered, 1.0));
+        }
+    )glsl";
+
+    // Split-sum environment BRDF integration into a 2D rg table.
+    const std::string brdf_body = R"glsl(
+        layout(local_size_x = 8, local_size_y = 8) in;
+        layout(rgba16f, set = 0, binding = 0) uniform writeonly image2D outLut;
+
+        float geometry_schlick_ggx(float nDotX, float roughness)
+        {
+            float a = roughness;
+            float k = (a * a) / 2.0;
+            return nDotX / (nDotX * (1.0 - k) + k);
+        }
+
+        float geometry_smith(vec3 N, vec3 V, vec3 L, float roughness)
+        {
+            return geometry_schlick_ggx(max(dot(N, V), 0.0), roughness) *
+                   geometry_schlick_ggx(max(dot(N, L), 0.0), roughness);
+        }
+
+        vec2 integrate_brdf(float nDotV, float roughness)
+        {
+            vec3 V = vec3(sqrt(1.0 - nDotV * nDotV), 0.0, nDotV);
+            vec3 N = vec3(0.0, 0.0, 1.0);
+            float scale = 0.0;
+            float bias = 0.0;
+            const uint SAMPLE_COUNT = 1024u;
+            for (uint i = 0u; i < SAMPLE_COUNT; ++i)
+            {
+                vec2 xi = hammersley(i, SAMPLE_COUNT);
+                vec3 H = importance_sample_ggx(xi, N, roughness);
+                vec3 L = normalize(2.0 * dot(V, H) * H - V);
+                float nDotL = max(L.z, 0.0);
+                float nDotH = max(H.z, 0.0);
+                float vDotH = max(dot(V, H), 0.0);
+                if (nDotL > 0.0)
+                {
+                    float g = geometry_smith(N, V, L, roughness);
+                    float gVis = (g * vDotH) / (nDotH * nDotV);
+                    float fc = pow(1.0 - vDotH, 5.0);
+                    scale += (1.0 - fc) * gVis;
+                    bias += fc * gVis;
+                }
+            }
+            return vec2(scale, bias) / float(SAMPLE_COUNT);
+        }
+
+        void main()
+        {
+            ivec2 size = imageSize(outLut);
+            ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+            if (p.x >= size.x || p.y >= size.y)
+            {
+                return;
+            }
+            vec2 uv = (vec2(p) + 0.5) / vec2(size);
+            vec2 result = integrate_brdf(uv.x, uv.y);
+            imageStore(outLut, p, vec4(result, 0.0, 1.0));
+        }
+    )glsl";
 } // namespace
 
 namespace rendering_engine
@@ -293,6 +518,11 @@ namespace rendering_engine
             gpu.destroy(m_irradiance);
             m_irradiance = {};
         }
+        if (m_prefiltered.valid())
+        {
+            gpu.destroy(m_prefiltered);
+            m_prefiltered = {};
+        }
         if (m_skybox.valid())
         {
             gpu.destroy(m_skybox);
@@ -303,6 +533,13 @@ namespace rendering_engine
     gpu::texture environment::skybox() const
     {
         return m_skybox;
+    }
+
+    gpu::texture environment::prefiltered() const
+    {
+        // The GPU path builds a dedicated GGX-convolved cube; the CPU
+        // fallback reuses the source mip chain as the specular source.
+        return m_prefiltered.valid() ? m_prefiltered : m_skybox;
     }
 
     gpu::texture environment::irradiance() const
@@ -317,12 +554,27 @@ namespace rendering_engine
 
     void environment::build(uint32_t face_size, const std::array<std::vector<float>, 6>& faces)
     {
+        upload_source(face_size, faces);
+
+        auto& gpu = *control::current_engine().gpu;
+        if (gpu.supports_compute_prefilter())
+        {
+            build_derived_gpu(face_size);
+        }
+        else
+        {
+            build_derived_cpu(face_size, faces);
+        }
+    }
+
+    void environment::upload_source(uint32_t face_size, const std::array<std::vector<float>, 6>& faces)
+    {
         auto& gpu = *control::current_engine().gpu;
 
         // Source skybox cube: HDR with a full mip chain. Mip 0 is the
-        // sharp background; coarser mips double as the prefiltered specular
-        // lobe selected by perceptual roughness. clamp_edge avoids face
-        // seams; trilinear filtering smooths the roughness sweep.
+        // sharp background sampled by the skybox pass; the GPU prefilter
+        // reads coarser mips to suppress fireflies. clamp_edge avoids face
+        // seams; trilinear filtering smooths sampling.
         gpu::texture_descriptor skybox_descriptor{};
         skybox_descriptor.dimension = gpu::texture_dimension::cube;
         skybox_descriptor.format = gpu::texture_format::rgba16_float;
@@ -343,6 +595,11 @@ namespace rendering_engine
             gpu.write_cube_face(m_skybox, static_cast<gpu::cube_face>(face), data.data(), data.size() * sizeof(float));
         }
         gpu.generate_mipmaps(m_skybox);
+    }
+
+    void environment::build_derived_cpu(uint32_t face_size, const std::array<std::vector<float>, 6>& faces)
+    {
+        auto& gpu = *control::current_engine().gpu;
 
         // Diffuse irradiance cube: each output texel integrates the source
         // over a cosine-weighted hemisphere about its direction.
@@ -446,9 +703,232 @@ namespace rendering_engine
         }
         gpu.write_texture(m_brdf_lut, brdf_data.data(), brdf_data.size() * sizeof(float));
 
-        LOG_INF("Built IBL environment (skybox %ux%u, irradiance %u, brdf %u)",
+        LOG_INF("Built IBL environment on CPU (skybox %ux%u, irradiance %u, brdf %u)",
                 face_size,
                 face_size,
+                irradiance_size,
+                brdf_size);
+    }
+
+    void environment::build_derived_gpu(uint32_t face_size)
+    {
+        auto& gpu = *control::current_engine().gpu;
+
+        // Temporaries are tracked so the whole convolution scaffold is
+        // released once the tables are written; only the three textures
+        // outlive this function.
+        std::vector<gpu::shader_module> shaders;
+        std::vector<gpu::pipeline> pipelines;
+        std::vector<gpu::bind_group_layout> layouts;
+        std::vector<gpu::bind_group> groups;
+        std::vector<gpu::buffer> buffers;
+
+        const auto make_compute = [&](const std::string& body, const gpu::bind_group_layout_descriptor& layout_desc)
+        {
+            gpu::shader_module_descriptor sd{};
+            sd.stage = gpu::shader_stage::compute;
+            sd.spirv = gpu::compile_glsl_to_spirv(compute_prelude + body, gpu::shader_stage::compute);
+            const gpu::shader_module shader = gpu.create_shader_module(sd);
+            shaders.push_back(shader);
+
+            const gpu::bind_group_layout layout = gpu.create_bind_group_layout(layout_desc);
+            layouts.push_back(layout);
+
+            gpu::compute_pipeline_descriptor pd{};
+            pd.compute_shader = shader;
+            pd.bind_group_layouts.push_back(layout);
+            const gpu::pipeline pipe = gpu.create_compute_pipeline(pd);
+            pipelines.push_back(pipe);
+            return std::pair<gpu::pipeline, gpu::bind_group_layout>{pipe, layout};
+        };
+
+        // Storage-capable cube/2D texture descriptor helper.
+        const auto storage_texture = [&](gpu::texture_dimension dim, uint32_t size, bool mipmapped)
+        {
+            gpu::texture_descriptor td{};
+            td.dimension = dim;
+            td.format = gpu::texture_format::rgba16_float;
+            td.width = size;
+            td.height = size;
+            td.mipmaps = mipmapped;
+            td.min_filter = gpu::filter_mode::linear;
+            td.mag_filter = gpu::filter_mode::linear;
+            td.mipmap_filter = mipmapped ? gpu::mipmap_mode::linear : gpu::mipmap_mode::none;
+            td.address_u = gpu::address_mode::clamp_edge;
+            td.address_v = gpu::address_mode::clamp_edge;
+            td.address_w = gpu::address_mode::clamp_edge;
+            return gpu.create_texture(td);
+        };
+
+        // Layout entry helpers.
+        const auto sampler_entry = [](uint32_t binding)
+        { return gpu::bind_group_layout_entry{binding, gpu::binding_kind::texture}; };
+        const auto image_entry = [](uint32_t binding)
+        {
+            gpu::bind_group_layout_entry e{binding, gpu::binding_kind::storage_texture};
+            e.storage_format = gpu::texture_format::rgba16_float;
+            e.storage_access_mode = gpu::storage_access::write_only;
+            return e;
+        };
+        const auto ubo_entry = [](uint32_t binding)
+        { return gpu::bind_group_layout_entry{binding, gpu::binding_kind::uniform_buffer}; };
+
+        // ---- pipelines --------------------------------------------------
+        gpu::bind_group_layout_descriptor irr_layout{};
+        irr_layout.entries.push_back(sampler_entry(0));
+        irr_layout.entries.push_back(image_entry(1));
+        const auto [irr_pipe, irr_bgl] = make_compute(irradiance_body, irr_layout);
+
+        gpu::bind_group_layout_descriptor pre_layout{};
+        pre_layout.entries.push_back(sampler_entry(0));
+        pre_layout.entries.push_back(image_entry(1));
+        pre_layout.entries.push_back(ubo_entry(2));
+        const auto [pre_pipe, pre_bgl] = make_compute(prefilter_body, pre_layout);
+
+        gpu::bind_group_layout_descriptor brdf_layout{};
+        brdf_layout.entries.push_back(image_entry(0));
+        const auto [brdf_pipe, brdf_bgl] = make_compute(brdf_body, brdf_layout);
+
+        // ---- output textures -------------------------------------------
+        m_irradiance = storage_texture(gpu::texture_dimension::cube, irradiance_size, false);
+        m_prefiltered = storage_texture(gpu::texture_dimension::cube, face_size, true);
+        m_brdf_lut = storage_texture(gpu::texture_dimension::d2, brdf_size, false);
+        // Allocate the prefiltered mip chain so each level can be bound as
+        // an image; the compute pass overwrites every level afterwards.
+        gpu.generate_mipmaps(m_prefiltered);
+
+        const uint32_t prefilter_mips =
+            1u + static_cast<uint32_t>(std::floor(std::log2(static_cast<float>(face_size))));
+
+        // ---- bind groups ------------------------------------------------
+        const auto sampler_binding = [](uint32_t binding, gpu::texture tex)
+        {
+            gpu::binding_value v{};
+            v.binding = binding;
+            v.kind = gpu::binding_kind::texture;
+            v.texture_value = tex;
+            return v;
+        };
+        const auto image_binding = [](uint32_t binding, gpu::texture tex, uint32_t level)
+        {
+            gpu::binding_value v{};
+            v.binding = binding;
+            v.kind = gpu::binding_kind::storage_texture;
+            v.texture_value = tex;
+            v.storage_level = level;
+            return v;
+        };
+        const auto ubo_binding = [](uint32_t binding, gpu::buffer buf)
+        {
+            gpu::binding_value v{};
+            v.binding = binding;
+            v.kind = gpu::binding_kind::uniform_buffer;
+            v.buffer_value = buf;
+            return v;
+        };
+
+        gpu::bind_group_descriptor irr_bg_desc{};
+        irr_bg_desc.layout = irr_bgl;
+        irr_bg_desc.entries.push_back(sampler_binding(0, m_skybox));
+        irr_bg_desc.entries.push_back(image_binding(1, m_irradiance, 0));
+        const gpu::bind_group irr_bg = gpu.create_bind_group(irr_bg_desc);
+        groups.push_back(irr_bg);
+
+        gpu::bind_group_descriptor brdf_bg_desc{};
+        brdf_bg_desc.layout = brdf_bgl;
+        brdf_bg_desc.entries.push_back(image_binding(0, m_brdf_lut, 0));
+        const gpu::bind_group brdf_bg = gpu.create_bind_group(brdf_bg_desc);
+        groups.push_back(brdf_bg);
+
+        // One bind group + Params UBO per prefilter mip (roughness varies).
+        std::vector<gpu::bind_group> prefilter_groups;
+        std::vector<uint32_t> prefilter_sizes;
+        for (uint32_t mip = 0; mip < prefilter_mips; ++mip)
+        {
+            const float roughness =
+                prefilter_mips > 1 ? static_cast<float>(mip) / static_cast<float>(prefilter_mips - 1) : 0.0f;
+            const std::array<float, 4> params{roughness, static_cast<float>(face_size), 0.0f, 0.0f};
+
+            gpu::buffer_descriptor bd{};
+            bd.size = sizeof(params);
+            bd.usage = gpu::buffer_usage_uniform | gpu::buffer_usage_copy_dst;
+            bd.hint = gpu::buffer_usage_hint::static_data;
+            bd.initial_data = params.data();
+            const gpu::buffer ubo = gpu.create_buffer(bd);
+            buffers.push_back(ubo);
+
+            gpu::bind_group_descriptor desc{};
+            desc.layout = pre_bgl;
+            desc.entries.push_back(sampler_binding(0, m_skybox));
+            desc.entries.push_back(image_binding(1, m_prefiltered, mip));
+            desc.entries.push_back(ubo_binding(2, ubo));
+            const gpu::bind_group bg = gpu.create_bind_group(desc);
+            groups.push_back(bg);
+            prefilter_groups.push_back(bg);
+            prefilter_sizes.push_back(std::max(1u, face_size >> mip));
+        }
+
+        // ---- dispatch ---------------------------------------------------
+        constexpr uint32_t local = 8;
+        const auto groups_for = [](uint32_t extent) { return (extent + local - 1) / local; };
+
+        auto encoder = gpu.create_command_encoder();
+        {
+            auto pass = encoder->begin_compute_pass();
+
+            pass->set_pipeline(brdf_pipe);
+            pass->set_bind_group(0, brdf_bg);
+            pass->dispatch(groups_for(brdf_size), groups_for(brdf_size), 1);
+
+            pass->set_pipeline(irr_pipe);
+            pass->set_bind_group(0, irr_bg);
+            pass->dispatch(groups_for(irradiance_size), groups_for(irradiance_size), 6);
+
+            pass->set_pipeline(pre_pipe);
+            for (uint32_t mip = 0; mip < prefilter_mips; ++mip)
+            {
+                const uint32_t size = prefilter_sizes[mip];
+                pass->set_bind_group(0, prefilter_groups[mip]);
+                pass->dispatch(groups_for(size), groups_for(size), 6);
+            }
+
+            pass->end();
+        }
+        // Make the image stores visible to the samplers that read these
+        // textures in later passes.
+        encoder->barrier(gpu::pipeline_stage_compute_shader,
+                         gpu::pipeline_stage_fragment_shader,
+                         gpu::access_storage_image_write,
+                         gpu::access_shader_read);
+        gpu.submit(std::move(encoder));
+
+        // The scaffold is single-use; release it now that the tables hold
+        // their results. The three output textures persist.
+        for (auto g : groups)
+        {
+            gpu.destroy(g);
+        }
+        for (auto b : buffers)
+        {
+            gpu.destroy(b);
+        }
+        for (auto p : pipelines)
+        {
+            gpu.destroy(p);
+        }
+        for (auto l : layouts)
+        {
+            gpu.destroy(l);
+        }
+        for (auto s : shaders)
+        {
+            gpu.destroy(s);
+        }
+
+        LOG_INF("Built IBL environment on GPU (skybox %ux%u, prefilter mips %u, irradiance %u, brdf %u)",
+                face_size,
+                face_size,
+                prefilter_mips,
                 irradiance_size,
                 brdf_size);
     }
