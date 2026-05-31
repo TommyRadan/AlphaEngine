@@ -59,6 +59,14 @@ namespace rendering_engine
         // passes sample @ref scene_color_texture as their input.
         gpu::render_target scene_color_target{};
         gpu::texture scene_color_texture{};
+
+        // Off-screen LDR colour target the tonemap pass resolves into.
+        // The swapchain is not sampleable as a shader input, so the
+        // final post effect (FXAA) reads its tonemapped source from this
+        // intermediate rgba8 target and writes the result to
+        // @ref swapchain_target. Also owned by @ref context.
+        gpu::render_target ldr_color_target{};
+        gpu::texture ldr_color_texture{};
     };
 
     /**
