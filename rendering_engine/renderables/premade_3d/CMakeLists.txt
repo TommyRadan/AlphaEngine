@@ -5,8 +5,12 @@ target_sources(AlphaEngine PRIVATE
     capsule.hpp
     circle.cpp
     circle.hpp
+    cone.cpp
+    cone.hpp
     cubed_sphere.cpp
     cubed_sphere.hpp
+    cylinder.cpp
+    cylinder.hpp
     dodecahedron.cpp
     dodecahedron.hpp
     icosahedron.cpp
