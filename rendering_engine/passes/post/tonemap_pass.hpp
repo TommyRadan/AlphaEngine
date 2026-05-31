@@ -35,11 +35,15 @@ namespace rendering_engine
      * applies @c exposure as a pre-curve scale, runs Krzysztof
      * Narkowicz's 5-line ACES filmic approximation per channel,
      * and gamma-2.2 encodes the result before writing to the
-     * swapchain. Without this pass HDR luminance > 1.0 saturates
-     * to white as soon as it hits the 8-bit backbuffer.
+     * off-screen LDR target. Without this pass HDR luminance > 1.0
+     * saturates to white as soon as it hits the 8-bit backbuffer.
      *
-     * Slots into the post chain between @ref scene_pass and
-     * @ref ui_pass. Pipeline state mirrors any other fullscreen-
+     * It resolves into @ref frame_context::ldr_color_target rather
+     * than straight to the swapchain so the trailing @ref fxaa_pass
+     * can sample the tonemapped result as a shader input (the
+     * swapchain is not sampleable). Slots into the post chain between
+     * @ref scene_pass and @ref fxaa_pass. Pipeline state mirrors any
+     * other fullscreen-
      * triangle post pass (depth off, blend off, no culling, no
      * vertex buffers); the shared
      * @ref fullscreen_triangle_vertex_shader emits the geometry
