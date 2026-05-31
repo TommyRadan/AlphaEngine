@@ -28,6 +28,7 @@
 #include <control/engine.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
+#include <rendering_engine/ibl/environment.hpp>
 #include <rendering_engine/mesh/tangent.hpp>
 #include <rendering_engine/mesh/vertex.hpp>
 
@@ -48,14 +49,24 @@ namespace
     constexpr uint32_t material_roughness_map_binding = 7;
     constexpr uint32_t material_emissive_map_binding = 8;
 
-    // std140 layout for the per-material params UBO, five vec4 rows:
+    // Image-based-lighting samplers. The shadow map (9) and shadow UBO
+    // (10) are spent by the scene pass's per-frame set, so the IBL set
+    // resumes at 11: the irradiance and prefiltered specular cube maps and
+    // the 2D BRDF look-up table. They stay unique across both the UBO and
+    // sampler namespaces to satisfy the OpenGL ARB_gl_spirv flattening.
+    constexpr uint32_t material_irradiance_map_binding = 11;
+    constexpr uint32_t material_prefiltered_map_binding = 12;
+    constexpr uint32_t material_brdf_lut_binding = 13;
+
+    // std140 layout for the per-material params UBO, six vec4 rows:
     //   0  baseColor   (rgb tint, a alpha)
     //   16 emissive    (rgb colour, a intensity)
     //   32 params      (x metalness, y roughness, z opacity)
     //   48 mapFlags    (x albedo, y normal, z metalness, w roughness)
     //   64 mapFlags2   (x emissive)
-    // 80 bytes total.
-    constexpr size_t material_ubo_size = 80;
+    //   80 iblParams   (x ibl enabled, y ibl intensity)
+    // 96 bytes total.
+    constexpr size_t material_ubo_size = 96;
 
     const std::string vertex_shader = R"vs(
         #version 450
@@ -156,6 +167,7 @@ namespace
             vec4 params;   // x metalness, y roughness, z opacity
             vec4 mapFlags; // x albedo, y normal, z metalness, w roughness
             vec4 mapFlags2; // x emissive
+            vec4 iblParams; // x enabled, y intensity
         } u_material;
 
         layout(set = 2, binding = 4) uniform sampler2D albedoMap;
@@ -163,6 +175,14 @@ namespace
         layout(set = 2, binding = 6) uniform sampler2D metalnessMap;
         layout(set = 2, binding = 7) uniform sampler2D roughnessMap;
         layout(set = 2, binding = 8) uniform sampler2D emissiveMap;
+
+        // Image-based lighting: the diffuse irradiance cube, the
+        // prefiltered specular cube (the skybox mip chain), and the
+        // split-sum environment BRDF table. Sampled only when
+        // u_material.iblParams.x is set.
+        layout(set = 2, binding = 11) uniform samplerCube irradianceMap;
+        layout(set = 2, binding = 12) uniform samplerCube prefilteredMap;
+        layout(set = 2, binding = 13) uniform sampler2D brdfLut;
 
         vec3 shading_normal()
         {
@@ -206,6 +226,35 @@ namespace
         vec3 fresnel_schlick(float cosTheta, vec3 F0)
         {
             return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+        }
+
+        // Fresnel with a roughness-aware ceiling so rough surfaces do not
+        // over-brighten at grazing angles under image-based lighting.
+        vec3 fresnel_schlick_roughness(float cosTheta, vec3 F0, float roughness)
+        {
+            vec3 Fr = max(vec3(1.0 - roughness), F0);
+            return F0 + (Fr - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+        }
+
+        // Image-based ambient: diffuse irradiance plus prefiltered specular
+        // weighted by the split-sum environment BRDF. The prefiltered cube
+        // is the skybox mip chain, so perceptual roughness selects the LOD.
+        vec3 ibl_ambient(vec3 N, vec3 V, vec3 albedo, float metalness, float roughness, vec3 F0)
+        {
+            float nDotV = max(dot(N, V), 0.0);
+            vec3 F = fresnel_schlick_roughness(nDotV, F0, roughness);
+            vec3 kD = (1.0 - F) * (1.0 - metalness);
+
+            vec3 irradiance = texture(irradianceMap, N).rgb;
+            vec3 diffuse = irradiance * albedo;
+
+            vec3 R = reflect(-V, N);
+            float maxLod = float(textureQueryLevels(prefilteredMap) - 1);
+            vec3 prefiltered = textureLod(prefilteredMap, R, roughness * maxLod).rgb;
+            vec2 envBrdf = texture(brdfLut, vec2(nDotV, roughness)).rg;
+            vec3 specular = prefiltered * (F * envBrdf.x + envBrdf.y);
+
+            return (kD * diffuse + specular) * u_material.iblParams.y;
         }
 
         vec3 brdf(vec3 N, vec3 V, vec3 L, vec3 radiance, vec3 albedo, float metalness, float roughness, vec3 F0)
@@ -313,10 +362,18 @@ namespace
                 Lo += brdf(N, V, L, radiance, albedo, metalness, roughness, F0);
             }
 
-            // Flat ambient stand-in until image-based lighting lands;
-            // pure metals reflect nothing without an environment, so the
-            // ambient diffuse fades out as metalness rises.
-            vec3 ambient = u_lights.ambient.rgb * albedo * (1.0 - metalness);
+            vec3 ambient;
+            if (u_material.iblParams.x > 0.5)
+            {
+                ambient = ibl_ambient(N, V, albedo, metalness, roughness, F0);
+            }
+            else
+            {
+                // Flat ambient fallback when no environment is attached;
+                // pure metals reflect nothing without one, so the ambient
+                // diffuse fades out as metalness rises.
+                ambient = u_lights.ambient.rgb * albedo * (1.0 - metalness);
+            }
 
             vec3 emissive = u_material.emissive.rgb * u_material.emissive.a;
             if (u_material.mapFlags2.x != 0.0)
@@ -353,6 +410,9 @@ namespace rendering_engine
         material_layout.entries.push_back({material_metalness_map_binding, gpu::binding_kind::texture});
         material_layout.entries.push_back({material_roughness_map_binding, gpu::binding_kind::texture});
         material_layout.entries.push_back({material_emissive_map_binding, gpu::binding_kind::texture});
+        material_layout.entries.push_back({material_irradiance_map_binding, gpu::binding_kind::texture});
+        material_layout.entries.push_back({material_prefiltered_map_binding, gpu::binding_kind::texture});
+        material_layout.entries.push_back({material_brdf_lut_binding, gpu::binding_kind::texture});
 
         // Opaque lit surface: depth tested and written, no blending.
         material_params params{};
@@ -516,6 +576,22 @@ namespace rendering_engine
         rebuild_bind_group();
     }
 
+    void standard_material::set_environment(const environment& env)
+    {
+        m_environment = &env;
+        rebuild_bind_group();
+    }
+
+    void standard_material::clear_environment()
+    {
+        if (m_environment == nullptr)
+        {
+            return;
+        }
+        m_environment = nullptr;
+        rebuild_bind_group();
+    }
+
     gpu::texture standard_material::upload_map(const util::image& image)
     {
         auto& gpu = *control::current_engine().gpu;
@@ -585,6 +661,24 @@ namespace rendering_engine
             bg_descriptor.entries.push_back(tex_slot);
         }
 
+        // IBL set: bind the environment's tables, or invalid handles when
+        // none is attached. The iblParams flag gates the sampling, so the
+        // dormant handles are never read — matching how the scene pass
+        // leaves the shadow map invalid until a caster exists.
+        const std::array<std::pair<uint32_t, gpu::texture>, 3> ibl_maps = {{
+            {material_irradiance_map_binding, m_environment != nullptr ? m_environment->irradiance() : gpu::texture{}},
+            {material_prefiltered_map_binding, m_environment != nullptr ? m_environment->skybox() : gpu::texture{}},
+            {material_brdf_lut_binding, m_environment != nullptr ? m_environment->brdf_lut() : gpu::texture{}},
+        }};
+        for (const auto& [binding, texture] : ibl_maps)
+        {
+            gpu::binding_value tex_slot{};
+            tex_slot.binding = binding;
+            tex_slot.kind = gpu::binding_kind::texture;
+            tex_slot.texture_value = texture;
+            bg_descriptor.entries.push_back(tex_slot);
+        }
+
         m_per_material_bind_group = gpu.create_bind_group(bg_descriptor);
 
         upload_params();
@@ -592,7 +686,7 @@ namespace rendering_engine
 
     void standard_material::upload_params()
     {
-        std::array<float, 20> payload{};
+        std::array<float, 24> payload{};
         payload[0] = static_cast<float>(m_base_color.r) / 255.0f;
         payload[1] = static_cast<float>(m_base_color.g) / 255.0f;
         payload[2] = static_cast<float>(m_base_color.b) / 255.0f;
@@ -609,6 +703,10 @@ namespace rendering_engine
         payload[14] = m_metalness_map.valid() ? 1.0f : 0.0f;
         payload[15] = m_roughness_map.valid() ? 1.0f : 0.0f;
         payload[16] = m_emissive_map.valid() ? 1.0f : 0.0f;
+        // iblParams row at offset 80 (float index 20): enable flag + the
+        // intensity multiplier the shader applies to the ambient term.
+        payload[20] = m_environment != nullptr ? 1.0f : 0.0f;
+        payload[21] = 1.0f;
 
         auto& gpu = *control::current_engine().gpu;
         gpu.write_buffer(m_material_ubo, payload.data(), material_ubo_size, 0);
