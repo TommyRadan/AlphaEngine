@@ -159,16 +159,18 @@ namespace
             }
             float bias = max(u_shadow.params.y * (1.0 - dot(N, L)), u_shadow.params.y * 0.1);
             vec2 texelSize = 1.0 / vec2(textureSize(shadowMap, 0));
+            // 5x5 PCF to match standard_material; softens the penumbra
+            // where the light-space texel-to-world ratio is coarse.
             float lit = 0.0;
-            for (int x = -1; x <= 1; ++x)
+            for (int x = -2; x <= 2; ++x)
             {
-                for (int y = -1; y <= 1; ++y)
+                for (int y = -2; y <= 2; ++y)
                 {
                     float closest = texture(shadowMap, proj.xy + vec2(x, y) * texelSize).r;
                     lit += (proj.z - bias > closest) ? 0.0 : 1.0;
                 }
             }
-            return lit / 9.0;
+            return lit / 25.0;
         }
 
         void main()
