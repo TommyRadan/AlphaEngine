@@ -35,6 +35,7 @@
 #include <rendering_engine/passes/debug_pass.hpp>
 #include <rendering_engine/passes/pass.hpp>
 #include <rendering_engine/passes/post/bloom_pass.hpp>
+#include <rendering_engine/passes/post/fxaa_pass.hpp>
 #include <rendering_engine/passes/post/tonemap_pass.hpp>
 #include <rendering_engine/passes/scene_pass.hpp>
 #include <rendering_engine/passes/shadow_pass.hpp>
@@ -80,6 +81,19 @@ void rendering_engine::context::init()
     m_scene_color_target = eng.gpu->create_render_target(scene_color_descriptor);
     m_scene_color_texture = eng.gpu->render_target_color_texture(m_scene_color_target);
 
+    // Allocate the off-screen LDR target the tonemap pass resolves into
+    // and the FXAA pass samples. The swapchain cannot be bound as a
+    // shader input, so the final anti-aliasing pass reads its tonemapped
+    // source from this rgba8 intermediate and writes to the swapchain.
+    // No depth: the post chain runs depth-disabled.
+    gpu::render_target_descriptor ldr_color_descriptor{};
+    ldr_color_descriptor.color_format = gpu::texture_format::rgba8_unorm;
+    ldr_color_descriptor.width = width;
+    ldr_color_descriptor.height = height;
+    ldr_color_descriptor.with_depth = false;
+    m_ldr_color_target = eng.gpu->create_render_target(ldr_color_descriptor);
+    m_ldr_color_texture = eng.gpu->render_target_color_texture(m_ldr_color_target);
+
     // Construct the built-in passes first — each pass owns the
     // per-frame bind-group layout its matching material reads at
     // pipeline-create time. The shadow pass is built before the scene
@@ -94,6 +108,9 @@ void rendering_engine::context::init()
     // glow back into the same target, so tonemap maps the bloomed result.
     auto bloom = std::make_unique<bloom_pass>(m_scene_color_texture, width, height);
     auto post = std::make_unique<tonemap_pass>(m_scene_color_texture);
+    // FXAA closes the post chain: it samples the LDR target tonemap
+    // resolved into and writes the anti-aliased result to the swapchain.
+    auto fxaa = std::make_unique<fxaa_pass>(m_ldr_color_texture, width, height);
     auto ui = std::make_unique<ui_pass>(&m_ui_renderables);
 #if _DEBUG
     auto debug = std::make_unique<debug_pass>(&m_debug_renderables);
@@ -111,9 +128,10 @@ void rendering_engine::context::init()
 
     // Register the built-in passes in render order: scene writes into
     // the HDR target, the bloom post pass blurs its bright pixels back
-    // into that target, the tonemap post pass maps the result to LDR on
-    // the swapchain, and the UI pass composites on top. The debug pass is
-    // appended in debug builds only so debug visuals always read on
+    // into that target, the tonemap post pass maps the result to LDR in
+    // the off-screen LDR target, the FXAA post pass anti-aliases that LDR
+    // image onto the swapchain, and the UI pass composites on top. The
+    // debug pass is appended in debug builds only so debug visuals read on
     // top of the game UI; release builds drop it entirely so the
     // overlay registry has no consumer and the stage costs nothing.
     // Further post effects insert between scene and ui by pushing into
@@ -126,6 +144,7 @@ void rendering_engine::context::init()
     m_passes.push_back(std::move(scene));
     m_passes.push_back(std::move(bloom));
     m_passes.push_back(std::move(post));
+    m_passes.push_back(std::move(fxaa));
     m_passes.push_back(std::move(ui));
 #if _DEBUG
     m_passes.push_back(std::move(debug));
@@ -151,6 +170,12 @@ void rendering_engine::context::quit()
     // Release the off-screen HDR target before the device tears its
     // pools down. The colour and depth attachments are owned by the
     // target so destroy() releases all three.
+    if (m_ldr_color_target.valid())
+    {
+        eng.gpu->destroy(m_ldr_color_target);
+        m_ldr_color_target = {};
+        m_ldr_color_texture = {};
+    }
     if (m_scene_color_target.valid())
     {
         eng.gpu->destroy(m_scene_color_target);
@@ -172,8 +197,12 @@ void rendering_engine::context::render()
     // Capture per-frame state once so passes cannot disagree about
     // which camera or backbuffer is active mid-frame, and so they
     // do not have to re-query the camera singleton on every entry.
-    frame_context ctx{
-        gpu.swapchain_target(), camera::get_current_camera(), m_scene_color_target, m_scene_color_texture};
+    frame_context ctx{gpu.swapchain_target(),
+                      camera::get_current_camera(),
+                      m_scene_color_target,
+                      m_scene_color_texture,
+                      m_ldr_color_target,
+                      m_ldr_color_texture};
 
     auto encoder = gpu.create_command_encoder();
     for (auto& p : m_passes)

@@ -153,5 +153,12 @@ namespace rendering_engine
         // so the post chain can sample it as input.
         gpu::render_target m_scene_color_target{};
         gpu::texture m_scene_color_texture{};
+
+        // Off-screen LDR target the tonemap pass resolves into and the
+        // FXAA pass samples. rgba8, no depth; created alongside the HDR
+        // target in @ref init and released in @ref quit. Surfaced via
+        // @ref frame_context::ldr_color_target / @c ldr_color_texture.
+        gpu::render_target m_ldr_color_target{};
+        gpu::texture m_ldr_color_texture{};
     };
 } // namespace rendering_engine
