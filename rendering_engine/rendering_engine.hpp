@@ -38,6 +38,7 @@ namespace rendering_engine
     struct renderable;
     struct basic_material;
     struct phong_material;
+    struct standard_material;
     struct ui_material;
 
     /**
@@ -120,6 +121,9 @@ namespace rendering_engine
         /** @brief Built-in Blinn-Phong lit 3D scene material. Constructed in @ref init. */
         phong_material& get_phong_material();
 
+        /** @brief Built-in PBR metallic-roughness lit 3D scene material. Constructed in @ref init. */
+        standard_material& get_standard_material();
+
         /** @brief Built-in 2D overlay material. Constructed in @ref init. */
         ui_material& get_ui_material();
 
@@ -139,6 +143,7 @@ namespace rendering_engine
         // layouts. Released after the passes in @ref quit.
         std::unique_ptr<basic_material> m_basic_material;
         std::unique_ptr<phong_material> m_phong_material;
+        std::unique_ptr<standard_material> m_standard_material;
         std::unique_ptr<ui_material> m_ui_material;
 
         // Off-screen HDR target the scene pass renders into.
