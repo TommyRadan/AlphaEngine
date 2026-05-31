@@ -35,6 +35,7 @@
 #include <rendering_engine/ibl/environment.hpp>
 #include <rendering_engine/lighting/directional_light.hpp>
 #include <rendering_engine/materials/standard_material.hpp>
+#include <rendering_engine/renderables/premade_3d/plane.hpp>
 #include <rendering_engine/renderables/premade_3d/sphere.hpp>
 #include <rendering_engine/rendering_engine.hpp>
 #include <rendering_engine/util/color.hpp>
@@ -57,9 +58,16 @@ namespace
     constexpr float grid_row_height = 0.95f;
     constexpr float sphere_scale = 0.45f;
 
+    // Vertical drop from the grid centre to the ground plane: the lowest
+    // sphere's bottom sits at z = -(grid_row_height/2 + sphere_scale), so
+    // the plane clears it with a small margin.
+    constexpr float ground_z = -1.05f;
+
     std::unique_ptr<rendering_engine::environment> g_environment;
     std::vector<std::unique_ptr<rendering_engine::standard_material>> g_materials;
     std::vector<std::unique_ptr<rendering_engine::sphere>> g_spheres;
+    std::unique_ptr<rendering_engine::standard_material> g_ground_material;
+    std::unique_ptr<rendering_engine::plane> g_ground;
     std::unique_ptr<rendering_engine::directional_light> g_sun;
 
     // The world-space direction a cube texel faces, matching the OpenGL
@@ -182,12 +190,28 @@ namespace
             }
         }
 
+        // A large rough dielectric ground plane below the grid to catch
+        // the spheres' shadows. The plane lies in XY with a +Z normal
+        // (world up), so it just needs dropping below the lowest ball.
+        // Matte and slightly warm so the cast shadows read clearly.
+        g_ground_material = renderer.create_standard_material();
+        g_ground_material->set_metalness(0.0f);
+        g_ground_material->set_roughness(0.9f);
+        g_ground_material->set_base_color(rendering_engine::util::color{180, 180, 185, 255});
+
+        g_ground = std::make_unique<rendering_engine::plane>(g_ground_material.get(), 40.0f, 40.0f);
+        g_ground->transform.set_position(math::vec3{0.0f, 0.0f, ground_z});
+        g_ground->upload();
+        renderer.register_scene_renderable(g_ground.get());
+
         // A warm key light aligned with the sun in the sky so the direct
-        // and image-based lighting agree.
+        // and image-based lighting agree. It casts the scene's shadow map
+        // so the spheres drop shadows onto the ground plane.
         g_sun = std::make_unique<rendering_engine::directional_light>();
         g_sun->direction = math::vec3{-1.0f, 0.35f, -0.5f};
         g_sun->color = math::vec3{1.0f, 0.96f, 0.88f};
         g_sun->intensity = 2.0f;
+        g_sun->cast_shadow = true;
     }
 
     void on_engine_stop(const event_engine::engine_stop& /*event*/)
@@ -201,8 +225,11 @@ namespace
         {
             renderer.unregister_scene_renderable(ball.get());
         }
+        renderer.unregister_scene_renderable(g_ground.get());
 
         g_sun.reset();
+        g_ground.reset();
+        g_ground_material.reset();
         g_spheres.clear();
         g_materials.clear();
         g_environment.reset();
