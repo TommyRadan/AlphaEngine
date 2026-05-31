@@ -22,6 +22,9 @@
 
 #pragma once
 
+#include <infrastructure/math/mat4.hpp>
+#include <infrastructure/math/vec3.hpp>
+
 namespace infrastructure::math
 {
     /** @brief Float quaternion. Components are exposed in @c (w, x, y, z) order. */
@@ -38,4 +41,18 @@ namespace infrastructure::math
 
     quat normalize(const quat& q) noexcept;
     quat inverse(const quat& q) noexcept;
+
+    /** @brief Hamilton product: composes two rotations (@p a applied after @p b). */
+    quat operator*(const quat& a, const quat& b) noexcept;
+    /** @brief Rotates @p v by the rotation @p q. */
+    vec3 operator*(const quat& q, const vec3& v) noexcept;
+
+    /** @brief Builds a quaternion from intrinsic Tait-Bryan euler angles (radians). */
+    quat quat_from_euler(const vec3& euler_radians) noexcept;
+    /** @brief Extracts intrinsic Tait-Bryan euler angles (radians) from @p q. */
+    vec3 euler_from_quat(const quat& q) noexcept;
+    /** @brief Orientation whose forward (-Z) axis points along @p direction, with @p up as the reference up. */
+    quat quat_look_at(const vec3& direction, const vec3& up) noexcept;
+    /** @brief Rotation matrix equivalent to @p q. */
+    mat4 to_mat4(const quat& q) noexcept;
 } // namespace infrastructure::math

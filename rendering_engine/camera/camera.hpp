@@ -40,6 +40,9 @@ namespace rendering_engine
 
         rendering_engine::util::transform transform;
 
+        // Orients the camera so it faces @p target, using the engine up axis (+Z).
+        void look_at(const infrastructure::math::vec3& target);
+
         void invalidate_view_matrix();
         const infrastructure::math::mat4 get_view_matrix() const;
 

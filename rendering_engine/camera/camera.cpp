@@ -50,6 +50,20 @@ rendering_engine::camera* rendering_engine::camera::get_current_camera()
     return rendering_engine::camera::m_current_camera;
 }
 
+void rendering_engine::camera::look_at(const infrastructure::math::vec3& target)
+{
+    infrastructure::math::vec3 direction = target - transform.get_position();
+    if (infrastructure::math::length(direction) <= 0.0f)
+    {
+        return;
+    }
+
+    // The view matrix derives its look-at target from the position plus the rotation vector, so the
+    // camera's orientation lives in that rotation as a forward direction (see get_view_matrix).
+    transform.set_rotation(infrastructure::math::normalize(direction));
+    invalidate_view_matrix();
+}
+
 void rendering_engine::camera::invalidate_view_matrix()
 {
     m_is_view_matrix_dirty = true;
