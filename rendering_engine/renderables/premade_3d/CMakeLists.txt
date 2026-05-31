@@ -7,4 +7,6 @@ target_sources(AlphaEngine PRIVATE
     plane.hpp
     sphere.cpp
     sphere.hpp
+    torus.cpp
+    torus.hpp
 )
