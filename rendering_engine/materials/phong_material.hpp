@@ -1,0 +1,95 @@
+/**
+ * Copyright (c) 2015-2026 Tomislav Radanovic
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+#pragma once
+
+#include <rendering_engine/gpu/handle.hpp>
+#include <rendering_engine/materials/material.hpp>
+#include <rendering_engine/util/color.hpp>
+#include <rendering_engine/util/image.hpp>
+
+namespace rendering_engine
+{
+    // Built-in lit 3D scene material — the analogue of
+    // @c THREE.MeshPhongMaterial. Position+UV+normal vertex stream,
+    // MVP transform in the vertex shader, and Blinn-Phong shading in
+    // the fragment shader driven by the per-frame lights UBO the
+    // @ref scene_pass uploads at slot 0, binding 2. The first actually
+    // shaded built-in surface; cheaper than full PBR.
+    //
+    // Slot layout matches the other 3D materials: the per-frame group
+    // at slot 0 (camera + lights, owned by the @ref scene_pass) and the
+    // per-draw group at slot 1 (@c modelMatrix, built by each
+    // renderable), so renderables need no changes. The diffuse /
+    // specular params and the optional diffuse map live in the
+    // per-material group at slot 2 owned by this material.
+    struct phong_material : public material
+    {
+        // @p frame_layout is the per-frame bind-group layout owned by
+        // the @ref scene_pass; it must match the layout the pass binds
+        // at slot 0 every frame so the pipeline and the runtime bind
+        // group agree on slot shape.
+        explicit phong_material(gpu::bind_group_layout frame_layout);
+        ~phong_material() override;
+
+        // Base diffuse (Lambertian) colour. When a diffuse map is set
+        // the sampled texel modulates this tint (white leaves it
+        // unchanged). The alpha channel carries through to the output.
+        void set_diffuse(const util::color& color);
+
+        // Specular highlight colour. White gives a neutral highlight;
+        // tint it to colour the reflection.
+        void set_specular(const util::color& color);
+
+        // Blinn-Phong specular exponent. Larger values yield a tighter,
+        // sharper highlight. Three.js analog: MeshPhongMaterial.shininess.
+        void set_shininess(float shininess);
+
+        // Bind a diffuse texture; the fragment shader multiplies it into
+        // the diffuse term. Replaces any previous map and rebuilds the
+        // per-material bind group.
+        void set_diffuse_map(const util::image& image);
+
+        // Drop the diffuse texture; the material falls back to the flat
+        // diffuse tint. No-op when no map is set.
+        void clear_diffuse_map();
+
+        // The per-material group trails the per-frame and per-draw
+        // groups, so it occupies slot 2 (per-frame at 0, per-draw at 1).
+        uint32_t per_material_slot() const override;
+
+    private:
+        // (Re)create the per-material bind group against the current
+        // diffuse-map handle, then push the latest params into the UBO.
+        void rebuild_bind_group();
+
+        // Push {diffuse, specular, shininess, useTexture} into the
+        // per-material UBO.
+        void upload_params();
+
+        util::color m_diffuse{255, 255, 255, 255};
+        util::color m_specular{255, 255, 255, 255};
+        float m_shininess{32.0f};
+        gpu::buffer m_material_ubo{};
+        gpu::texture m_diffuse_map{};
+    };
+} // namespace rendering_engine

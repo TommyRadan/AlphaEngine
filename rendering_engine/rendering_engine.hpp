@@ -37,6 +37,7 @@ namespace rendering_engine
     struct pass;
     struct renderable;
     struct basic_material;
+    struct phong_material;
     struct ui_material;
 
     /**
@@ -116,6 +117,9 @@ namespace rendering_engine
         /** @brief Built-in unlit 3D scene material. Constructed in @ref init. */
         basic_material& get_basic_material();
 
+        /** @brief Built-in Blinn-Phong lit 3D scene material. Constructed in @ref init. */
+        phong_material& get_phong_material();
+
         /** @brief Built-in 2D overlay material. Constructed in @ref init. */
         ui_material& get_ui_material();
 
@@ -134,6 +138,7 @@ namespace rendering_engine
         // @ref init so they can read the passes' per-frame bind-group
         // layouts. Released after the passes in @ref quit.
         std::unique_ptr<basic_material> m_basic_material;
+        std::unique_ptr<phong_material> m_phong_material;
         std::unique_ptr<ui_material> m_ui_material;
 
         // Off-screen HDR target the scene pass renders into.
