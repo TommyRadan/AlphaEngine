@@ -3,6 +3,8 @@ target_sources(AlphaEngine PRIVATE
     cube.hpp
     cubed_sphere.cpp
     cubed_sphere.hpp
+    plane.cpp
+    plane.hpp
     sphere.cpp
     sphere.hpp
 )
