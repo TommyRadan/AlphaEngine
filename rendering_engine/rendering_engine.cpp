@@ -36,6 +36,7 @@
 #include <rendering_engine/passes/pass.hpp>
 #include <rendering_engine/passes/post/tonemap_pass.hpp>
 #include <rendering_engine/passes/scene_pass.hpp>
+#include <rendering_engine/passes/shadow_pass.hpp>
 #include <rendering_engine/passes/ui_pass.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
 #include <rendering_engine/window.hpp>
@@ -80,8 +81,12 @@ void rendering_engine::context::init()
 
     // Construct the built-in passes first — each pass owns the
     // per-frame bind-group layout its matching material reads at
-    // pipeline-create time.
-    auto scene = std::make_unique<scene_pass>(&m_scene_renderables);
+    // pipeline-create time. The shadow pass is built before the scene
+    // pass so the latter can bake the shadow map into its per-frame
+    // bind group and query the light-space matrix each frame; it walks
+    // the same scene-renderable registry.
+    auto shadow = std::make_unique<shadow_pass>(&m_scene_renderables);
+    auto scene = std::make_unique<scene_pass>(&m_scene_renderables, shadow.get());
     const gpu::bind_group_layout scene_frame_layout = scene->frame_bind_group_layout();
     auto post = std::make_unique<tonemap_pass>(m_scene_color_texture);
     auto ui = std::make_unique<ui_pass>(&m_ui_renderables);
@@ -109,6 +114,9 @@ void rendering_engine::context::init()
     // this list; future debug consumers (wireframe, gizmos, frustum
     // visualisations) register with the debug-renderable registry
     // rather than adding new passes.
+    // The shadow pass renders the light's depth map first so the scene
+    // pass can sample it the same frame.
+    m_passes.push_back(std::move(shadow));
     m_passes.push_back(std::move(scene));
     m_passes.push_back(std::move(post));
     m_passes.push_back(std::move(ui));

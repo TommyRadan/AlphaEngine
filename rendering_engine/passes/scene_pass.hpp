@@ -31,6 +31,7 @@
 namespace rendering_engine
 {
     struct renderable;
+    struct shadow_pass;
 
     /**
      * @brief 3D scene pass. Clears the swapchain colour and depth,
@@ -41,16 +42,21 @@ namespace rendering_engine
      *
      * Owns the per-frame bind-group layout (camera @c viewMatrix /
      * @c projectionMatrix at binding 0 and the packed lights block at
-     * binding 2, both in slot 0). The matching @c basic_material reads the
-     * layout via @ref frame_bind_group_layout so the pipeline and the
-     * runtime bind group agree on slot shape.
+     * binding 2, both in slot 0; plus the directional shadow matrix at
+     * binding 4 and the shadow map at binding 9). The matching lit
+     * materials read the layout via @ref frame_bind_group_layout so the
+     * pipeline and the runtime bind group agree on slot shape.
      *
      * Skipped when no camera is attached (matches the previous
      * @c if (camera != nullptr) gate).
      */
     struct scene_pass : pass
     {
-        explicit scene_pass(std::vector<renderable*>* registry);
+        // @p shadow is the shadow pass that runs ahead of this one; the
+        // scene pass bakes its depth map into the per-frame bind group
+        // and uploads its light-space matrix each frame so the lit
+        // materials can sample it. May be null to disable shadowing.
+        scene_pass(std::vector<renderable*>* registry, shadow_pass* shadow);
         ~scene_pass() override;
 
         scene_pass(const scene_pass&) = delete;
@@ -79,7 +85,13 @@ namespace rendering_engine
         gpu::bind_group_layout m_frame_layout{};
         gpu::buffer m_frame_ubo{};
         gpu::buffer m_lights_ubo{};
+        gpu::buffer m_shadow_ubo{};
         gpu::bind_group m_frame_bind_group{};
+
+        // Shadow pass feeding the per-frame group. Non-owning — the
+        // engine context owns both passes and orders the shadow pass
+        // before this one. Null disables shadowing.
+        shadow_pass* m_shadow{nullptr};
 
         // Reused across frames so the underlying allocation persists.
         std::vector<draw_item> m_items;

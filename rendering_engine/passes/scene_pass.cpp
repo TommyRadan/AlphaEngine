@@ -37,6 +37,7 @@
 #include <rendering_engine/lighting/light.hpp>
 #include <rendering_engine/lighting/lights_ubo.hpp>
 #include <rendering_engine/materials/material.hpp>
+#include <rendering_engine/passes/shadow_pass.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
 
 namespace rendering_engine
@@ -57,15 +58,32 @@ namespace rendering_engine
         // block takes binding 2.
         constexpr uint32_t camera_binding = 0;
         constexpr uint32_t lights_binding = 2;
+
+        // Directional shadow data shares the per-frame group. The lit
+        // pipelines already spend UBO bindings 0..3 (camera, model,
+        // lights, material params) and sampler bindings 4..8; following
+        // the materials' convention of never reusing a number across the
+        // two namespaces, the shadow map takes the next free sampler
+        // binding 9 and the shadow UBO sits at 10.
+        constexpr uint32_t shadow_map_binding = 9;
+        constexpr uint32_t shadow_binding = 10;
+
+        // std140 layout of the per-frame Shadow block: mat4
+        // lightViewProj at offset 0, vec4 params at offset 64
+        // (x enabled, y bias, z caster index). 80 bytes total.
+        constexpr size_t shadow_ubo_size = sizeof(infrastructure::math::mat4) + 4 * sizeof(float);
     } // namespace
 
-    scene_pass::scene_pass(std::vector<renderable*>* registry) : m_registry(registry)
+    scene_pass::scene_pass(std::vector<renderable*>* registry, shadow_pass* shadow)
+        : m_registry(registry), m_shadow(shadow)
     {
         auto& gpu = *control::current_engine().gpu;
 
         gpu::bind_group_layout_descriptor frame_layout_descriptor{};
         frame_layout_descriptor.entries.push_back({camera_binding, gpu::binding_kind::uniform_buffer});
         frame_layout_descriptor.entries.push_back({lights_binding, gpu::binding_kind::uniform_buffer});
+        frame_layout_descriptor.entries.push_back({shadow_binding, gpu::binding_kind::uniform_buffer});
+        frame_layout_descriptor.entries.push_back({shadow_map_binding, gpu::binding_kind::texture});
         m_frame_layout = gpu.create_bind_group_layout(frame_layout_descriptor);
 
         gpu::buffer_descriptor ubo_descriptor{};
@@ -79,6 +97,12 @@ namespace rendering_engine
         lights_descriptor.usage = gpu::buffer_usage_uniform | gpu::buffer_usage_copy_dst;
         lights_descriptor.hint = gpu::buffer_usage_hint::dynamic_data;
         m_lights_ubo = gpu.create_buffer(lights_descriptor);
+
+        gpu::buffer_descriptor shadow_descriptor{};
+        shadow_descriptor.size = shadow_ubo_size;
+        shadow_descriptor.usage = gpu::buffer_usage_uniform | gpu::buffer_usage_copy_dst;
+        shadow_descriptor.hint = gpu::buffer_usage_hint::dynamic_data;
+        m_shadow_ubo = gpu.create_buffer(shadow_descriptor);
 
         gpu::bind_group_descriptor frame_bind_group_descriptor{};
         frame_bind_group_descriptor.layout = m_frame_layout;
@@ -95,6 +119,21 @@ namespace rendering_engine
         lights_slot.buffer_value = m_lights_ubo;
         frame_bind_group_descriptor.entries.push_back(lights_slot);
 
+        gpu::binding_value shadow_slot{};
+        shadow_slot.binding = shadow_binding;
+        shadow_slot.kind = gpu::binding_kind::uniform_buffer;
+        shadow_slot.buffer_value = m_shadow_ubo;
+        frame_bind_group_descriptor.entries.push_back(shadow_slot);
+
+        // The shadow map is owned by the shadow pass. Its handle is
+        // stable across frames, so capture it once here; an invalid
+        // handle (no shadow pass) simply binds nothing.
+        gpu::binding_value shadow_map_slot{};
+        shadow_map_slot.binding = shadow_map_binding;
+        shadow_map_slot.kind = gpu::binding_kind::texture;
+        shadow_map_slot.texture_value = m_shadow != nullptr ? m_shadow->shadow_map() : gpu::texture{};
+        frame_bind_group_descriptor.entries.push_back(shadow_map_slot);
+
         m_frame_bind_group = gpu.create_bind_group(frame_bind_group_descriptor);
     }
 
@@ -105,6 +144,11 @@ namespace rendering_engine
         {
             gpu.destroy(m_frame_bind_group);
             m_frame_bind_group = {};
+        }
+        if (m_shadow_ubo.valid())
+        {
+            gpu.destroy(m_shadow_ubo);
+            m_shadow_ubo = {};
         }
         if (m_lights_ubo.valid())
         {
@@ -173,6 +217,21 @@ namespace rendering_engine
         gpu_lights lights_payload{};
         pack_lights(registered_lights(), lights_payload);
         gpu.write_buffer(m_lights_ubo, &lights_payload, sizeof(gpu_lights), 0);
+
+        // Upload the directional shadow block: the light-space matrix
+        // plus {enabled, bias, caster index}. When no caster is active
+        // the enabled flag stays 0 and the lit shader skips sampling,
+        // so the matrix and the (cleared) map go unused.
+        std::array<float, 20> shadow_payload{};
+        if (m_shadow != nullptr && m_shadow->has_shadow())
+        {
+            std::memcpy(
+                shadow_payload.data(), m_shadow->light_view_projection().data(), sizeof(infrastructure::math::mat4));
+            shadow_payload[16] = 1.0f;
+            shadow_payload[17] = m_shadow->depth_bias();
+            shadow_payload[18] = static_cast<float>(m_shadow->shadow_light_index());
+        }
+        gpu.write_buffer(m_shadow_ubo, shadow_payload.data(), shadow_ubo_size, 0);
 
         // Collect every renderable's draw items into a single per-frame
         // list, then sort by pipeline id so the dispatch loop only

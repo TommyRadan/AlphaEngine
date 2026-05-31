@@ -147,6 +147,14 @@ namespace rendering_engine::gpu
         // passes to bind the previous pass's output as a sampled input.
         virtual texture render_target_color_texture(render_target handle) = 0;
 
+        // Texture handle wrapping the depth attachment of @p handle, or
+        // an invalid handle for the swapchain or a target created
+        // without depth. The depth texture is allocated as a sampled
+        // texture so a later pass can read it — the shadow pass renders
+        // scene depth into a @c depth32_float target here and the lit
+        // materials sample it.
+        virtual texture render_target_depth_texture(render_target handle) = 0;
+
         // -- Command recording --------------------------------------------
 
         // Allocate a new command encoder. Each encoder records one

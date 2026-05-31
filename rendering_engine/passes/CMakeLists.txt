@@ -4,6 +4,8 @@ target_sources(AlphaEngine PRIVATE
     pass.hpp
     scene_pass.cpp
     scene_pass.hpp
+    shadow_pass.cpp
+    shadow_pass.hpp
     ui_pass.cpp
     ui_pass.hpp
 )

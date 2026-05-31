@@ -1182,6 +1182,15 @@ namespace rendering_engine::gpu::backend::vulkan
         return {};
     }
 
+    texture vk_device::render_target_depth_texture(render_target handle)
+    {
+        if (auto* record = m_render_targets.lookup(handle.id))
+        {
+            return record->depth_attachment;
+        }
+        return {};
+    }
+
     void vk_device::note_render_pass_opened(bool is_swapchain, bool use_depth)
     {
         if (is_swapchain)

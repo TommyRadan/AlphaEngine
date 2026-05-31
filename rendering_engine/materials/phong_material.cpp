@@ -122,6 +122,16 @@ namespace
             PointLight point[MAX_POINT];
         } u_lights;
 
+        // Directional shadow data, owned by the scene pass alongside the
+        // lights block. params: x enabled, y bias, z caster light index.
+        layout(set = 0, binding = 10, std140) uniform Shadow
+        {
+            mat4 lightViewProj;
+            vec4 params;
+        } u_shadow;
+
+        layout(set = 0, binding = 9) uniform sampler2D shadowMap;
+
         layout(set = 2, binding = 3, std140) uniform Material
         {
             vec4 diffuseColor;
@@ -130,6 +140,36 @@ namespace
         } u_material;
 
         layout(set = 2, binding = 4) uniform sampler2D diffuseMap;
+
+        // 1.0 = fully lit, 0.0 = fully shadowed. Only the caster light
+        // index is occluded; every other directional light returns 1.0.
+        // 3x3 PCF softens the shadow edge by one texel.
+        float directional_shadow(int lightIndex, vec3 N, vec3 L)
+        {
+            if (u_shadow.params.x == 0.0 || lightIndex != int(u_shadow.params.z))
+            {
+                return 1.0;
+            }
+            vec4 lightClip = u_shadow.lightViewProj * vec4(worldPosition, 1.0);
+            vec3 proj = lightClip.xyz / lightClip.w;
+            proj = proj * 0.5 + 0.5;
+            if (proj.z > 1.0 || proj.x < 0.0 || proj.x > 1.0 || proj.y < 0.0 || proj.y > 1.0)
+            {
+                return 1.0;
+            }
+            float bias = max(u_shadow.params.y * (1.0 - dot(N, L)), u_shadow.params.y * 0.1);
+            vec2 texelSize = 1.0 / vec2(textureSize(shadowMap, 0));
+            float lit = 0.0;
+            for (int x = -1; x <= 1; ++x)
+            {
+                for (int y = -1; y <= 1; ++y)
+                {
+                    float closest = texture(shadowMap, proj.xy + vec2(x, y) * texelSize).r;
+                    lit += (proj.z - bias > closest) ? 0.0 : 1.0;
+                }
+            }
+            return lit / 9.0;
+        }
 
         void main()
         {
@@ -151,12 +191,13 @@ namespace
                 vec3 L = normalize(-u_lights.directional[i].direction.xyz);
                 float nDotL = max(dot(N, L), 0.0);
                 vec3 radiance = u_lights.directional[i].color.rgb;
-                result += nDotL * radiance * diffuseAlbedo;
+                float shadow = directional_shadow(i, N, L);
+                result += shadow * nDotL * radiance * diffuseAlbedo;
                 if (nDotL > 0.0)
                 {
                     vec3 H = normalize(L + V);
                     float nDotH = max(dot(N, H), 0.0);
-                    result += pow(nDotH, shininess) * radiance * specularColor;
+                    result += shadow * pow(nDotH, shininess) * radiance * specularColor;
                 }
             }
 
