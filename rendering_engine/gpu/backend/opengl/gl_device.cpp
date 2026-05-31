@@ -320,6 +320,15 @@ namespace rendering_engine::gpu::backend::opengl
         return {};
     }
 
+    texture gl_device::render_target_depth_texture(render_target handle)
+    {
+        if (auto* record = m_render_targets.lookup(handle.id))
+        {
+            return record->depth_attachment;
+        }
+        return {};
+    }
+
     // -- Command recording ----------------------------------------
 
     std::unique_ptr<command_encoder> gl_device::create_command_encoder()

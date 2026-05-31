@@ -31,6 +31,7 @@
 #include <rendering_engine/lighting/directional_light.hpp>
 #include <rendering_engine/lighting/point_light.hpp>
 #include <rendering_engine/materials/phong_material.hpp>
+#include <rendering_engine/renderables/premade_3d/plane.hpp>
 #include <rendering_engine/renderables/premade_3d/sphere.hpp>
 #include <rendering_engine/rendering_engine.hpp>
 #include <rendering_engine/util/color.hpp>
@@ -38,6 +39,7 @@
 #include <memory>
 
 static std::unique_ptr<rendering_engine::sphere> g_sphere;
+static std::unique_ptr<rendering_engine::plane> g_ground;
 static std::unique_ptr<rendering_engine::ambient_light> g_ambient;
 static std::unique_ptr<rendering_engine::directional_light> g_sun;
 static std::unique_ptr<rendering_engine::point_light> g_lamp;
@@ -56,6 +58,14 @@ static void on_engine_start(const event_engine::engine_start& event)
     g_sphere->upload();
     control::current_engine().renderer->register_scene_renderable(g_sphere.get());
 
+    // A large ground plane below the sphere to catch its shadow. World
+    // up is +Z here, so the plane's default +Z normal already faces the
+    // sky; drop it just under the unit sphere and scale it out.
+    g_ground = std::make_unique<rendering_engine::plane>(&material, 30.0f, 30.0f);
+    g_ground->transform.set_position(infrastructure::math::vec3{0.0f, 0.0f, -1.5f});
+    g_ground->upload();
+    control::current_engine().renderer->register_scene_renderable(g_ground.get());
+
     // Lights self-register on construction; keeping them alive is enough
     // for the scene pass to pack them into the per-frame lights UBO.
     g_ambient = std::make_unique<rendering_engine::ambient_light>();
@@ -63,11 +73,13 @@ static void on_engine_start(const event_engine::engine_start& event)
     g_ambient->intensity = 0.15f;
 
     // Camera looks from -X toward the origin, so a sun travelling +X
-    // (and slightly down) lights the camera-facing hemisphere.
+    // (and slightly down) lights the camera-facing hemisphere. It casts
+    // the scene's single shadow map onto the ground plane.
     g_sun = std::make_unique<rendering_engine::directional_light>();
     g_sun->direction = infrastructure::math::vec3{1.0f, -0.4f, -0.6f};
     g_sun->color = infrastructure::math::vec3{1.0f, 0.97f, 0.9f};
     g_sun->intensity = 1.0f;
+    g_sun->cast_shadow = true;
 
     // A cool point light off to the camera side for a coloured highlight
     // that falls off with distance.
@@ -80,7 +92,9 @@ static void on_engine_start(const event_engine::engine_start& event)
 static void on_engine_stop(const event_engine::engine_stop& event)
 {
     control::current_engine().renderer->unregister_scene_renderable(g_sphere.get());
+    control::current_engine().renderer->unregister_scene_renderable(g_ground.get());
     g_sphere.reset();
+    g_ground.reset();
     g_lamp.reset();
     g_sun.reset();
     g_ambient.reset();
