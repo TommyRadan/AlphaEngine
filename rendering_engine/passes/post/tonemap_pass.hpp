@@ -28,15 +28,36 @@
 namespace rendering_engine
 {
     /**
+     * @brief Tonemap operator the @ref tonemap_pass applies to the
+     *        HDR scene colour, the analogue of @c THREE.ToneMapping.
+     *
+     * The enumerator values are the contract with the fragment
+     * shader's @c Tonemap UBO — they are uploaded verbatim and
+     * branched on at draw time, so they must not be reordered.
+     */
+    enum class tonemap_operator : int
+    {
+        /// No curve: the exposed colour is only clamped and gamma
+        /// encoded (THREE.NoToneMapping / LinearToneMapping).
+        none = 0,
+        /// Reinhard's x / (1 + x) shoulder (THREE.ReinhardToneMapping).
+        reinhard = 1,
+        /// Krzysztof Narkowicz's ACES filmic approximation
+        /// (THREE.ACESFilmicToneMapping). The default.
+        aces = 2,
+    };
+
+    /**
      * @brief Maps the HDR scene-colour target into LDR for the
-     *        swapchain via an ACES filmic curve and gamma encode.
+     *        swapchain via a selectable tonemap curve and gamma encode.
      *
      * Reads the rgba16f scene target produced by @ref scene_pass,
-     * applies @c exposure as a pre-curve scale, runs Krzysztof
-     * Narkowicz's 5-line ACES filmic approximation per channel,
-     * and gamma-2.2 encodes the result before writing to the
-     * off-screen LDR target. Without this pass HDR luminance > 1.0
-     * saturates to white as soon as it hits the 8-bit backbuffer.
+     * applies @c exposure as a pre-curve scale, runs the operator
+     * selected via @ref set_operator (ACES filmic by default,
+     * Reinhard, or a clamp-only linear path), and gamma-2.2 encodes
+     * the result before writing to the off-screen LDR target. Without
+     * this pass HDR luminance > 1.0 saturates to white as soon as it
+     * hits the 8-bit backbuffer.
      *
      * It resolves into @ref frame_context::ldr_color_target rather
      * than straight to the swapchain so the trailing @ref fxaa_pass
@@ -49,9 +70,12 @@ namespace rendering_engine
      * @ref fullscreen_triangle_vertex_shader emits the geometry
      * from @c gl_VertexID.
      *
-     * @c exposure defaults to 1.0 and is captured into the input
-     * bind group at construction. It exists today as scaffold for
-     * a future auto-exposure stage; live tuning is out of scope.
+     * @c exposure and the operator default to 1.0 / @ref
+     * tonemap_operator::aces and are baked into the @c Tonemap UBO at
+     * construction. Both are live-tunable: @ref set_exposure and
+     * @ref set_operator rewrite the UBO immediately (the change lands
+     * on the next recorded frame), the entry point a future
+     * auto-exposure stage will drive the exposure through.
      */
     struct tonemap_pass : pass
     {
@@ -63,11 +87,36 @@ namespace rendering_engine
 
         void record(gpu::command_encoder& encoder, const frame_context& ctx) override;
 
+        /// @brief Sets the pre-curve exposure scale; rewrites the UBO.
+        void set_exposure(float exposure);
+        /// @brief The current pre-curve exposure scale.
+        float exposure() const
+        {
+            return m_exposure;
+        }
+
+        /// @brief Selects the tonemap curve; rewrites the UBO.
+        void set_operator(tonemap_operator op);
+        /// @brief The currently selected tonemap curve.
+        tonemap_operator operator_kind() const
+        {
+            return m_operator;
+        }
+
     private:
+        // Repacks the { exposure, operator } pair and writes it to the
+        // Tonemap UBO; called by the setters whenever a value changes.
+        void upload_uniforms();
+
+        // CPU-side mirror of the std140 @c Tonemap UBO: the float
+        // exposure scale and the int operator selector.
+        float m_exposure{1.0f};
+        tonemap_operator m_operator{tonemap_operator::aces};
+
         gpu::shader_module m_vertex_shader{};
         gpu::shader_module m_fragment_shader{};
         gpu::buffer m_vertex_buffer{};
-        gpu::buffer m_exposure_ubo{};
+        gpu::buffer m_tonemap_ubo{};
         gpu::bind_group_layout m_input_layout{};
         gpu::bind_group m_input_bind_group{};
         gpu::pipeline m_pipeline{};
