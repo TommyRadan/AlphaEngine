@@ -30,6 +30,7 @@
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/materials/basic_material.hpp>
 #include <rendering_engine/materials/phong_material.hpp>
+#include <rendering_engine/materials/standard_material.hpp>
 #include <rendering_engine/materials/ui_material.hpp>
 #include <rendering_engine/passes/debug_pass.hpp>
 #include <rendering_engine/passes/pass.hpp>
@@ -94,8 +95,9 @@ void rendering_engine::context::init()
     // has no per-frame group.
     m_basic_material = std::make_unique<basic_material>(scene_frame_layout);
     m_phong_material = std::make_unique<phong_material>(scene_frame_layout);
+    m_standard_material = std::make_unique<standard_material>(scene_frame_layout);
     m_ui_material = std::make_unique<ui_material>();
-    LOG_INF("Rendering Engine: basic_material, phong_material and ui_material constructed");
+    LOG_INF("Rendering Engine: basic_material, phong_material, standard_material and ui_material constructed");
 
     // Register the built-in passes in render order: scene writes into
     // the HDR target, the tonemap post pass maps it to LDR on the
@@ -127,6 +129,7 @@ void rendering_engine::context::quit()
     // Then materials, which own pipelines that reference the device.
     // Release them before the device tears its pools down.
     m_ui_material.reset();
+    m_standard_material.reset();
     m_phong_material.reset();
     m_basic_material.reset();
 
@@ -214,6 +217,11 @@ rendering_engine::basic_material& rendering_engine::context::get_basic_material(
 rendering_engine::phong_material& rendering_engine::context::get_phong_material()
 {
     return *m_phong_material;
+}
+
+rendering_engine::standard_material& rendering_engine::context::get_standard_material()
+{
+    return *m_standard_material;
 }
 
 rendering_engine::ui_material& rendering_engine::context::get_ui_material()
