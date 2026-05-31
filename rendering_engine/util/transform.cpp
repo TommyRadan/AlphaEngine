@@ -24,7 +24,7 @@
 #include <rendering_engine/util/transform.hpp>
 
 rendering_engine::util::transform::transform()
-    : m_is_transform_matrix_dirty{true}, m_position{0.0f, 0.0f, 0.0f}, m_rotation{0.0f, 0.0f, 0.0f},
+    : m_is_transform_matrix_dirty{true}, m_position{0.0f, 0.0f, 0.0f}, m_rotation{0.0f, 0.0f, 0.0f}, m_quaternion{},
       m_scale{1.0f, 1.0f, 1.0f}
 {
 }
@@ -38,6 +38,14 @@ void rendering_engine::util::transform::set_position(const infrastructure::math:
 void rendering_engine::util::transform::set_rotation(const infrastructure::math::vec3& rotation)
 {
     m_rotation = rotation;
+    m_quaternion = infrastructure::math::quat_from_euler(rotation);
+    m_is_transform_matrix_dirty = true;
+}
+
+void rendering_engine::util::transform::set_quaternion(const infrastructure::math::quat& rotation)
+{
+    m_quaternion = infrastructure::math::normalize(rotation);
+    m_rotation = infrastructure::math::euler_from_quat(m_quaternion);
     m_is_transform_matrix_dirty = true;
 }
 
@@ -57,9 +65,43 @@ infrastructure::math::vec3 rendering_engine::util::transform::get_rotation() con
     return m_rotation;
 }
 
+infrastructure::math::quat rendering_engine::util::transform::get_quaternion() const
+{
+    return m_quaternion;
+}
+
 infrastructure::math::vec3 rendering_engine::util::transform::get_scale() const
 {
     return m_scale;
+}
+
+void rendering_engine::util::transform::look_at(const infrastructure::math::vec3& target,
+                                                const infrastructure::math::vec3& up)
+{
+    infrastructure::math::vec3 direction = target - m_position;
+    if (infrastructure::math::length(direction) <= 0.0f)
+    {
+        return;
+    }
+
+    m_quaternion = infrastructure::math::quat_look_at(direction, up);
+    m_rotation = infrastructure::math::euler_from_quat(m_quaternion);
+    m_is_transform_matrix_dirty = true;
+}
+
+infrastructure::math::vec3 rendering_engine::util::transform::get_forward() const
+{
+    return infrastructure::math::normalize(m_quaternion * infrastructure::math::vec3{0.0f, 0.0f, -1.0f});
+}
+
+infrastructure::math::vec3 rendering_engine::util::transform::get_right() const
+{
+    return infrastructure::math::normalize(m_quaternion * infrastructure::math::vec3{1.0f, 0.0f, 0.0f});
+}
+
+infrastructure::math::vec3 rendering_engine::util::transform::get_up() const
+{
+    return infrastructure::math::normalize(m_quaternion * infrastructure::math::vec3{0.0f, 1.0f, 0.0f});
 }
 
 infrastructure::math::mat4 rendering_engine::util::transform::get_transform_matrix() const
@@ -70,19 +112,20 @@ infrastructure::math::mat4 rendering_engine::util::transform::get_transform_matr
     }
 
     using infrastructure::math::mat4;
-    using infrastructure::math::rotate;
     using infrastructure::math::scale;
+    using infrastructure::math::to_mat4;
     using infrastructure::math::translate;
-    using infrastructure::math::vec3;
 
     mat4 pos_matrix = translate(m_position);
-    mat4 rot_x_matrix = rotate(m_rotation.x, vec3{1.0f, 0.0f, 0.0f});
-    mat4 rot_y_matrix = rotate(m_rotation.y, vec3{0.0f, 1.0f, 0.0f});
-    mat4 rot_z_matrix = rotate(m_rotation.z, vec3{0.0f, 0.0f, 1.0f});
+    mat4 rot_matrix = to_mat4(m_quaternion);
     mat4 scale_matrix = scale(m_scale);
-    mat4 rot_matrix = rot_z_matrix * rot_y_matrix * rot_x_matrix;
 
     m_transform_matrix = pos_matrix * rot_matrix * scale_matrix;
     m_is_transform_matrix_dirty = false;
     return m_transform_matrix;
+}
+
+infrastructure::math::mat4 rendering_engine::util::transform::get_world_matrix() const
+{
+    return get_transform_matrix();
 }
