@@ -48,11 +48,13 @@ namespace
     constexpr uint32_t shadow_map_size = 2048;
 
     // Orthographic light frustum covering the scene. The box is centred
-    // on the world origin and oriented along the light direction; these
-    // half-extents and depth range cover the demo's ground plane and
-    // props with room to spare. A future cascaded / scene-bounds-fit
-    // pass would derive these from the camera frustum.
-    constexpr float ortho_half_extent = 15.0f;
+    // on the world origin and oriented along the light direction. The
+    // half-extent is kept just large enough to enclose the demo's ground
+    // plane footprint and props: a tighter box spends more of the 2048
+    // shadow-map texels on the actual occluders, so the penumbra is
+    // sharper. Issue #146 tracks deriving this from the scene/camera
+    // bounds (and cascades) instead of a hardcoded extent.
+    constexpr float ortho_half_extent = 6.0f;
     constexpr float light_distance = 30.0f;
     constexpr float light_near = 1.0f;
     constexpr float light_far = 80.0f;
