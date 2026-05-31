@@ -16,6 +16,9 @@
 # Other
 *.suo
 
+# Claude Code harness (agent worktrees, transcripts)
+.claude/
+
 # Mac specific
 .DS_Store
 
