@@ -30,23 +30,47 @@ namespace rendering_engine
 {
     struct material;
 
-    struct cube : public renderable
+    // Parameterized box centered at the origin, mirroring Three.js
+    // BoxGeometry: per-axis dimensions plus per-axis segment counts.
+    // Each of the six faces is a tessellated grid with its own [0,1]
+    // UVs and a constant outward-pointing normal, so the box can be
+    // textured and normal-mapped. Vertex format is
+    // position + uv + normal + tangent; tangents are derived from the
+    // position/uv/normal channels via @ref generate_tangents.
+    struct box : public renderable
     {
-        explicit cube(material* mat);
-        ~cube() override;
+        explicit box(material* mat,
+                     float width = 1.0f,
+                     float height = 1.0f,
+                     float depth = 1.0f,
+                     unsigned int width_segments = 1,
+                     unsigned int height_segments = 1,
+                     unsigned int depth_segments = 1);
+        ~box() override;
 
         rendering_engine::util::transform transform;
 
         void upload() final;
         void collect_draw_items(std::vector<draw_item>& out) final;
 
+        gpu::buffer get_vertex_buffer() const;
+        gpu::buffer get_index_buffer() const;
+        unsigned int get_index_count() const;
+
     private:
         material* m_material{nullptr};
+        float m_width;
+        float m_height;
+        float m_depth;
+        unsigned int m_width_segments;
+        unsigned int m_height_segments;
+        unsigned int m_depth_segments;
+        unsigned int m_index_count{0};
+        uint32_t m_vertex_stride{0};
+
         gpu::buffer m_vertex_buffer{};
+        gpu::buffer m_index_buffer{};
         gpu::buffer m_draw_ubo{};
         gpu::bind_group m_draw_bind_group{};
-
-        unsigned int m_vertex_count{0};
-        uint32_t m_vertex_stride{0};
     };
 } // namespace rendering_engine
