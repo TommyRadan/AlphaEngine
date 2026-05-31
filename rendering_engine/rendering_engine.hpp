@@ -126,6 +126,19 @@ namespace rendering_engine
         /** @brief Built-in PBR metallic-roughness lit 3D scene material. Constructed in @ref init. */
         standard_material& get_standard_material();
 
+        /**
+         * @brief Creates a fresh @ref standard_material bound to the scene
+         *        pass's per-frame layout, owned by the caller.
+         *
+         * Use this when a scene needs several PBR surfaces with different
+         * parameters (a material grid, distinct objects) rather than the
+         * single shared @ref get_standard_material. If a scene environment
+         * is set (see @ref set_environment) it is applied to the new
+         * material so it picks up image-based ambient immediately. The
+         * returned material must not outlive the rendering context.
+         */
+        std::unique_ptr<standard_material> create_standard_material();
+
         /** @brief Built-in 2D overlay material. Constructed in @ref init. */
         ui_material& get_ui_material();
 
@@ -158,6 +171,15 @@ namespace rendering_engine
         // @ref m_passes. Kept so @ref set_environment can swap its cube
         // map after construction. Null until @ref init runs.
         skybox_pass* m_skybox{nullptr};
+
+        // The scene pass's per-frame bind-group layout, captured in
+        // @ref init so @ref create_standard_material can build additional
+        // materials against the same slot 0.
+        gpu::bind_group_layout m_scene_frame_layout{};
+
+        // The active scene environment, or null. Stored so newly created
+        // materials inherit the image-based lighting. Non-owning.
+        const environment* m_environment{nullptr};
 
         // Built-in materials, constructed after the passes in
         // @ref init so they can read the passes' per-frame bind-group

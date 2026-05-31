@@ -105,6 +105,9 @@ void rendering_engine::context::init()
     auto shadow = std::make_unique<shadow_pass>(&m_scene_renderables);
     auto scene = std::make_unique<scene_pass>(&m_scene_renderables, shadow.get());
     const gpu::bind_group_layout scene_frame_layout = scene->frame_bind_group_layout();
+    // Kept so create_standard_material can build extra materials against
+    // the same per-frame layout the scene pass binds at slot 0.
+    m_scene_frame_layout = scene_frame_layout;
     // The skybox pass runs after the scene pass and composites the cube-map
     // background into the HDR target where no geometry was drawn. It stays
     // dormant until set_environment supplies a cube map.
@@ -284,8 +287,20 @@ rendering_engine::ui_material& rendering_engine::context::get_ui_material()
     return *m_ui_material;
 }
 
+std::unique_ptr<rendering_engine::standard_material> rendering_engine::context::create_standard_material()
+{
+    auto material = std::make_unique<standard_material>(m_scene_frame_layout);
+    if (m_environment != nullptr)
+    {
+        material->set_environment(*m_environment);
+    }
+    return material;
+}
+
 void rendering_engine::context::set_environment(const environment* env)
 {
+    m_environment = env;
+
     // Point the skybox pass at the cube map (or clear it) and mirror the
     // choice onto the built-in standard material so its surfaces pick up
     // the matching image-based ambient.
