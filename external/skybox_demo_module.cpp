@@ -43,19 +43,28 @@ namespace
 {
     namespace math = infrastructure::math;
 
-    // Resolution of each procedurally generated cube face. Small enough to
-    // build instantly, large enough that the mip chain gives a clean
-    // roughness sweep.
-    constexpr uint32_t face_size = 128;
+    // Resolution of each procedurally generated cube face. 256 keeps the
+    // sun crisp and limits aliasing while the GPU prefilter stays cheap.
+    constexpr uint32_t face_size = 256;
+
+    // The IBL test grid: roughness sweeps left-to-right; the top row is
+    // pure metal, the bottom row a coloured dielectric, so the same
+    // environment shows up as both sharpening specular reflections and a
+    // soft diffuse tint.
+    constexpr int grid_columns = 6;
+    constexpr int grid_rows = 2;
+    constexpr float grid_spacing = 1.15f;
+    constexpr float grid_row_height = 0.95f;
+    constexpr float sphere_scale = 0.45f;
 
     std::unique_ptr<rendering_engine::environment> g_environment;
-    std::unique_ptr<rendering_engine::sphere> g_sphere;
+    std::vector<std::unique_ptr<rendering_engine::standard_material>> g_materials;
+    std::vector<std::unique_ptr<rendering_engine::sphere>> g_spheres;
     std::unique_ptr<rendering_engine::directional_light> g_sun;
 
     // The world-space direction a cube texel faces, matching the OpenGL
-    // cube-map convention the @ref environment samples with. Must stay in
-    // lock-step with environment.cpp's dir_for_face_uv so the generated
-    // faces and the sampler agree.
+    // cube-map convention the @ref environment samples with (kept in
+    // lock-step with environment.cpp's dir_for_face_uv).
     math::vec3 dir_for_face_uv(int face, float u, float v)
     {
         const float sc = 2.0f * u - 1.0f;
@@ -77,31 +86,32 @@ namespace
         }
     }
 
-    // A simple analytic HDR sky: a horizon-to-zenith gradient about the
-    // engine's +Z up axis, a dim ground hemisphere, and a bright sun disk
-    // with a soft glow. Returns linear radiance (the sun core exceeds 1).
+    // A clear-sky model about the engine's +Z up axis: a saturated
+    // horizon-to-zenith gradient, a dim ground hemisphere, and a tight
+    // bright sun. Returns linear radiance (the sun core exceeds 1) and is
+    // kept dim enough at the horizon that the background does not wash out.
     math::vec3 sky_radiance(const math::vec3& dir)
     {
-        const math::vec3 horizon{0.70f, 0.80f, 0.95f};
-        const math::vec3 zenith{0.12f, 0.32f, 0.80f};
-        const math::vec3 ground{0.22f, 0.20f, 0.18f};
+        const math::vec3 horizon{0.50f, 0.62f, 0.78f};
+        const math::vec3 zenith{0.07f, 0.20f, 0.58f};
+        const math::vec3 ground{0.17f, 0.15f, 0.13f};
 
         math::vec3 color;
         if (dir.z >= 0.0f)
         {
-            color = math::lerp(horizon, zenith, std::pow(dir.z, 0.5f));
+            color = math::lerp(horizon, zenith, std::pow(dir.z, 0.45f));
         }
         else
         {
-            color = math::lerp(horizon, ground, std::pow(-dir.z, 0.4f));
+            color = math::lerp(horizon, ground, std::pow(-dir.z, 0.35f));
         }
 
-        // Sun roughly toward +X so it faces the default camera at -X.
+        // Sun toward +X so it faces the default camera at -X.
         const math::vec3 sun_dir = math::normalize(math::vec3{1.0f, -0.35f, 0.5f});
         const float s = std::max(math::dot(dir, sun_dir), 0.0f);
-        const float disk = std::pow(s, 800.0f) * 30.0f;
-        const float glow = std::pow(s, 8.0f) * 1.4f;
-        color += math::vec3{1.0f, 0.96f, 0.88f} * (disk + glow);
+        const float disk = std::pow(s, 1200.0f) * 18.0f;
+        const float glow = std::pow(s, 24.0f) * 0.5f;
+        color += math::vec3{1.0f, 0.95f, 0.85f} * (disk + glow);
         return color;
     }
 
@@ -135,23 +145,39 @@ namespace
         auto& renderer = *control::current_engine().renderer;
 
         // Build the IBL environment from the procedural sky and make it the
-        // scene's background + ambient source. set_environment points the
-        // skybox pass at the cube map and attaches the same environment to
-        // the built-in standard material.
+        // scene background + ambient source. set_environment also stores it
+        // so create_standard_material below inherits the lighting.
         g_environment = std::make_unique<rendering_engine::environment>(face_size, generate_sky_faces());
         renderer.set_environment(g_environment.get());
 
-        // A polished metal sphere so the prefiltered specular reflection of
-        // the sky reads clearly; a little roughness softens it into the mip
-        // chain rather than a perfect mirror.
-        auto& material = renderer.get_standard_material();
-        material.set_base_color(rendering_engine::util::color{250, 250, 250, 255});
-        material.set_metalness(1.0f);
-        material.set_roughness(0.2f);
+        // A roughness x metalness grid. The camera sits at -X looking
+        // toward the origin with +Z up, so the grid is laid out across Y
+        // (columns) and Z (rows) at the origin plane.
+        for (int row = 0; row < grid_rows; ++row)
+        {
+            const bool metal = row == 0;
+            for (int col = 0; col < grid_columns; ++col)
+            {
+                auto material = renderer.create_standard_material();
+                material->set_metalness(metal ? 1.0f : 0.0f);
+                // Crisp mirror at the left, fully rough at the right.
+                const float roughness = 0.05f + 0.95f * static_cast<float>(col) / static_cast<float>(grid_columns - 1);
+                material->set_roughness(roughness);
+                material->set_base_color(metal ? rendering_engine::util::color{245, 245, 245, 255}
+                                               : rendering_engine::util::color{220, 70, 50, 255});
 
-        g_sphere = std::make_unique<rendering_engine::sphere>(&material);
-        g_sphere->upload();
-        renderer.register_scene_renderable(g_sphere.get());
+                auto ball = std::make_unique<rendering_engine::sphere>(material.get());
+                const float y = (static_cast<float>(col) - static_cast<float>(grid_columns - 1) * 0.5f) * grid_spacing;
+                const float z = (static_cast<float>(grid_rows - 1) * 0.5f - static_cast<float>(row)) * grid_row_height;
+                ball->transform.set_position(math::vec3{0.0f, y, z});
+                ball->transform.set_scale(math::vec3{sphere_scale, sphere_scale, sphere_scale});
+                ball->upload();
+                renderer.register_scene_renderable(ball.get());
+
+                g_materials.push_back(std::move(material));
+                g_spheres.push_back(std::move(ball));
+            }
+        }
 
         // A warm key light aligned with the sun in the sky so the direct
         // and image-based lighting agree.
@@ -165,13 +191,17 @@ namespace
     {
         auto& renderer = *control::current_engine().renderer;
 
-        // Clear the environment before the object dies so neither the
-        // skybox pass nor the material keeps a dangling cube-map handle.
+        // Clear the environment before it dies so neither the skybox pass
+        // nor any material keeps a dangling cube-map handle.
         renderer.set_environment(nullptr);
-        renderer.unregister_scene_renderable(g_sphere.get());
+        for (auto& ball : g_spheres)
+        {
+            renderer.unregister_scene_renderable(ball.get());
+        }
 
         g_sun.reset();
-        g_sphere.reset();
+        g_spheres.clear();
+        g_materials.clear();
         g_environment.reset();
     }
 } // namespace
