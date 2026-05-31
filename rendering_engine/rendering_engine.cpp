@@ -34,6 +34,7 @@
 #include <rendering_engine/materials/ui_material.hpp>
 #include <rendering_engine/passes/debug_pass.hpp>
 #include <rendering_engine/passes/pass.hpp>
+#include <rendering_engine/passes/post/bloom_pass.hpp>
 #include <rendering_engine/passes/post/tonemap_pass.hpp>
 #include <rendering_engine/passes/scene_pass.hpp>
 #include <rendering_engine/passes/shadow_pass.hpp>
@@ -88,6 +89,10 @@ void rendering_engine::context::init()
     auto shadow = std::make_unique<shadow_pass>(&m_scene_renderables);
     auto scene = std::make_unique<scene_pass>(&m_scene_renderables, shadow.get());
     const gpu::bind_group_layout scene_frame_layout = scene->frame_bind_group_layout();
+    // Bloom runs between the scene and tonemap passes: it reads the HDR
+    // scene colour, blurs the bright pixels and additively composites the
+    // glow back into the same target, so tonemap maps the bloomed result.
+    auto bloom = std::make_unique<bloom_pass>(m_scene_color_texture, width, height);
     auto post = std::make_unique<tonemap_pass>(m_scene_color_texture);
     auto ui = std::make_unique<ui_pass>(&m_ui_renderables);
 #if _DEBUG
@@ -105,12 +110,13 @@ void rendering_engine::context::init()
     LOG_INF("Rendering Engine: basic_material, phong_material, standard_material and ui_material constructed");
 
     // Register the built-in passes in render order: scene writes into
-    // the HDR target, the tonemap post pass maps it to LDR on the
-    // swapchain, and the UI pass composites on top. The debug pass is
+    // the HDR target, the bloom post pass blurs its bright pixels back
+    // into that target, the tonemap post pass maps the result to LDR on
+    // the swapchain, and the UI pass composites on top. The debug pass is
     // appended in debug builds only so debug visuals always read on
     // top of the game UI; release builds drop it entirely so the
     // overlay registry has no consumer and the stage costs nothing.
-    // Future post effects insert between scene and ui by pushing into
+    // Further post effects insert between scene and ui by pushing into
     // this list; future debug consumers (wireframe, gizmos, frustum
     // visualisations) register with the debug-renderable registry
     // rather than adding new passes.
@@ -118,6 +124,7 @@ void rendering_engine::context::init()
     // pass can sample it the same frame.
     m_passes.push_back(std::move(shadow));
     m_passes.push_back(std::move(scene));
+    m_passes.push_back(std::move(bloom));
     m_passes.push_back(std::move(post));
     m_passes.push_back(std::move(ui));
 #if _DEBUG
