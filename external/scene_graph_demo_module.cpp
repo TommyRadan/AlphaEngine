@@ -36,12 +36,16 @@
  *
  * A planet revolves because its orbit pivot turns; a moon revolves because its
  * moon pivot — a child of the planet — turns, and it turns with the opposite
- * sign so moons sweep the other way from the planets. The sun is a
- * light_component whose point light sits at the world origin and lights the
- * planets; its sphere is given an emissive material so it reads as the source.
- * Nothing here touches world matrices directly. The camera comes from
- * camera_module (WASD + mouse); the orbits lie in the YZ plane so they read
- * face-on from its default vantage down +X.
+ * sign so moons sweep the other way from the planets. Pivots turn about the
+ * world up axis (+Z), so the system lies flat in the XY plane, the natural
+ * orientation for this Z-up engine. Nothing here touches world matrices
+ * directly; the camera comes from camera_module (WASD + mouse).
+ *
+ * Lighting: the sun sphere is emissive so it reads as the source, with a dim
+ * point light at the origin for radial fill. Cast shadows come from a
+ * directional key light (this engine shadow-maps directional lights only, not
+ * point lights, over a fixed ±6 frustum at the origin), so moons throw eclipse
+ * shadows onto their planets and the whole system is sized to fit that box.
  */
 
 #include "api/game_module.hpp"
@@ -52,6 +56,7 @@
 #include <infrastructure/log.hpp>
 #include <infrastructure/math/math.hpp>
 #include <rendering_engine/lighting/ambient_light.hpp>
+#include <rendering_engine/lighting/directional_light.hpp>
 #include <rendering_engine/lighting/point_light.hpp>
 #include <rendering_engine/materials/standard_material.hpp>
 #include <rendering_engine/mesh/mesh.hpp>
@@ -82,6 +87,7 @@ static std::vector<std::unique_ptr<scene_graph::node>> g_nodes;
 static std::vector<std::unique_ptr<rendering_engine::standard_material>> g_materials;
 static std::vector<spinner> g_spinners;
 static std::unique_ptr<rendering_engine::ambient_light> g_ambient;
+static std::unique_ptr<rendering_engine::directional_light> g_sun_dir;
 static rendering_engine::mesh g_sphere;
 static float g_time = 0.0f;
 
@@ -173,7 +179,7 @@ static void make_planet(scene_graph::node& parent,
     g_spinners.push_back(spinner{orbit, orbit_rate});
 
     scene_graph::node* anchor = make_child(*orbit);
-    anchor->transform.set_position(math::vec3{0.0f, distance, 0.0f});
+    anchor->transform.set_position(math::vec3{distance, 0.0f, 0.0f});
 
     make_visual(*anchor, math::vec3{0.0f, 0.0f, 0.0f}, radius, make_material(color, 0.8f));
 
@@ -185,8 +191,8 @@ static void make_planet(scene_graph::node& parent,
         // moon of a planet runs at its own rate so they do not overlap.
         g_spinners.push_back(spinner{moon_pivot, -1.7f - 0.6f * static_cast<float>(i)});
 
-        const float moon_distance = radius + 0.7f + 0.6f * static_cast<float>(i);
-        make_visual(*moon_pivot, math::vec3{0.0f, moon_distance, 0.0f}, 0.18f, moon_material);
+        const float moon_distance = radius + 0.45f + 0.35f * static_cast<float>(i);
+        make_visual(*moon_pivot, math::vec3{moon_distance, 0.0f, 0.0f}, 0.15f, moon_material);
     }
 }
 
@@ -199,35 +205,48 @@ static void on_engine_start(const event_engine::engine_start& event)
     // Dim fill so the night side of each body is not pure black.
     g_ambient = std::make_unique<rendering_engine::ambient_light>();
     g_ambient->color = math::vec3{1.0f, 1.0f, 1.0f};
-    g_ambient->intensity = 0.08f;
+    g_ambient->intensity = 0.05f;
 
     scene_graph::node& root = control::current_engine().scenes->root;
 
-    // The sun: an emissive sphere at the origin so it reads as the light
-    // source, plus a point light at the same spot lighting the planets. The
-    // point light uses constant attenuation (no distance falloff) so the outer
-    // planets stay lit.
+    // The sun: an emissive sphere at the origin so it reads as the source, plus
+    // a dim point light at the same spot for a little radial fill (constant
+    // attenuation, no distance falloff, so the outer planets still catch it).
     auto* sun_material = make_material(rendering_engine::util::color{255, 220, 120, 255}, 1.0f);
     sun_material->set_emissive(rendering_engine::util::color{255, 210, 110, 255});
     sun_material->set_emissive_intensity(3.0f);
 
     // The sun is a childless leaf, so giving it a scale is safe; its point
     // light sits at the same node and scale never touches a translation.
-    scene_graph::node* sun = make_visual(root, math::vec3{0.0f, 0.0f, 0.0f}, 1.2f, sun_material);
+    scene_graph::node* sun = make_visual(root, math::vec3{0.0f, 0.0f, 0.0f}, 1.0f, sun_material);
     auto sun_light = std::make_unique<rendering_engine::point_light>();
     sun_light->color = math::vec3{1.0f, 0.96f, 0.88f};
-    sun_light->intensity = 3.0f;
+    sun_light->intensity = 0.8f;
     sun_light->constant_attenuation = 1.0f;
     sun_light->linear_attenuation = 0.0f;
     sun_light->quadratic_attenuation = 0.0f;
     sun->add_component<scene_graph::light_component>(scene_graph::light_component{std::move(sun_light)});
 
+    // Shadows: this engine only casts from directional lights (point lights do
+    // not), with a fixed orthographic shadow frustum of half-extent 6 centred at
+    // the origin (see shadow_pass.cpp / issue #146). So the key light is a
+    // shadow-casting directional light aimed roughly across the orbital plane —
+    // moons then cast eclipse shadows on their planets — and the whole system is
+    // kept inside that ±6 box. A point-light "sun" cannot cast radial shadows
+    // here; this is the closest the renderer supports.
+    g_sun_dir = std::make_unique<rendering_engine::directional_light>();
+    g_sun_dir->direction = math::vec3{1.0f, 0.25f, -0.15f};
+    g_sun_dir->color = math::vec3{1.0f, 0.95f, 0.85f};
+    g_sun_dir->intensity = 2.2f;
+    g_sun_dir->cast_shadow = true;
+
     // Planets: distance, radius, orbit rate (rad/s, all same sign), colour,
-    // moon count. Inner planets orbit faster, the classic look.
-    make_planet(root, 3.0f, 0.45f, 0.60f, rendering_engine::util::color{120, 170, 255, 255}, 0);
-    make_planet(root, 4.8f, 0.55f, 0.42f, rendering_engine::util::color{220, 110, 80, 255}, 1);
-    make_planet(root, 7.0f, 0.80f, 0.30f, rendering_engine::util::color{210, 180, 120, 255}, 2);
-    make_planet(root, 9.3f, 0.65f, 0.22f, rendering_engine::util::color{150, 220, 200, 255}, 1);
+    // moon count. Inner planets orbit faster, the classic look. Distances stay
+    // within the ±6 shadow frustum so every body is shadow-mapped.
+    make_planet(root, 1.7f, 0.35f, 0.70f, rendering_engine::util::color{120, 170, 255, 255}, 0);
+    make_planet(root, 2.7f, 0.50f, 0.50f, rendering_engine::util::color{220, 110, 80, 255}, 1);
+    make_planet(root, 3.7f, 0.70f, 0.34f, rendering_engine::util::color{210, 180, 120, 255}, 2);
+    make_planet(root, 4.6f, 0.45f, 0.24f, rendering_engine::util::color{150, 220, 200, 255}, 1);
 }
 
 static void on_engine_stop(const event_engine::engine_stop& event)
@@ -240,6 +259,7 @@ static void on_engine_stop(const event_engine::engine_stop& event)
     g_nodes.clear();
     g_materials.clear();
     g_ambient.reset();
+    g_sun_dir.reset();
 }
 
 static void on_frame(const event_engine::frame& event)
@@ -248,11 +268,12 @@ static void on_frame(const event_engine::frame& event)
 
     g_time += static_cast<float>(get_delta_time()) / 1000.0f;
 
-    // Drive each orbit/moon pivot from absolute time about the world X axis, so
-    // the orbital plane is YZ and reads face-on from camera_module's view.
+    // Drive each orbit/moon pivot from absolute time about the world up axis
+    // (+Z), so the system lies flat in the XY plane — the natural orientation
+    // for this Z-up engine.
     for (const spinner& s : g_spinners)
     {
-        s.node->transform.set_rotation(math::vec3{s.rate * g_time, 0.0f, 0.0f});
+        s.node->transform.set_rotation(math::vec3{0.0f, 0.0f, s.rate * g_time});
     }
 }
 
