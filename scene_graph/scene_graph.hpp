@@ -29,6 +29,7 @@
 
 #include <string>
 
+#include <scene_graph/component.hpp>
 #include <scene_graph/node.hpp>
 
 namespace scene_graph
@@ -37,12 +38,15 @@ namespace scene_graph
      * @brief Lifetime owner of the scene graph subsystem.
      *
      * Owned by @ref control::engine. Brings the subsystem up and down with the
-     * same @ref init / @ref quit shape as the other subsystems and owns the
+     * same @ref init / @ref quit shape as the other subsystems, and owns both
+     * the @ref components store (the per-scene component pools) and the
      * @ref root of the node hierarchy — the world-space anchor every other
      * @ref node parents under (directly or transitively).
      */
     struct context
     {
+        context();
+
         /** @brief Initializes the scene graph subsystem. */
         void init();
 
@@ -50,10 +54,21 @@ namespace scene_graph
         void quit();
 
         /**
+         * @brief Pools backing every node's components.
+         *
+         * One @ref infrastructure::pool per component type; nodes hold handles
+         * into it rather than owning component data. Declared before @ref root
+         * so it outlives the node tree and is still alive when nodes free their
+         * components during teardown.
+         */
+        component_store components;
+
+        /**
          * @brief Root of the scene hierarchy.
          *
-         * Sits at world origin with identity transform. Add nodes under it to
-         * have their world matrices anchored to the scene; it has no special
+         * Sits at world origin with identity transform and is wired to
+         * @ref components, so nodes added under it (directly or transitively)
+         * inherit the store and can carry components. It has no special
          * behaviour beyond being a conventional, always-present parent.
          */
         node root;

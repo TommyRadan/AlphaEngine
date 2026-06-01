@@ -24,10 +24,21 @@
 
 #include <algorithm>
 
-scene_graph::node::node() : m_parent{nullptr} {}
+scene_graph::node::node() : m_parent{nullptr}, m_store{nullptr} {}
 
 scene_graph::node::~node()
 {
+    // Free this node's components before anything else; the store outlives the
+    // node, so leaving handles dangling would leak pooled slots.
+    if (m_store != nullptr)
+    {
+        for (const component_entry& entry : m_components)
+        {
+            m_store->erase(entry.type, entry.handle);
+        }
+    }
+    m_components.clear();
+
     // Detach from the parent so its child list never references freed memory.
     if (m_parent != nullptr)
     {
@@ -60,6 +71,10 @@ void scene_graph::node::add(node& child)
 
     child.m_parent = this;
     child.transform.set_parent(&transform);
+    if (child.m_store == nullptr)
+    {
+        child.set_store(m_store);
+    }
     m_children.push_back(&child);
 }
 
@@ -89,4 +104,23 @@ const std::vector<scene_graph::node*>& scene_graph::node::children() const noexc
 infrastructure::math::mat4 scene_graph::node::world_matrix() const
 {
     return transform.get_world_matrix();
+}
+
+void scene_graph::node::set_store(component_store* store) noexcept
+{
+    m_store = store;
+    // Hand the store down to any descendants that do not have one yet so a
+    // whole subtree built before being parented into a scene picks it up.
+    for (node* child : m_children)
+    {
+        if (child->m_store == nullptr)
+        {
+            child->set_store(store);
+        }
+    }
+}
+
+scene_graph::component_store* scene_graph::node::store() const noexcept
+{
+    return m_store;
 }

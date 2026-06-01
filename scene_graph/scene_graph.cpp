@@ -26,6 +26,13 @@
 
 #include <string>
 
+scene_graph::context::context()
+{
+    // Wire the root to the scene's component store so every node added under it
+    // inherits the store (via node::add) and can carry components.
+    root.set_store(&components);
+}
+
 void scene_graph::context::init()
 {
     LOG_INF("Init Scene Graph");

@@ -22,41 +22,55 @@
 
 /**
  * @file node.hpp
- * @brief Hierarchical scene-graph node (Three.js @c Object3D / @c Group analog).
+ * @brief Scene-graph node — the entity in the entity/component model.
  */
 
 #pragma once
 
+#include <typeindex>
 #include <vector>
 
+#include <infrastructure/log.hpp>
 #include <infrastructure/math/math.hpp>
 #include <rendering_engine/util/transform.hpp>
+#include <scene_graph/component.hpp>
 
 namespace scene_graph
 {
     /**
-     * @brief A node in the scene hierarchy.
+     * @brief A node in the scene hierarchy — the entity of the
+     *        entity/component model.
      *
-     * Each node owns a local @ref rendering_engine::util::transform and a set
-     * of parent/child links. Mutating @ref transform positions the node
-     * relative to its parent; @ref world_matrix composes the parent chain so a
-     * child inherits the accumulated transform of every ancestor — the
-     * @c THREE.Object3D / @c THREE.Group model. A node carrying no renderable is
-     * simply a group used to move a subtree as a unit.
+     * Every node has two intrinsic things: a local @ref transform (its pose
+     * relative to its parent) and a set of parent/child links, so world
+     * matrices propagate down the tree the way @c THREE.Object3D /
+     * @c GameObject hierarchies do. Everything else a node "is" — a mesh, a
+     * camera, a light, an audio emitter — is expressed by attaching
+     * **components**. A node carrying no components is an empty group used to
+     * move a subtree as a unit.
      *
-     * Links are non-owning raw pointers: a node never deletes its parent or its
-     * children, and the caller keeps every node alive for as long as it is
-     * wired into a tree. The destructor detaches the node from its parent and
-     * orphans its children back to world space so dangling links never outlive
-     * the node. Main-thread-only; member access is not synchronised.
+     * Components are not stored in the node. The node records, per component,
+     * a @ref component_handle into a pool owned by the scene's
+     * @ref component_store (set via @ref set_store, normally inherited from the
+     * parent on @ref add). The node owns the *handle* and drives the
+     * component's lifetime — destroying the node, or calling
+     * @ref remove_component, frees the pooled storage — while the store (the
+     * subsystem) owns the *data*. This keeps component data contiguous in its
+     * subsystem and lets nodes stay small.
+     *
+     * Links are non-owning raw pointers: a node never deletes its parent or
+     * children, and the caller keeps every node alive while it is wired into a
+     * tree. The destructor detaches from the parent, orphans children back to
+     * world space, and frees this node's components. Main-thread-only.
      */
     struct node
     {
         node();
         ~node();
 
-        // Non-copyable: a node holds raw parent/child links that a copy would
-        // alias. Moving would invalidate the addresses children parent against.
+        // Non-copyable: a node holds raw parent/child links and component
+        // handles that a copy would alias. Moving would invalidate the
+        // addresses children parent against.
         node(const node&) = delete;
         node& operator=(const node&) = delete;
         node(node&&) = delete;
@@ -74,9 +88,10 @@ namespace scene_graph
         /**
          * @brief Attaches @p child below this node.
          *
-         * Re-parents @p child (detaching it from any previous parent first) and
-         * points its transform at this node so world matrices propagate. A node
-         * is never added to itself.
+         * Re-parents @p child (detaching it from any previous parent first),
+         * points its transform at this node so world matrices propagate, and
+         * — if @p child has no store yet — hands it this node's store so it
+         * can carry components. A node is never added to itself.
          */
         void add(node& child);
 
@@ -98,29 +113,102 @@ namespace scene_graph
         infrastructure::math::mat4 world_matrix() const;
 
         /**
-         * @brief Attaches a renderable so its draws inherit this node's world
-         *        transform.
+         * @brief Sets the component store this node draws its component pools
+         *        from, propagating to children that have none.
          *
-         * Parents the renderable's own transform under this node; the renderable
-         * keeps its local transform and is still owned and registered with the
-         * renderer by the caller. Templated so it accepts any renderable that
-         * exposes a public @c transform member without naming each type here.
+         * Usually called indirectly: a scene's root is given the store by
+         * @ref scene_graph::context, and @ref add hands it down the tree.
          */
-        template<typename Object>
-        void attach(Object& object)
+        void set_store(component_store* store) noexcept;
+
+        /** @brief Component store backing this node, or @c nullptr if unscoped. */
+        component_store* store() const noexcept;
+
+        /**
+         * @brief Adds (or replaces) the @c C component on this node.
+         *
+         * Stores @p value in the scene's pool for @c C and records its handle.
+         * Replaces any existing @c C on this node. Returns a pointer to the
+         * pooled component, or @c nullptr if the node has no store yet.
+         */
+        template<typename C>
+        C* add_component(C value)
         {
-            object.transform.set_parent(&transform);
+            if (m_store == nullptr)
+            {
+                LOG_WRN("scene_graph::node::add_component: node has no component store");
+                return nullptr;
+            }
+
+            remove_component<C>();
+            component_handle handle = m_store->add<C>(std::move(value));
+            m_components.push_back(component_entry{std::type_index(typeid(C)), handle});
+            return m_store->get<C>(handle);
         }
 
-        /** @brief Detaches a renderable previously passed to @ref attach. */
-        template<typename Object>
-        void detach(Object& object)
+        /** @brief Pointer to this node's @c C component, or @c nullptr if it has none. */
+        template<typename C>
+        C* get_component() noexcept
         {
-            object.transform.set_parent(nullptr);
+            if (m_store == nullptr)
+            {
+                return nullptr;
+            }
+            std::type_index type{typeid(C)};
+            for (const component_entry& entry : m_components)
+            {
+                if (entry.type == type)
+                {
+                    return m_store->get<C>(entry.handle);
+                }
+            }
+            return nullptr;
+        }
+
+        /** @brief True when this node carries a @c C component. */
+        template<typename C>
+        bool has_component() const noexcept
+        {
+            std::type_index type{typeid(C)};
+            for (const component_entry& entry : m_components)
+            {
+                if (entry.type == type)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /** @brief Removes this node's @c C component and frees its pooled storage. No-op if absent. */
+        template<typename C>
+        void remove_component() noexcept
+        {
+            std::type_index type{typeid(C)};
+            for (auto it = m_components.begin(); it != m_components.end(); ++it)
+            {
+                if (it->type == type)
+                {
+                    if (m_store != nullptr)
+                    {
+                        m_store->remove<C>(it->handle);
+                    }
+                    m_components.erase(it);
+                    return;
+                }
+            }
         }
 
     private:
+        struct component_entry
+        {
+            std::type_index type;
+            component_handle handle;
+        };
+
         node* m_parent;
         std::vector<node*> m_children;
+        component_store* m_store;
+        std::vector<component_entry> m_components;
     };
 } // namespace scene_graph
