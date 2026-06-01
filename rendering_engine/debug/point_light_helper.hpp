@@ -23,7 +23,7 @@
 #pragma once
 
 #include <infrastructure/math/math.hpp>
-#include <rendering_engine/debug/helper.hpp>
+#include <rendering_engine/debug/line_helper.hpp>
 
 namespace rendering_engine
 {
@@ -37,7 +37,7 @@ namespace rendering_engine::debug
     // tinted with the light's colour. The geometry tracks the light's
     // position / colour every frame, so the helper must not outlive the
     // light it points at.
-    struct point_light_helper : public helper
+    struct point_light_helper : public line_helper
     {
         explicit point_light_helper(const point_light* light, float size = 0.25f);
 

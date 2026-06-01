@@ -23,7 +23,7 @@
 #pragma once
 
 #include <infrastructure/math/math.hpp>
-#include <rendering_engine/debug/helper.hpp>
+#include <rendering_engine/debug/line_helper.hpp>
 #include <rendering_engine/util/color.hpp>
 
 namespace rendering_engine
@@ -42,7 +42,7 @@ namespace rendering_engine::debug
     //
     // Visualising the active camera's own frustum is degenerate (it fills
     // the screen); this is meant for a secondary / inactive camera.
-    struct camera_helper : public helper
+    struct camera_helper : public line_helper
     {
         explicit camera_helper(const camera* cam, util::color color = util::color{200, 200, 80, 255});
 

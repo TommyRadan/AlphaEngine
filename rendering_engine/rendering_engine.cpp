@@ -27,13 +27,14 @@
 #include <infrastructure/settings.hpp>
 #include <rendering_engine/camera/camera.hpp>
 #include <rendering_engine/debug/axes_helper.hpp>
-#include <rendering_engine/debug/grid_helper.hpp>
 #include <rendering_engine/debug/helper.hpp>
+#include <rendering_engine/debug/infinite_grid.hpp>
 #include <rendering_engine/debug_ui/imgui_layer.hpp>
 #include <rendering_engine/gpu/command_encoder.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/ibl/environment.hpp>
 #include <rendering_engine/materials/basic_material.hpp>
+#include <rendering_engine/materials/grid_material.hpp>
 #include <rendering_engine/materials/line_material.hpp>
 #include <rendering_engine/materials/phong_material.hpp>
 #include <rendering_engine/materials/points_material.hpp>
@@ -146,6 +147,8 @@ void rendering_engine::context::init()
     // Depth-disabled line variant for the debug gizmos so they always
     // read on top in the depth-less debug pass.
     m_debug_line_material = std::make_unique<line_material>(scene_frame_layout, /*depth_tested=*/false);
+    // Analytic infinite-grid material; shares the scene per-frame layout.
+    m_grid_material = std::make_unique<grid_material>(scene_frame_layout);
     m_ui_material = std::make_unique<ui_material>();
     LOG_INF("Rendering Engine: basic_material, phong_material, standard_material, points_material, line_material and "
             "ui_material constructed");
@@ -182,14 +185,16 @@ void rendering_engine::context::init()
     debug_ui::init();
 
 #if _DEBUG
-    // Provide a couple of always-available reference gizmos (ground grid
-    // + world axes) so a fresh debug build has something to toggle from
-    // the overlay's Helpers panel. They auto-register into the
-    // debug-renderable registry and the helper registry on construction.
-    // Game code can add the box / light / camera helpers against its own
-    // objects the same way. The debug pass is dropped in release, so this
-    // whole block compiles out there.
-    m_debug_helpers.push_back(std::make_unique<debug::grid_helper>());
+    // Provide a couple of always-available reference gizmos (the infinite
+    // ground grid + world axes) so a fresh debug build has something to
+    // toggle from the overlay's Helpers panel. They auto-register into the
+    // matching renderable registry and the helper registry on
+    // construction: the infinite grid into the scene pass (depth-tested),
+    // the axes into the always-on-top debug pass. Game code can add the
+    // box / light / camera helpers against its own objects the same way.
+    // The debug pass is dropped in release, so this whole block compiles
+    // out there.
+    m_debug_helpers.push_back(std::make_unique<debug::infinite_grid>());
     m_debug_helpers.push_back(std::make_unique<debug::axes_helper>());
 #endif
 }
@@ -217,6 +222,7 @@ void rendering_engine::context::quit()
     // Then materials, which own pipelines that reference the device.
     // Release them before the device tears its pools down.
     m_ui_material.reset();
+    m_grid_material.reset();
     m_debug_line_material.reset();
     m_line_material.reset();
     m_points_material.reset();
@@ -338,6 +344,11 @@ rendering_engine::line_material& rendering_engine::context::get_line_material()
 rendering_engine::line_material& rendering_engine::context::get_debug_line_material()
 {
     return *m_debug_line_material;
+}
+
+rendering_engine::grid_material& rendering_engine::context::get_grid_material()
+{
+    return *m_grid_material;
 }
 
 rendering_engine::ui_material& rendering_engine::context::get_ui_material()

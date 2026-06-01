@@ -45,7 +45,7 @@ namespace rendering_engine::debug
     } // namespace
 
     directional_light_helper::directional_light_helper(const directional_light* light, float size)
-        : helper("Directional light"), m_light(light), m_size(size)
+        : line_helper("Directional light"), m_light(light), m_size(size)
     {
     }
 

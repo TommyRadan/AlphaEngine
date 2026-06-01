@@ -31,7 +31,7 @@
 namespace rendering_engine::debug
 {
     box_helper::box_helper(const infrastructure::math::aabb& box, util::color color)
-        : helper("Box"), m_box(box), m_color(color)
+        : line_helper("Box"), m_box(box), m_color(color)
     {
         rebuild();
     }
