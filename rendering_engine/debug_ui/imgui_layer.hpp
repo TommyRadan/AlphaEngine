@@ -33,11 +33,12 @@
  * type, so callers in the always-compiled engine core (window, rendering
  * context) can include this header unconditionally.
  *
- * ImGui currently renders through the OpenGL3 backend only. When the
- * Vulkan backend is selected the layer initialises to an inert state and
- * logs once; bringing the Vulkan ImGui backend up is tracked as a
- * follow-up (it needs the backend to expose its instance / device / queue
- * / descriptor pool).
+ * ImGui renders through the OpenGL3 or the Vulkan backend, matching the
+ * GPU backend the engine brought up. Either way the draw data is recorded
+ * into the swapchain-targeted debug pass: the layer subscribes to
+ * @ref event_engine::render_debug in @ref init and records there, inside
+ * the still-open render pass, so the same injection point works for both
+ * the immediate-mode OpenGL backend and Vulkan's recorded command buffer.
  */
 
 #pragma once
@@ -45,9 +46,11 @@
 namespace rendering_engine::debug_ui
 {
     /**
-     * @brief Brings ImGui and its SDL3 + OpenGL3 backends up against the
-     *        live window and GL context. Call once after the window and
-     *        GPU device are initialised. No-op in release.
+     * @brief Brings ImGui and its SDL3 + OpenGL3 / Vulkan backends up
+     *        against the live window and GPU device, and subscribes to
+     *        @ref event_engine::render_debug so the overlay is recorded
+     *        into the debug pass. Call once after the window, GPU device
+     *        and passes are initialised. No-op in release.
      */
     void init();
 
@@ -62,14 +65,15 @@ namespace rendering_engine::debug_ui
     void process_event(const void* sdl_event);
 
     /**
-     * @brief Builds and renders the debug overlay for the current frame.
+     * @brief Opens a new ImGui frame and builds the debug panels.
      *
-     * Runs a full ImGui frame (new-frame / build panels / render) and
-     * paints the draw data onto the default framebuffer, so it must be
-     * called after the rendering passes have submitted and before the
-     * buffers are swapped. No-op in release.
+     * Runs the backend / platform new-frame, builds the overlay (FPS,
+     * frame-time profiler, settings inspector) and calls @c ImGui::Render
+     * so the draw data is ready. Must be called once per frame *before*
+     * the rendering passes run, since the draw data is consumed inside the
+     * debug pass via @ref event_engine::render_debug. No-op in release.
      */
-    void render();
+    void begin_frame();
 
     /** @brief True when a focused panel is capturing keyboard input. */
     bool wants_keyboard();

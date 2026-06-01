@@ -53,6 +53,10 @@ namespace rendering_engine::gpu::backend::vulkan
                                          size_t offset,
                                          uint32_t draw_count,
                                          uint32_t stride) override;
+        void* native_command_buffer() const noexcept override
+        {
+            return m_cmd;
+        }
         void end() override;
 
     private:

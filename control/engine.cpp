@@ -142,10 +142,12 @@ namespace control
     void engine::tick()
     {
         window->tick();
+        // Build the ImGui debug overlay before the passes run; its draw
+        // data is recorded inside the swapchain-targeted debug pass (via
+        // the render_debug event) so it composites on top of the frame on
+        // both the OpenGL and Vulkan backends. No-op in release builds.
+        rendering_engine::debug_ui::begin_frame();
         renderer->render();
-        // Paint the ImGui debug overlay on top of the rendered frame
-        // before presenting. No-op in release builds.
-        rendering_engine::debug_ui::render();
         window->swap_buffers();
         time->perform_tick();
     }

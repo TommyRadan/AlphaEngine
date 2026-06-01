@@ -191,11 +191,13 @@ add_library(imgui STATIC
     ${imgui_SOURCE_DIR}/imgui_widgets.cpp
     ${imgui_SOURCE_DIR}/imgui_demo.cpp
     ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl3.cpp
-    ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp)
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_vulkan.cpp)
 target_include_directories(imgui PUBLIC ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/backends)
 # The SDL3 backend needs the SDL headers; the OpenGL3 backend ships its
-# own function loader, so no GL link dependency is required here.
-target_link_libraries(imgui PUBLIC SDL3::SDL3-static)
+# own function loader, so no GL link dependency is required there. The
+# Vulkan backend links against the loader (default Vulkan prototypes).
+target_link_libraries(imgui PUBLIC SDL3::SDL3-static Vulkan::Vulkan)
 target_link_libraries(AlphaEngine $<$<CONFIG:Debug>:imgui>)
 target_compile_definitions(AlphaEngine PRIVATE $<$<CONFIG:Debug>:ALPHAENGINE_HAS_IMGUI>)
 
