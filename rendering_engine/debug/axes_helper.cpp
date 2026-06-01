@@ -28,7 +28,7 @@
 
 namespace rendering_engine::debug
 {
-    axes_helper::axes_helper(float size) : helper("Axes")
+    axes_helper::axes_helper(float size) : line_helper("Axes")
     {
         namespace math = infrastructure::math;
 

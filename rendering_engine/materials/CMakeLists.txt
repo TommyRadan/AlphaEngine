@@ -1,6 +1,8 @@
 target_sources(AlphaEngine PRIVATE
     basic_material.cpp
     basic_material.hpp
+    grid_material.cpp
+    grid_material.hpp
     line_material.cpp
     line_material.hpp
     material.cpp

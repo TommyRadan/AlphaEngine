@@ -25,30 +25,40 @@
 #include <vector>
 
 #include <infrastructure/math/math.hpp>
-#include <rendering_engine/renderables/line.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
 #include <rendering_engine/util/color.hpp>
-#include <rendering_engine/util/transform.hpp>
 
 namespace rendering_engine::debug
 {
+    // Which pass a helper draws in.
+    enum class helper_layer
+    {
+        // The depth-less debug-overlay pass: always-on-top gizmos that
+        // never get occluded (axes, light/camera/box wireframes). Drawn
+        // only in debug builds.
+        overlay,
+
+        // The 3D scene pass: depth-tested geometry that integrates with
+        // the scene and is occluded by it (the infinite ground grid).
+        scene,
+    };
+
     // Base for the debug gizmo family — the analogue of Three.js's
-    // @c *Helper objects (grid, axes, bounding box, light, camera
-    // frustum). A helper owns a single @ref line renderable drawn as
-    // independent segments through the shared @ref line_material, and on
-    // construction registers itself twice: into the engine's
-    // debug-renderable registry (so the debug pass draws it — debug
-    // builds only) and into the process-wide helper registry the debug UI
-    // walks to toggle visibility. Simply keeping a helper alive is enough
-    // for it to draw; destroying it unregisters from both.
+    // @c *Helper objects. A helper carries a display name and a
+    // visibility flag, and on construction registers itself twice: into
+    // the process-wide helper registry the debug UI walks to toggle
+    // visibility, and into one of the engine's renderable registries
+    // (chosen by @ref helper_layer) so the matching pass draws it.
+    // Destroying it unregisters from both.
     //
-    // Like the rest of the debug-overlay machinery the type is always
-    // compiled, but its draws are inert in release: the debug pass is
-    // dropped from the pass list there, so a registered helper is never
-    // collected.
+    // The geometry itself lives in the subclasses: @ref line_helper for
+    // the line-based overlay gizmos, @ref infinite_grid for the
+    // shader-driven ground grid. Like the rest of the debug-overlay
+    // machinery the types are always compiled, but the overlay layer is
+    // inert in release where the debug pass is dropped.
     struct helper : public renderable
     {
-        explicit helper(const char* name);
+        helper(const char* name, helper_layer layer);
         ~helper() override;
 
         helper(const helper&) = delete;
@@ -61,39 +71,14 @@ namespace rendering_engine::debug
         // debug UI flips this per helper; defaults to visible.
         bool visible{true};
 
-        // World placement of the gizmo. The grid and axes helpers leave
-        // this at identity and bake their geometry around the origin; the
-        // dynamic helpers (box, light, camera) bake world-space geometry
-        // directly and ignore it.
-        util::transform transform;
-
-        void upload() final;
-        void collect_draw_items(std::vector<draw_item>& out) final;
-
     protected:
-        // Replace the gizmo geometry with @p positions interpreted as
-        // independent line segments (vertex pairs) and upload it. The two
-        // vectors must be the same length; concrete helpers call this when
-        // their geometry changes.
-        void set_segments(const std::vector<infrastructure::math::vec3>& positions,
-                          const std::vector<infrastructure::math::vec3>& colors);
-
-        // Rebuild geometry from the helper's target before drawing.
-        // Static helpers (grid, axes) build once in their constructor and
-        // leave this a no-op; helpers that follow a moving target (light,
-        // camera) override it to refresh when the target changes. Invoked
-        // from @ref collect_draw_items.
-        virtual void refresh();
-
         // Linear-RGB triple in [0, 1] from a 0..255 @ref util::color,
-        // ignoring alpha. The debug pass writes straight to the LDR
-        // backbuffer (after tonemapping), so the value lands on screen
-        // unmodified.
+        // ignoring alpha.
         static infrastructure::math::vec3 to_rgb(const util::color& c);
 
     private:
         const char* m_name;
-        line m_line;
+        helper_layer m_layer;
     };
 
     // The helpers alive right now, in construction order. Owned by the

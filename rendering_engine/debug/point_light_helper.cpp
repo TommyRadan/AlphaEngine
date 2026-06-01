@@ -42,7 +42,7 @@ namespace rendering_engine::debug
     } // namespace
 
     point_light_helper::point_light_helper(const point_light* light, float size)
-        : helper("Point light"), m_light(light), m_size(size)
+        : line_helper("Point light"), m_light(light), m_size(size)
     {
     }
 

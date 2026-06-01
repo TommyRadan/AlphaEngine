@@ -23,7 +23,7 @@
 #pragma once
 
 #include <infrastructure/math/aabb.hpp>
-#include <rendering_engine/debug/helper.hpp>
+#include <rendering_engine/debug/line_helper.hpp>
 #include <rendering_engine/util/color.hpp>
 
 namespace rendering_engine::debug
@@ -32,7 +32,7 @@ namespace rendering_engine::debug
     // @c THREE.Box3Helper. The twelve edges are baked in world space, so
     // the inherited @ref transform is left at identity; call
     // @ref set_box to follow a box that moves.
-    struct box_helper : public helper
+    struct box_helper : public line_helper
     {
         explicit box_helper(const infrastructure::math::aabb& box = infrastructure::math::aabb{},
                             util::color color = util::color{255, 255, 0, 255});

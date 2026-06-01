@@ -12,6 +12,10 @@ target_sources(AlphaEngine PRIVATE
     grid_helper.hpp
     helper.cpp
     helper.hpp
+    infinite_grid.cpp
+    infinite_grid.hpp
+    line_helper.cpp
+    line_helper.hpp
     point_light_helper.cpp
     point_light_helper.hpp
 )

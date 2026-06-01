@@ -25,7 +25,6 @@
 #include <algorithm>
 
 #include <control/engine.hpp>
-#include <rendering_engine/materials/line_material.hpp>
 #include <rendering_engine/rendering_engine.hpp>
 
 namespace rendering_engine::debug
@@ -43,19 +42,32 @@ namespace rendering_engine::debug
         }
     } // namespace
 
-    helper::helper(const char* name)
-        : m_name(name), m_line(&control::current_engine().renderer->get_debug_line_material())
+    helper::helper(const char* name, helper_layer layer) : m_name(name), m_layer(layer)
     {
-        // Every gizmo is a list of independent segments (vertex pairs).
-        m_line.set_mode(line_mode::segments);
-
         helper_registry().push_back(this);
-        control::current_engine().renderer->register_debug_renderable(this);
+
+        auto& renderer = *control::current_engine().renderer;
+        if (m_layer == helper_layer::scene)
+        {
+            renderer.register_scene_renderable(this);
+        }
+        else
+        {
+            renderer.register_debug_renderable(this);
+        }
     }
 
     helper::~helper()
     {
-        control::current_engine().renderer->unregister_debug_renderable(this);
+        auto& renderer = *control::current_engine().renderer;
+        if (m_layer == helper_layer::scene)
+        {
+            renderer.unregister_scene_renderable(this);
+        }
+        else
+        {
+            renderer.unregister_debug_renderable(this);
+        }
 
         auto& helpers = helper_registry();
         helpers.erase(std::remove(helpers.begin(), helpers.end(), this), helpers.end());
@@ -66,41 +78,10 @@ namespace rendering_engine::debug
         return m_name;
     }
 
-    void helper::upload()
-    {
-        // Geometry is uploaded eagerly in set_segments(); nothing to do
-        // when the pass requests an upload.
-    }
-
-    void helper::set_segments(const std::vector<infrastructure::math::vec3>& positions,
-                              const std::vector<infrastructure::math::vec3>& colors)
-    {
-        m_line.set_positions(positions, colors);
-        m_line.upload();
-    }
-
-    void helper::refresh() {}
-
     infrastructure::math::vec3 helper::to_rgb(const util::color& c)
     {
         return infrastructure::math::vec3{
             static_cast<float>(c.r) / 255.0f, static_cast<float>(c.g) / 255.0f, static_cast<float>(c.b) / 255.0f};
-    }
-
-    void helper::collect_draw_items(std::vector<draw_item>& out)
-    {
-        if (!visible)
-        {
-            return;
-        }
-
-        // Let dynamic gizmos follow their target before they draw.
-        refresh();
-
-        // Place the (mostly origin-baked) geometry; dynamic helpers leave
-        // the transform at identity and bake world-space vertices.
-        m_line.transform = transform;
-        m_line.collect_draw_items(out);
     }
 
     const std::vector<helper*>& registered_helpers()

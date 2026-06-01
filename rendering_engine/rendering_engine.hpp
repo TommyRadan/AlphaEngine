@@ -43,6 +43,7 @@ namespace rendering_engine
     struct standard_material;
     struct points_material;
     struct line_material;
+    struct grid_material;
     struct ui_material;
 
     namespace debug
@@ -164,6 +165,15 @@ namespace rendering_engine
          */
         line_material& get_debug_line_material();
 
+        /**
+         * @brief Built-in analytic infinite-grid material (the CAD-style
+         *        ground grid). Constructed in @ref init.
+         *
+         * Shares the scene per-frame layout (camera at slot 0) and is
+         * fronted by the @ref debug::infinite_grid scene renderable.
+         */
+        grid_material& get_grid_material();
+
         /** @brief Built-in 2D overlay material. Constructed in @ref init. */
         ui_material& get_ui_material();
 
@@ -224,6 +234,8 @@ namespace rendering_engine
         std::unique_ptr<line_material> m_line_material;
         // Depth-disabled line material the debug gizmos draw through.
         std::unique_ptr<line_material> m_debug_line_material;
+        // Analytic infinite-grid material fronted by debug::infinite_grid.
+        std::unique_ptr<grid_material> m_grid_material;
         std::unique_ptr<ui_material> m_ui_material;
 
         // Off-screen HDR target the scene pass renders into.

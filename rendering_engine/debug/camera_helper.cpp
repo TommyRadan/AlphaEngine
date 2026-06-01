@@ -31,7 +31,8 @@
 
 namespace rendering_engine::debug
 {
-    camera_helper::camera_helper(const camera* cam, util::color color) : helper("Camera"), m_camera(cam), m_color(color)
+    camera_helper::camera_helper(const camera* cam, util::color color)
+        : line_helper("Camera"), m_camera(cam), m_color(color)
     {
     }
 
