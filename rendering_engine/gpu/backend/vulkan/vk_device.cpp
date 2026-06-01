@@ -1660,6 +1660,10 @@ namespace rendering_engine::gpu::backend::vulkan
     {
         return m_bind_group_layouts.lookup(h.id);
     }
+    VkInstance vk_device::instance() const noexcept
+    {
+        return m_instance;
+    }
     VkDevice vk_device::vk_handle() const noexcept
     {
         return m_device;
@@ -1683,6 +1687,10 @@ namespace rendering_engine::gpu::backend::vulkan
     VkDescriptorPool vk_device::descriptor_pool() const noexcept
     {
         return m_descriptor_pool;
+    }
+    uint32_t vk_device::swapchain_image_count() const noexcept
+    {
+        return static_cast<uint32_t>(m_swapchain_images.size());
     }
     uint32_t vk_device::current_swapchain_image_index() const noexcept
     {

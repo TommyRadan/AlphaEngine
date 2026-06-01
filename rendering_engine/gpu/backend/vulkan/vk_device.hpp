@@ -109,12 +109,16 @@ namespace rendering_engine::gpu::backend::vulkan
         vk_bind_group_layout* lookup_bind_group_layout(bind_group_layout h);
 
         // Vulkan handles + helpers exposed to per-resource TUs.
+        VkInstance instance() const noexcept;
         VkDevice vk_handle() const noexcept;
         VkPhysicalDevice physical_device() const noexcept;
         VkQueue graphics_queue() const noexcept;
         uint32_t graphics_queue_family() const noexcept;
         VkCommandPool command_pool() const noexcept;
         VkDescriptorPool descriptor_pool() const noexcept;
+        // Number of images the swapchain was created with — surfaced so
+        // the Dear ImGui Vulkan backend can size its frame resources.
+        uint32_t swapchain_image_count() const noexcept;
         uint32_t current_swapchain_image_index() const noexcept;
         bool have_current_swapchain_image() const noexcept;
         bool depth_clip_control_enabled() const noexcept;

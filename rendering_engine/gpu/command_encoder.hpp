@@ -105,6 +105,19 @@ namespace rendering_engine::gpu
         virtual void
         multi_draw_indexed_indirect(buffer indirect_buffer, size_t offset, uint32_t draw_count, uint32_t stride) = 0;
 
+        // Escape hatch returning the backend-native command buffer
+        // (a @c VkCommandBuffer on Vulkan) as an opaque pointer so a
+        // debug overlay can record draws straight into the open render
+        // pass — Dear ImGui's @c ImGui_ImplVulkan_RenderDrawData wants
+        // the raw command buffer. Returns @c nullptr on backends that
+        // record immediately (OpenGL) and therefore have no command
+        // buffer to hand out; those overlays issue their draws against
+        // the bound framebuffer instead.
+        virtual void* native_command_buffer() const noexcept
+        {
+            return nullptr;
+        }
+
         // Close the pass. After this call no further methods may be
         // invoked on the encoder. The next pass on the same command
         // encoder may target a different render target.
