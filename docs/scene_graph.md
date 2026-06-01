@@ -94,7 +94,20 @@ The model lands in stages:
    they appear.
 
 The `external/scene_graph_demo_module` is the worked example: a solar system —
-an emissive sun sphere with a point light (`light_component`) at the centre, a
-handful of orbiting planet spheres (`mesh_component`), and retrograde moons that
-orbit the other way — all driven purely by spinning the orbit-pivot nodes, with
-scale confined to childless visual leaves so it never contaminates a subtree.
+an emissive sun sphere with a shadow-casting point light (`light_component`) at
+the centre, a handful of orbiting planet spheres (`mesh_component`), and
+retrograde moons that orbit the other way — all driven purely by spinning the
+orbit-pivot nodes, with scale confined to childless visual leaves so it never
+contaminates a subtree. The sun's point light uses the omni shadow map (below),
+so moons fall dark behind their planets and cast eclipse shadows.
+
+## Point-light (omni) shadows
+
+`point_shadow_pass` renders the scene's depth from the first shadow-casting
+`point_light` into six perspective depth maps (±X/±Y/±Z, 90° FOV) — a cube map
+emulated with six 2D targets, so the device needs no cube render-target support.
+The `scene_pass` binds the six maps, their view-projections, and the light
+position into the per-frame group; the lit shader selects the face by the major
+axis of (fragment − light), projects, and PCF-compares to occlude that light.
+Mirrors the directional `shadow_pass`. Set `point_light::cast_shadow` to enable;
+only the first shadow-casting point light is honoured.

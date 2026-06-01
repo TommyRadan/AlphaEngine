@@ -42,6 +42,7 @@
 #include <rendering_engine/materials/ui_material.hpp>
 #include <rendering_engine/passes/debug_pass.hpp>
 #include <rendering_engine/passes/pass.hpp>
+#include <rendering_engine/passes/point_shadow_pass.hpp>
 #include <rendering_engine/passes/post/bloom_pass.hpp>
 #include <rendering_engine/passes/post/fxaa_pass.hpp>
 #include <rendering_engine/passes/post/tonemap_pass.hpp>
@@ -110,7 +111,11 @@ void rendering_engine::context::init()
     // bind group and query the light-space matrix each frame; it walks
     // the same scene-renderable registry.
     auto shadow = std::make_unique<shadow_pass>(&m_scene_renderables);
-    auto scene = std::make_unique<scene_pass>(&m_scene_renderables, shadow.get());
+    // The omni shadow pass renders six depth faces from the first shadow-casting
+    // point light; like the directional shadow it runs before the scene pass so
+    // its maps are ready for the per-frame bind group.
+    auto point_shadow = std::make_unique<point_shadow_pass>(&m_scene_renderables);
+    auto scene = std::make_unique<scene_pass>(&m_scene_renderables, shadow.get(), point_shadow.get());
     const gpu::bind_group_layout scene_frame_layout = scene->frame_bind_group_layout();
     // Kept so create_standard_material can build extra materials against
     // the same per-frame layout the scene pass binds at slot 0.
@@ -170,6 +175,7 @@ void rendering_engine::context::init()
     // The shadow pass renders the light's depth map first so the scene
     // pass can sample it the same frame.
     m_passes.push_back(std::move(shadow));
+    m_passes.push_back(std::move(point_shadow));
     m_passes.push_back(std::move(scene));
     m_passes.push_back(std::move(skybox));
     m_passes.push_back(std::move(bloom));

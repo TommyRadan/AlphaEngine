@@ -32,6 +32,7 @@ namespace rendering_engine
 {
     struct renderable;
     struct shadow_pass;
+    struct point_shadow_pass;
 
     /**
      * @brief 3D scene pass. Clears the swapchain colour and depth,
@@ -56,7 +57,10 @@ namespace rendering_engine
         // scene pass bakes its depth map into the per-frame bind group
         // and uploads its light-space matrix each frame so the lit
         // materials can sample it. May be null to disable shadowing.
-        scene_pass(std::vector<renderable*>* registry, shadow_pass* shadow);
+        // @p point_shadow is the omni shadow pass for the first shadow-casting
+        // point light; its six depth maps are baked into the per-frame bind
+        // group and its matrices uploaded each frame. May be null.
+        scene_pass(std::vector<renderable*>* registry, shadow_pass* shadow, point_shadow_pass* point_shadow);
         ~scene_pass() override;
 
         scene_pass(const scene_pass&) = delete;
@@ -93,12 +97,14 @@ namespace rendering_engine
         gpu::buffer m_frame_ubo{};
         gpu::buffer m_lights_ubo{};
         gpu::buffer m_shadow_ubo{};
+        gpu::buffer m_point_shadow_ubo{};
         gpu::bind_group m_frame_bind_group{};
 
-        // Shadow pass feeding the per-frame group. Non-owning — the
-        // engine context owns both passes and orders the shadow pass
-        // before this one. Null disables shadowing.
+        // Shadow passes feeding the per-frame group. Non-owning — the
+        // engine context owns the passes and orders them before this one.
+        // Null disables that kind of shadowing.
         shadow_pass* m_shadow{nullptr};
+        point_shadow_pass* m_point_shadow{nullptr};
 
         // Reused across frames so the underlying allocation persists.
         std::vector<draw_item> m_items;
