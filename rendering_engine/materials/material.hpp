@@ -139,13 +139,19 @@ namespace rendering_engine
         // stored, and exposed to the subclass so it can build its
         // @ref m_per_material_bind_group against it. Leave it empty for
         // materials with no shared per-material resources.
+        //
+        // @p topology selects the primitive assembly mode baked into
+        // the pipeline; it defaults to @c triangles so existing
+        // materials need no changes. Point-list materials pass
+        // @c primitive_topology::points.
         void construct_pipeline(const std::string& vertex_source,
                                 const std::string& fragment_source,
                                 const gpu::vertex_buffer_layout& vertex_layout,
                                 const gpu::bind_group_layout_descriptor& draw_layout,
                                 gpu::bind_group_layout frame_layout,
                                 const material_params& params,
-                                const gpu::bind_group_layout_descriptor& material_layout = {});
+                                const gpu::bind_group_layout_descriptor& material_layout = {},
+                                gpu::primitive_topology topology = gpu::primitive_topology::triangles);
 
         // Build the pipeline + per-draw layout from source. When
         // @p frame_layout is valid, slot 0 is reserved for a
@@ -153,6 +159,8 @@ namespace rendering_engine
         // @ref per_draw_slot returns 1; otherwise the per-draw
         // group occupies slot 0. When @p material_layout has entries
         // it becomes the trailing descriptor set (per-material).
+        // @p topology bakes the primitive assembly mode into the
+        // pipeline (defaults to @c triangles).
         void construct_pipeline(const std::string& vertex_source,
                                 const std::string& fragment_source,
                                 const gpu::vertex_buffer_layout& vertex_layout,
@@ -161,7 +169,8 @@ namespace rendering_engine
                                 const gpu::depth_state& depth,
                                 const gpu::blend_state& blend,
                                 const gpu::rasterizer_state& rasterizer,
-                                const gpu::bind_group_layout_descriptor& material_layout = {});
+                                const gpu::bind_group_layout_descriptor& material_layout = {},
+                                gpu::primitive_topology topology = gpu::primitive_topology::triangles);
 
         void destruct_pipeline();
 

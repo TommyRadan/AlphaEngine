@@ -10,5 +10,9 @@ target_sources(AlphaEngine PRIVATE
 # sphere at the origin, so it is left out of the build while
 # skybox_demo_module owns the origin sphere. Swap the two filenames to
 # bring the Blinn-Phong demo back.
+#
+# points_demo_module.cpp showcases points_material + the points renderable
+# as a coloured Fibonacci-sphere point cloud. It also owns the origin, so
+# it is left out of the build; swap it in for skybox_demo_module to view it.
 
 add_subdirectory(api)
