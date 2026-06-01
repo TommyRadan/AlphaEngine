@@ -62,6 +62,12 @@ Before finishing any task:
 2. **Fix style and naming before handing back.** Run `./scripts/check-style.ps1 -Fix` and `./scripts/check-naming.ps1 -Fix`, then re-run both without `-Fix` and confirm they pass. CI will fail otherwise.
 3. **Confirm the code builds.** Run `./scripts/build.ps1` (or the equivalent `cmake --build build` invocation for the active toolchain) and verify the configure + build steps both succeed. A passing format/tidy check is not a substitute for a real build.
 
+### Authorship and attribution
+
+- **All work is authored by Tomislav Radanovic `<tommy.radan@gmail.com>`.** Set this as the commit author/committer (e.g. `git -c user.name="Tomislav Radanovic" -c user.email="tommy.radan@gmail.com" commit ...`).
+- **Never mention Claude, AI assistance, or any tool involvement** anywhere that ends up in the repository — commit messages, PR titles/bodies, branch names, code comments, or docs. Do not add `Co-authored-by` or "Generated with" trailers.
+- **Branch names follow the `type/short-kebab-description` convention** seen across the repo (`feat/box-primitive`, `chore/sdl3-static`, `cmake/glm-fetchcontent`, `docs/doxygen-public-headers`, `ci/github-actions`) — not the auto-generated `claude/...` or random-name style.
+
 ## CI
 
 `.github/workflows/ci.yml` runs three jobs on every push/PR to `master`: clang-format (Ubuntu, LLVM 18), clang-tidy (Ubuntu, LLVM 18 + libc++ — the CMake passes `-stdlib=libc++` when the compiler is Clang, so the libc++ headers are required), and a Windows MSVC build matrix (Debug + Release) that uploads the built executable as an artifact and posts a sticky PR comment linking to it.
