@@ -3,6 +3,7 @@ target_sources(AlphaEngine PRIVATE
     buffer.hpp
     log.cpp
     log.hpp
+    pool.hpp
     settings.cpp
     settings.hpp
     time.cpp
