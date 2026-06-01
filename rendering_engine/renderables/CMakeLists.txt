@@ -2,6 +2,8 @@ target_sources(AlphaEngine PRIVATE
     draw_item.hpp
     model.cpp
     model.hpp
+    points.cpp
+    points.hpp
     renderable.hpp
 )
 

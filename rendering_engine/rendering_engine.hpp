@@ -41,6 +41,7 @@ namespace rendering_engine
     struct basic_material;
     struct phong_material;
     struct standard_material;
+    struct points_material;
     struct ui_material;
 
     /**
@@ -139,6 +140,9 @@ namespace rendering_engine
          */
         std::unique_ptr<standard_material> create_standard_material();
 
+        /** @brief Built-in unlit point-cloud material (point topology). Constructed in @ref init. */
+        points_material& get_points_material();
+
         /** @brief Built-in 2D overlay material. Constructed in @ref init. */
         ui_material& get_ui_material();
 
@@ -187,6 +191,7 @@ namespace rendering_engine
         std::unique_ptr<basic_material> m_basic_material;
         std::unique_ptr<phong_material> m_phong_material;
         std::unique_ptr<standard_material> m_standard_material;
+        std::unique_ptr<points_material> m_points_material;
         std::unique_ptr<ui_material> m_ui_material;
 
         // Off-screen HDR target the scene pass renders into.

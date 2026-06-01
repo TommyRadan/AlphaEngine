@@ -116,6 +116,14 @@ namespace rendering_engine::gpu::backend::opengl
         // reflection vector crosses them. Core since OpenGL 3.2.
         glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
 
+        // Let the vertex shader drive @c gl_PointSize for point-list
+        // pipelines (e.g. @ref points_material). Without this the
+        // fixed-function point size is locked to whatever the last
+        // @c glPointSize set, so per-material sizing would be ignored.
+        // Core since OpenGL 3.2; on Vulkan @c gl_PointSize is always
+        // honoured, so this keeps both backends in agreement.
+        glEnable(GL_PROGRAM_POINT_SIZE);
+
         // The default swapchain target is just framebuffer
         // 0 with the window's current dimensions; the engine
         // updates dimensions through @ref resize_swapchain.
