@@ -133,12 +133,29 @@ namespace scene_graph
             }
         }
 
+        /**
+         * @brief Type-erased active/visible toggle used by @ref node::set_active.
+         *
+         * Dispatches to the component's @c on_active_changed(node&, bool) if it
+         * defines one, so components that own external state (a renderable's
+         * registration) can show or hide it when a subtree is enabled/disabled.
+         */
+        void set_active(std::type_index type, component_handle handle, node& owner, bool active) noexcept
+        {
+            auto it = m_pools.find(type);
+            if (it != m_pools.end())
+            {
+                it->second->set_active(handle, owner, active);
+            }
+        }
+
     private:
         struct pool_base
         {
             virtual ~pool_base() = default;
             virtual void erase(component_handle handle) noexcept = 0;
             virtual void update(component_handle handle, node& owner) noexcept = 0;
+            virtual void set_active(component_handle handle, node& owner, bool active) noexcept = 0;
         };
 
         template<typename C>
@@ -170,6 +187,17 @@ namespace scene_graph
                     if (C* c = data.get(make_handle<C>(handle)))
                     {
                         c->on_update(owner);
+                    }
+                }
+            }
+
+            void set_active(component_handle handle, node& owner, bool active) noexcept override
+            {
+                if constexpr (requires(C& c, node& n, bool a) { c.on_active_changed(n, a); })
+                {
+                    if (C* c = data.get(make_handle<C>(handle)))
+                    {
+                        c->on_active_changed(owner, active);
                     }
                 }
             }

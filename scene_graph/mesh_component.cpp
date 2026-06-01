@@ -43,13 +43,39 @@ void scene_graph::mesh_component::on_attach(node& owner)
     // Draw at the node's world transform: the model's local transform stays
     // identity and inherits the node pose through the transform parent chain.
     m_model->transform.set_parent(&owner.transform);
-    control::current_engine().renderer->register_scene_renderable(m_model.get());
-    m_registered = true;
+    register_model();
 }
 
 void scene_graph::mesh_component::on_destroy()
 {
-    if (m_registered && m_model)
+    unregister_model();
+}
+
+void scene_graph::mesh_component::on_active_changed(node& owner, bool active)
+{
+    (void)owner;
+    if (active)
+    {
+        register_model();
+    }
+    else
+    {
+        unregister_model();
+    }
+}
+
+void scene_graph::mesh_component::register_model()
+{
+    if (m_model && !m_registered)
+    {
+        control::current_engine().renderer->register_scene_renderable(m_model.get());
+        m_registered = true;
+    }
+}
+
+void scene_graph::mesh_component::unregister_model()
+{
+    if (m_model && m_registered)
     {
         control::current_engine().renderer->unregister_scene_renderable(m_model.get());
         m_registered = false;

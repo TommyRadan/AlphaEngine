@@ -27,6 +27,7 @@
 
 #pragma once
 
+#include <string>
 #include <typeindex>
 #include <vector>
 
@@ -84,6 +85,54 @@ namespace scene_graph
          * @c transform.get_world_matrix() and @ref world_matrix agree.
          */
         rendering_engine::util::transform transform;
+
+        /** @brief Optional label, used by @ref find. Not required to be unique. */
+        std::string name;
+
+        /**
+         * @brief Returns the first node in this subtree (this node included)
+         *        whose @ref name equals @p target, or @c nullptr.
+         *
+         * Depth-first, in child insertion order.
+         */
+        node* find(const std::string& target);
+
+        // --- World-space helpers -------------------------------------------
+
+        /** @brief This node's world-space position (translation of @ref world_matrix). */
+        infrastructure::math::vec3 world_position() const;
+
+        /**
+         * @brief Places the node at @p world_position in world space by solving
+         *        for the local position under the current parent.
+         */
+        void set_world_position(const infrastructure::math::vec3& world_position);
+
+        /**
+         * @brief Orients the node so its forward axis points at @p target in
+         *        world space. Exact when ancestors are unrotated/unscaled; under
+         *        a rotated parent the @p up handling is approximate.
+         */
+        void look_at(const infrastructure::math::vec3& target,
+                     const infrastructure::math::vec3& up = infrastructure::math::vec3{0.0f, 0.0f, 1.0f});
+
+        // --- Active / visible state ----------------------------------------
+
+        /** @brief This node's own active flag (ignores ancestors). */
+        bool is_active() const noexcept;
+
+        /** @brief True when this node and every ancestor are active. */
+        bool is_effective_active() const noexcept;
+
+        /**
+         * @brief Enables or disables this node (and, by inheritance, its subtree).
+         *
+         * A disabled subtree is skipped by @ref update_subtree and its components
+         * are told to hide via @c on_active_changed (e.g. a @c mesh_component
+         * unregisters its model from the renderer), so it stops both updating and
+         * drawing. Re-enabling restores it, provided every ancestor is active.
+         */
+        void set_active(bool active);
 
         /**
          * @brief Attaches @p child below this node.
@@ -169,6 +218,12 @@ namespace scene_graph
                     component->on_attach(*this);
                 }
             }
+            // If the node is currently disabled, hide the freshly attached
+            // component so it matches the subtree's visibility.
+            if (!m_effective_active)
+            {
+                m_store->set_active(std::type_index(typeid(C)), handle, *this, false);
+            }
             return component;
         }
 
@@ -232,9 +287,17 @@ namespace scene_graph
             component_handle handle;
         };
 
+        // Recomputes effective-active from @p parent_effective, dispatching
+        // on_active_changed to this node's components when it flips, and recurses
+        // into children with the new value.
+        void refresh_active(bool parent_effective);
+
         node* m_parent;
         std::vector<node*> m_children;
         component_store* m_store;
         std::vector<component_entry> m_components;
+
+        bool m_active;
+        bool m_effective_active;
     };
 } // namespace scene_graph

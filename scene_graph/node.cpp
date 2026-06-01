@@ -24,7 +24,7 @@
 
 #include <algorithm>
 
-scene_graph::node::node() : m_parent{nullptr}, m_store{nullptr} {}
+scene_graph::node::node() : m_parent{nullptr}, m_store{nullptr}, m_active{true}, m_effective_active{true} {}
 
 scene_graph::node::~node()
 {
@@ -76,6 +76,10 @@ void scene_graph::node::add(node& child)
         child.set_store(m_store);
     }
     m_children.push_back(&child);
+
+    // The child subtree inherits this node's effective-active state, so a node
+    // moved under a disabled parent hides (and shows again under an enabled one).
+    child.refresh_active(m_effective_active);
 }
 
 void scene_graph::node::remove(node& child)
@@ -108,6 +112,12 @@ infrastructure::math::mat4 scene_graph::node::world_matrix() const
 
 void scene_graph::node::update_subtree()
 {
+    // A disabled node freezes its whole subtree — no component updates run.
+    if (!m_active)
+    {
+        return;
+    }
+
     if (m_store != nullptr)
     {
         for (const component_entry& entry : m_components)
@@ -139,4 +149,98 @@ void scene_graph::node::set_store(component_store* store) noexcept
 scene_graph::component_store* scene_graph::node::store() const noexcept
 {
     return m_store;
+}
+
+scene_graph::node* scene_graph::node::find(const std::string& target)
+{
+    if (name == target)
+    {
+        return this;
+    }
+    for (node* child : m_children)
+    {
+        if (node* found = child->find(target))
+        {
+            return found;
+        }
+    }
+    return nullptr;
+}
+
+infrastructure::math::vec3 scene_graph::node::world_position() const
+{
+    const infrastructure::math::mat4 world = world_matrix();
+    return infrastructure::math::vec3{world.m[12], world.m[13], world.m[14]};
+}
+
+void scene_graph::node::set_world_position(const infrastructure::math::vec3& world_position)
+{
+    // local = inverse(parent_world) * world_position (as a point).
+    if (m_parent == nullptr)
+    {
+        transform.set_position(world_position);
+        return;
+    }
+    const infrastructure::math::mat4 parent_inverse = infrastructure::math::inverse(m_parent->world_matrix());
+    const infrastructure::math::vec4 local = parent_inverse * infrastructure::math::vec4{world_position, 1.0f};
+    transform.set_position(infrastructure::math::vec3{local.x, local.y, local.z});
+}
+
+void scene_graph::node::look_at(const infrastructure::math::vec3& target, const infrastructure::math::vec3& up)
+{
+    // Re-express the world-space target in the node's local frame, then defer to
+    // the transform's local look_at. Exact when ancestors are unrotated.
+    if (m_parent == nullptr)
+    {
+        transform.look_at(target, up);
+        return;
+    }
+    const infrastructure::math::mat4 parent_inverse = infrastructure::math::inverse(m_parent->world_matrix());
+    const infrastructure::math::vec4 local_target = parent_inverse * infrastructure::math::vec4{target, 1.0f};
+    transform.look_at(infrastructure::math::vec3{local_target.x, local_target.y, local_target.z}, up);
+}
+
+bool scene_graph::node::is_active() const noexcept
+{
+    return m_active;
+}
+
+bool scene_graph::node::is_effective_active() const noexcept
+{
+    return m_effective_active;
+}
+
+void scene_graph::node::set_active(bool active)
+{
+    if (active == m_active)
+    {
+        return;
+    }
+    m_active = active;
+    const bool parent_effective = m_parent != nullptr ? m_parent->m_effective_active : true;
+    refresh_active(parent_effective);
+}
+
+void scene_graph::node::refresh_active(bool parent_effective)
+{
+    const bool effective = parent_effective && m_active;
+    if (effective == m_effective_active)
+    {
+        // No change here means no change downstream either.
+        return;
+    }
+    m_effective_active = effective;
+
+    if (m_store != nullptr)
+    {
+        for (const component_entry& entry : m_components)
+        {
+            m_store->set_active(entry.type, entry.handle, *this, effective);
+        }
+    }
+
+    for (node* child : m_children)
+    {
+        child->refresh_active(effective);
+    }
 }

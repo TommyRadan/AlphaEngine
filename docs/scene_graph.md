@@ -62,6 +62,24 @@ A node's local transform is `rendering_engine::util::transform`. Parenting a nod
 renderables build their per-draw model matrix from `get_world_matrix()`, so moving
 a parent node moves its whole subtree.
 
+World matrices are **cached**. Each transform tracks a local-change version and a
+world version; `get_world_matrix()` rebuilds its cached world matrix only when its
+own local components changed or an ancestor's world version advanced. A static
+hierarchy therefore costs no repeated matrix multiplies, and the scheme stays
+correct for the renderable-transform-parented-to-node case (the renderable polls
+the node transform's world version) without push-based invalidation.
+
+## Node conveniences
+
+- **`name` + `find(name)`** — depth-first search of a subtree (self included).
+- **`active`** — `set_active(false)` disables a node and, by inheritance, its
+  subtree: `update_subtree` skips it and components are told to hide via the
+  `on_active_changed(node&, bool)` hook (e.g. `mesh_component` unregisters its
+  model from the renderer). `is_effective_active()` folds in ancestors.
+- **World-space helpers** — `world_position()`, `set_world_position()` (solves for
+  the local position under the current parent), and `look_at(target)` (exact when
+  ancestors are unrotated).
+
 ## Status / roadmap
 
 The model lands in stages:
