@@ -3,16 +3,16 @@ target_sources(AlphaEngine PRIVATE
     exit_module.cpp
     fps_overlay_module.cpp
     frame_module.cpp
-    skybox_demo_module.cpp
+    points_demo_module.cpp
 )
 
-# phong_demo_module.cpp is the previous scene showcase; it places a lit
-# sphere at the origin, so it is left out of the build while
-# skybox_demo_module owns the origin sphere. Swap the two filenames to
-# bring the Blinn-Phong demo back.
+# Only one scene-owning demo module is compiled at a time because each
+# places its showcase geometry at the origin. points_demo_module.cpp is
+# the active one: it showcases points_material + the points renderable as
+# a coloured Fibonacci-sphere point cloud.
 #
-# points_demo_module.cpp showcases points_material + the points renderable
-# as a coloured Fibonacci-sphere point cloud. It also owns the origin, so
-# it is left out of the build; swap it in for skybox_demo_module to view it.
+# skybox_demo_module.cpp (procedural sky + IBL sphere grid) and
+# phong_demo_module.cpp (Blinn-Phong lit sphere) are the other showcases;
+# swap either filename in for points_demo_module.cpp to bring it back.
 
 add_subdirectory(api)
