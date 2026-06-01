@@ -61,6 +61,15 @@ struct settings
     const char* get_window_name() const noexcept;
     const win_type get_window_type() const noexcept;
     const bool is_double_buffered() const noexcept;
+
+    /**
+     * @brief Whether the presentation engine should wait for vertical
+     *        sync. Disabled by default for both debug and release so the
+     *        frame rate is uncapped (the debug FPS overlay is more useful
+     *        with vsync off, and release favours latency over tearing).
+     */
+    const bool is_vsync_enabled() const noexcept;
+
     const float get_field_of_view() const noexcept;
     const float get_mouse_sensitivity() const noexcept;
 
@@ -85,6 +94,7 @@ private:
     std::string m_window_name;
     win_type m_window_type;
     bool m_is_double_buffered;
+    bool m_is_vsync_enabled;
     float m_field_of_view;
     float m_mouse_sensitivity;
     bool m_is_mouse_reversed;

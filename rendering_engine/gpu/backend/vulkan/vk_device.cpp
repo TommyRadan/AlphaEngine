@@ -176,18 +176,33 @@ namespace rendering_engine::gpu::backend::vulkan
                                    : formats.front();
         }
 
-        VkPresentModeKHR pick_present_mode(VkPhysicalDevice gpu, VkSurfaceKHR surface)
+        VkPresentModeKHR pick_present_mode(VkPhysicalDevice gpu, VkSurfaceKHR surface, bool vsync_enabled)
         {
             uint32_t count = 0;
             vkGetPhysicalDeviceSurfacePresentModesKHR(gpu, surface, &count, nullptr);
             std::vector<VkPresentModeKHR> modes(count);
             vkGetPhysicalDeviceSurfacePresentModesKHR(gpu, surface, &count, modes.data());
-            for (auto m : modes)
+
+            const auto supports = [&modes](VkPresentModeKHR wanted)
+            { return std::find(modes.begin(), modes.end(), wanted) != modes.end(); };
+
+            if (vsync_enabled)
             {
-                if (m == VK_PRESENT_MODE_MAILBOX_KHR)
-                {
-                    return m;
-                }
+                // FIFO is always available and locks to the refresh rate.
+                return VK_PRESENT_MODE_FIFO_KHR;
+            }
+
+            // Vsync off: prefer IMMEDIATE (uncapped, may tear); fall back to
+            // MAILBOX (low-latency triple buffering) and finally the
+            // guaranteed FIFO when neither is exposed. Mirrors the OpenGL
+            // path, which sets a swap interval of 0 when vsync is disabled.
+            if (supports(VK_PRESENT_MODE_IMMEDIATE_KHR))
+            {
+                return VK_PRESENT_MODE_IMMEDIATE_KHR;
+            }
+            if (supports(VK_PRESENT_MODE_MAILBOX_KHR))
+            {
+                return VK_PRESENT_MODE_MAILBOX_KHR;
             }
             return VK_PRESENT_MODE_FIFO_KHR;
         }
@@ -826,7 +841,8 @@ namespace rendering_engine::gpu::backend::vulkan
         vkGetPhysicalDeviceSurfaceCapabilitiesKHR(m_physical_device, m_surface, &caps);
 
         m_surface_format = pick_surface_format(m_physical_device, m_surface);
-        m_present_mode = pick_present_mode(m_physical_device, m_surface);
+        const bool vsync_enabled = control::current_engine().settings->is_vsync_enabled();
+        m_present_mode = pick_present_mode(m_physical_device, m_surface, vsync_enabled);
 
         VkExtent2D extent = caps.currentExtent;
         if (extent.width == UINT32_MAX)

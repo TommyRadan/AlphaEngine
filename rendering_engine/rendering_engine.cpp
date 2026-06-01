@@ -26,6 +26,7 @@
 #include <infrastructure/log.hpp>
 #include <infrastructure/settings.hpp>
 #include <rendering_engine/camera/camera.hpp>
+#include <rendering_engine/debug_ui/imgui_layer.hpp>
 #include <rendering_engine/gpu/command_encoder.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/ibl/environment.hpp>
@@ -167,11 +168,19 @@ void rendering_engine::context::init()
 #if _DEBUG
     m_passes.push_back(std::move(debug));
 #endif
+
+    // Bring the ImGui debug overlay up now that the window, GL context
+    // and passes are live. No-op in release builds.
+    debug_ui::init();
 }
 
 void rendering_engine::context::quit()
 {
     auto& eng = control::current_engine();
+
+    // Tear the ImGui overlay down first, while the window and GL context
+    // it bound to are still alive. No-op in release builds.
+    debug_ui::shutdown();
 
     // Drop the passes first; their record() bodies reach for the
     // event bus we're about to release, and the passes own per-frame
