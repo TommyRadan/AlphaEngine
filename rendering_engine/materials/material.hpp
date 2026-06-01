@@ -161,7 +161,8 @@ namespace rendering_engine
                                 const gpu::depth_state& depth,
                                 const gpu::blend_state& blend,
                                 const gpu::rasterizer_state& rasterizer,
-                                const gpu::bind_group_layout_descriptor& material_layout = {});
+                                const gpu::bind_group_layout_descriptor& material_layout = {},
+                                gpu::primitive_topology topology = gpu::primitive_topology::triangles);
 
         void destruct_pipeline();
 
