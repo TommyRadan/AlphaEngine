@@ -172,6 +172,11 @@ namespace rendering_engine
         return m_frame_layout;
     }
 
+    gpu::bind_group scene_pass::frame_bind_group() const
+    {
+        return m_frame_bind_group;
+    }
+
     void scene_pass::record(gpu::command_encoder& encoder, const frame_context& ctx)
     {
         auto& eng = control::current_engine();

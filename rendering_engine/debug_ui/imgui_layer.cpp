@@ -41,6 +41,7 @@
 #include <infrastructure/log.hpp>
 #include <infrastructure/settings.hpp>
 #include <infrastructure/time.hpp>
+#include <rendering_engine/debug/helper.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_device.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_resources.hpp>
 #include <rendering_engine/gpu/command_encoder.hpp>
@@ -74,6 +75,7 @@ namespace rendering_engine::debug_ui
         bool g_show_settings = true;
         bool g_show_profiler = true;
         bool g_show_demo = false;
+        bool g_show_helpers = true;
 
         // Rolling frame-time history (milliseconds) for the profiler
         // graph, used as a ring buffer.
@@ -144,6 +146,7 @@ namespace rendering_engine::debug_ui
                 {
                     ImGui::MenuItem("Profiler", nullptr, &g_show_profiler);
                     ImGui::MenuItem("Settings", nullptr, &g_show_settings);
+                    ImGui::MenuItem("Helpers", nullptr, &g_show_helpers);
                     ImGui::MenuItem("ImGui demo", nullptr, &g_show_demo);
                     ImGui::EndPopup();
                 }
@@ -231,6 +234,59 @@ namespace rendering_engine::debug_ui
             ImGui::End();
         }
 
+        // Lists every live debug gizmo (the THREE.*Helper analogues) with
+        // a checkbox bound to its visibility, plus master show / hide
+        // shortcuts. The helper registry is shared with the renderer, so
+        // the toggles take effect on the next debug-pass draw.
+        void draw_helpers_window()
+        {
+            if (!g_show_helpers)
+            {
+                return;
+            }
+
+            const auto& helpers = rendering_engine::debug::registered_helpers();
+
+            ImGui::SetNextWindowSize(ImVec2{260.0f, 0.0f}, ImGuiCond_FirstUseEver);
+            if (ImGui::Begin("Helpers", &g_show_helpers))
+            {
+                if (helpers.empty())
+                {
+                    ImGui::TextDisabled("no debug helpers registered");
+                }
+                else
+                {
+                    if (ImGui::SmallButton("Show all"))
+                    {
+                        for (auto* gizmo : helpers)
+                        {
+                            gizmo->visible = true;
+                        }
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton("Hide all"))
+                    {
+                        for (auto* gizmo : helpers)
+                        {
+                            gizmo->visible = false;
+                        }
+                    }
+                    ImGui::Separator();
+
+                    // Disambiguate the checkbox ids by index so two
+                    // helpers sharing a name still toggle independently.
+                    int index = 0;
+                    for (auto* gizmo : helpers)
+                    {
+                        ImGui::PushID(index++);
+                        ImGui::Checkbox(gizmo->name(), &gizmo->visible);
+                        ImGui::PopID();
+                    }
+                }
+            }
+            ImGui::End();
+        }
+
         void build_panels()
         {
             // Push this frame's time into the rolling history first so the
@@ -242,6 +298,7 @@ namespace rendering_engine::debug_ui
             draw_fps_overlay();
             draw_profiler_window();
             draw_settings_window();
+            draw_helpers_window();
             if (g_show_demo)
             {
                 ImGui::ShowDemoWindow(&g_show_demo);

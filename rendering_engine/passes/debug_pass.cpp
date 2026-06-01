@@ -33,7 +33,10 @@
 
 namespace rendering_engine
 {
-    debug_pass::debug_pass(std::vector<renderable*>* registry) : m_registry(registry) {}
+    debug_pass::debug_pass(std::vector<renderable*>* registry, gpu::bind_group frame_bind_group)
+        : m_registry(registry), m_frame_bind_group(frame_bind_group)
+    {
+    }
 
     void debug_pass::record(gpu::command_encoder& encoder, const frame_context& ctx)
     {
@@ -60,12 +63,24 @@ namespace rendering_engine
                          { return a.mat->pipeline().id < b.mat->pipeline().id; });
 
         uint64_t last_pipeline_id = 0;
+        bool first_iter = true;
         for (const auto& item : m_items)
         {
             const uint64_t pid = item.mat->pipeline().id;
             if (pid != last_pipeline_id)
             {
                 pass_encoder->set_pipeline(item.mat->pipeline());
+
+                // Bind the camera per-frame group once after the first
+                // pipeline change so the line gizmos project with the
+                // scene camera; it sticks across later set_pipeline calls.
+                // Skipped when absent (no scene pass / camera).
+                if (first_iter && m_frame_bind_group.valid())
+                {
+                    pass_encoder->set_bind_group(0, m_frame_bind_group);
+                    first_iter = false;
+                }
+
                 if (item.mat->per_material_bind_group().valid())
                 {
                     pass_encoder->set_bind_group(item.mat->per_material_slot(), item.mat->per_material_bind_group());

@@ -53,7 +53,15 @@ namespace rendering_engine
      */
     struct debug_pass : pass
     {
-        explicit debug_pass(std::vector<renderable*>* registry);
+        // @p frame_bind_group is the scene pass's per-frame group (camera
+        // at slot 0). The debug helpers draw through the line material,
+        // whose pipeline reserves slot 0 for the camera, so binding it
+        // here projects the world-space gizmos with the same camera the
+        // scene used. The scene pass runs first and refills the backing
+        // UBO every frame, so the captured handle always reflects the
+        // current camera. An invalid handle simply binds nothing (e.g.
+        // ImGui-only debug content).
+        debug_pass(std::vector<renderable*>* registry, gpu::bind_group frame_bind_group);
         ~debug_pass() override = default;
 
         debug_pass(const debug_pass&) = delete;
@@ -66,6 +74,10 @@ namespace rendering_engine
         // debug-renderable registry. Same lifetime guarantee as
         // @ref ui_pass::m_registry.
         std::vector<renderable*>* m_registry;
+
+        // Scene pass's per-frame camera bind group, bound at slot 0 for
+        // the line-based gizmos. See the constructor note.
+        gpu::bind_group m_frame_bind_group;
 
         // Reused across frames so the underlying allocation persists.
         std::vector<draw_item> m_items;

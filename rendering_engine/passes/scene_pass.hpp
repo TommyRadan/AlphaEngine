@@ -69,6 +69,13 @@ namespace rendering_engine
         // reserve slot 0 for this layout.
         gpu::bind_group_layout frame_bind_group_layout() const;
 
+        // The per-frame bind group itself (camera / lights / shadow at
+        // slot 0). The handle is stable across frames — the pass refills
+        // the backing UBOs in record() rather than recreating the group —
+        // so the debug pass can capture it once and bind it to project
+        // its line-based gizmos with the same camera the scene used.
+        gpu::bind_group frame_bind_group() const;
+
     private:
         // Non-owning back-pointer to the engine context's
         // scene-renderable registry. The context outlives every
