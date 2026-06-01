@@ -93,6 +93,8 @@ The model lands in stages:
 6. **Further subsystems** (audio, physics) adopt the same handle/pool shape as
    they appear.
 
-The `external/scene_graph_demo_module` is the worked example: a spinning pivot
-with orbiting cube `mesh_component`s, a second-level "moon", and an orbiting
-point light via `light_component` — all driven purely by animating parent nodes.
+The `external/scene_graph_demo_module` is the worked example: a solar system —
+an emissive sun sphere with a point light (`light_component`) at the centre, a
+handful of orbiting planet spheres (`mesh_component`), and retrograde moons that
+orbit the other way — all driven purely by spinning the orbit-pivot nodes, with
+scale confined to childless visual leaves so it never contaminates a subtree.
