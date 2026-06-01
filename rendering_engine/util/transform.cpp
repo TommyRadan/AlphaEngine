@@ -25,34 +25,41 @@
 
 rendering_engine::util::transform::transform()
     : m_is_transform_matrix_dirty{true}, m_position{0.0f, 0.0f, 0.0f}, m_rotation{0.0f, 0.0f, 0.0f}, m_quaternion{},
-      m_scale{1.0f, 1.0f, 1.0f}, m_parent{nullptr}
+      m_scale{1.0f, 1.0f, 1.0f}, m_parent{nullptr}, m_local_version{1}, m_world_version{0}, m_seen_local_version{0},
+      m_seen_parent_world_version{0}
 {
+}
+
+void rendering_engine::util::transform::mark_local_dirty()
+{
+    m_is_transform_matrix_dirty = true;
+    ++m_local_version;
 }
 
 void rendering_engine::util::transform::set_position(const infrastructure::math::vec3& position)
 {
     m_position = position;
-    m_is_transform_matrix_dirty = true;
+    mark_local_dirty();
 }
 
 void rendering_engine::util::transform::set_rotation(const infrastructure::math::vec3& rotation)
 {
     m_rotation = rotation;
     m_quaternion = infrastructure::math::quat_from_euler(rotation);
-    m_is_transform_matrix_dirty = true;
+    mark_local_dirty();
 }
 
 void rendering_engine::util::transform::set_quaternion(const infrastructure::math::quat& rotation)
 {
     m_quaternion = infrastructure::math::normalize(rotation);
     m_rotation = infrastructure::math::euler_from_quat(m_quaternion);
-    m_is_transform_matrix_dirty = true;
+    mark_local_dirty();
 }
 
 void rendering_engine::util::transform::set_scale(const infrastructure::math::vec3& scale)
 {
     m_scale = scale;
-    m_is_transform_matrix_dirty = true;
+    mark_local_dirty();
 }
 
 infrastructure::math::vec3 rendering_engine::util::transform::get_position() const
@@ -86,7 +93,7 @@ void rendering_engine::util::transform::look_at(const infrastructure::math::vec3
 
     m_quaternion = infrastructure::math::quat_look_at(direction, up);
     m_rotation = infrastructure::math::euler_from_quat(m_quaternion);
-    m_is_transform_matrix_dirty = true;
+    mark_local_dirty();
 }
 
 infrastructure::math::vec3 rendering_engine::util::transform::get_forward() const
@@ -127,16 +134,41 @@ infrastructure::math::mat4 rendering_engine::util::transform::get_transform_matr
 
 infrastructure::math::mat4 rendering_engine::util::transform::get_world_matrix() const
 {
-    if (m_parent != nullptr)
+    const infrastructure::math::mat4 local = get_transform_matrix();
+
+    if (m_parent == nullptr)
     {
-        return m_parent->get_world_matrix() * get_transform_matrix();
+        // Recompute only when the local transform changed (or the cache was
+        // last built against a parent, i.e. just detached).
+        if (m_world_version == 0 || m_seen_local_version != m_local_version || m_seen_parent_world_version != 0)
+        {
+            m_world_matrix = local;
+            m_seen_local_version = m_local_version;
+            m_seen_parent_world_version = 0;
+            ++m_world_version;
+        }
+        return m_world_matrix;
     }
-    return get_transform_matrix();
+
+    // Resolve the parent first; this advances the parent's world version if any
+    // ancestor moved, so the comparison below catches the change.
+    const infrastructure::math::mat4 parent_world = m_parent->get_world_matrix();
+    if (m_world_version == 0 || m_seen_local_version != m_local_version ||
+        m_seen_parent_world_version != m_parent->m_world_version)
+    {
+        m_world_matrix = parent_world * local;
+        m_seen_local_version = m_local_version;
+        m_seen_parent_world_version = m_parent->m_world_version;
+        ++m_world_version;
+    }
+    return m_world_matrix;
 }
 
 void rendering_engine::util::transform::set_parent(const transform* parent)
 {
     m_parent = parent;
+    // Re-parenting changes the world inputs; force a world recompute next query.
+    ++m_local_version;
 }
 
 const rendering_engine::util::transform* rendering_engine::util::transform::get_parent() const

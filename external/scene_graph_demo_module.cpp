@@ -68,6 +68,7 @@
 
 #include <cmath>
 #include <memory>
+#include <string>
 #include <vector>
 
 namespace math = infrastructure::math;
@@ -173,10 +174,13 @@ static void make_planet(scene_graph::node& parent,
                         const rendering_engine::util::color& color,
                         int moons)
 {
+    static int planet_no = 0;
+
     scene_graph::node* orbit = make_child(parent);
     g_spinners.push_back(spinner{orbit, orbit_rate});
 
     scene_graph::node* anchor = make_child(*orbit);
+    anchor->name = "planet" + std::to_string(planet_no++); // reachable via scenes->root.find(...)
     anchor->transform.set_position(math::vec3{distance, 0.0f, 0.0f});
 
     make_visual(*anchor, math::vec3{0.0f, 0.0f, 0.0f}, radius, make_material(color, 0.8f));
@@ -220,6 +224,7 @@ static void on_engine_start(const event_engine::engine_start& event)
     // The sun is a childless leaf, so giving it a scale is safe; its point
     // light sits at the same node and scale never touches a translation.
     scene_graph::node* sun = make_visual(root, math::vec3{0.0f, 0.0f, 0.0f}, 1.0f, sun_material);
+    sun->name = "sun";
     auto sun_light = std::make_unique<rendering_engine::point_light>();
     sun_light->color = math::vec3{1.0f, 0.96f, 0.88f};
     sun_light->intensity = 3.0f;

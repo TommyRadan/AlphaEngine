@@ -88,6 +88,15 @@ namespace scene_graph
          */
         void on_destroy();
 
+        /**
+         * @brief Shows (registers) or hides (unregisters) the model when the
+         *        owning node is enabled/disabled.
+         *
+         * Called by @ref node::set_active. Hiding leaves the model and its
+         * parenting intact so re-enabling simply re-registers it.
+         */
+        void on_active_changed(node& owner, bool active);
+
         /** @brief The owned model, or @c nullptr for an empty component. */
         rendering_engine::model* model() const noexcept
         {
@@ -95,6 +104,9 @@ namespace scene_graph
         }
 
     private:
+        void register_model();
+        void unregister_model();
+
         std::unique_ptr<rendering_engine::model> m_model;
         bool m_registered{false};
     };

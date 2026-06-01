@@ -22,6 +22,8 @@
 
 #pragma once
 
+#include <cstdint>
+
 #include <infrastructure/math/math.hpp>
 
 namespace rendering_engine::util
@@ -52,7 +54,10 @@ namespace rendering_engine::util
         // Local transform matrix: translate * rotate * scale, ignoring any parent.
         infrastructure::math::mat4 get_transform_matrix() const;
         // World-space matrix. When a parent is set this is
-        // @c parent->get_world_matrix() * local; otherwise it equals the local matrix.
+        // @c parent->get_world_matrix() * local; otherwise it equals the local
+        // matrix. The result is cached and only recomputed when this transform's
+        // local components change or an ancestor's world matrix advances, so a
+        // static hierarchy costs no repeated matrix multiplies.
         infrastructure::math::mat4 get_world_matrix() const;
 
         // Parents this transform under @p parent so @ref get_world_matrix composes
@@ -62,6 +67,9 @@ namespace rendering_engine::util
         const transform* get_parent() const;
 
     private:
+        // Bumps the local-change version and marks the local matrix dirty.
+        void mark_local_dirty();
+
         mutable infrastructure::math::mat4 m_transform_matrix;
         mutable bool m_is_transform_matrix_dirty;
 
@@ -71,5 +79,15 @@ namespace rendering_engine::util
         infrastructure::math::vec3 m_scale;
 
         const transform* m_parent;
+
+        // World-matrix cache. @ref m_local_version bumps on any local change;
+        // @ref m_world_version bumps whenever @ref m_world_matrix is recomputed,
+        // so children can detect that this transform moved. The two "seen"
+        // counters record the inputs the cache was last built from.
+        mutable infrastructure::math::mat4 m_world_matrix;
+        mutable uint64_t m_local_version;
+        mutable uint64_t m_world_version;
+        mutable uint64_t m_seen_local_version;
+        mutable uint64_t m_seen_parent_world_version;
     };
 } // namespace rendering_engine::util
