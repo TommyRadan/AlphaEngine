@@ -145,7 +145,7 @@ void rendering_engine::points::collect_draw_items(std::vector<draw_item>& out)
         m_draw_bind_group = gpu.create_bind_group(bg_descriptor);
     }
 
-    const auto model_matrix = transform.get_transform_matrix();
+    const auto model_matrix = transform.get_world_matrix();
     gpu.write_buffer(m_draw_ubo, model_matrix.data(), sizeof(infrastructure::math::mat4), 0);
 
     // Non-indexed point-list draw: an invalid index buffer tells the

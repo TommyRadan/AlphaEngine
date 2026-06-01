@@ -29,8 +29,9 @@
 void scene_graph::context::init()
 {
     LOG_INF("Init Scene Graph");
+    // The root node is always present; subtrees parent under it via node::add.
     // Node add/remove and traversal diagnostics are expected to be logged from
-    // here by scene_graph API calls once they exist. See docs/logging.md.
+    // scene_graph API calls. See docs/logging.md.
 }
 
 void scene_graph::context::quit()

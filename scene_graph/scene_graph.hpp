@@ -29,14 +29,17 @@
 
 #include <string>
 
+#include <scene_graph/node.hpp>
+
 namespace scene_graph
 {
     /**
      * @brief Lifetime owner of the scene graph subsystem.
      *
-     * Owned by @ref control::engine. Currently a lifecycle stub that
-     * matches the shape of the other engine subsystems — @ref init is
-     * called at startup and @ref quit at shutdown.
+     * Owned by @ref control::engine. Brings the subsystem up and down with the
+     * same @ref init / @ref quit shape as the other subsystems and owns the
+     * @ref root of the node hierarchy — the world-space anchor every other
+     * @ref node parents under (directly or transitively).
      */
     struct context
     {
@@ -45,5 +48,14 @@ namespace scene_graph
 
         /** @brief Shuts down the scene graph subsystem. */
         void quit();
+
+        /**
+         * @brief Root of the scene hierarchy.
+         *
+         * Sits at world origin with identity transform. Add nodes under it to
+         * have their world matrices anchored to the scene; it has no special
+         * behaviour beyond being a conventional, always-present parent.
+         */
+        node root;
     };
 } // namespace scene_graph
