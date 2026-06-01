@@ -80,9 +80,19 @@ The model lands in stages:
    transform, and unregisters in `on_destroy`. Because the renderer keeps a
    non-owning pointer, the model lives behind a `unique_ptr` so its address — and
    thus the registration — survives the component being relocated in its pool.
-4. **`camera_component` / `light_component` (next).** Same shape over the camera
-   and light registries.
-5. **Traversal.** A once-per-frame walk updates world matrices (dirty-flag
-   propagation) and pushes them to the render components.
+4. **`light_component` / `camera_component` (done).** Same shape over the light
+   and camera registries. Each owns its object behind a `unique_ptr` (the
+   registries hold the object's address), and an `on_update(node&)` hook tracks
+   the node: a point light's position and a directional light's direction follow
+   the node's world transform, and a camera's position follows its node.
+5. **Traversal (done).** `scene_graph::context::update()` walks the tree from
+   `root` once per frame — wired into `engine::tick` after game-module `on_frame`
+   and before the draw — dispatching each component's `on_update` so node-derived
+   state is refreshed against the settled world transforms. (A dirty-flag
+   optimisation can replace the full walk later; correctness first.)
 6. **Further subsystems** (audio, physics) adopt the same handle/pool shape as
    they appear.
+
+The `external/scene_graph_demo_module` is the worked example: a spinning pivot
+with orbiting cube `mesh_component`s, a second-level "moon", and an orbiting
+point light via `light_component` — all driven purely by animating parent nodes.

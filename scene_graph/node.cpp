@@ -106,6 +106,22 @@ infrastructure::math::mat4 scene_graph::node::world_matrix() const
     return transform.get_world_matrix();
 }
 
+void scene_graph::node::update_subtree()
+{
+    if (m_store != nullptr)
+    {
+        for (const component_entry& entry : m_components)
+        {
+            m_store->update(entry.type, entry.handle, *this);
+        }
+    }
+
+    for (node* child : m_children)
+    {
+        child->update_subtree();
+    }
+}
+
 void scene_graph::node::set_store(component_store* store) noexcept
 {
     m_store = store;

@@ -147,6 +147,9 @@ namespace control
         // the render_debug event) so it composites on top of the frame on
         // both the OpenGL and Vulkan backends. No-op in release builds.
         rendering_engine::debug_ui::begin_frame();
+        // Propagate scene-graph component updates (light/camera poses tracking
+        // their nodes) after on_frame moved nodes and before the draw walk.
+        scenes->update();
         renderer->render();
         window->swap_buffers();
         time->perform_tick();

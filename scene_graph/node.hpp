@@ -105,6 +105,17 @@ namespace scene_graph
         const std::vector<node*>& children() const noexcept;
 
         /**
+         * @brief Updates this node's components, then recurses into children.
+         *
+         * Calls each component's @c on_update(node&) (those that define one) so
+         * components can resync from the node's now-settled world transform.
+         * Driven once per frame from @ref scene_graph::context::update on the
+         * scene root, after game-module @c on_frame has moved nodes and before
+         * the renderer walks the frame.
+         */
+        void update_subtree();
+
+        /**
          * @brief World-space matrix of this node.
          *
          * Equivalent to @c transform.get_world_matrix(): @c parent.world * local

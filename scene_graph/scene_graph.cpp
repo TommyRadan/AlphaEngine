@@ -45,3 +45,8 @@ void scene_graph::context::quit()
 {
     LOG_INF("Quit Scene Graph");
 }
+
+void scene_graph::context::update()
+{
+    root.update_subtree();
+}

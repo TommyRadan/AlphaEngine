@@ -54,6 +54,16 @@ namespace scene_graph
         void quit();
 
         /**
+         * @brief Advances the scene one frame: propagates component updates.
+         *
+         * Walks the node tree from @ref root and dispatches each component's
+         * @c on_update so node-derived state (light positions, camera poses)
+         * tracks the hierarchy. Called from @ref control::engine::tick after
+         * game-module @c on_frame and before the renderer draws.
+         */
+        void update();
+
+        /**
          * @brief Pools backing every node's components.
          *
          * One @ref infrastructure::pool per component type; nodes hold handles
