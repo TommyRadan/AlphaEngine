@@ -22,23 +22,26 @@
 
 /**
  * @file scene_graph_demo_module.cpp
- * @brief Showcase for the entity/component scene graph.
+ * @brief Solar-system showcase for the entity/component scene graph.
  *
- * Builds a small node hierarchy and animates only its parents, letting the
- * scene graph propagate the motion:
+ * Builds a node hierarchy and animates only the orbit pivots, letting the scene
+ * graph propagate every world transform:
  *
  *   root
- *   └── pivot                 (spins about Z every frame)
- *       ├── orbiter x4        (offset out from the pivot; each also spins)
- *       │     └── moon        (child of the first orbiter — a second level)
- *       └── lamp              (a point light via light_component)
+ *   ├── sun                       (emissive sphere + point light at the centre)
+ *   └── orbit_pivot (per planet)  (spins one way -> the planet revolves)
+ *         └── planet              (sphere via mesh_component)
+ *               └── moon_pivot    (spins the OTHER way -> retrograde moons)
+ *                     └── moon    (smaller sphere)
  *
- * Each orbiter carries a mesh_component (a cube), so spinning the pivot makes
- * them revolve around the centre; spinning an orbiter makes its moon revolve
- * around it — pure hierarchical world-matrix propagation, no per-object math in
- * here. The lamp is a light_component whose point light tracks its node, so the
- * highlight sweeps across the cubes as the pivot turns. The camera is provided
- * by camera_module (WASD + mouse to fly around).
+ * A planet revolves because its orbit pivot turns; a moon revolves because its
+ * moon pivot — a child of the planet — turns, and it turns with the opposite
+ * sign so moons sweep the other way from the planets. The sun is a
+ * light_component whose point light sits at the world origin and lights the
+ * planets; its sphere is given an emissive material so it reads as the source.
+ * Nothing here touches world matrices directly. The camera comes from
+ * camera_module (WASD + mouse); the orbits lie in the YZ plane so they read
+ * face-on from its default vantage down +X.
  */
 
 #include "api/game_module.hpp"
@@ -50,7 +53,7 @@
 #include <infrastructure/math/math.hpp>
 #include <rendering_engine/lighting/ambient_light.hpp>
 #include <rendering_engine/lighting/point_light.hpp>
-#include <rendering_engine/materials/phong_material.hpp>
+#include <rendering_engine/materials/standard_material.hpp>
 #include <rendering_engine/mesh/mesh.hpp>
 #include <rendering_engine/rendering_engine.hpp>
 #include <rendering_engine/util/color.hpp>
@@ -65,48 +68,56 @@
 
 namespace math = infrastructure::math;
 
-// Nodes are owned here (the scene-graph root only holds non-owning links).
-static std::vector<std::unique_ptr<scene_graph::node>> g_nodes;
-static scene_graph::node* g_pivot = nullptr;
-static std::vector<scene_graph::node*> g_orbiters;
-static std::unique_ptr<rendering_engine::ambient_light> g_ambient;
-static rendering_engine::mesh g_cube;
-
-static float g_revolve = 0.0f;
-static const float g_revolve_speed = 0.6f;
-static const int g_orbiter_count = 4;
-static const float g_orbit_radius = 2.5f;
-
-static void push_quad(std::vector<rendering_engine::vertex_position_uv_normal>& out,
-                      const math::vec3& a,
-                      const math::vec3& b,
-                      const math::vec3& c,
-                      const math::vec3& d,
-                      const math::vec3& normal)
+// A node that turns about the world X axis at a fixed rate; the orbit pivots
+// (planets one way, moons the other) are all just spinners.
+struct spinner
 {
-    const math::vec2 uv00{0.0f, 0.0f};
-    const math::vec2 uv10{1.0f, 0.0f};
-    const math::vec2 uv11{1.0f, 1.0f};
-    const math::vec2 uv01{0.0f, 1.0f};
-    out.push_back({a, uv00, normal});
-    out.push_back({b, uv10, normal});
-    out.push_back({c, uv11, normal});
-    out.push_back({a, uv00, normal});
-    out.push_back({c, uv11, normal});
-    out.push_back({d, uv01, normal});
-}
+    scene_graph::node* node;
+    float rate; // radians per second; sign sets the direction
+};
 
-static rendering_engine::mesh make_cube(float h)
+// Everything is owned here — the scene-graph root only holds non-owning links,
+// and materials must not outlive the renderer.
+static std::vector<std::unique_ptr<scene_graph::node>> g_nodes;
+static std::vector<std::unique_ptr<rendering_engine::standard_material>> g_materials;
+static std::vector<spinner> g_spinners;
+static std::unique_ptr<rendering_engine::ambient_light> g_ambient;
+static rendering_engine::mesh g_sphere;
+static float g_time = 0.0f;
+
+static rendering_engine::mesh make_sphere(int stacks, int slices)
 {
     std::vector<rendering_engine::vertex_position_uv_normal> v;
-    v.reserve(36);
-    // +X, -X, +Y, -Y, +Z, -Z faces, wound CCW when viewed from outside.
-    push_quad(v, {h, -h, -h}, {h, h, -h}, {h, h, h}, {h, -h, h}, {1, 0, 0});
-    push_quad(v, {-h, h, -h}, {-h, -h, -h}, {-h, -h, h}, {-h, h, h}, {-1, 0, 0});
-    push_quad(v, {h, h, -h}, {-h, h, -h}, {-h, h, h}, {h, h, h}, {0, 1, 0});
-    push_quad(v, {-h, -h, -h}, {h, -h, -h}, {h, -h, h}, {-h, -h, h}, {0, -1, 0});
-    push_quad(v, {-h, -h, h}, {h, -h, h}, {h, h, h}, {-h, h, h}, {0, 0, 1});
-    push_quad(v, {h, -h, -h}, {-h, -h, -h}, {-h, h, -h}, {h, h, -h}, {0, 0, -1});
+    const float pi = 3.14159265358979f;
+
+    // Unit sphere; the normal equals the position and bodies are scaled per
+    // node. Two triangles per stack/slice cell, wound CCW when seen from
+    // outside.
+    auto at = [&](int stack, int slice)
+    {
+        const float phi = pi * (static_cast<float>(stack) / stacks); // 0..pi from +Z pole
+        const float theta = 2.0f * pi * (static_cast<float>(slice) / slices);
+        const math::vec3 p{std::sin(phi) * std::cos(theta), std::sin(phi) * std::sin(theta), std::cos(phi)};
+        const math::vec2 uv{static_cast<float>(slice) / slices, static_cast<float>(stack) / stacks};
+        return rendering_engine::vertex_position_uv_normal{p, uv, p};
+    };
+
+    for (int stack = 0; stack < stacks; ++stack)
+    {
+        for (int slice = 0; slice < slices; ++slice)
+        {
+            const auto a = at(stack, slice);
+            const auto b = at(stack + 1, slice);
+            const auto c = at(stack + 1, slice + 1);
+            const auto d = at(stack, slice + 1);
+            v.push_back(a);
+            v.push_back(b);
+            v.push_back(c);
+            v.push_back(a);
+            v.push_back(c);
+            v.push_back(d);
+        }
+    }
 
     rendering_engine::mesh mesh;
     mesh.upload_obj(v);
@@ -121,62 +132,113 @@ static scene_graph::node* make_child(scene_graph::node& parent)
     return node;
 }
 
+static rendering_engine::standard_material* make_material(const rendering_engine::util::color& base, float roughness)
+{
+    auto material = control::current_engine().renderer->create_standard_material();
+    material->set_base_color(base);
+    material->set_metalness(0.0f);
+    material->set_roughness(roughness);
+    g_materials.push_back(std::move(material));
+    return g_materials.back().get();
+}
+
+// Adds a sphere "visual" leaf under @p parent at @p offset, scaled to @p radius.
+// Scale lives only on these childless leaves: scaling a node scales its whole
+// subtree, so the orbit/anchor nodes that carry children stay unscaled and only
+// the rendered spheres take a size.
+static scene_graph::node* make_visual(scene_graph::node& parent,
+                                      const math::vec3& offset,
+                                      float radius,
+                                      rendering_engine::standard_material* material)
+{
+    scene_graph::node* visual = make_child(parent);
+    visual->transform.set_position(offset);
+    visual->transform.set_scale(math::vec3{radius, radius, radius});
+    visual->add_component<scene_graph::mesh_component>(scene_graph::mesh_component{material, g_sphere});
+    return visual;
+}
+
+// Adds a planet: an orbit pivot (spinner about X) under @p parent, an unscaled
+// anchor out at @p distance along +Y, the planet sphere on the anchor, and
+// @p moons moons on their own retrograde pivots hung off the same anchor (so
+// the planet's scale never reaches them).
+static void make_planet(scene_graph::node& parent,
+                        float distance,
+                        float radius,
+                        float orbit_rate,
+                        const rendering_engine::util::color& color,
+                        int moons)
+{
+    scene_graph::node* orbit = make_child(parent);
+    g_spinners.push_back(spinner{orbit, orbit_rate});
+
+    scene_graph::node* anchor = make_child(*orbit);
+    anchor->transform.set_position(math::vec3{0.0f, distance, 0.0f});
+
+    make_visual(*anchor, math::vec3{0.0f, 0.0f, 0.0f}, radius, make_material(color, 0.8f));
+
+    auto* moon_material = make_material(rendering_engine::util::color{170, 170, 180, 255}, 0.9f);
+    for (int i = 0; i < moons; ++i)
+    {
+        scene_graph::node* moon_pivot = make_child(*anchor);
+        // Retrograde: moons sweep opposite to the planets' orbits, and each
+        // moon of a planet runs at its own rate so they do not overlap.
+        g_spinners.push_back(spinner{moon_pivot, -1.7f - 0.6f * static_cast<float>(i)});
+
+        const float moon_distance = radius + 0.7f + 0.6f * static_cast<float>(i);
+        make_visual(*moon_pivot, math::vec3{0.0f, moon_distance, 0.0f}, 0.18f, moon_material);
+    }
+}
+
 static void on_engine_start(const event_engine::engine_start& event)
 {
     (void)event;
 
-    auto& material = control::current_engine().renderer->get_phong_material();
-    material.set_diffuse(rendering_engine::util::color{230, 126, 34, 255});
-    material.set_specular(rendering_engine::util::color{255, 255, 255, 255});
-    material.set_shininess(48.0f);
+    g_sphere = make_sphere(18, 36);
 
-    g_cube = make_cube(0.5f);
-
-    // Soft fill so faces turned away from the lamp are not pure black.
+    // Dim fill so the night side of each body is not pure black.
     g_ambient = std::make_unique<rendering_engine::ambient_light>();
     g_ambient->color = math::vec3{1.0f, 1.0f, 1.0f};
-    g_ambient->intensity = 0.2f;
+    g_ambient->intensity = 0.08f;
 
     scene_graph::node& root = control::current_engine().scenes->root;
 
-    g_pivot = make_child(root);
+    // The sun: an emissive sphere at the origin so it reads as the light
+    // source, plus a point light at the same spot lighting the planets. The
+    // point light uses constant attenuation (no distance falloff) so the outer
+    // planets stay lit.
+    auto* sun_material = make_material(rendering_engine::util::color{255, 220, 120, 255}, 1.0f);
+    sun_material->set_emissive(rendering_engine::util::color{255, 210, 110, 255});
+    sun_material->set_emissive_intensity(3.0f);
 
-    for (int i = 0; i < g_orbiter_count; ++i)
-    {
-        const float angle = (static_cast<float>(i) / g_orbiter_count) * 2.0f * 3.14159265f;
-        scene_graph::node* orbiter = make_child(*g_pivot);
-        orbiter->transform.set_position(
-            math::vec3{g_orbit_radius * std::cos(angle), g_orbit_radius * std::sin(angle), 0.0f});
-        orbiter->add_component<scene_graph::mesh_component>(scene_graph::mesh_component{&material, g_cube});
-        g_orbiters.push_back(orbiter);
-    }
+    // The sun is a childless leaf, so giving it a scale is safe; its point
+    // light sits at the same node and scale never touches a translation.
+    scene_graph::node* sun = make_visual(root, math::vec3{0.0f, 0.0f, 0.0f}, 1.2f, sun_material);
+    auto sun_light = std::make_unique<rendering_engine::point_light>();
+    sun_light->color = math::vec3{1.0f, 0.96f, 0.88f};
+    sun_light->intensity = 3.0f;
+    sun_light->constant_attenuation = 1.0f;
+    sun_light->linear_attenuation = 0.0f;
+    sun_light->quadratic_attenuation = 0.0f;
+    sun->add_component<scene_graph::light_component>(scene_graph::light_component{std::move(sun_light)});
 
-    // A second hierarchy level: a small "moon" cube parented to the first
-    // orbiter, so it revolves around that orbiter as the orbiter spins.
-    scene_graph::node* moon = make_child(*g_orbiters.front());
-    moon->transform.set_position(math::vec3{1.1f, 0.0f, 0.0f});
-    moon->transform.set_scale(math::vec3{0.4f, 0.4f, 0.4f});
-    moon->add_component<scene_graph::mesh_component>(scene_graph::mesh_component{&material, g_cube});
-
-    // A point light parented to the pivot, so it sweeps around the ring; the
-    // light_component drives its position from the node's world transform.
-    scene_graph::node* lamp = make_child(*g_pivot);
-    lamp->transform.set_position(math::vec3{0.0f, 0.0f, 2.5f});
-    auto light = std::make_unique<rendering_engine::point_light>();
-    light->color = math::vec3{1.0f, 0.95f, 0.85f};
-    light->intensity = 40.0f;
-    lamp->add_component<scene_graph::light_component>(scene_graph::light_component{std::move(light)});
+    // Planets: distance, radius, orbit rate (rad/s, all same sign), colour,
+    // moon count. Inner planets orbit faster, the classic look.
+    make_planet(root, 3.0f, 0.45f, 0.60f, rendering_engine::util::color{120, 170, 255, 255}, 0);
+    make_planet(root, 4.8f, 0.55f, 0.42f, rendering_engine::util::color{220, 110, 80, 255}, 1);
+    make_planet(root, 7.0f, 0.80f, 0.30f, rendering_engine::util::color{210, 180, 120, 255}, 2);
+    make_planet(root, 9.3f, 0.65f, 0.22f, rendering_engine::util::color{150, 220, 200, 255}, 1);
 }
 
 static void on_engine_stop(const event_engine::engine_stop& event)
 {
     (void)event;
-    // Destroying the nodes frees their components, which unregister their
-    // models and lights from the renderer. Clear before the engine tears the
-    // renderer and GPU device down.
-    g_orbiters.clear();
-    g_pivot = nullptr;
+    // Destroying the nodes frees their components, which unregister their models
+    // and the sun's light from the renderer. Do this — and drop the materials —
+    // before the engine tears the renderer and GPU device down.
+    g_spinners.clear();
     g_nodes.clear();
+    g_materials.clear();
     g_ambient.reset();
 }
 
@@ -184,20 +246,13 @@ static void on_frame(const event_engine::frame& event)
 {
     (void)event;
 
-    const float dt = static_cast<float>(get_delta_time()) / 1000.0f;
-    g_revolve += g_revolve_speed * dt;
+    g_time += static_cast<float>(get_delta_time()) / 1000.0f;
 
-    if (g_pivot != nullptr)
+    // Drive each orbit/moon pivot from absolute time about the world X axis, so
+    // the orbital plane is YZ and reads face-on from camera_module's view.
+    for (const spinner& s : g_spinners)
     {
-        // Spin the pivot: every orbiter (and the lamp) revolves with it.
-        g_pivot->transform.set_rotation(math::vec3{0.0f, 0.0f, g_revolve});
-    }
-
-    // Spin each orbiter on its own axis (twice as fast): the moon parented to
-    // the first orbiter revolves around it.
-    for (scene_graph::node* orbiter : g_orbiters)
-    {
-        orbiter->transform.set_rotation(math::vec3{0.0f, 0.0f, g_revolve * 2.0f});
+        s.node->transform.set_rotation(math::vec3{s.rate * g_time, 0.0f, 0.0f});
     }
 }
 
