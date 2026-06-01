@@ -44,10 +44,8 @@
  * Lighting: a single point light at the world origin (the sun), so every body
  * is lit on its sun-facing side and dark on the far side, radially correct all
  * the way around its orbit; the sun sphere is emissive so it reads as the
- * source. There are no cast shadows — this engine shadow-maps directional
- * lights only, and a fixed direction cannot represent a central point sun
- * (correct on one side, reversed on the other). True eclipse shadows would need
- * omni/point shadow maps the renderer does not have yet.
+ * source. The point light casts an omni (six-face) shadow map, so a moon goes
+ * dark when it passes behind its planet and drops an eclipse shadow onto it.
  */
 
 #include "api/game_module.hpp"
@@ -213,13 +211,8 @@ static void on_engine_start(const event_engine::engine_start& event)
     // body is lit on its sun-facing side and dark on the far side, all the way
     // around its orbit. Constant attenuation (no distance falloff) keeps the
     // outer planets as bright as the inner ones. The sphere is emissive so it
-    // reads as the source.
-    //
-    // No cast shadows: this engine shadow-maps directional lights only, and a
-    // single fixed direction cannot stand in for a central (point) sun — it is
-    // correct on one side of the system and reversed on the other. Eclipse
-    // shadows would need omni/point shadow maps, which the renderer does not
-    // have yet.
+    // reads as the source. cast_shadow turns on the omni (six-face) shadow map,
+    // so a moon goes dark behind its planet and casts an eclipse shadow on it.
     auto* sun_material = make_material(rendering_engine::util::color{255, 220, 120, 255}, 1.0f);
     sun_material->set_emissive(rendering_engine::util::color{255, 210, 110, 255});
     sun_material->set_emissive_intensity(3.0f);
@@ -233,6 +226,7 @@ static void on_engine_start(const event_engine::engine_start& event)
     sun_light->constant_attenuation = 1.0f;
     sun_light->linear_attenuation = 0.0f;
     sun_light->quadratic_attenuation = 0.0f;
+    sun_light->cast_shadow = true;
     sun->add_component<scene_graph::light_component>(scene_graph::light_component{std::move(sun_light)});
 
     // Planets: distance, radius, orbit rate (rad/s, all same sign), colour,
