@@ -41,11 +41,13 @@
  * orientation for this Z-up engine. Nothing here touches world matrices
  * directly; the camera comes from camera_module (WASD + mouse).
  *
- * Lighting: the sun sphere is emissive so it reads as the source, with a dim
- * point light at the origin for radial fill. Cast shadows come from a
- * directional key light (this engine shadow-maps directional lights only, not
- * point lights, over a fixed ±6 frustum at the origin), so moons throw eclipse
- * shadows onto their planets and the whole system is sized to fit that box.
+ * Lighting: a single point light at the world origin (the sun), so every body
+ * is lit on its sun-facing side and dark on the far side, radially correct all
+ * the way around its orbit; the sun sphere is emissive so it reads as the
+ * source. There are no cast shadows — this engine shadow-maps directional
+ * lights only, and a fixed direction cannot represent a central point sun
+ * (correct on one side, reversed on the other). True eclipse shadows would need
+ * omni/point shadow maps the renderer does not have yet.
  */
 
 #include "api/game_module.hpp"
@@ -56,7 +58,6 @@
 #include <infrastructure/log.hpp>
 #include <infrastructure/math/math.hpp>
 #include <rendering_engine/lighting/ambient_light.hpp>
-#include <rendering_engine/lighting/directional_light.hpp>
 #include <rendering_engine/lighting/point_light.hpp>
 #include <rendering_engine/materials/standard_material.hpp>
 #include <rendering_engine/mesh/mesh.hpp>
@@ -87,7 +88,6 @@ static std::vector<std::unique_ptr<scene_graph::node>> g_nodes;
 static std::vector<std::unique_ptr<rendering_engine::standard_material>> g_materials;
 static std::vector<spinner> g_spinners;
 static std::unique_ptr<rendering_engine::ambient_light> g_ambient;
-static std::unique_ptr<rendering_engine::directional_light> g_sun_dir;
 static rendering_engine::mesh g_sphere;
 static float g_time = 0.0f;
 
@@ -209,9 +209,17 @@ static void on_engine_start(const event_engine::engine_start& event)
 
     scene_graph::node& root = control::current_engine().scenes->root;
 
-    // The sun: an emissive sphere at the origin so it reads as the source, plus
-    // a dim point light at the same spot for a little radial fill (constant
-    // attenuation, no distance falloff, so the outer planets still catch it).
+    // The sun is the only light: a point light at the world origin, so every
+    // body is lit on its sun-facing side and dark on the far side, all the way
+    // around its orbit. Constant attenuation (no distance falloff) keeps the
+    // outer planets as bright as the inner ones. The sphere is emissive so it
+    // reads as the source.
+    //
+    // No cast shadows: this engine shadow-maps directional lights only, and a
+    // single fixed direction cannot stand in for a central (point) sun — it is
+    // correct on one side of the system and reversed on the other. Eclipse
+    // shadows would need omni/point shadow maps, which the renderer does not
+    // have yet.
     auto* sun_material = make_material(rendering_engine::util::color{255, 220, 120, 255}, 1.0f);
     sun_material->set_emissive(rendering_engine::util::color{255, 210, 110, 255});
     sun_material->set_emissive_intensity(3.0f);
@@ -221,28 +229,14 @@ static void on_engine_start(const event_engine::engine_start& event)
     scene_graph::node* sun = make_visual(root, math::vec3{0.0f, 0.0f, 0.0f}, 1.0f, sun_material);
     auto sun_light = std::make_unique<rendering_engine::point_light>();
     sun_light->color = math::vec3{1.0f, 0.96f, 0.88f};
-    sun_light->intensity = 0.8f;
+    sun_light->intensity = 3.0f;
     sun_light->constant_attenuation = 1.0f;
     sun_light->linear_attenuation = 0.0f;
     sun_light->quadratic_attenuation = 0.0f;
     sun->add_component<scene_graph::light_component>(scene_graph::light_component{std::move(sun_light)});
 
-    // Shadows: this engine only casts from directional lights (point lights do
-    // not), with a fixed orthographic shadow frustum of half-extent 6 centred at
-    // the origin (see shadow_pass.cpp / issue #146). So the key light is a
-    // shadow-casting directional light aimed roughly across the orbital plane —
-    // moons then cast eclipse shadows on their planets — and the whole system is
-    // kept inside that ±6 box. A point-light "sun" cannot cast radial shadows
-    // here; this is the closest the renderer supports.
-    g_sun_dir = std::make_unique<rendering_engine::directional_light>();
-    g_sun_dir->direction = math::vec3{1.0f, 0.25f, -0.15f};
-    g_sun_dir->color = math::vec3{1.0f, 0.95f, 0.85f};
-    g_sun_dir->intensity = 2.2f;
-    g_sun_dir->cast_shadow = true;
-
     // Planets: distance, radius, orbit rate (rad/s, all same sign), colour,
-    // moon count. Inner planets orbit faster, the classic look. Distances stay
-    // within the ±6 shadow frustum so every body is shadow-mapped.
+    // moon count. Inner planets orbit faster, the classic look.
     make_planet(root, 1.7f, 0.35f, 0.70f, rendering_engine::util::color{120, 170, 255, 255}, 0);
     make_planet(root, 2.7f, 0.50f, 0.50f, rendering_engine::util::color{220, 110, 80, 255}, 1);
     make_planet(root, 3.7f, 0.70f, 0.34f, rendering_engine::util::color{210, 180, 120, 255}, 2);
@@ -259,7 +253,6 @@ static void on_engine_stop(const event_engine::engine_stop& event)
     g_nodes.clear();
     g_materials.clear();
     g_ambient.reset();
-    g_sun_dir.reset();
 }
 
 static void on_frame(const event_engine::frame& event)
