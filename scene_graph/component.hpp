@@ -129,7 +129,19 @@ namespace scene_graph
 
             void erase(component_handle handle) noexcept override
             {
-                data.erase(make_handle<C>(handle));
+                auto h = make_handle<C>(handle);
+                // Give components that manage external state (e.g. a renderer
+                // registration) a chance to unwind it before the slot — and the
+                // data it owns — is freed. Plain-data components define no
+                // on_destroy and skip this entirely.
+                if constexpr (requires(C& c) { c.on_destroy(); })
+                {
+                    if (C* c = data.get(h))
+                    {
+                        c->on_destroy();
+                    }
+                }
+                data.erase(h);
             }
         };
 

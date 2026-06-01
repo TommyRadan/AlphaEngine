@@ -68,13 +68,21 @@ The model lands in stages:
 
 1. **Foundation (done).** `infrastructure::pool` + handle; `node` as an entity
    with a type-erased `component_store`; transform-hierarchy world-matrix
-   propagation. No subsystem owns component pools yet, so any plain struct can be
-   a component but nothing renders off one.
-2. **Render components.** `rendering_engine` exposes pools for renderables,
-   cameras, and lights with create/destroy-by-handle; `mesh_component`,
-   `camera_component`, and `light_component` wrap those handles, registering with
-   the renderer on attach and unregistering on detach.
-3. **Traversal.** A once-per-frame walk updates world matrices (dirty-flag
+   propagation.
+2. **Component lifecycle hooks (done).** A component may define `on_attach(node&)`
+   (called when added to a node) and/or `on_destroy()` (called just before its
+   pool slot is freed); the store detects them with `if constexpr (requires ...)`,
+   so plain-data components need neither. This is how a component bridges to a
+   subsystem without the core knowing subsystem types.
+3. **`mesh_component` (done).** The first render component: owns a
+   `rendering_engine::model` on the heap, registers it with the scene renderer in
+   `on_attach`, parents it under the node so it draws at the node's world
+   transform, and unregisters in `on_destroy`. Because the renderer keeps a
+   non-owning pointer, the model lives behind a `unique_ptr` so its address — and
+   thus the registration — survives the component being relocated in its pool.
+4. **`camera_component` / `light_component` (next).** Same shape over the camera
+   and light registries.
+5. **Traversal.** A once-per-frame walk updates world matrices (dirty-flag
    propagation) and pushes them to the render components.
-4. **Further subsystems** (audio, physics) adopt the same handle/pool shape as
+6. **Further subsystems** (audio, physics) adopt the same handle/pool shape as
    they appear.

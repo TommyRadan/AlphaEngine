@@ -143,7 +143,22 @@ namespace scene_graph
             remove_component<C>();
             component_handle handle = m_store->add<C>(std::move(value));
             m_components.push_back(component_entry{std::type_index(typeid(C)), handle});
-            return m_store->get<C>(handle);
+
+            C* component = m_store->get<C>(handle);
+            // Components that bridge to a subsystem (e.g. registering a
+            // renderable) wire themselves up here, now that they know their
+            // owning node. Plain-data components define no on_attach and skip
+            // this. The pooled component may be relocated later, so on_attach
+            // must key any external registration off stable state (its owned
+            // heap object / the node's transform), not its own address.
+            if constexpr (requires(C& c, node& n) { c.on_attach(n); })
+            {
+                if (component != nullptr)
+                {
+                    component->on_attach(*this);
+                }
+            }
+            return component;
         }
 
         /** @brief Pointer to this node's @c C component, or @c nullptr if it has none. */
