@@ -26,6 +26,9 @@
 #include <infrastructure/log.hpp>
 #include <infrastructure/settings.hpp>
 #include <rendering_engine/camera/camera.hpp>
+#include <rendering_engine/debug/axes_helper.hpp>
+#include <rendering_engine/debug/grid_helper.hpp>
+#include <rendering_engine/debug/helper.hpp>
 #include <rendering_engine/debug_ui/imgui_layer.hpp>
 #include <rendering_engine/gpu/command_encoder.hpp>
 #include <rendering_engine/gpu/device.hpp>
@@ -126,7 +129,9 @@ void rendering_engine::context::init()
     auto fxaa = std::make_unique<fxaa_pass>(m_ldr_color_texture, width, height);
     auto ui = std::make_unique<ui_pass>(&m_ui_renderables);
 #if _DEBUG
-    auto debug = std::make_unique<debug_pass>(&m_debug_renderables);
+    // The debug pass binds the scene pass's per-frame camera group at
+    // slot 0 so the line-based debug gizmos project with the same camera.
+    auto debug = std::make_unique<debug_pass>(&m_debug_renderables, scene->frame_bind_group());
 #endif
 
     // Construct the built-in materials against the per-frame layouts
@@ -138,6 +143,9 @@ void rendering_engine::context::init()
     m_standard_material = std::make_unique<standard_material>(scene_frame_layout);
     m_points_material = std::make_unique<points_material>(scene_frame_layout);
     m_line_material = std::make_unique<line_material>(scene_frame_layout);
+    // Depth-disabled line variant for the debug gizmos so they always
+    // read on top in the depth-less debug pass.
+    m_debug_line_material = std::make_unique<line_material>(scene_frame_layout, /*depth_tested=*/false);
     m_ui_material = std::make_unique<ui_material>();
     LOG_INF("Rendering Engine: basic_material, phong_material, standard_material, points_material, line_material and "
             "ui_material constructed");
@@ -172,6 +180,18 @@ void rendering_engine::context::init()
     // Bring the ImGui debug overlay up now that the window, GL context
     // and passes are live. No-op in release builds.
     debug_ui::init();
+
+#if _DEBUG
+    // Provide a couple of always-available reference gizmos (ground grid
+    // + world axes) so a fresh debug build has something to toggle from
+    // the overlay's Helpers panel. They auto-register into the
+    // debug-renderable registry and the helper registry on construction.
+    // Game code can add the box / light / camera helpers against its own
+    // objects the same way. The debug pass is dropped in release, so this
+    // whole block compiles out there.
+    m_debug_helpers.push_back(std::make_unique<debug::grid_helper>());
+    m_debug_helpers.push_back(std::make_unique<debug::axes_helper>());
+#endif
 }
 
 void rendering_engine::context::quit()
@@ -182,6 +202,12 @@ void rendering_engine::context::quit()
     // it bound to are still alive. No-op in release builds.
     debug_ui::shutdown();
 
+    // Release the built-in debug helpers before the line material and the
+    // GPU device they reference; their destructors unregister from the
+    // debug-renderable registry and free their line buffers. Empty in
+    // release. Game-owned helpers must likewise be released before quit.
+    m_debug_helpers.clear();
+
     // Drop the passes first; their record() bodies reach for the
     // event bus we're about to release, and the passes own per-frame
     // bind-group layouts referenced by the materials' pipelines.
@@ -191,6 +217,7 @@ void rendering_engine::context::quit()
     // Then materials, which own pipelines that reference the device.
     // Release them before the device tears its pools down.
     m_ui_material.reset();
+    m_debug_line_material.reset();
     m_line_material.reset();
     m_points_material.reset();
     m_standard_material.reset();
@@ -306,6 +333,11 @@ rendering_engine::points_material& rendering_engine::context::get_points_materia
 rendering_engine::line_material& rendering_engine::context::get_line_material()
 {
     return *m_line_material;
+}
+
+rendering_engine::line_material& rendering_engine::context::get_debug_line_material()
+{
+    return *m_debug_line_material;
 }
 
 rendering_engine::ui_material& rendering_engine::context::get_ui_material()

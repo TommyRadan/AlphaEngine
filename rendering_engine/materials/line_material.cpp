@@ -91,7 +91,7 @@ namespace
 
 namespace rendering_engine
 {
-    line_material::line_material(gpu::bind_group_layout frame_layout)
+    line_material::line_material(gpu::bind_group_layout frame_layout, bool depth_tested)
     {
         gpu::vertex_buffer_layout vertex_layout{};
         // Stride = 0 — the per-vertex stride is supplied at
@@ -111,11 +111,13 @@ namespace rendering_engine
         gpu::bind_group_layout_descriptor material_layout{};
         material_layout.entries.push_back({material_params_binding, gpu::binding_kind::uniform_buffer});
 
-        // Opaque unlit lines: depth tested and written, no blending.
+        // Opaque unlit lines: depth tested and written by default, no
+        // blending. The debug-overlay variant disables both so its
+        // gizmos always draw on top of a depth-less pass.
         material_params params{};
         params.transparent = false;
-        params.depth_test = true;
-        params.depth_write = true;
+        params.depth_test = depth_tested;
+        params.depth_write = depth_tested;
 
         construct_pipeline(vertex_shader,
                            fragment_shader,

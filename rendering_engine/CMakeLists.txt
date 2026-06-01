@@ -6,6 +6,7 @@ target_sources(AlphaEngine PRIVATE
 )
 
 add_subdirectory(camera)
+add_subdirectory(debug)
 add_subdirectory(debug_ui)
 add_subdirectory(gpu)
 add_subdirectory(ibl)

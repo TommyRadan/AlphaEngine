@@ -54,7 +54,14 @@ namespace rendering_engine
         // the @ref scene_pass; it must match the layout the pass binds
         // at slot 0 every frame so the pipeline and the runtime bind
         // group agree on slot shape.
-        explicit line_material(gpu::bind_group_layout frame_layout);
+        //
+        // @p depth_tested keeps the default opaque scene behaviour
+        // (depth tested and written). Pass @c false for lines drawn in a
+        // depth-less pass such as the debug-overlay pass, where the
+        // swapchain depth buffer is not cleared per frame and a
+        // depth-writing line would occlude itself on the next frame; the
+        // debug gizmos use such a variant so they always draw on top.
+        explicit line_material(gpu::bind_group_layout frame_layout, bool depth_tested = true);
         ~line_material() override;
 
         // Tint multiplied into every vertex's colour (white leaves the

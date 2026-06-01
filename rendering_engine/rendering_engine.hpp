@@ -45,6 +45,11 @@ namespace rendering_engine
     struct line_material;
     struct ui_material;
 
+    namespace debug
+    {
+        struct helper;
+    }
+
     /**
      * @brief Orchestrates the rendering subsystem (window, GL context, materials, passes).
      *
@@ -147,6 +152,18 @@ namespace rendering_engine
         /** @brief Built-in unlit line material (line topology). Constructed in @ref init. */
         line_material& get_line_material();
 
+        /**
+         * @brief Built-in line material for debug gizmos — line topology
+         *        with depth testing disabled.
+         *
+         * Shares the scene per-frame layout (camera at slot 0) with
+         * @ref get_line_material, but draws depth-less so the debug
+         * helpers (the THREE.*Helper analogues) always read on top in the
+         * depth-less debug pass. Constructed in @ref init; used by the
+         * @ref debug::helper family.
+         */
+        line_material& get_debug_line_material();
+
         /** @brief Built-in 2D overlay material. Constructed in @ref init. */
         ui_material& get_ui_material();
 
@@ -168,6 +185,14 @@ namespace rendering_engine
         std::vector<renderable*> m_scene_renderables;
         std::vector<renderable*> m_ui_renderables;
         std::vector<renderable*> m_debug_renderables;
+
+        // Built-in debug gizmos (ground grid + world axes) created in
+        // @ref init for debug builds and toggled from the debug UI. They
+        // auto-register into @ref m_debug_renderables on construction, so
+        // this list owns their lifetime and must be cleared in @ref quit
+        // before the line material and GPU device they reference. Empty in
+        // release builds, where the debug pass is dropped entirely.
+        std::vector<std::unique_ptr<debug::helper>> m_debug_helpers;
 
         // Ordered pass list walked once per frame in @ref render.
         // Populated by @ref init with the built-in scene + UI passes
@@ -197,6 +222,8 @@ namespace rendering_engine
         std::unique_ptr<standard_material> m_standard_material;
         std::unique_ptr<points_material> m_points_material;
         std::unique_ptr<line_material> m_line_material;
+        // Depth-disabled line material the debug gizmos draw through.
+        std::unique_ptr<line_material> m_debug_line_material;
         std::unique_ptr<ui_material> m_ui_material;
 
         // Off-screen HDR target the scene pass renders into.
