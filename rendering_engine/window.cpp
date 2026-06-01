@@ -27,6 +27,7 @@
 #include <infrastructure/log.hpp>
 #include <infrastructure/settings.hpp>
 #include <infrastructure/time.hpp>
+#include <rendering_engine/debug_ui/imgui_layer.hpp>
 #include <rendering_engine/util/color.hpp>
 #include <rendering_engine/window.hpp>
 #include <SDL3/SDL.h>
@@ -135,9 +136,10 @@ namespace rendering_engine
                 throw std::runtime_error{SDL_GetError()};
             }
             LOG_INF("SDL window and GL context created successfully");
-            if (!SDL_GL_SetSwapInterval(1))
+            const int swap_interval = s.is_vsync_enabled() ? 1 : 0;
+            if (!SDL_GL_SetSwapInterval(swap_interval))
             {
-                LOG_WRN("Could not enable vsync: %s", SDL_GetError());
+                LOG_WRN("Could not set swap interval to %d: %s", swap_interval, SDL_GetError());
             }
         }
     }
@@ -165,6 +167,11 @@ namespace rendering_engine
     SDL_Window* window::sdl_window() const noexcept
     {
         return m_window.get();
+    }
+
+    void* window::gl_context() const noexcept
+    {
+        return m_gl_context.get();
     }
 
     void window::show_message(const std::string& title, const std::string& message)
@@ -198,10 +205,22 @@ namespace rendering_engine
         SDL_PumpEvents();
         while (SDL_PollEvent(&events))
         {
+            // Let the debug UI see every event first. When a debug panel
+            // has focus it captures the matching input class so the same
+            // click / keystroke does not also drive the camera or game
+            // modules. Both calls are no-ops in release builds.
+            debug_ui::process_event(&events);
+            const bool ui_wants_keyboard = debug_ui::wants_keyboard();
+            const bool ui_wants_mouse = debug_ui::wants_mouse();
+
             switch (events.type)
             {
             case SDL_EVENT_KEY_DOWN:
             {
+                if (ui_wants_keyboard)
+                {
+                    break;
+                }
                 event_engine::key_down key_down;
                 key_down.m_key_code = (event_engine::key_code)events.key.key;
                 bus.emit<event_engine::key_down>(key_down);
@@ -210,6 +229,10 @@ namespace rendering_engine
 
             case SDL_EVENT_KEY_UP:
             {
+                if (ui_wants_keyboard)
+                {
+                    break;
+                }
                 event_engine::key_up key_up;
                 key_up.m_key_code = (event_engine::key_code)events.key.key;
                 bus.emit<event_engine::key_up>(key_up);
@@ -218,6 +241,10 @@ namespace rendering_engine
 
             case SDL_EVENT_MOUSE_BUTTON_DOWN:
             {
+                if (ui_wants_mouse)
+                {
+                    break;
+                }
                 event_engine::mouse_key_down mouse_key_down;
                 switch (events.button.button)
                 {
@@ -242,6 +269,10 @@ namespace rendering_engine
 
             case SDL_EVENT_MOUSE_BUTTON_UP:
             {
+                if (ui_wants_mouse)
+                {
+                    break;
+                }
                 event_engine::mouse_key_up mouse_key_up;
                 mouse_key_up.m_key_code = event_engine::mouse_key_code::left;
                 switch (events.button.button)
@@ -267,6 +298,10 @@ namespace rendering_engine
 
             case SDL_EVENT_MOUSE_MOTION:
             {
+                if (ui_wants_mouse)
+                {
+                    break;
+                }
                 event_engine::mouse_move mouse_move;
                 mouse_move.m_x = static_cast<int>(events.motion.xrel);
                 mouse_move.m_y = static_cast<int>(events.motion.yrel);

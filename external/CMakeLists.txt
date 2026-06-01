@@ -1,10 +1,13 @@
 target_sources(AlphaEngine PRIVATE
     camera_module.cpp
     exit_module.cpp
-    fps_overlay_module.cpp
     frame_module.cpp
     line_demo_module.cpp
 )
+
+# The FPS counter used to live here as a label-rendering game module; it
+# now ships as a built-in ImGui debug panel (rendering_engine/debug_ui),
+# so the standalone fps_overlay_module was removed.
 
 # Only one scene-owning demo module is compiled at a time because each
 # places its showcase geometry at the origin. line_demo_module.cpp is

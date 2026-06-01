@@ -29,6 +29,7 @@
 #include <infrastructure/log.hpp>
 #include <infrastructure/settings.hpp>
 #include <infrastructure/time.hpp>
+#include <rendering_engine/debug_ui/imgui_layer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/rendering_engine.hpp>
 #include <rendering_engine/window.hpp>
@@ -142,6 +143,9 @@ namespace control
     {
         window->tick();
         renderer->render();
+        // Paint the ImGui debug overlay on top of the rendered frame
+        // before presenting. No-op in release builds.
+        rendering_engine::debug_ui::render();
         window->swap_buffers();
         time->perform_tick();
     }

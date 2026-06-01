@@ -111,6 +111,16 @@ namespace rendering_engine
          */
         SDL_Window* sdl_window() const noexcept;
 
+        /**
+         * @brief Returns the SDL OpenGL context as an opaque pointer, or
+         *        @c nullptr when running on the Vulkan backend.
+         *
+         * Exposed so the debug-UI layer can hand the context to
+         * @c ImGui_ImplSDL3_InitForOpenGL without depending on the SDL
+         * GL types. Ownership stays with the @ref window.
+         */
+        void* gl_context() const noexcept;
+
     private:
         sdl_window_handle m_window;
         sdl_gl_context_handle m_gl_context;

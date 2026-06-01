@@ -164,6 +164,41 @@ target_link_libraries(AlphaEngine ${OPENGL_LIBRARIES})
 find_package(Vulkan REQUIRED)
 target_link_libraries(AlphaEngine Vulkan::Vulkan)
 
+# Dear ImGui — fetched from source and built as a small static library
+# from the same explicit-file pattern the rest of the tree uses. ImGui
+# ships no CMakeLists, so FetchContent only populates the sources and we
+# compile the core plus the SDL3 platform backend and the OpenGL3
+# renderer backend ourselves. The docking branch is pinned by tag so the
+# debug tooling can dock and tear off panels.
+#
+# ImGui is debug-only: it is linked into AlphaEngine and the
+# ALPHAENGINE_HAS_IMGUI macro is defined for Debug configurations only,
+# via generator expressions so this also holds for multi-config
+# generators (Visual Studio) where CMAKE_BUILD_TYPE is empty at configure
+# time. Release builds never link ImGui and the debug-UI layer compiles
+# down to empty no-ops.
+FetchContent_Declare(
+    imgui
+    GIT_REPOSITORY https://github.com/ocornut/imgui.git
+    GIT_TAG v1.92.8-docking
+    GIT_SHALLOW TRUE
+)
+FetchContent_MakeAvailable(imgui)
+add_library(imgui STATIC
+    ${imgui_SOURCE_DIR}/imgui.cpp
+    ${imgui_SOURCE_DIR}/imgui_draw.cpp
+    ${imgui_SOURCE_DIR}/imgui_tables.cpp
+    ${imgui_SOURCE_DIR}/imgui_widgets.cpp
+    ${imgui_SOURCE_DIR}/imgui_demo.cpp
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl3.cpp
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp)
+target_include_directories(imgui PUBLIC ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/backends)
+# The SDL3 backend needs the SDL headers; the OpenGL3 backend ships its
+# own function loader, so no GL link dependency is required here.
+target_link_libraries(imgui PUBLIC SDL3::SDL3-static)
+target_link_libraries(AlphaEngine $<$<CONFIG:Debug>:imgui>)
+target_compile_definitions(AlphaEngine PRIVATE $<$<CONFIG:Debug>:ALPHAENGINE_HAS_IMGUI>)
+
 # Post-build
 if(APPLE)
     target_link_libraries(AlphaEngine "-framework CoreFoundation -framework IOKit -framework CoreVideo")
