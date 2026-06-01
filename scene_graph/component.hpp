@@ -43,6 +43,8 @@
 
 namespace scene_graph
 {
+    struct node;
+
     /**
      * @brief Untyped handle into a @ref component_store pool.
      *
@@ -115,11 +117,28 @@ namespace scene_graph
             }
         }
 
+        /**
+         * @brief Type-erased per-frame update used by @ref node traversal.
+         *
+         * Dispatches to the component's @c on_update(node&) if it defines one,
+         * so components that derive state from their node (a light's position,
+         * a camera's pose) can refresh it once the world transforms are settled.
+         */
+        void update(std::type_index type, component_handle handle, node& owner) noexcept
+        {
+            auto it = m_pools.find(type);
+            if (it != m_pools.end())
+            {
+                it->second->update(handle, owner);
+            }
+        }
+
     private:
         struct pool_base
         {
             virtual ~pool_base() = default;
             virtual void erase(component_handle handle) noexcept = 0;
+            virtual void update(component_handle handle, node& owner) noexcept = 0;
         };
 
         template<typename C>
@@ -142,6 +161,17 @@ namespace scene_graph
                     }
                 }
                 data.erase(h);
+            }
+
+            void update(component_handle handle, node& owner) noexcept override
+            {
+                if constexpr (requires(C& c, node& n) { c.on_update(n); })
+                {
+                    if (C* c = data.get(make_handle<C>(handle)))
+                    {
+                        c->on_update(owner);
+                    }
+                }
             }
         };
 
