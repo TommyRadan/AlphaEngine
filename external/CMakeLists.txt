@@ -11,8 +11,9 @@ target_sources(AlphaEngine PRIVATE
 # the active one: it showcases points_material + the points renderable as
 # a coloured Fibonacci-sphere point cloud.
 #
-# skybox_demo_module.cpp (procedural sky + IBL sphere grid) and
-# phong_demo_module.cpp (Blinn-Phong lit sphere) are the other showcases;
-# swap either filename in for points_demo_module.cpp to bring it back.
+# skybox_demo_module.cpp (procedural sky + IBL sphere grid),
+# phong_demo_module.cpp (Blinn-Phong lit sphere) and line_demo_module.cpp
+# (a coloured helix line strip) are the other showcases; swap any one
+# filename in for points_demo_module.cpp to bring it back.
 
 add_subdirectory(api)
