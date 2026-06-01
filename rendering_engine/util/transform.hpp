@@ -49,9 +49,17 @@ namespace rendering_engine::util
         infrastructure::math::vec3 get_right() const;
         infrastructure::math::vec3 get_up() const;
 
+        // Local transform matrix: translate * rotate * scale, ignoring any parent.
         infrastructure::math::mat4 get_transform_matrix() const;
-        // World-space matrix. No parenting yet, so this matches the local transform matrix.
+        // World-space matrix. When a parent is set this is
+        // @c parent->get_world_matrix() * local; otherwise it equals the local matrix.
         infrastructure::math::mat4 get_world_matrix() const;
+
+        // Parents this transform under @p parent so @ref get_world_matrix composes
+        // the parent chain. Non-owning; pass @c nullptr to detach back to world space.
+        // The scene graph keeps these links in sync with its node hierarchy.
+        void set_parent(const transform* parent);
+        const transform* get_parent() const;
 
     private:
         mutable infrastructure::math::mat4 m_transform_matrix;
@@ -61,5 +69,7 @@ namespace rendering_engine::util
         infrastructure::math::vec3 m_rotation;
         infrastructure::math::quat m_quaternion;
         infrastructure::math::vec3 m_scale;
+
+        const transform* m_parent;
     };
 } // namespace rendering_engine::util

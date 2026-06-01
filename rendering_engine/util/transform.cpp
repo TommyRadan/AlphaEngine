@@ -25,7 +25,7 @@
 
 rendering_engine::util::transform::transform()
     : m_is_transform_matrix_dirty{true}, m_position{0.0f, 0.0f, 0.0f}, m_rotation{0.0f, 0.0f, 0.0f}, m_quaternion{},
-      m_scale{1.0f, 1.0f, 1.0f}
+      m_scale{1.0f, 1.0f, 1.0f}, m_parent{nullptr}
 {
 }
 
@@ -127,5 +127,19 @@ infrastructure::math::mat4 rendering_engine::util::transform::get_transform_matr
 
 infrastructure::math::mat4 rendering_engine::util::transform::get_world_matrix() const
 {
+    if (m_parent != nullptr)
+    {
+        return m_parent->get_world_matrix() * get_transform_matrix();
+    }
     return get_transform_matrix();
+}
+
+void rendering_engine::util::transform::set_parent(const transform* parent)
+{
+    m_parent = parent;
+}
+
+const rendering_engine::util::transform* rendering_engine::util::transform::get_parent() const
+{
+    return m_parent;
 }
