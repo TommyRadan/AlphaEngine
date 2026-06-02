@@ -1,0 +1,118 @@
+/**
+ * Copyright (c) 2015-2026 Tomislav Radanovic
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+#pragma once
+
+#include <cstdint>
+#include <vector>
+
+#include <core/math/math.hpp>
+#include <rendering_engine/gpu/handle.hpp>
+#include <rendering_engine/mesh/vertex.hpp>
+#include <rendering_engine/renderables/renderable.hpp>
+#include <rendering_engine/util/color.hpp>
+
+namespace rendering_engine
+{
+    struct material;
+
+    // Draws one shared mesh many times in a single instanced draw, each
+    // copy with its own world transform and tint — the engine analog of
+    // THREE.InstancedMesh. The geometry (vertex + index buffers) and the
+    // material are shared across every instance; only a per-instance
+    // storage buffer of @c {mat4 model; vec4 color;} records varies.
+    //
+    // The renderable emits a single indexed-indirect @ref draw_item whose
+    // command record carries the instance count, so the whole batch costs
+    // one draw call. It must be fronted by an @ref instanced_material,
+    // whose vertex shader reads the per-instance record by
+    // @c gl_InstanceIndex; pass that material to the constructor.
+    struct instanced_mesh : public renderable
+    {
+        // @p mat is non-owning and is expected to be an
+        // @ref instanced_material. @p instance_count is the fixed capacity
+        // of the per-instance buffer; the active draw count starts equal to
+        // it and can be lowered via @ref set_instance_count.
+        instanced_mesh(material* mat, uint32_t instance_count);
+        ~instanced_mesh() override;
+
+        // Upload the shared geometry drawn once per instance. Vertices use
+        // the position+uv+normal record (the instanced material reads only
+        // the position); indices are 32-bit. Call once after construction,
+        // before the first frame.
+        void upload_geometry(const std::vector<vertex_position_uv_normal>& vertices,
+                             const std::vector<uint32_t>& indices);
+
+        // Geometry uploads through @ref upload_geometry; this is a no-op so
+        // @ref instanced_mesh still satisfies the @ref renderable interface.
+        void upload() final {}
+
+        void collect_draw_items(std::vector<draw_item>& out) final;
+
+        // Fixed per-instance buffer capacity set at construction.
+        uint32_t instance_capacity() const;
+
+        // Number of instances drawn this frame. Clamped to the capacity.
+        void set_instance_count(uint32_t count);
+        uint32_t instance_count() const;
+
+        // Per-instance world transform. @p index must be < the capacity.
+        void set_instance_transform(uint32_t index, const core::math::mat4& transform);
+
+        // Per-instance tint, multiplied by the material's flat colour.
+        // Defaults to opaque white. @p index must be < the capacity.
+        void set_instance_color(uint32_t index, const util::color& color);
+
+    private:
+        // Per-instance record mirrored on the CPU and uploaded into the
+        // storage buffer. Layout matches the std430 @c instance_data block
+        // in the instanced material's vertex shader: mat4 (64 bytes) then
+        // vec4 (16 bytes), 80 bytes total with no trailing padding.
+        struct instance_record
+        {
+            core::math::mat4 model{};
+            core::math::vec4 color{1.0f, 1.0f, 1.0f, 1.0f};
+        };
+
+        material* m_material{nullptr};
+        uint32_t m_capacity{0};
+        uint32_t m_instance_count{0};
+
+        // CPU mirror of the per-instance storage buffer, re-uploaded when
+        // an instance changes.
+        std::vector<instance_record> m_instances;
+        bool m_instances_dirty{true};
+
+        // Instance count last written into the indirect command, so the
+        // command is only rewritten when the active count actually changes.
+        uint32_t m_uploaded_instance_count{0};
+
+        gpu::buffer m_vertex_buffer{};
+        gpu::buffer m_index_buffer{};
+        gpu::buffer m_instance_buffer{};
+        gpu::buffer m_indirect_buffer{};
+        gpu::bind_group m_draw_bind_group{};
+
+        uint32_t m_index_count{0};
+        uint32_t m_vertex_stride{0};
+    };
+} // namespace rendering_engine

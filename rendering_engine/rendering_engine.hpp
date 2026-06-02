@@ -39,6 +39,7 @@ namespace rendering_engine
     struct skybox_pass;
     struct environment;
     struct basic_material;
+    struct instanced_material;
     struct phong_material;
     struct standard_material;
     struct points_material;
@@ -127,6 +128,16 @@ namespace rendering_engine
 
         /** @brief Built-in unlit 3D scene material. Constructed in @ref init. */
         basic_material& get_basic_material();
+
+        /**
+         * @brief Built-in unlit instanced material fronted by
+         *        @ref instanced_mesh. Constructed in @ref init.
+         *
+         * Shares the scene per-frame layout (camera at slot 0); its
+         * per-draw slot reads the per-instance transform / colour storage
+         * buffer the @ref instanced_mesh renderable builds.
+         */
+        instanced_material& get_instanced_material();
 
         /** @brief Built-in Blinn-Phong lit 3D scene material. Constructed in @ref init. */
         phong_material& get_phong_material();
@@ -227,6 +238,7 @@ namespace rendering_engine
         // @ref init so they can read the passes' per-frame bind-group
         // layouts. Released after the passes in @ref quit.
         std::unique_ptr<basic_material> m_basic_material;
+        std::unique_ptr<instanced_material> m_instanced_material;
         std::unique_ptr<phong_material> m_phong_material;
         std::unique_ptr<standard_material> m_standard_material;
         std::unique_ptr<points_material> m_points_material;

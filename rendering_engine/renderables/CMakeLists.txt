@@ -1,5 +1,7 @@
 target_sources(AlphaEngine PRIVATE
     draw_item.hpp
+    instanced_mesh.cpp
+    instanced_mesh.hpp
     line.cpp
     line.hpp
     model.cpp

@@ -3,6 +3,8 @@ target_sources(AlphaEngine PRIVATE
     basic_material.hpp
     grid_material.cpp
     grid_material.hpp
+    instanced_material.cpp
+    instanced_material.hpp
     line_material.cpp
     line_material.hpp
     material.cpp

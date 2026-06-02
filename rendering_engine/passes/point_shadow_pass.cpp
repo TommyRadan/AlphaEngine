@@ -358,6 +358,14 @@ namespace rendering_engine
 
             for (const auto& item : m_items)
             {
+                // Instanced renderables keep their transforms in a per-draw
+                // storage buffer the depth-only pipeline can't read, so they
+                // don't cast omni shadows yet — skip them rather than emit a
+                // single garbage caster from the unbound model UBO.
+                if (item.indirect_buffer.valid())
+                {
+                    continue;
+                }
                 pass_encoder->set_bind_group(1, item.per_draw_bind_group);
                 pass_encoder->set_vertex_buffer(0, item.vertex_buffer, 0, item.vertex_stride);
                 if (item.index_buffer.valid())
