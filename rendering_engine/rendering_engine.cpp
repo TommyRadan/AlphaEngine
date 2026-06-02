@@ -116,7 +116,7 @@ void rendering_engine::context::init()
     // point light; like the directional shadow it runs before the scene pass so
     // its maps are ready for the per-frame bind group.
     auto point_shadow = std::make_unique<point_shadow_pass>(&m_scene_renderables);
-    auto scene = std::make_unique<scene_pass>(&m_scene_renderables, shadow.get(), point_shadow.get());
+    auto scene = std::make_unique<scene_pass>(&m_scene_renderables, shadow.get(), point_shadow.get(), &m_render_stats);
     const gpu::bind_group_layout scene_frame_layout = scene->frame_bind_group_layout();
     // Kept so create_standard_material can build extra materials against
     // the same per-frame layout the scene pass binds at slot 0.
@@ -368,6 +368,11 @@ rendering_engine::grid_material& rendering_engine::context::get_grid_material()
 rendering_engine::ui_material& rendering_engine::context::get_ui_material()
 {
     return *m_ui_material;
+}
+
+const rendering_engine::render_stats& rendering_engine::context::get_render_stats() const
+{
+    return m_render_stats;
 }
 
 std::unique_ptr<rendering_engine::standard_material> rendering_engine::context::create_standard_material()

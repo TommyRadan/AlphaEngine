@@ -219,5 +219,6 @@ void rendering_engine::instanced_mesh::collect_draw_items(std::vector<draw_item>
     item.index_count = m_index_count;
     item.vertex_stride = m_vertex_stride;
     item.instance_stride = static_cast<uint32_t>(sizeof(instance_record));
+    item.instance_count = m_instance_count;
     out.push_back(item);
 }

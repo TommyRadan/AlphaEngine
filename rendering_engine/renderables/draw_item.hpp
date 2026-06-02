@@ -63,6 +63,10 @@ namespace rendering_engine
         uint32_t index_count{0};
         uint32_t vertex_stride{0};
         uint32_t instance_stride{0};
+        // Instances drawn by this item. 1 for ordinary draws; instanced
+        // renderables set the count carried in their indirect command so
+        // render-stats accounting matches what the GPU draws.
+        uint32_t instance_count{1};
         gpu::index_format index_format{gpu::index_format::uint32};
     };
 } // namespace rendering_engine

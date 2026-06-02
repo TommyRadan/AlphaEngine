@@ -88,8 +88,11 @@ namespace rendering_engine
             point_shadow_face_count * sizeof(core::math::mat4) + 2 * 4 * sizeof(float);
     } // namespace
 
-    scene_pass::scene_pass(std::vector<renderable*>* registry, shadow_pass* shadow, point_shadow_pass* point_shadow)
-        : m_registry(registry), m_shadow(shadow), m_point_shadow(point_shadow)
+    scene_pass::scene_pass(std::vector<renderable*>* registry,
+                           shadow_pass* shadow,
+                           point_shadow_pass* point_shadow,
+                           render_stats* stats)
+        : m_registry(registry), m_shadow(shadow), m_point_shadow(point_shadow), m_stats(stats)
     {
         auto& gpu = *runtime::current_engine().gpu;
 
@@ -232,6 +235,15 @@ namespace rendering_engine
         auto& eng = runtime::current_engine();
         auto& gpu = *eng.gpu;
 
+        // Reset this frame's stats up front. The renderable count is known
+        // regardless of whether a camera is attached; the draw totals stay
+        // zero on no-camera frames (nothing is collected below).
+        if (m_stats != nullptr)
+        {
+            *m_stats = render_stats{};
+            m_stats->scene_renderables = static_cast<uint32_t>(m_registry->size());
+        }
+
         // Render into the HDR scene-colour target so the post chain
         // can sample real luminance. The tonemap post pass maps the
         // result onto the swapchain before the UI composites.
@@ -324,6 +336,23 @@ namespace rendering_engine
                          m_items.end(),
                          [](const draw_item& a, const draw_item& b)
                          { return a.mat->pipeline().id < b.mat->pipeline().id; });
+
+        // Tally this frame's draw statistics for the debug overlay. Each
+        // item is one draw call; triangle / vertex counts scale by the
+        // item's instance count. Indexed draws count index_count vertices
+        // (vertices fetched), non-indexed count vertex_count.
+        if (m_stats != nullptr)
+        {
+            m_stats->draw_calls = static_cast<uint32_t>(m_items.size());
+            for (const auto& item : m_items)
+            {
+                const uint32_t instances = item.instance_count == 0 ? 1u : item.instance_count;
+                const uint32_t verts = item.index_buffer.valid() ? item.index_count : item.vertex_count;
+                m_stats->instances += instances;
+                m_stats->vertices += static_cast<uint64_t>(verts) * instances;
+                m_stats->triangles += static_cast<uint64_t>(verts / 3u) * instances;
+            }
+        }
 
         uint64_t last_pipeline_id = 0;
         bool first_iter = true;

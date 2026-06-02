@@ -26,6 +26,7 @@
 
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/passes/pass.hpp>
+#include <rendering_engine/render_stats.hpp>
 #include <rendering_engine/renderables/draw_item.hpp>
 
 namespace rendering_engine
@@ -60,7 +61,13 @@ namespace rendering_engine
         // @p point_shadow is the omni shadow pass for the first shadow-casting
         // point light; its six depth maps are baked into the per-frame bind
         // group and its matrices uploaded each frame. May be null.
-        scene_pass(std::vector<renderable*>* registry, shadow_pass* shadow, point_shadow_pass* point_shadow);
+        // @p stats is filled with this frame's draw statistics each record();
+        // non-owning, owned by the engine context and surfaced to the debug
+        // overlay. May be null to disable stats collection.
+        scene_pass(std::vector<renderable*>* registry,
+                   shadow_pass* shadow,
+                   point_shadow_pass* point_shadow,
+                   render_stats* stats);
         ~scene_pass() override;
 
         scene_pass(const scene_pass&) = delete;
@@ -105,6 +112,11 @@ namespace rendering_engine
         // Null disables that kind of shadowing.
         shadow_pass* m_shadow{nullptr};
         point_shadow_pass* m_point_shadow{nullptr};
+
+        // Non-owning; filled each record() with this frame's draw stats.
+        // Owned by the engine context, which outlives the pass. Null
+        // disables collection.
+        render_stats* m_stats{nullptr};
 
         // Reused across frames so the underlying allocation persists.
         std::vector<draw_item> m_items;
