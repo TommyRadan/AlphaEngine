@@ -22,9 +22,12 @@
 
 #include <runtime/scene_graph.hpp>
 
-#include <core/log.hpp>
-
 #include <string>
+#include <utility>
+
+#include <core/jobs.hpp>
+#include <core/log.hpp>
+#include <runtime/engine.hpp>
 
 runtime::context::context()
 {
@@ -48,5 +51,45 @@ void runtime::context::quit()
 
 void runtime::context::update()
 {
+    // Phase 1 (parallel): warm every active node's cached world matrix,
+    // breadth-first by depth. Within one depth band every node's parent was
+    // resolved in the previous band, so a node only ever writes its own cache
+    // while reading its parent's already-settled one — the writes are disjoint
+    // and the reads are pure, which makes the band data-race free. This keeps
+    // the matrix multiplies (the costly part of a deep hierarchy) on the worker
+    // pool while everything with side effects below stays on the main thread.
+    //
+    // Inactive subtrees are skipped, matching node::update_subtree: a disabled
+    // node freezes its whole subtree and its components are already hidden.
+    core::jobs& jobs = *current_engine().jobs;
+
+    m_band.clear();
+    if (root.is_active())
+    {
+        m_band.push_back(&root);
+    }
+
+    while (!m_band.empty())
+    {
+        jobs.parallel_for(m_band.size(), [this](std::size_t i) { m_band[i]->transform.get_world_matrix(); });
+
+        m_next_band.clear();
+        for (node* parent : m_band)
+        {
+            for (node* child : parent->children())
+            {
+                if (child->is_active())
+                {
+                    m_next_band.push_back(child);
+                }
+            }
+        }
+        std::swap(m_band, m_next_band);
+    }
+
+    // Phase 2 (serial): dispatch each component's on_update down the tree.
+    // Components bridge to shared subsystems (renderer registries, the light
+    // list, per-draw GPU buffers), none of which are thread-safe, so this walk
+    // stays single-threaded — and the world matrices it reads are already warm.
     root.update_subtree();
 }

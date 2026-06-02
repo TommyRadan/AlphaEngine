@@ -83,6 +83,12 @@ add_subdirectory(core)
 add_subdirectory(rendering_engine)
 add_subdirectory(external)
 
+# Threads — the core worker pool (core/jobs) uses std::thread. MSVC links its
+# threading support implicitly; on Linux this pulls in pthread.
+set(THREADS_PREFER_PTHREAD_FLAG ON)
+find_package(Threads REQUIRED)
+target_link_libraries(AlphaEngine Threads::Threads)
+
 # Use C++ standard library
 if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
     target_compile_options(AlphaEngine PRIVATE -stdlib=libc++)

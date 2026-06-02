@@ -26,6 +26,7 @@
 #include <stdexcept>
 
 #include <core/event_engine.hpp>
+#include <core/jobs.hpp>
 #include <core/log.hpp>
 #include <core/settings.hpp>
 #include <core/time.hpp>
@@ -84,6 +85,10 @@ namespace runtime
         // header and the old subsystem init order in main_loop.cpp.
         settings = std::make_unique<::settings>();
         time = std::make_unique<core::time>();
+        // The worker pool has no dependencies and is brought up early so any
+        // subsystem can hand it work during init or per frame. Its threads
+        // idle until the first job is dispatched.
+        jobs = std::make_unique<core::jobs>();
         events = std::make_unique<core::event_bus>();
         window = std::make_unique<rendering_engine::window>();
         gpu = rendering_engine::gpu::create_device(to_backend_type(settings->graphics.backend));
@@ -104,6 +109,9 @@ namespace runtime
         gpu.reset();
         window.reset();
         events.reset();
+        // Joins the worker threads. Every per-frame job is forked and joined
+        // within tick(), so nothing is in flight by the time we get here.
+        jobs.reset();
         time.reset();
         settings.reset();
         g_current_engine = nullptr;

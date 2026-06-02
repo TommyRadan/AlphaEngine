@@ -48,6 +48,10 @@ namespace core
 }
 namespace core
 {
+    struct jobs;
+}
+namespace core
+{
     struct time;
 }
 namespace rendering_engine
@@ -114,6 +118,7 @@ namespace runtime
         // engine's own lifetime, in the order they are declared here.
         std::unique_ptr<::settings> settings;
         std::unique_ptr<core::time> time;
+        std::unique_ptr<core::jobs> jobs;
         std::unique_ptr<core::event_bus> events;
         std::unique_ptr<rendering_engine::window> window;
         std::unique_ptr<rendering_engine::gpu::device> gpu;
