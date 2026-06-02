@@ -103,7 +103,11 @@ jobs:
       - name: Run run-clang-tidy on subsystem sources
         run: |
           set -euo pipefail
-          pattern="/(runtime|core|rendering_engine|external)/"
+          # Anchor to the workspace root so the regex matches only the
+          # repo's top-level modules and not vendored sources that happen
+          # to live under a like-named subdirectory (e.g. SDL3's
+          # build/_deps/sdl3-src/src/core/).
+          pattern="${GITHUB_WORKSPACE}/(runtime|core|rendering_engine|external)/"
           run-clang-tidy -p build -quiet "${pattern}"
 
   # ---------------------------------------------------------------------------
