@@ -87,7 +87,7 @@ void rendering_engine::box::upload()
     // normal direction. @c u_len / @c v_len are the face extents along
     // those axes and @c w_off the (signed) distance from the origin to
     // the face plane. The face is centered on the origin via the half
-    // extents, matching Three.js buildPlane. Winding is CCW when viewed
+    // extents. Winding is CCW when viewed
     // from outside (along -w_dir toward the face), matching the sphere
     // convention so backface culling treats all primitives alike.
     const auto build_face = [&](const vec3& u_axis,

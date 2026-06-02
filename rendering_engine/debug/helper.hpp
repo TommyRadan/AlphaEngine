@@ -43,8 +43,8 @@ namespace rendering_engine::debug
         scene,
     };
 
-    // Base for the debug gizmo family — the analogue of Three.js's
-    // @c *Helper objects. A helper carries a display name and a
+    // Base for the debug gizmo family of @c *Helper objects.
+    // A helper carries a display name and a
     // visibility flag, and on construction registers itself twice: into
     // the process-wide helper registry the debug UI walks to toggle
     // visibility, and into one of the engine's renderable registries

@@ -29,7 +29,7 @@ namespace rendering_engine
     struct material;
 
     // Regular tetrahedron (4 vertices, 4 triangular faces) built on the shared
-    // polyhedron generator with the canonical three.js base table.
+    // polyhedron generator with the canonical base table.
     struct tetrahedron : public polyhedron
     {
         explicit tetrahedron(material* mat, float radius = 1.0f, unsigned int detail = 0);

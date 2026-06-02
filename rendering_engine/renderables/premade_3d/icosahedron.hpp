@@ -29,7 +29,7 @@ namespace rendering_engine
     struct material;
 
     // Regular icosahedron (12 vertices, 20 triangular faces) built on the
-    // shared polyhedron generator with the canonical three.js base table.
+    // shared polyhedron generator with the canonical base table.
     struct icosahedron : public polyhedron
     {
         explicit icosahedron(material* mat, float radius = 1.0f, unsigned int detail = 0);

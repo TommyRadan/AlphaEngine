@@ -37,8 +37,8 @@
 namespace rendering_engine
 {
     // The pre-integrated image-based-lighting set derived from a single
-    // cube-map background — the analogue of @c THREE.PMREMGenerator's
-    // output that @c scene.environment feeds into a standard material.
+    // cube-map background, fed into a standard material as its
+    // environment.
     //
     // Constructing an @ref environment uploads the source cube map (HDR,
     // with a mip chain) and derives:

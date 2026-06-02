@@ -33,7 +33,7 @@ namespace rendering_engine
 {
     struct material;
 
-    // Generic polyhedron generator, mirroring three.js PolyhedronGeometry.
+    // Generic polyhedron generator.
     // Takes a base mesh expressed as a flat list of vertex positions (x, y, z
     // triplets) and a flat list of triangle indices, subdivides each base
     // triangle @c detail times, projects every resulting vertex onto the

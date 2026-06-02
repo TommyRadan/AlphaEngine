@@ -44,8 +44,8 @@ namespace runtime
      *
      * Every node has two intrinsic things: a local @ref transform (its pose
      * relative to its parent) and a set of parent/child links, so world
-     * matrices propagate down the tree the way @c THREE.Object3D /
-     * @c GameObject hierarchies do. Everything else a node "is" — a mesh, a
+     * matrices propagate down the tree the way @c GameObject
+     * hierarchies do. Everything else a node "is" — a mesh, a
      * camera, a light, an audio emitter — is expressed by attaching
      * **components**. A node carrying no components is an empty group used to
      * move a subtree as a unit.

@@ -42,8 +42,7 @@ namespace rendering_engine
      * The @ref scene_pass exposes that depth texture plus the
      * light-space view-projection matrix to the lit materials through
      * its per-frame bind group, and the lit fragment shaders sample it
-     * to occlude that light's contribution. Three.js analog:
-     * @c DirectionalLightShadow.
+     * to occlude that light's contribution.
      *
      * The light's view is an orthographic box centred on the world
      * origin and oriented along the light direction — the standard

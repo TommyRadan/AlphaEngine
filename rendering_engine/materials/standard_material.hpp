@@ -31,13 +31,13 @@ namespace rendering_engine
 {
     struct environment;
 
-    // Built-in physically-based lit 3D scene material — the analogue of
-    // @c THREE.MeshStandardMaterial (metallic-roughness workflow). Cook-
+    // Built-in physically-based lit 3D scene material
+    // (metallic-roughness workflow). Cook-
     // Torrance specular (GGX distribution, Smith geometry, Schlick-
     // Fresnel) plus a Lambertian diffuse, driven by the per-frame lights
     // UBO the @ref scene_pass uploads at slot 0, binding 2. The modern
     // default surface: more expensive than @ref phong_material but the
-    // single biggest step toward Three.js visual parity.
+    // single biggest step toward physically based visual fidelity.
     //
     // Consumes the position+uv+normal+tangent vertex stream (the tangent
     // feeds the normal-map TBN basis). Slot layout matches the other 3D
@@ -67,19 +67,18 @@ namespace rendering_engine
 
         // Metalness in [0, 1]. 0 is a dielectric (plastic, wood), 1 is a
         // raw metal whose diffuse term vanishes and whose specular tints
-        // toward the base colour. Three.js analog: metalness.
+        // toward the base colour.
         void set_metalness(float metalness);
 
         // Perceptual roughness in [0, 1]. 0 is a mirror-smooth surface,
-        // 1 is fully diffuse. Three.js analog: roughness.
+        // 1 is fully diffuse.
         void set_roughness(float roughness);
 
         // Emissive colour added after shading (unaffected by lights).
         // Black (the default) emits nothing.
         void set_emissive(const util::color& color);
 
-        // Scalar multiplier on the emissive colour. Three.js analog:
-        // emissiveIntensity.
+        // Scalar multiplier on the emissive colour.
         void set_emissive_intensity(float intensity);
 
         // Bind an albedo (base-colour) texture; multiplied into the base
@@ -112,8 +111,7 @@ namespace rendering_engine
         // prefiltered specular (the skybox mip chain) and BRDF LUT replace
         // the flat ambient term. The @ref environment must outlive the
         // material (or be cleared first); only the texture handles are
-        // referenced, not owned. Three.js analog: material.envMap /
-        // scene.environment.
+        // referenced, not owned.
         void set_environment(const environment& env);
 
         // Detach the environment and revert to the flat ambient term.

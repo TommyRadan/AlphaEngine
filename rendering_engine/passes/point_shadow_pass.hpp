@@ -49,7 +49,7 @@ namespace rendering_engine
      * view-projections and the light position to the lit materials through its
      * per-frame bind group; the lit fragment shader picks the face by the major
      * axis of the fragment-to-light vector and samples it to occlude the
-     * light's contribution. Three.js analog: @c PointLightShadow.
+     * light's contribution.
      *
      * Like @ref shadow_pass it reuses the scene-renderable registry and each
      * renderable's existing per-draw model-matrix bind group, so every scene

@@ -30,7 +30,7 @@ namespace rendering_engine
 {
     struct material;
 
-    // Flat annulus lying in the XY plane (Three.js RingGeometry). Built from a
+    // Flat annulus lying in the XY plane. Built from a
     // radial/angular grid between an inner and outer radius. Vertex format is
     // position + uv + normal; every normal points along +Z. Front faces are
     // CCW when viewed from +Z.

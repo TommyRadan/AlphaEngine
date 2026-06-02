@@ -28,7 +28,7 @@ namespace rendering_engine
 {
     struct material;
 
-    // Cone primitive matching Three.js ConeGeometry. A cone is just a
+    // Cone primitive. A cone is just a
     // cylinder with a top radius of 0, so this is a thin wrapper that
     // forwards to the cylinder generator with radius_top fixed at 0.
     struct cone : public cylinder

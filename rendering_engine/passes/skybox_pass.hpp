@@ -28,8 +28,7 @@
 namespace rendering_engine
 {
     /**
-     * @brief Draws a cube-map background into the HDR scene target — the
-     *        analogue of @c THREE.Scene.background = CubeTexture.
+     * @brief Draws a cube-map background into the HDR scene target.
      *
      * Runs after the @ref scene_pass and loads (does not clear) that pass's
      * HDR colour and depth. A single fullscreen triangle is emitted at the

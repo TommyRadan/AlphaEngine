@@ -28,11 +28,10 @@ namespace rendering_engine
 {
     namespace
     {
-        // Golden ratio t = (1 + sqrt(5)) / 2, matching three.js
-        // IcosahedronGeometry.
+        // Golden ratio t = (1 + sqrt(5)) / 2.
         const float t = (1.0f + std::sqrt(5.0f)) / 2.0f;
 
-        // Canonical three.js IcosahedronGeometry base vertices (12) and faces
+        // Canonical icosahedron base vertices (12) and faces
         // (20). The polyhedron generator normalises these onto the sphere.
         const std::vector<float> base_vertices = {
             -1.0f, t,  0.0f, 1.0f, t,  0.0f, -1.0f, -t,    0.0f, 1.0f, -t,   0.0f, 0.0f, -1.0f, t,  0.0f, 1.0f, t, 0.0f,

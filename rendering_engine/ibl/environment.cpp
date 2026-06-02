@@ -712,7 +712,7 @@ namespace rendering_engine
 
     void environment::build_derived_gpu(uint32_t face_size)
     {
-        auto& gpu = *control::current_engine().gpu;
+        auto& gpu = *runtime::current_engine().gpu;
 
         // Temporaries are tracked so the whole convolution scaffold is
         // released once the tables are written; only the three textures

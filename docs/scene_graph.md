@@ -28,7 +28,7 @@ runtime::context
 This is composition, not inheritance: a node is not a `camera_node` *subclass*;
 it is an entity that *has* a camera component. The same node can be a mesh **and**
 an audio emitter **and** a light at once, which is exactly the case a typed-node
-hierarchy (Godot `Camera3D`/`MeshInstance3D`, Three.js `Mesh`/`Camera`) handles
+hierarchy (Godot `Camera3D`/`MeshInstance3D`) handles
 awkwardly. The reference points are Unity's `GameObject` + Components and
 Unreal's `Actor` + `SceneComponent`s.
 

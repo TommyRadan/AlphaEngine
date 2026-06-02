@@ -22,23 +22,22 @@
 
 #pragma once
 
-#include <infrastructure/math/math.hpp>
+#include <core/math/math.hpp>
 #include <rendering_engine/lighting/light.hpp>
 
 namespace rendering_engine
 {
     // Omni-directional light radiating from a world-space point and
-    // falling off with distance. Three.js analog: THREE.PointLight.
+    // falling off with distance.
     struct point_light : light
     {
         point_light();
 
         // World-space position the light radiates from.
-        infrastructure::math::vec3 position{0.0f, 0.0f, 0.0f};
+        core::math::vec3 position{0.0f, 0.0f, 0.0f};
 
         // Distance past which the light contributes nothing. 0 means no
-        // hard cutoff (falloff still applies). Three.js analog:
-        // PointLight.distance.
+        // hard cutoff (falloff still applies).
         float range{0.0f};
 
         // Classic constant / linear / quadratic attenuation
@@ -49,9 +48,8 @@ namespace rendering_engine
 
         // When true this light renders an omni (six-face) shadow map from its
         // position and the lit materials sample it to occlude its contribution.
-        // Three.js analog: Light.castShadow / PointLightShadow. Only the first
-        // shadow-casting point light is honoured today; the rest light without
-        // casting. Defaults to false so existing scenes keep their look.
+        // Only the first shadow-casting point light is honoured today; the rest
+        // light without casting. Defaults to false so existing scenes keep their look.
         bool cast_shadow{false};
     };
 } // namespace rendering_engine

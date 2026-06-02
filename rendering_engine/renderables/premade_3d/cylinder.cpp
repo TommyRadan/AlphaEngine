@@ -127,7 +127,7 @@ void rendering_engine::cylinder::upload()
         }
     }
 
-    // Caps. Three.js skips a cap whose radius is 0, so a top radius of 0
+    // Caps. A cap whose radius is 0 is skipped, so a top radius of 0
     // collapses the top into the apex of a cone. Each cap is a triangle
     // fan around a dedicated center vertex with a flat (+/-Y) normal.
     const auto generate_cap = [&](bool top)
@@ -140,18 +140,18 @@ void rendering_engine::cylinder::upload()
 
         const float sign = top ? 1.0f : -1.0f;
         const float cap_y = half_height * sign;
-        const infrastructure::math::vec3 normal{0.0f, sign, 0.0f};
+        const core::math::vec3 normal{0.0f, sign, 0.0f};
 
         const uint32_t center_start = static_cast<uint32_t>(vertices.size());
 
         // A center vertex per radial segment keeps the cap UVs aligned
-        // with the rim vertices, matching Three.js.
+        // with the rim vertices.
         for (unsigned int x = 0; x < m_radial_segments; ++x)
         {
             vertex_position_uv_normal vertex;
-            vertex.pos = infrastructure::math::vec3{0.0f, cap_y, 0.0f};
+            vertex.pos = core::math::vec3{0.0f, cap_y, 0.0f};
             vertex.normal = normal;
-            vertex.uv = infrastructure::math::vec2{0.5f, 0.5f};
+            vertex.uv = core::math::vec2{0.5f, 0.5f};
             vertices.push_back(vertex);
         }
 

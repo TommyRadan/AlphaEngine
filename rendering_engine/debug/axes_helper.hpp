@@ -26,8 +26,8 @@
 
 namespace rendering_engine::debug
 {
-    // The three world axes drawn from the origin — the analogue of
-    // @c THREE.AxesHelper. +X is red, +Y green, +Z blue. Reposition or
+    // The three world axes drawn from the origin.
+    // +X is red, +Y green, +Z blue. Reposition or
     // orient it through the inherited @ref transform.
     struct axes_helper : public line_helper
     {

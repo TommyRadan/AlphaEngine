@@ -67,8 +67,7 @@ rendering_engine::torus::~torus()
 
 void rendering_engine::torus::upload()
 {
-    // One extra ring/column of vertices so UVs and the seam wrap cleanly,
-    // matching the Three.js TorusGeometry layout.
+    // One extra ring/column of vertices so UVs and the seam wrap cleanly.
     const unsigned int rings = m_radial_segments + 1;
     const unsigned int columns = m_tubular_segments + 1;
 

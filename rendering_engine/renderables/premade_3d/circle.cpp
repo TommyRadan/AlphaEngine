@@ -71,17 +71,17 @@ void rendering_engine::circle::upload()
     std::vector<vertex_position_uv_normal> vertices;
     vertices.reserve(segments + 2);
 
-    const infrastructure::math::vec3 normal{0.0f, 0.0f, 1.0f};
+    const core::math::vec3 normal{0.0f, 0.0f, 1.0f};
 
     // Centre vertex.
     vertex_position_uv_normal centre;
-    centre.pos = infrastructure::math::vec3{0.0f, 0.0f, 0.0f};
-    centre.uv = infrastructure::math::vec2{0.5f, 0.5f};
+    centre.pos = core::math::vec3{0.0f, 0.0f, 0.0f};
+    centre.uv = core::math::vec2{0.5f, 0.5f};
     centre.normal = normal;
     vertices.push_back(centre);
 
     // Rim vertices, one extra so the last segment closes against a distinct
-    // vertex (matching Three.js CircleGeometry).
+    // vertex.
     for (unsigned int s = 0; s <= segments; ++s)
     {
         const float segment = m_theta_start + static_cast<float>(s) / static_cast<float>(segments) * m_theta_length;

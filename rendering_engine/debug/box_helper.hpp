@@ -22,28 +22,28 @@
 
 #pragma once
 
-#include <infrastructure/math/aabb.hpp>
+#include <core/math/aabb.hpp>
 #include <rendering_engine/debug/line_helper.hpp>
 #include <rendering_engine/util/color.hpp>
 
 namespace rendering_engine::debug
 {
-    // Wireframe of an axis-aligned bounding box — the analogue of
-    // @c THREE.Box3Helper. The twelve edges are baked in world space, so
+    // Wireframe of an axis-aligned bounding box.
+    // The twelve edges are baked in world space, so
     // the inherited @ref transform is left at identity; call
     // @ref set_box to follow a box that moves.
     struct box_helper : public line_helper
     {
-        explicit box_helper(const infrastructure::math::aabb& box = infrastructure::math::aabb{},
+        explicit box_helper(const core::math::aabb& box = core::math::aabb{},
                             util::color color = util::color{255, 255, 0, 255});
 
         // Replace the box and rebuild the wireframe.
-        void set_box(const infrastructure::math::aabb& box);
+        void set_box(const core::math::aabb& box);
 
     private:
         void rebuild();
 
-        infrastructure::math::aabb m_box;
+        core::math::aabb m_box;
         util::color m_color;
     };
 } // namespace rendering_engine::debug

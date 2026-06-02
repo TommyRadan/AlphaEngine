@@ -30,8 +30,7 @@ namespace rendering_engine
 {
     struct material;
 
-    // Cylinder (or truncated cone) primitive matching Three.js
-    // CylinderGeometry. Centered at the origin with its axis along +Y;
+    // Cylinder (or truncated cone) primitive. Centered at the origin with its axis along +Y;
     // the height spans [-height/2, +height/2]. The torso (side wall) is
     // tessellated into radial_segments columns by height_segments rows
     // of quads with smooth radial normals derived from the slope between
