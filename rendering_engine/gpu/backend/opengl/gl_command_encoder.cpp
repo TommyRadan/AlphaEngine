@@ -271,6 +271,11 @@ namespace rendering_engine::gpu::backend::opengl
 
         const auto& layout = pipe->vertex_buffers[slot];
         const uint32_t stride = stride_override != 0 ? stride_override : layout.stride;
+        // Per-instance slots advance once per instance (divisor 1) instead
+        // of once per vertex, so a single record drives a whole instanced
+        // draw copy. The divisor is VAO state, so it is set alongside the
+        // attribute pointer here.
+        const GLuint divisor = layout.step_mode == vertex_step_mode::instance ? 1u : 0u;
         for (const auto& attribute : layout.attributes)
         {
             const GLsizeiptr final_offset = static_cast<GLsizeiptr>(offset + attribute.offset);
@@ -281,6 +286,7 @@ namespace rendering_engine::gpu::backend::opengl
                                   GL_FALSE,
                                   static_cast<GLsizei>(stride),
                                   reinterpret_cast<const GLvoid*>(final_offset));
+            glVertexAttribDivisor(attribute.location, divisor);
         }
     }
 

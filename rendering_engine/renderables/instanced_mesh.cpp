@@ -46,16 +46,15 @@ namespace
 rendering_engine::instanced_mesh::instanced_mesh(material* mat, uint32_t instance_count)
     : m_material{mat}, m_capacity{instance_count}, m_instance_count{instance_count}, m_instances(instance_count)
 {
+    // The per-instance record must match the stride the instanced material's
+    // slot-1 vertex layout was built with.
+    static_assert(sizeof(instance_record) == instanced_material::instance_buffer_stride,
+                  "instance_record layout must match instanced_material::instance_buffer_stride");
 }
 
 rendering_engine::instanced_mesh::~instanced_mesh()
 {
     auto& gpu = *runtime::current_engine().gpu;
-    if (m_draw_bind_group.valid())
-    {
-        gpu.destroy(m_draw_bind_group);
-        m_draw_bind_group = {};
-    }
     if (m_indirect_buffer.valid())
     {
         gpu.destroy(m_indirect_buffer);
@@ -165,13 +164,14 @@ void rendering_engine::instanced_mesh::collect_draw_items(std::vector<draw_item>
 
     auto& gpu = *runtime::current_engine().gpu;
 
-    // Per-instance storage buffer: one {mat4 model; vec4 color;} record per
-    // instance, indexed by gl_InstanceIndex in the instanced material.
+    // Per-instance vertex stream: one {mat4 model; vec4 color;} record per
+    // instance, bound to slot 1 and stepped once per instance by the
+    // instanced material's per-instance vertex layout.
     if (!m_instance_buffer.valid())
     {
         gpu::buffer_descriptor instance_descriptor{};
         instance_descriptor.size = m_capacity * sizeof(instance_record);
-        instance_descriptor.usage = gpu::buffer_usage_storage | gpu::buffer_usage_copy_dst;
+        instance_descriptor.usage = gpu::buffer_usage_vertex | gpu::buffer_usage_copy_dst;
         instance_descriptor.hint = gpu::buffer_usage_hint::dynamic_data;
         m_instance_buffer = gpu.create_buffer(instance_descriptor);
         m_instances_dirty = true;
@@ -190,18 +190,6 @@ void rendering_engine::instanced_mesh::collect_draw_items(std::vector<draw_item>
         const std::array<uint32_t, indirect_command_uints> command{m_index_count, m_instance_count, 0u, 0u, 0u};
         gpu.write_buffer(m_indirect_buffer, command.data(), indirect_command_size, 0);
         m_uploaded_instance_count = m_instance_count;
-    }
-
-    if (!m_draw_bind_group.valid())
-    {
-        gpu::bind_group_descriptor bg_descriptor{};
-        bg_descriptor.layout = m_material->per_draw_layout();
-        gpu::binding_value instance_slot{};
-        instance_slot.binding = instanced_material::instance_buffer_binding;
-        instance_slot.kind = gpu::binding_kind::storage_buffer;
-        instance_slot.buffer_value = m_instance_buffer;
-        bg_descriptor.entries.push_back(instance_slot);
-        m_draw_bind_group = gpu.create_bind_group(bg_descriptor);
     }
 
     // Re-upload the whole per-instance array when any record changed. The
@@ -227,8 +215,9 @@ void rendering_engine::instanced_mesh::collect_draw_items(std::vector<draw_item>
     item.vertex_buffer = m_vertex_buffer;
     item.index_buffer = m_index_buffer;
     item.indirect_buffer = m_indirect_buffer;
-    item.per_draw_bind_group = m_draw_bind_group;
+    item.instance_buffer = m_instance_buffer;
     item.index_count = m_index_count;
     item.vertex_stride = m_vertex_stride;
+    item.instance_stride = static_cast<uint32_t>(sizeof(instance_record));
     out.push_back(item);
 }

@@ -45,16 +45,24 @@ namespace rendering_engine
     // record instead of from @ref index_count. This is how
     // @ref instanced_mesh emits a single instanced draw over shared
     // geometry; only the index path supports it.
+    //
+    // A valid @ref instance_buffer is bound to vertex slot 1 as the
+    // per-instance stream (one record per instanced draw copy, stepped
+    // by the pipeline's per-instance vertex layout); @ref instance_stride
+    // is its record size. Used together with @ref indirect_buffer by
+    // @ref instanced_mesh.
     struct draw_item
     {
         material* mat{nullptr};
         gpu::buffer vertex_buffer{};
         gpu::buffer index_buffer{};
         gpu::buffer indirect_buffer{};
+        gpu::buffer instance_buffer{};
         gpu::bind_group per_draw_bind_group{};
         uint32_t vertex_count{0};
         uint32_t index_count{0};
         uint32_t vertex_stride{0};
+        uint32_t instance_stride{0};
         gpu::index_format index_format{gpu::index_format::uint32};
     };
 } // namespace rendering_engine

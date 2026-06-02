@@ -22,28 +22,32 @@
 
 #pragma once
 
+#include <cstdint>
+
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/materials/material.hpp>
 #include <rendering_engine/util/color.hpp>
 
 namespace rendering_engine
 {
-    // Built-in unlit material for @ref instanced_mesh. Position+UV vertex
+    // Built-in unlit material for @ref instanced_mesh. Position vertex
     // stream like @ref basic_material, but the model matrix and per-instance
-    // tint come from a per-draw storage buffer indexed by @c gl_InstanceIndex
-    // rather than a single per-draw model UBO — so one draw paints every
-    // instance with its own transform and colour.
+    // tint come from a second, per-instance vertex stream (bound at slot 1)
+    // rather than a per-draw model UBO — so one draw paints every instance
+    // with its own transform and colour.
     //
-    // Slot layout: the per-frame group at slot 0 (camera, owned by the
-    // @ref scene_pass), the per-draw group at slot 1 (the per-instance
-    // storage buffer, built by @ref instanced_mesh), and the per-material
-    // group at slot 2 (a flat tint multiplied onto every instance, owned
-    // by this material).
+    // The per-instance stream is a tightly packed record of a @c mat4 model
+    // (four @c vec4 columns at locations 1..4) followed by a @c vec4 colour
+    // (location 5); see @ref instance_buffer_stride. It is fed through
+    // @c glVertexAttribDivisor / @c VK_VERTEX_INPUT_RATE_INSTANCE instead of
+    // @c gl_InstanceIndex, which keeps the path portable across the OpenGL
+    // (ARB_gl_spirv) and Vulkan backends. @ref instanced_mesh builds a
+    // matching buffer; this material is meant to be fronted by it.
     //
-    // The per-draw bind group must carry a @c storage_buffer of
-    // @ref instanced_mesh records at @ref instance_buffer_binding; only
-    // @ref instanced_mesh produces a matching group, so this material is
-    // meant to be fronted by it.
+    // Slot layout: per-frame group at slot 0 (camera, owned by the
+    // @ref scene_pass) and the per-material group at slot 2 (a flat tint
+    // multiplied onto every instance, owned by this material). The per-draw
+    // group (slot 1) is unused.
     struct instanced_material : public material
     {
         // @p frame_layout is the per-frame bind-group layout owned by the
@@ -52,10 +56,10 @@ namespace rendering_engine
         explicit instanced_material(gpu::bind_group_layout frame_layout);
         ~instanced_material() override;
 
-        // Per-draw storage-buffer binding the instance records live at.
-        // Exposed so @ref instanced_mesh builds its bind group against the
-        // same number this material's pipeline expects.
-        static constexpr uint32_t instance_buffer_binding = 1;
+        // Byte stride of one per-instance record: a mat4 model (64 bytes)
+        // followed by a vec4 colour (16 bytes). @ref instanced_mesh lays out
+        // its instance buffer to match.
+        static constexpr uint32_t instance_buffer_stride = 16u * sizeof(float) + 4u * sizeof(float);
 
         // Flat tint multiplied onto every instance's own colour (white
         // leaves the per-instance colours unchanged).

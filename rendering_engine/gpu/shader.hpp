@@ -62,12 +62,24 @@ namespace rendering_engine::gpu
         uint32_t offset{0};
     };
 
+    // How a vertex buffer slot advances through its attributes. @c vertex
+    // steps once per vertex (the default); @c instance steps once per
+    // instance, so a single record feeds every vertex of one instanced
+    // draw copy. Maps to @c glVertexAttribDivisor (0 / 1) on the OpenGL
+    // backend and to @c VkVertexInputRate on Vulkan.
+    enum class vertex_step_mode
+    {
+        vertex,
+        instance,
+    };
+
     // Layout of one vertex buffer slot fed into a pipeline. The
     // pipeline references its layouts by index; the runtime
     // @c set_vertex_buffer call binds a buffer to the same slot.
     struct vertex_buffer_layout
     {
         uint32_t stride{0};
+        vertex_step_mode step_mode{vertex_step_mode::vertex};
         std::vector<vertex_attribute> attributes;
     };
 } // namespace rendering_engine::gpu

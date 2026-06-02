@@ -24,6 +24,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 #include <rendering_engine/gpu/bind_group.hpp>
 #include <rendering_engine/gpu/handle.hpp>
@@ -153,6 +154,20 @@ namespace rendering_engine
                                 const gpu::bind_group_layout_descriptor& material_layout = {},
                                 gpu::primitive_topology topology = gpu::primitive_topology::triangles);
 
+        // Multi-stream variant: each entry of @p vertex_layouts becomes a
+        // vertex buffer slot in declaration order, so a material can mix a
+        // per-vertex geometry stream with a per-instance stream (see
+        // @ref instanced_material). Otherwise identical to the single-layout
+        // overload above.
+        void construct_pipeline(const std::string& vertex_source,
+                                const std::string& fragment_source,
+                                const std::vector<gpu::vertex_buffer_layout>& vertex_layouts,
+                                const gpu::bind_group_layout_descriptor& draw_layout,
+                                gpu::bind_group_layout frame_layout,
+                                const material_params& params,
+                                const gpu::bind_group_layout_descriptor& material_layout = {},
+                                gpu::primitive_topology topology = gpu::primitive_topology::triangles);
+
         // Build the pipeline + per-draw layout from source. When
         // @p frame_layout is valid, slot 0 is reserved for a
         // per-frame bind group owned by the corresponding pass and
@@ -164,6 +179,19 @@ namespace rendering_engine
         void construct_pipeline(const std::string& vertex_source,
                                 const std::string& fragment_source,
                                 const gpu::vertex_buffer_layout& vertex_layout,
+                                const gpu::bind_group_layout_descriptor& draw_layout,
+                                gpu::bind_group_layout frame_layout,
+                                const gpu::depth_state& depth,
+                                const gpu::blend_state& blend,
+                                const gpu::rasterizer_state& rasterizer,
+                                const gpu::bind_group_layout_descriptor& material_layout = {},
+                                gpu::primitive_topology topology = gpu::primitive_topology::triangles);
+
+        // Multi-stream variant of the explicit-state overload; see the
+        // multi-stream @ref construct_pipeline above.
+        void construct_pipeline(const std::string& vertex_source,
+                                const std::string& fragment_source,
+                                const std::vector<gpu::vertex_buffer_layout>& vertex_layouts,
                                 const gpu::bind_group_layout_descriptor& draw_layout,
                                 gpu::bind_group_layout frame_layout,
                                 const gpu::depth_state& depth,
