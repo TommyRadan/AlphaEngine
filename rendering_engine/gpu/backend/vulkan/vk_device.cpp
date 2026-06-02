@@ -222,11 +222,11 @@ namespace rendering_engine::gpu::backend::vulkan
     {
         LOG_INF("Init gpu::backend::vulkan::vk_device");
 
-        auto& eng = control::current_engine();
+        auto& eng = runtime::current_engine();
         if (eng.settings != nullptr)
         {
-            m_window_width = eng.settings->get_window_width();
-            m_window_height = eng.settings->get_window_height();
+            m_window_width = eng.settings->window.width;
+            m_window_height = eng.settings->window.height;
         }
 
         create_instance();
@@ -841,7 +841,7 @@ namespace rendering_engine::gpu::backend::vulkan
         vkGetPhysicalDeviceSurfaceCapabilitiesKHR(m_physical_device, m_surface, &caps);
 
         m_surface_format = pick_surface_format(m_physical_device, m_surface);
-        const bool vsync_enabled = control::current_engine().settings->is_vsync_enabled();
+        const bool vsync_enabled = runtime::current_engine().settings->window.vsync;
         m_present_mode = pick_present_mode(m_physical_device, m_surface, vsync_enabled);
 
         VkExtent2D extent = caps.currentExtent;

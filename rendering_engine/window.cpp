@@ -64,10 +64,10 @@ namespace rendering_engine
             throw std::runtime_error{"Could not initialize video system"};
         }
 
-        ::settings& s{*control::current_engine().settings};
-        m_is_vulkan = s.get_graphics_backend() == graphics_backend::vulkan;
+        ::settings& s{*runtime::current_engine().settings};
+        m_is_vulkan = s.graphics.backend == graphics_backend::vulkan;
         SDL_WindowFlags window_flags{m_is_vulkan ? SDL_WINDOW_VULKAN : SDL_WINDOW_OPENGL};
-        auto type{s.get_window_type()};
+        auto type{s.window.type};
 
         const char* type_name = "windowed";
         bool fullscreen = false;
@@ -85,11 +85,11 @@ namespace rendering_engine
         }
 
         LOG_INF("Creating window: name='%s' size=%ux%u mode=%s double_buffered=%s",
-                s.get_window_name(),
-                s.get_window_width(),
-                s.get_window_height(),
+                s.window.name.c_str(),
+                s.window.width,
+                s.window.height,
                 type_name,
-                s.is_double_buffered() ? "true" : "false");
+                s.window.double_buffered ? "true" : "false");
 
         if (!m_is_vulkan)
         {
@@ -99,14 +99,13 @@ namespace rendering_engine
             SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE, 8);
             SDL_GL_SetAttribute(SDL_GL_BUFFER_SIZE, 32);
             SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 16);
-            SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, s.is_double_buffered());
+            SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, s.window.double_buffered);
             SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
             SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
             SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 6);
         }
 
-        m_window.reset(
-            SDL_CreateWindow(s.get_window_name(), s.get_window_width(), s.get_window_height(), window_flags));
+        m_window.reset(SDL_CreateWindow(s.window.name.c_str(), s.window.width, s.window.height, window_flags));
 
         if (m_window == nullptr)
         {
@@ -136,7 +135,7 @@ namespace rendering_engine
                 throw std::runtime_error{SDL_GetError()};
             }
             LOG_INF("SDL window and GL context created successfully");
-            const int swap_interval = s.is_vsync_enabled() ? 1 : 0;
+            const int swap_interval = s.window.vsync ? 1 : 0;
             if (!SDL_GL_SetSwapInterval(swap_interval))
             {
                 LOG_WRN("Could not set swap interval to %d: %s", swap_interval, SDL_GetError());

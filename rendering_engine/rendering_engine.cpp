@@ -72,8 +72,8 @@ void rendering_engine::context::init()
     uint32_t height = 0;
     if (eng.settings != nullptr)
     {
-        width = eng.settings->get_window_width();
-        height = eng.settings->get_window_height();
+        width = eng.settings->window.width;
+        height = eng.settings->window.height;
         eng.gpu->resize_swapchain(width, height);
     }
 

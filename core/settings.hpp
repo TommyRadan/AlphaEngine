@@ -22,7 +22,7 @@
 
 /**
  * @file settings.hpp
- * @brief Global read-only application settings (window, camera, input).
+ * @brief Engine-wide configuration, grouped per subsystem domain.
  */
 
 #pragma once
@@ -37,30 +37,21 @@ enum class win_type
     win_type_fullscreen  /**< Exclusive fullscreen. */
 };
 
-/** @brief GPU backend selected by @ref settings. */
+/** @brief GPU backend selected by @ref graphics_settings. */
 enum class graphics_backend
 {
     opengl, /**< OpenGL 4.6 core. */
     vulkan, /**< Vulkan. */
 };
 
-/**
- * @brief Engine-wide configuration, owned by @ref control::engine.
- *
- * Values are populated in the constructor — debug builds default to an
- * 800x600 windowed layout, release builds match the current display
- * mode and go fullscreen. All accessors are @c const and @c noexcept;
- * the struct is intended as read-only engine-wide configuration.
- */
-struct settings
+/** @brief Window / presentation configuration. */
+struct window_settings
 {
-    settings();
-
-    const unsigned int get_window_width() const noexcept;
-    const unsigned int get_window_height() const noexcept;
-    const char* get_window_name() const noexcept;
-    const win_type get_window_type() const noexcept;
-    const bool is_double_buffered() const noexcept;
+    unsigned int width;
+    unsigned int height;
+    std::string name;
+    win_type type;
+    bool double_buffered;
 
     /**
      * @brief Whether the presentation engine should wait for vertical
@@ -68,35 +59,53 @@ struct settings
      *        frame rate is uncapped (the debug FPS overlay is more useful
      *        with vsync off, and release favours latency over tearing).
      */
-    const bool is_vsync_enabled() const noexcept;
-
-    const float get_field_of_view() const noexcept;
-    const float get_mouse_sensitivity() const noexcept;
+    bool vsync;
 
     /** @brief Returns @c width / @c height of the window. */
-    const float get_aspect_ratio() const noexcept;
+    float aspect_ratio() const noexcept;
+};
 
-    const bool is_mouse_reversed() const noexcept;
-
+/** @brief GPU backend configuration. */
+struct graphics_settings
+{
     /**
      * @brief GPU backend the engine should bring up at startup.
      *
-     * Read once during @ref control::engine construction. The default
+     * Read once during @ref runtime::engine construction. The default
      * is @ref graphics_backend::opengl; the value can be overridden
      * via the @c ALPHAENGINE_GRAPHICS_BACKEND environment variable
      * (`opengl` or `vulkan`).
      */
-    const graphics_backend get_graphics_backend() const noexcept;
+    graphics_backend backend;
+};
 
-private:
-    unsigned int m_window_width;
-    unsigned int m_window_height;
-    std::string m_window_name;
-    win_type m_window_type;
-    bool m_is_double_buffered;
-    bool m_is_vsync_enabled;
-    float m_field_of_view;
-    float m_mouse_sensitivity;
-    bool m_is_mouse_reversed;
-    graphics_backend m_graphics_backend;
+/** @brief Camera configuration. */
+struct camera_settings
+{
+    float field_of_view;
+};
+
+/** @brief Input / mouse configuration. */
+struct input_settings
+{
+    float mouse_sensitivity;
+    bool mouse_reversed;
+};
+
+/**
+ * @brief Engine-wide configuration, owned by @ref runtime::engine.
+ *
+ * Values are populated in the constructor — debug builds default to a
+ * 1600x900 windowed layout, release builds match the current display
+ * mode and go fullscreen. The struct is intended as read-only engine-wide
+ * configuration, grouped into per-subsystem domains.
+ */
+struct settings
+{
+    settings();
+
+    window_settings window;
+    graphics_settings graphics;
+    camera_settings camera;
+    input_settings input;
 };

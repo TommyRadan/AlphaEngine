@@ -429,8 +429,8 @@ namespace rendering_engine::debug_ui
             return;
         }
 
-        auto& eng = control::current_engine();
-        const graphics_backend backend = eng.settings->get_graphics_backend();
+        auto& eng = runtime::current_engine();
+        const graphics_backend backend = eng.settings->graphics.backend;
 
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
@@ -459,7 +459,7 @@ namespace rendering_engine::debug_ui
         // Record the overlay into the swapchain-targeted debug pass. The
         // debug pass emits render_debug while its render pass is open, so
         // both backends land their draws on top of the composited frame.
-        eng.events->subscribe<event_engine::render_debug>(on_render_debug);
+        eng.events->subscribe<core::render_debug>(on_render_debug);
 
         LOG_INF("debug_ui: ImGui overlay initialised (SDL3 + %s)", graphics_backend_name(backend));
     }

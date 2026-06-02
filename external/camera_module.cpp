@@ -144,31 +144,31 @@ static void on_mouse_move(const core::mouse_move& event)
         return;
     }
 
-    infrastructure::math::vec3 rotation;
+    core::math::vec3 rotation;
     get_camera_rot(g_camera_id, &rotation.x, &rotation.y, &rotation.z);
-    infrastructure::math::vec3 up_vector{0.0f, 0.0f, 1.0f};
+    core::math::vec3 up_vector{0.0f, 0.0f, 1.0f};
 
     // Normalize the rotation vector to get the forward direction
-    infrastructure::math::vec3 forward = infrastructure::math::normalize(rotation);
+    core::math::vec3 forward = core::math::normalize(rotation);
 
     // Calculate the right vector (perpendicular to forward and up)
-    infrastructure::math::vec3 right = infrastructure::math::normalize(infrastructure::math::cross(forward, up_vector));
+    core::math::vec3 right = core::math::normalize(core::math::cross(forward, up_vector));
 
-    const auto& s = *control::current_engine().settings;
-    float sensitivity = s.get_mouse_sensitivity();
-    int pitch_multiplier = s.is_mouse_reversed() ? -1 : 1;
+    const auto& s = *runtime::current_engine().settings;
+    float sensitivity = s.input.mouse_sensitivity;
+    int pitch_multiplier = s.input.mouse_reversed ? -1 : 1;
 
     // Calculate rotation angles in radians
     float yaw_angle = delta_x * sensitivity;
     float pitch_angle = delta_y * sensitivity * pitch_multiplier;
 
     // Create rotation matrices
-    infrastructure::math::mat4 yaw_rotation = infrastructure::math::rotate(yaw_angle, up_vector);
-    infrastructure::math::mat4 pitch_rotation = infrastructure::math::rotate(pitch_angle, right);
+    core::math::mat4 yaw_rotation = core::math::rotate(yaw_angle, up_vector);
+    core::math::mat4 pitch_rotation = core::math::rotate(pitch_angle, right);
 
     // Apply rotations
-    infrastructure::math::vec4 rotated = infrastructure::math::vec4{forward, 0.0f} * yaw_rotation * pitch_rotation;
-    infrastructure::math::vec3 new_rotation = infrastructure::math::vec3{rotated.x, rotated.y, rotated.z};
+    core::math::vec4 rotated = core::math::vec4{forward, 0.0f} * yaw_rotation * pitch_rotation;
+    core::math::vec3 new_rotation = core::math::vec3{rotated.x, rotated.y, rotated.z};
 
     // Prevent looking too far up or down
     if (std::abs(new_rotation.z) > 0.99f)
