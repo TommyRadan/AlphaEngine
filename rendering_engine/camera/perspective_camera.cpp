@@ -20,29 +20,29 @@
  * SOFTWARE.
  */
 
-#include <control/engine.hpp>
-#include <infrastructure/math/math.hpp>
-#include <infrastructure/settings.hpp>
+#include <core/math/math.hpp>
+#include <core/settings.hpp>
 #include <rendering_engine/camera/perspective_camera.hpp>
+#include <runtime/engine.hpp>
 
 rendering_engine::perspective_camera::perspective_camera()
 {
-    const ::settings& s = *control::current_engine().settings;
+    const ::settings& s = *runtime::current_engine().settings;
 
-    field_of_view = s.get_field_of_view();
-    aspect_ratio = s.get_aspect_ratio();
+    field_of_view = s.camera.field_of_view;
+    aspect_ratio = s.window.aspect_ratio();
     near_clip = 0.1f;
     far_clip = 10000.0f;
 }
 
-const infrastructure::math::mat4 rendering_engine::perspective_camera::get_projection_matrix() const
+const core::math::mat4 rendering_engine::perspective_camera::get_projection_matrix() const
 {
     if (!m_is_projection_matrix_dirty)
     {
         return m_projection;
     }
 
-    m_projection = infrastructure::math::perspective(field_of_view, aspect_ratio, near_clip, far_clip);
+    m_projection = core::math::perspective(field_of_view, aspect_ratio, near_clip, far_clip);
     m_is_projection_matrix_dirty = false;
     return m_projection;
 }

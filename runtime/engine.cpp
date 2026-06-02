@@ -83,15 +83,15 @@ namespace runtime
         // Construction order mirrors the declaration order in the
         // header and the old subsystem init order in main_loop.cpp.
         settings = std::make_unique<::settings>();
-        time = std::make_unique<infrastructure::time>();
-        events = std::make_unique<event_engine::event_bus>();
+        time = std::make_unique<core::time>();
+        events = std::make_unique<core::event_bus>();
         window = std::make_unique<rendering_engine::window>();
-        gpu = rendering_engine::gpu::create_device(to_backend_type(settings->get_graphics_backend()));
+        gpu = rendering_engine::gpu::create_device(to_backend_type(settings->graphics.backend));
         // The built-in materials inside @c renderer are deferred
         // until init() because they compile GL shader programs and
         // need the GL context to be live first.
         renderer = std::make_unique<rendering_engine::context>();
-        scenes = std::make_unique<scene_graph::context>();
+        scenes = std::make_unique<runtime::context>();
     }
 
     engine::~engine()

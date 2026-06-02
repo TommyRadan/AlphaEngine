@@ -31,7 +31,7 @@ namespace rendering_engine
     {
         perspective_camera();
 
-        const infrastructure::math::mat4 get_projection_matrix() const final;
+        const core::math::mat4 get_projection_matrix() const final;
 
         float field_of_view;
         float aspect_ratio;
