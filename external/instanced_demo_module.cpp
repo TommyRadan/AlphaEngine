@@ -40,14 +40,15 @@
 
 namespace
 {
-    // A grid_side x grid_side wall of cubes drawn from one shared geometry
-    // in a single instanced draw call, each cube with its own transform and
-    // tint. The camera (camera_module) sits at -X looking toward the origin,
-    // so the wall is laid out in the Y-Z plane at x = 0 to face it.
-    constexpr uint32_t grid_side = 8;
-    constexpr uint32_t instance_count = grid_side * grid_side;
-    constexpr float spacing = 1.6f;
-    constexpr float cube_scale = 0.6f;
+    // A grid_side^3 lattice of small cubes drawn from one shared geometry
+    // in a single instanced draw call — thousands of objects, one draw.
+    // The camera (camera_module) starts at -X looking toward the origin, so
+    // the lattice is pushed forward along +X to sit in front of it.
+    constexpr uint32_t grid_side = 16;
+    constexpr uint32_t instance_count = grid_side * grid_side * grid_side; // 4096
+    constexpr float spacing = 0.7f;
+    constexpr float cube_scale = 0.32f;
+    constexpr float forward_offset = 2.0f;
 
     std::unique_ptr<rendering_engine::instanced_mesh> g_cubes;
     std::vector<core::math::vec3> g_base_positions;
@@ -119,19 +120,25 @@ namespace
         {
             for (uint32_t j = 0; j < grid_side; ++j)
             {
-                const uint32_t index = i * grid_side + j;
-                const float y = (static_cast<float>(i) - centre) * spacing;
-                const float z = (static_cast<float>(j) - centre) * spacing;
-                g_base_positions.push_back(core::math::vec3{0.0f, y, z});
+                for (uint32_t k = 0; k < grid_side; ++k)
+                {
+                    const uint32_t index = (i * grid_side + j) * grid_side + k;
+                    const float x = (static_cast<float>(i) - centre) * spacing + forward_offset;
+                    const float y = (static_cast<float>(j) - centre) * spacing;
+                    const float z = (static_cast<float>(k) - centre) * spacing;
+                    g_base_positions.push_back(core::math::vec3{x, y, z});
 
-                // Tint each cube by its grid position for a colour gradient.
-                const auto r = static_cast<uint8_t>(40 + (215 * i) / (grid_side - 1));
-                const auto b = static_cast<uint8_t>(40 + (215 * j) / (grid_side - 1));
-                g_cubes->set_instance_color(index, rendering_engine::util::color{r, 80, b, 255});
+                    // Tint each cube by its lattice cell for an RGB gradient.
+                    const auto r = static_cast<uint8_t>(40 + (215 * i) / (grid_side - 1));
+                    const auto g = static_cast<uint8_t>(40 + (215 * j) / (grid_side - 1));
+                    const auto b = static_cast<uint8_t>(40 + (215 * k) / (grid_side - 1));
+                    g_cubes->set_instance_color(index, rendering_engine::util::color{r, g, b, 255});
+                }
             }
         }
 
         runtime::current_engine().renderer->register_scene_renderable(g_cubes.get());
+        LOG_INF("instanced_demo_module: %u cubes in one instanced draw", instance_count);
     }
 
     void on_engine_stop(const core::engine_stop& event)
@@ -152,17 +159,17 @@ namespace
 
         g_time += static_cast<float>(get_delta_time()) / 1000.0f;
 
-        const core::math::vec3 spin_axis{0.0f, 0.0f, 1.0f};
+        const core::math::vec3 spin_axis{0.0f, 1.0f, 0.0f};
         const core::math::vec3 unit_scale{cube_scale, cube_scale, cube_scale};
         for (uint32_t index = 0; index < instance_count; ++index)
         {
             const core::math::vec3& base = g_base_positions[index];
-            // A travelling sine wave along the wall plus a per-cube spin,
-            // recomputed every frame to exercise the dynamic per-instance
-            // storage-buffer upload path.
-            const float phase = base.y + base.z;
-            const float bob = std::sin(g_time * 2.0f + phase) * 0.4f;
-            const core::math::vec3 position{base.x + bob, base.y, base.z};
+            // A travelling sine wave across the lattice plus a per-cube spin,
+            // recomputed every frame for all instances to exercise the
+            // dynamic per-instance storage-buffer upload path at scale.
+            const float phase = base.x + base.y + base.z;
+            const float bob = std::sin(g_time * 2.0f + phase) * 0.25f;
+            const core::math::vec3 position{base.x, base.y + bob, base.z};
             const float angle = g_time + phase;
 
             const core::math::mat4 model =

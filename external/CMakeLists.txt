@@ -2,7 +2,7 @@ target_sources(AlphaEngine PRIVATE
     camera_module.cpp
     exit_module.cpp
     frame_module.cpp
-    scene_graph_demo_module.cpp
+    instanced_demo_module.cpp
 )
 
 # The FPS counter used to live here as a label-rendering game module; it
@@ -10,17 +10,16 @@ target_sources(AlphaEngine PRIVATE
 # so the standalone fps_overlay_module was removed.
 
 # Only one scene-owning demo module is compiled at a time because each
-# places its showcase geometry at the origin. scene_graph_demo_module.cpp
-# is the active one: it builds a parent/child node hierarchy (a spinning
-# pivot with orbiting cube mesh_components, a second-level moon, and a
-# point light via light_component) to showcase the entity/component scene
-# graph and world-matrix propagation.
+# places its showcase geometry at the origin. instanced_demo_module.cpp is
+# the active one: it draws a grid_side^3 lattice of cubes (thousands of
+# objects) from one shared geometry in a single instanced draw call to
+# showcase the instanced_mesh renderable and its per-instance storage buffer.
 #
-# line_demo_module.cpp (coloured helix line strip), points_demo_module.cpp
-# (coloured Fibonacci-sphere point cloud), skybox_demo_module.cpp
-# (procedural sky + IBL sphere grid), phong_demo_module.cpp (Blinn-Phong
-# lit sphere) and instanced_demo_module.cpp (a wall of cubes drawn in one
-# instanced draw call) are the other showcases; swap any one filename in for
-# scene_graph_demo_module.cpp to bring it back.
+# scene_graph_demo_module.cpp (parent/child node hierarchy with orbiting
+# cube mesh_components and a point light), line_demo_module.cpp (coloured
+# helix line strip), points_demo_module.cpp (coloured Fibonacci-sphere point
+# cloud), skybox_demo_module.cpp (procedural sky + IBL sphere grid) and
+# phong_demo_module.cpp (Blinn-Phong lit sphere) are the other showcases;
+# swap any one filename in for instanced_demo_module.cpp to bring it back.
 
 add_subdirectory(api)
