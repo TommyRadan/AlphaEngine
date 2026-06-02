@@ -1,4 +1,5 @@
 target_sources(AlphaEngine PRIVATE
+    render_stats.hpp
     rendering_engine.cpp
     rendering_engine.hpp
     window.cpp

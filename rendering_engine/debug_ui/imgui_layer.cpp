@@ -45,6 +45,9 @@
 #include <rendering_engine/gpu/backend/vulkan/vk_resources.hpp>
 #include <rendering_engine/gpu/command_encoder.hpp>
 #include <rendering_engine/gpu/device.hpp>
+#include <rendering_engine/lighting/light.hpp>
+#include <rendering_engine/render_stats.hpp>
+#include <rendering_engine/rendering_engine.hpp>
 #include <rendering_engine/window.hpp>
 #include <runtime/engine.hpp>
 #include <SDL3/SDL.h>
@@ -76,6 +79,7 @@ namespace rendering_engine::debug_ui
         bool g_show_profiler = true;
         bool g_show_demo = false;
         bool g_show_helpers = true;
+        bool g_show_scene = true;
 
         // Rolling frame-time history (milliseconds) for the profiler
         // graph, used as a ring buffer.
@@ -145,6 +149,7 @@ namespace rendering_engine::debug_ui
                 if (ImGui::BeginPopupContextWindow())
                 {
                     ImGui::MenuItem("Profiler", nullptr, &g_show_profiler);
+                    ImGui::MenuItem("Scene", nullptr, &g_show_scene);
                     ImGui::MenuItem("Settings", nullptr, &g_show_settings);
                     ImGui::MenuItem("Helpers", nullptr, &g_show_helpers);
                     ImGui::MenuItem("ImGui demo", nullptr, &g_show_demo);
@@ -198,6 +203,64 @@ namespace rendering_engine::debug_ui
                 ImGui::Text("min %.2f ms", static_cast<double>(min_ms));
                 ImGui::SameLine();
                 ImGui::Text("max %.2f ms", static_cast<double>(max_ms));
+            }
+            ImGui::End();
+        }
+
+        // Scene statistics: how much geometry the scene pass submitted last
+        // frame (models, draw calls, instances, triangles, vertices) plus a
+        // breakdown of the live lights by type. The geometry figures come
+        // from the renderer's per-frame @ref render_stats; the light counts
+        // are read live from the lighting registry.
+        void draw_scene_window()
+        {
+            if (!g_show_scene)
+            {
+                return;
+            }
+
+            const auto& stats = runtime::current_engine().renderer->get_render_stats();
+
+            uint32_t ambient = 0;
+            uint32_t directional = 0;
+            uint32_t point = 0;
+            const auto& lights = registered_lights();
+            for (const auto* source : lights)
+            {
+                switch (source->type())
+                {
+                case light_type::ambient:
+                    ++ambient;
+                    break;
+                case light_type::directional:
+                    ++directional;
+                    break;
+                case light_type::point:
+                    ++point;
+                    break;
+                }
+            }
+
+            ImGui::SetNextWindowSize(ImVec2{300.0f, 0.0f}, ImGuiCond_FirstUseEver);
+            if (ImGui::Begin("Scene", &g_show_scene))
+            {
+                ImGui::SeparatorText("Geometry");
+                ImGui::Text("Models in scene: %u", stats.scene_renderables);
+                ImGui::Text("Models rendered: %u", stats.draw_calls);
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("No frustum culling yet — every registered model is drawn.");
+                }
+                ImGui::Text("Draw calls: %u", stats.draw_calls);
+                ImGui::Text("Instances: %u", stats.instances);
+                ImGui::Text("Triangles: %llu", static_cast<unsigned long long>(stats.triangles));
+                ImGui::Text("Vertices: %llu", static_cast<unsigned long long>(stats.vertices));
+
+                ImGui::SeparatorText("Lights");
+                ImGui::Text("Total: %zu", lights.size());
+                ImGui::Text("Ambient: %u", ambient);
+                ImGui::Text("Directional: %u", directional);
+                ImGui::Text("Point: %u", point);
             }
             ImGui::End();
         }
@@ -297,6 +360,7 @@ namespace rendering_engine::debug_ui
 
             draw_fps_overlay();
             draw_profiler_window();
+            draw_scene_window();
             draw_settings_window();
             draw_helpers_window();
             if (g_show_demo)

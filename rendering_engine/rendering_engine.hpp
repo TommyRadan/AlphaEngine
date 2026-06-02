@@ -31,6 +31,7 @@
 #include <vector>
 
 #include <rendering_engine/gpu/handle.hpp>
+#include <rendering_engine/render_stats.hpp>
 
 namespace rendering_engine
 {
@@ -189,6 +190,15 @@ namespace rendering_engine
         ui_material& get_ui_material();
 
         /**
+         * @brief This frame's scene / draw statistics (renderable count,
+         *        draw calls, instances, triangles, vertices).
+         *
+         * Refreshed by the scene pass every @ref render; the debug overlay
+         * reads it. Reflects the most recently completed scene pass.
+         */
+        const render_stats& get_render_stats() const;
+
+        /**
          * @brief Sets (or clears) the scene's image-based-lighting
          *        environment plus background.
          *
@@ -229,6 +239,10 @@ namespace rendering_engine
         // @ref init so @ref create_standard_material can build additional
         // materials against the same slot 0.
         gpu::bind_group_layout m_scene_frame_layout{};
+
+        // This frame's draw statistics, filled by the scene pass (which
+        // holds a pointer to it) and surfaced via @ref get_render_stats.
+        render_stats m_render_stats{};
 
         // The active scene environment, or null. Stored so newly created
         // materials inherit the image-based lighting. Non-owning.
