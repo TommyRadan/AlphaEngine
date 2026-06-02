@@ -38,7 +38,7 @@ namespace rendering_engine
      * @brief 3D scene pass. Clears the swapchain colour and depth,
      *        collects draw items from the scene-renderable registry,
      *        sorts them by pipeline, and dispatches them; broadcasts
-     *        @ref event_engine::render_scene as the documented escape
+     *        @ref core::render_scene as the documented escape
      *        hatch for debug / gizmo callers.
      *
      * Owns the per-frame bind-group layout (camera @c viewMatrix /

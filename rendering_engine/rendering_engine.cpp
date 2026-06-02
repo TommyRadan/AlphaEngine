@@ -22,9 +22,8 @@
 
 #include <rendering_engine/rendering_engine.hpp>
 
-#include <control/engine.hpp>
-#include <infrastructure/log.hpp>
-#include <infrastructure/settings.hpp>
+#include <core/log.hpp>
+#include <core/settings.hpp>
 #include <rendering_engine/camera/camera.hpp>
 #include <rendering_engine/debug/axes_helper.hpp>
 #include <rendering_engine/debug/helper.hpp>
@@ -52,6 +51,7 @@
 #include <rendering_engine/passes/ui_pass.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
 #include <rendering_engine/window.hpp>
+#include <runtime/engine.hpp>
 
 #include <algorithm>
 
@@ -62,7 +62,7 @@ void rendering_engine::context::init()
 {
     LOG_INF("Init Rendering Engine");
 
-    auto& eng = control::current_engine();
+    auto& eng = runtime::current_engine();
     eng.window->init();
     eng.gpu->init();
 
@@ -207,7 +207,7 @@ void rendering_engine::context::init()
 
 void rendering_engine::context::quit()
 {
-    auto& eng = control::current_engine();
+    auto& eng = runtime::current_engine();
 
     // Tear the ImGui overlay down first, while the window and GL context
     // it bound to are still alive. No-op in release builds.
@@ -260,7 +260,7 @@ void rendering_engine::context::quit()
 
 void rendering_engine::context::render()
 {
-    auto& eng = control::current_engine();
+    auto& eng = runtime::current_engine();
     auto& gpu = *eng.gpu;
 
     // Capture per-frame state once so passes cannot disagree about

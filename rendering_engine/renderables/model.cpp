@@ -22,19 +22,19 @@
 
 #include <rendering_engine/renderables/model.hpp>
 
-#include <control/engine.hpp>
-#include <infrastructure/log.hpp>
-#include <infrastructure/math/math.hpp>
+#include <core/log.hpp>
+#include <core/math/math.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/materials/material.hpp>
 #include <rendering_engine/mesh/vertex.hpp>
+#include <runtime/engine.hpp>
 
 rendering_engine::model::model(material* mat) : m_material{mat} {}
 
 rendering_engine::model::~model()
 {
-    auto& gpu = *control::current_engine().gpu;
+    auto& gpu = *runtime::current_engine().gpu;
     if (m_draw_bind_group.valid())
     {
         gpu.destroy(m_draw_bind_group);
@@ -57,7 +57,7 @@ void rendering_engine::model::upload_mesh(const rendering_engine::mesh& mesh)
     m_vertex_count = mesh.vertex_count();
     m_vertex_stride = sizeof(vertex_position_uv_normal);
 
-    auto& gpu = *control::current_engine().gpu;
+    auto& gpu = *runtime::current_engine().gpu;
 
     gpu::buffer_descriptor vertex_descriptor{};
     vertex_descriptor.size = m_vertex_count * sizeof(vertex_position_uv_normal);
@@ -79,7 +79,7 @@ void rendering_engine::model::collect_draw_items(std::vector<draw_item>& out)
         return;
     }
 
-    auto& gpu = *control::current_engine().gpu;
+    auto& gpu = *runtime::current_engine().gpu;
 
     if (!m_draw_ubo.valid())
     {
@@ -87,7 +87,7 @@ void rendering_engine::model::collect_draw_items(std::vector<draw_item>& out)
         // basic_material vertex shader: a single mat4 modelMatrix
         // packed std140 (64 bytes, no padding).
         gpu::buffer_descriptor ubo_descriptor{};
-        ubo_descriptor.size = sizeof(infrastructure::math::mat4);
+        ubo_descriptor.size = sizeof(core::math::mat4);
         ubo_descriptor.usage = gpu::buffer_usage_uniform | gpu::buffer_usage_copy_dst;
         ubo_descriptor.hint = gpu::buffer_usage_hint::dynamic_data;
         m_draw_ubo = gpu.create_buffer(ubo_descriptor);
@@ -106,7 +106,7 @@ void rendering_engine::model::collect_draw_items(std::vector<draw_item>& out)
     }
 
     const auto model_matrix = transform.get_world_matrix();
-    gpu.write_buffer(m_draw_ubo, model_matrix.data(), sizeof(infrastructure::math::mat4), 0);
+    gpu.write_buffer(m_draw_ubo, model_matrix.data(), sizeof(core::math::mat4), 0);
 
     draw_item item{};
     item.mat = m_material;

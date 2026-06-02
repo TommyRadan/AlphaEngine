@@ -22,7 +22,7 @@
 
 #pragma once
 
-#include <infrastructure/math/math.hpp>
+#include <core/math/math.hpp>
 #include <rendering_engine/camera/camera.hpp>
 
 namespace rendering_engine
@@ -31,7 +31,7 @@ namespace rendering_engine
     {
         orthographic_camera();
 
-        const infrastructure::math::mat4 get_projection_matrix() const final;
+        const core::math::mat4 get_projection_matrix() const final;
 
         float x_magnification;
         float y_magnification;

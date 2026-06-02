@@ -55,7 +55,7 @@ namespace rendering_engine
     /**
      * @brief Owns the application window, its GL context, and pumps OS input.
      *
-     * Owned by @ref control::engine. The window and GL context are
+     * Owned by @ref runtime::engine. The window and GL context are
      * held as @c std::unique_ptr with SDL-specific deleters, so their
      * lifetime is strictly tied to this instance — @ref init creates
      * them and @ref quit (or destruction) releases them. All methods
@@ -78,9 +78,9 @@ namespace rendering_engine
 
         /**
          * @brief Pumps the SDL event queue and translates OS input into
-         *        engine events broadcast through @ref event_engine::event_bus.
+         *        engine events broadcast through @ref core::event_bus.
          *
-         * Also broadcasts a @ref event_engine::frame event carrying the
+         * Also broadcasts a @ref core::frame event carrying the
          * current delta time. Call once per main-loop iteration.
          */
         void tick();

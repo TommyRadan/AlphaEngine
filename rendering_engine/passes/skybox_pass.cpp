@@ -24,8 +24,7 @@
 
 #include <string>
 
-#include <control/engine.hpp>
-#include <infrastructure/math/math.hpp>
+#include <core/math/math.hpp>
 #include <rendering_engine/camera/camera.hpp>
 #include <rendering_engine/gpu/bind_group.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
@@ -35,6 +34,7 @@
 #include <rendering_engine/gpu/shader.hpp>
 #include <rendering_engine/gpu/shader_compiler.hpp>
 #include <rendering_engine/passes/post/fullscreen_triangle.hpp>
+#include <runtime/engine.hpp>
 
 namespace
 {
@@ -79,14 +79,14 @@ namespace
 )fs";
 
     // std140 size of the Skybox UBO: a single mat4.
-    constexpr size_t sky_ubo_size = sizeof(infrastructure::math::mat4);
+    constexpr size_t sky_ubo_size = sizeof(core::math::mat4);
 } // namespace
 
 namespace rendering_engine
 {
     skybox_pass::skybox_pass()
     {
-        auto& gpu = *control::current_engine().gpu;
+        auto& gpu = *runtime::current_engine().gpu;
 
         gpu::shader_module_descriptor vs_descriptor{};
         vs_descriptor.stage = gpu::shader_stage::vertex;
@@ -153,7 +153,7 @@ namespace rendering_engine
 
     skybox_pass::~skybox_pass()
     {
-        auto& gpu = *control::current_engine().gpu;
+        auto& gpu = *runtime::current_engine().gpu;
         if (m_pipeline.valid())
         {
             gpu.destroy(m_pipeline);
@@ -199,7 +199,7 @@ namespace rendering_engine
 
     void skybox_pass::rebuild_bind_group()
     {
-        auto& gpu = *control::current_engine().gpu;
+        auto& gpu = *runtime::current_engine().gpu;
         if (m_input_bind_group.valid())
         {
             gpu.destroy(m_input_bind_group);
@@ -233,18 +233,18 @@ namespace rendering_engine
             return;
         }
 
-        auto& gpu = *control::current_engine().gpu;
+        auto& gpu = *runtime::current_engine().gpu;
 
         // Strip the translation from the view matrix so the sky rotates
         // with the camera but never translates, then invert
         // projection * view so the vertex shader can unproject screen
         // corners into world-space ray directions.
-        infrastructure::math::mat4 view = ctx.active_camera->get_view_matrix();
+        core::math::mat4 view = ctx.active_camera->get_view_matrix();
         view.data()[12] = 0.0f;
         view.data()[13] = 0.0f;
         view.data()[14] = 0.0f;
-        const infrastructure::math::mat4 projection = ctx.active_camera->get_projection_matrix();
-        const infrastructure::math::mat4 inv_view_proj = infrastructure::math::inverse(projection * view);
+        const core::math::mat4 projection = ctx.active_camera->get_projection_matrix();
+        const core::math::mat4 inv_view_proj = core::math::inverse(projection * view);
         gpu.write_buffer(m_sky_ubo, inv_view_proj.data(), sky_ubo_size, 0);
 
         gpu::render_pass_descriptor descriptor{};

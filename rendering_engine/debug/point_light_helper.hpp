@@ -22,7 +22,7 @@
 
 #pragma once
 
-#include <infrastructure/math/math.hpp>
+#include <core/math/math.hpp>
 #include <rendering_engine/debug/line_helper.hpp>
 
 namespace rendering_engine
@@ -50,8 +50,8 @@ namespace rendering_engine::debug
 
         // Last state the geometry was built from, so refresh() only
         // rebuilds when the light actually moves or changes colour.
-        infrastructure::math::vec3 m_last_position{0.0f, 0.0f, 0.0f};
-        infrastructure::math::vec3 m_last_color{0.0f, 0.0f, 0.0f};
+        core::math::vec3 m_last_position{0.0f, 0.0f, 0.0f};
+        core::math::vec3 m_last_color{0.0f, 0.0f, 0.0f};
         bool m_built{false};
     };
 } // namespace rendering_engine::debug

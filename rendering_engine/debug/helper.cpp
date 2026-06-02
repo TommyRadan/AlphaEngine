@@ -24,8 +24,8 @@
 
 #include <algorithm>
 
-#include <control/engine.hpp>
 #include <rendering_engine/rendering_engine.hpp>
+#include <runtime/engine.hpp>
 
 namespace rendering_engine::debug
 {
@@ -46,7 +46,7 @@ namespace rendering_engine::debug
     {
         helper_registry().push_back(this);
 
-        auto& renderer = *control::current_engine().renderer;
+        auto& renderer = *runtime::current_engine().renderer;
         if (m_layer == helper_layer::scene)
         {
             renderer.register_scene_renderable(this);
@@ -59,7 +59,7 @@ namespace rendering_engine::debug
 
     helper::~helper()
     {
-        auto& renderer = *control::current_engine().renderer;
+        auto& renderer = *runtime::current_engine().renderer;
         if (m_layer == helper_layer::scene)
         {
             renderer.unregister_scene_renderable(this);
@@ -78,9 +78,9 @@ namespace rendering_engine::debug
         return m_name;
     }
 
-    infrastructure::math::vec3 helper::to_rgb(const util::color& c)
+    core::math::vec3 helper::to_rgb(const util::color& c)
     {
-        return infrastructure::math::vec3{
+        return core::math::vec3{
             static_cast<float>(c.r) / 255.0f, static_cast<float>(c.g) / 255.0f, static_cast<float>(c.b) / 255.0f};
     }
 

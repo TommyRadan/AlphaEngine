@@ -22,45 +22,45 @@
 
 #pragma once
 
-#include <infrastructure/math/math.hpp>
+#include <core/math/math.hpp>
 
 namespace rendering_engine
 {
     struct vertex_position
     {
-        infrastructure::math::vec3 pos;
+        core::math::vec3 pos;
     };
 
     struct vertex_position_color
     {
-        infrastructure::math::vec3 pos;
-        infrastructure::math::vec3 color;
+        core::math::vec3 pos;
+        core::math::vec3 color;
     };
 
     struct vertex_position_uv
     {
-        infrastructure::math::vec3 pos;
-        infrastructure::math::vec2 uv;
+        core::math::vec3 pos;
+        core::math::vec2 uv;
     };
 
     struct vertex_position_normal
     {
-        infrastructure::math::vec3 pos;
-        infrastructure::math::vec3 normal;
+        core::math::vec3 pos;
+        core::math::vec3 normal;
     };
 
     struct vertex_position_color_normal
     {
-        infrastructure::math::vec3 pos;
-        infrastructure::math::vec3 color;
-        infrastructure::math::vec3 normal;
+        core::math::vec3 pos;
+        core::math::vec3 color;
+        core::math::vec3 normal;
     };
 
     struct vertex_position_uv_normal
     {
-        infrastructure::math::vec3 pos;
-        infrastructure::math::vec2 uv;
-        infrastructure::math::vec3 normal;
+        core::math::vec3 pos;
+        core::math::vec2 uv;
+        core::math::vec3 normal;
     };
 
     // The @c tangent is stored as a @c vec4 so the bitangent can be
@@ -70,9 +70,9 @@ namespace rendering_engine
     // bitangent correctly.
     struct vertex_position_uv_normal_tangent
     {
-        infrastructure::math::vec3 pos;
-        infrastructure::math::vec2 uv;
-        infrastructure::math::vec3 normal;
-        infrastructure::math::vec4 tangent;
+        core::math::vec3 pos;
+        core::math::vec2 uv;
+        core::math::vec3 normal;
+        core::math::vec4 tangent;
     };
 } // namespace rendering_engine

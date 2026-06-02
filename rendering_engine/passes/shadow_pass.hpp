@@ -24,7 +24,7 @@
 
 #include <vector>
 
-#include <infrastructure/math/math.hpp>
+#include <core/math/math.hpp>
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/passes/pass.hpp>
 #include <rendering_engine/renderables/draw_item.hpp>
@@ -76,7 +76,7 @@ namespace rendering_engine
         // Light-space view-projection matrix for the active caster,
         // refreshed every @ref record. Only meaningful when
         // @ref has_shadow is true.
-        const infrastructure::math::mat4& light_view_projection() const;
+        const core::math::mat4& light_view_projection() const;
 
         // Whether a shadow-casting directional light was found this
         // frame and the shadow map holds usable depth.
@@ -117,7 +117,7 @@ namespace rendering_engine
         // Reused across frames so the allocation persists.
         std::vector<draw_item> m_items;
 
-        infrastructure::math::mat4 m_light_view_projection{};
+        core::math::mat4 m_light_view_projection{};
         bool m_has_shadow{false};
         int m_shadow_light_index{-1};
     };

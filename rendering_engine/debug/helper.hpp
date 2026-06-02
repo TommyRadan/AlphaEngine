@@ -24,7 +24,7 @@
 
 #include <vector>
 
-#include <infrastructure/math/math.hpp>
+#include <core/math/math.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
 #include <rendering_engine/util/color.hpp>
 
@@ -74,7 +74,7 @@ namespace rendering_engine::debug
     protected:
         // Linear-RGB triple in [0, 1] from a 0..255 @ref util::color,
         // ignoring alpha.
-        static infrastructure::math::vec3 to_rgb(const util::color& c);
+        static core::math::vec3 to_rgb(const util::color& c);
 
     private:
         const char* m_name;

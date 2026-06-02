@@ -28,7 +28,7 @@
 #include <glslang/Public/ShaderLang.h>
 #include <SPIRV/GlslangToSpv.h>
 
-#include <infrastructure/log.hpp>
+#include <core/log.hpp>
 
 namespace rendering_engine::gpu
 {

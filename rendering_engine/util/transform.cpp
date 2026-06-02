@@ -20,7 +20,7 @@
  * SOFTWARE.
  */
 
-#include <infrastructure/math/math.hpp>
+#include <core/math/math.hpp>
 #include <rendering_engine/util/transform.hpp>
 
 rendering_engine::util::transform::transform()
@@ -36,92 +36,91 @@ void rendering_engine::util::transform::mark_local_dirty()
     ++m_local_version;
 }
 
-void rendering_engine::util::transform::set_position(const infrastructure::math::vec3& position)
+void rendering_engine::util::transform::set_position(const core::math::vec3& position)
 {
     m_position = position;
     mark_local_dirty();
 }
 
-void rendering_engine::util::transform::set_rotation(const infrastructure::math::vec3& rotation)
+void rendering_engine::util::transform::set_rotation(const core::math::vec3& rotation)
 {
     m_rotation = rotation;
-    m_quaternion = infrastructure::math::quat_from_euler(rotation);
+    m_quaternion = core::math::quat_from_euler(rotation);
     mark_local_dirty();
 }
 
-void rendering_engine::util::transform::set_quaternion(const infrastructure::math::quat& rotation)
+void rendering_engine::util::transform::set_quaternion(const core::math::quat& rotation)
 {
-    m_quaternion = infrastructure::math::normalize(rotation);
-    m_rotation = infrastructure::math::euler_from_quat(m_quaternion);
+    m_quaternion = core::math::normalize(rotation);
+    m_rotation = core::math::euler_from_quat(m_quaternion);
     mark_local_dirty();
 }
 
-void rendering_engine::util::transform::set_scale(const infrastructure::math::vec3& scale)
+void rendering_engine::util::transform::set_scale(const core::math::vec3& scale)
 {
     m_scale = scale;
     mark_local_dirty();
 }
 
-infrastructure::math::vec3 rendering_engine::util::transform::get_position() const
+core::math::vec3 rendering_engine::util::transform::get_position() const
 {
     return m_position;
 }
 
-infrastructure::math::vec3 rendering_engine::util::transform::get_rotation() const
+core::math::vec3 rendering_engine::util::transform::get_rotation() const
 {
     return m_rotation;
 }
 
-infrastructure::math::quat rendering_engine::util::transform::get_quaternion() const
+core::math::quat rendering_engine::util::transform::get_quaternion() const
 {
     return m_quaternion;
 }
 
-infrastructure::math::vec3 rendering_engine::util::transform::get_scale() const
+core::math::vec3 rendering_engine::util::transform::get_scale() const
 {
     return m_scale;
 }
 
-void rendering_engine::util::transform::look_at(const infrastructure::math::vec3& target,
-                                                const infrastructure::math::vec3& up)
+void rendering_engine::util::transform::look_at(const core::math::vec3& target, const core::math::vec3& up)
 {
-    infrastructure::math::vec3 direction = target - m_position;
-    if (infrastructure::math::length(direction) <= 0.0f)
+    core::math::vec3 direction = target - m_position;
+    if (core::math::length(direction) <= 0.0f)
     {
         return;
     }
 
-    m_quaternion = infrastructure::math::quat_look_at(direction, up);
-    m_rotation = infrastructure::math::euler_from_quat(m_quaternion);
+    m_quaternion = core::math::quat_look_at(direction, up);
+    m_rotation = core::math::euler_from_quat(m_quaternion);
     mark_local_dirty();
 }
 
-infrastructure::math::vec3 rendering_engine::util::transform::get_forward() const
+core::math::vec3 rendering_engine::util::transform::get_forward() const
 {
-    return infrastructure::math::normalize(m_quaternion * infrastructure::math::vec3{0.0f, 0.0f, -1.0f});
+    return core::math::normalize(m_quaternion * core::math::vec3{0.0f, 0.0f, -1.0f});
 }
 
-infrastructure::math::vec3 rendering_engine::util::transform::get_right() const
+core::math::vec3 rendering_engine::util::transform::get_right() const
 {
-    return infrastructure::math::normalize(m_quaternion * infrastructure::math::vec3{1.0f, 0.0f, 0.0f});
+    return core::math::normalize(m_quaternion * core::math::vec3{1.0f, 0.0f, 0.0f});
 }
 
-infrastructure::math::vec3 rendering_engine::util::transform::get_up() const
+core::math::vec3 rendering_engine::util::transform::get_up() const
 {
-    return infrastructure::math::normalize(m_quaternion * infrastructure::math::vec3{0.0f, 1.0f, 0.0f});
+    return core::math::normalize(m_quaternion * core::math::vec3{0.0f, 1.0f, 0.0f});
 }
 
-infrastructure::math::mat4 rendering_engine::util::transform::get_transform_matrix() const
+core::math::mat4 rendering_engine::util::transform::get_transform_matrix() const
 {
     if (!m_is_transform_matrix_dirty)
     {
         return m_transform_matrix;
     }
 
-    using infrastructure::math::mat4;
-    using infrastructure::math::scale;
-    using infrastructure::math::to_mat4;
-    using infrastructure::math::translate;
+    using core::math::mat4;
+    using core::math::scale;
+    using core::math::to_mat4;
+    using core::math::translate;
 
     mat4 pos_matrix = translate(m_position);
     mat4 rot_matrix = to_mat4(m_quaternion);
@@ -132,9 +131,9 @@ infrastructure::math::mat4 rendering_engine::util::transform::get_transform_matr
     return m_transform_matrix;
 }
 
-infrastructure::math::mat4 rendering_engine::util::transform::get_world_matrix() const
+core::math::mat4 rendering_engine::util::transform::get_world_matrix() const
 {
-    const infrastructure::math::mat4 local = get_transform_matrix();
+    const core::math::mat4 local = get_transform_matrix();
 
     if (m_parent == nullptr)
     {
@@ -152,7 +151,7 @@ infrastructure::math::mat4 rendering_engine::util::transform::get_world_matrix()
 
     // Resolve the parent first; this advances the parent's world version if any
     // ancestor moved, so the comparison below catches the change.
-    const infrastructure::math::mat4 parent_world = m_parent->get_world_matrix();
+    const core::math::mat4 parent_world = m_parent->get_world_matrix();
     if (m_world_version == 0 || m_seen_local_version != m_local_version ||
         m_seen_parent_world_version != m_parent->m_world_version)
     {

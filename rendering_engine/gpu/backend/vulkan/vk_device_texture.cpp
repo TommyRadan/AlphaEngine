@@ -30,7 +30,7 @@
 
 #include <cstring>
 
-#include <infrastructure/log.hpp>
+#include <core/log.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_translate.hpp>
 
 namespace rendering_engine::gpu::backend::vulkan

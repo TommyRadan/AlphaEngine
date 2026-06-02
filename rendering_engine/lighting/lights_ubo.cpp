@@ -22,7 +22,7 @@
 
 #include <rendering_engine/lighting/lights_ubo.hpp>
 
-#include <infrastructure/math/math.hpp>
+#include <core/math/math.hpp>
 #include <rendering_engine/lighting/ambient_light.hpp>
 #include <rendering_engine/lighting/directional_light.hpp>
 #include <rendering_engine/lighting/light.hpp>
@@ -32,7 +32,7 @@ namespace rendering_engine
 {
     namespace
     {
-        void write_vec3(float (&dst)[4], const infrastructure::math::vec3& v, float w)
+        void write_vec3(float (&dst)[4], const core::math::vec3& v, float w)
         {
             dst[0] = v.x;
             dst[1] = v.y;
@@ -45,7 +45,7 @@ namespace rendering_engine
     {
         out = gpu_lights{};
 
-        infrastructure::math::vec3 ambient{0.0f, 0.0f, 0.0f};
+        core::math::vec3 ambient{0.0f, 0.0f, 0.0f};
         uint32_t directional_count = 0;
         uint32_t point_count = 0;
 
@@ -66,7 +66,7 @@ namespace rendering_engine
                 }
                 const auto* dl = static_cast<const directional_light*>(l);
                 gpu_directional_light& slot = out.directional[directional_count];
-                write_vec3(slot.direction, infrastructure::math::normalize(dl->direction), 0.0f);
+                write_vec3(slot.direction, core::math::normalize(dl->direction), 0.0f);
                 write_vec3(slot.color, dl->color * dl->intensity, 0.0f);
                 ++directional_count;
                 break;

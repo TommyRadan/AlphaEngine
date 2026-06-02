@@ -28,17 +28,17 @@
 #include "api/log.hpp"
 #include "api/time.hpp"
 
-#include <control/engine.hpp>
-#include <infrastructure/log.hpp>
-#include <infrastructure/math/math.hpp>
-#include <infrastructure/settings.hpp>
+#include <core/log.hpp>
+#include <core/math/math.hpp>
+#include <core/settings.hpp>
 #include <rendering_engine/rendering_engine.hpp>
+#include <runtime/engine.hpp>
 
 camera_id g_camera_id = 0;
-std::map<event_engine::key_code, bool> keys;
-std::map<event_engine::mouse_key_code, bool> mouse_keys;
+std::map<core::key_code, bool> keys;
+std::map<core::mouse_key_code, bool> mouse_keys;
 
-static void on_engine_start(const event_engine::engine_start& event)
+static void on_engine_start(const core::engine_start& event)
 {
     g_camera_id = create_camera(camera_type::perspective);
     attach_camera(g_camera_id);
@@ -46,80 +46,80 @@ static void on_engine_start(const event_engine::engine_start& event)
     set_camera_pos(g_camera_id, -5.0, 0.0, 0.0);
 }
 
-static void on_engine_stop(const event_engine::engine_stop& event)
+static void on_engine_stop(const core::engine_stop& event)
 {
     destroy_camera(g_camera_id);
 }
 
-static void on_key_down(const event_engine::key_down& event)
+static void on_key_down(const core::key_down& event)
 {
     keys[event.m_key_code] = true;
 }
 
-static void on_key_up(const event_engine::key_up& event)
+static void on_key_up(const core::key_up& event)
 {
     keys[event.m_key_code] = false;
 }
 
-static void on_mouse_key_down(const event_engine::mouse_key_down& event)
+static void on_mouse_key_down(const core::mouse_key_down& event)
 {
     mouse_keys[event.m_key_code] = true;
 }
 
-static void on_mouse_key_up(const event_engine::mouse_key_up& event)
+static void on_mouse_key_up(const core::mouse_key_up& event)
 {
     mouse_keys[event.m_key_code] = false;
 }
 
-static void on_frame(const event_engine::frame& event)
+static void on_frame(const core::frame& event)
 {
     if (g_camera_id == 0)
     {
         return;
     }
 
-    infrastructure::math::vec3 position;
+    core::math::vec3 position;
     get_camera_pos(g_camera_id, &position.x, &position.y, &position.z);
 
-    infrastructure::math::vec3 rotation;
+    core::math::vec3 rotation;
     get_camera_rot(g_camera_id, &rotation.x, &rotation.y, &rotation.z);
 
     float speed = 3.0f;
-    if (keys[event_engine::key_code::shift])
+    if (keys[core::key_code::shift])
     {
         speed = 30.0f;
     }
 
     float distance = speed * ((float)get_delta_time() / 1000);
-    infrastructure::math::vec3 up_vector{0.0f, 0.0f, 1.0f};
-    infrastructure::math::vec3 new_position = position;
+    core::math::vec3 up_vector{0.0f, 0.0f, 1.0f};
+    core::math::vec3 new_position = position;
 
-    if (keys[event_engine::key_code::w])
+    if (keys[core::key_code::w])
     {
         new_position += rotation * distance;
     }
 
-    if (keys[event_engine::key_code::a])
+    if (keys[core::key_code::a])
     {
-        new_position -= infrastructure::math::cross(rotation, up_vector) * distance;
+        new_position -= core::math::cross(rotation, up_vector) * distance;
     }
 
-    if (keys[event_engine::key_code::s])
+    if (keys[core::key_code::s])
     {
         new_position -= rotation * distance;
     }
 
-    if (keys[event_engine::key_code::d])
+    if (keys[core::key_code::d])
     {
-        new_position += infrastructure::math::cross(rotation, up_vector) * distance;
+        new_position += core::math::cross(rotation, up_vector) * distance;
     }
 
-    if (keys[event_engine::key_code::space])
+    if (keys[core::key_code::space])
     {
         new_position += up_vector * distance;
     }
 
-    if (keys[event_engine::key_code::ctrl])
+    if (keys[core::key_code::ctrl])
     {
         new_position -= up_vector * distance;
     }
@@ -127,13 +127,13 @@ static void on_frame(const event_engine::frame& event)
     set_camera_pos(g_camera_id, new_position.x, new_position.y, new_position.z);
 }
 
-static void on_mouse_move(const event_engine::mouse_move& event)
+static void on_mouse_move(const core::mouse_move& event)
 {
     int32_t delta_x = event.m_x;
     int32_t delta_y = event.m_y;
 
 #if _DEBUG
-    if (!mouse_keys[event_engine::mouse_key_code::left])
+    if (!mouse_keys[core::mouse_key_code::left])
     {
         return;
     }

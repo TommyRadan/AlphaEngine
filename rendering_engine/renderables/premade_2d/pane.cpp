@@ -24,12 +24,12 @@
 
 #include <array>
 
-#include <control/engine.hpp>
-#include <infrastructure/log.hpp>
+#include <core/log.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/materials/material.hpp>
 #include <rendering_engine/mesh/vertex.hpp>
+#include <runtime/engine.hpp>
 
 namespace
 {
@@ -39,11 +39,11 @@ namespace
     constexpr size_t pane_draw_ubo_size = 32;
 } // namespace
 
-rendering_engine::pane::pane(material* mat, const infrastructure::math::vec2& size) : m_material{mat}, m_size{size} {}
+rendering_engine::pane::pane(material* mat, const core::math::vec2& size) : m_material{mat}, m_size{size} {}
 
 rendering_engine::pane::~pane()
 {
-    auto& gpu = *control::current_engine().gpu;
+    auto& gpu = *runtime::current_engine().gpu;
     if (m_draw_bind_group.valid())
     {
         gpu.destroy(m_draw_bind_group);
@@ -78,7 +78,7 @@ void rendering_engine::pane::set_color(const rendering_engine::util::color& colo
 
 void rendering_engine::pane::set_image(const rendering_engine::util::image& image)
 {
-    auto& gpu = *control::current_engine().gpu;
+    auto& gpu = *runtime::current_engine().gpu;
     if (m_texture.valid())
     {
         gpu.destroy(m_texture);
@@ -118,21 +118,21 @@ void rendering_engine::pane::upload()
     m_vertex_count = 6;
     m_vertex_stride = sizeof(vertex_position_uv);
 
-    const infrastructure::math::vec3 position{transform.get_position()};
+    const core::math::vec3 position{transform.get_position()};
 
     vertex_position_uv vertex[4];
-    vertex[0].pos = infrastructure::math::vec3{position.x, position.y - m_size.y, -1.0f};
-    vertex[0].uv = infrastructure::math::vec2{0.0f, 0.0f};
-    vertex[1].pos = infrastructure::math::vec3{position.x + m_size.x, position.y - m_size.y, -1.0f};
-    vertex[1].uv = infrastructure::math::vec2{1.0f, 0.0f};
-    vertex[2].pos = infrastructure::math::vec3{position.x + m_size.x, position.y, -1.0f};
-    vertex[2].uv = infrastructure::math::vec2{1.0f, 1.0f};
-    vertex[3].pos = infrastructure::math::vec3{position.x, position.y, -1.0f};
-    vertex[3].uv = infrastructure::math::vec2{0.0f, 1.0f};
+    vertex[0].pos = core::math::vec3{position.x, position.y - m_size.y, -1.0f};
+    vertex[0].uv = core::math::vec2{0.0f, 0.0f};
+    vertex[1].pos = core::math::vec3{position.x + m_size.x, position.y - m_size.y, -1.0f};
+    vertex[1].uv = core::math::vec2{1.0f, 0.0f};
+    vertex[2].pos = core::math::vec3{position.x + m_size.x, position.y, -1.0f};
+    vertex[2].uv = core::math::vec2{1.0f, 1.0f};
+    vertex[3].pos = core::math::vec3{position.x, position.y, -1.0f};
+    vertex[3].uv = core::math::vec2{0.0f, 1.0f};
 
     const uint32_t indices[6] = {3, 0, 1, 3, 1, 2};
 
-    auto& gpu = *control::current_engine().gpu;
+    auto& gpu = *runtime::current_engine().gpu;
 
     gpu::buffer_descriptor vertex_descriptor{};
     vertex_descriptor.size = sizeof(vertex);
@@ -169,7 +169,7 @@ void rendering_engine::pane::collect_draw_items(std::vector<draw_item>& out)
         return;
     }
 
-    auto& gpu = *control::current_engine().gpu;
+    auto& gpu = *runtime::current_engine().gpu;
 
     if (!m_draw_ubo.valid())
     {

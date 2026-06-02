@@ -28,17 +28,17 @@
 #include <memory>
 #include <vector>
 
-#include <control/engine.hpp>
-#include <infrastructure/log.hpp>
-#include <infrastructure/math/math.hpp>
+#include <core/log.hpp>
+#include <core/math/math.hpp>
 #include <rendering_engine/materials/points_material.hpp>
 #include <rendering_engine/renderables/points.hpp>
 #include <rendering_engine/rendering_engine.hpp>
 #include <rendering_engine/util/color.hpp>
+#include <runtime/engine.hpp>
 
 namespace
 {
-    namespace math = infrastructure::math;
+    namespace math = core::math;
 
     // Number of points on the Fibonacci-sphere cloud.
     constexpr int point_count = 2000;
@@ -48,9 +48,9 @@ namespace
     const float g_rotation_speed = 3.14f / 6;
 } // namespace
 
-static void on_engine_start(const event_engine::engine_start& event)
+static void on_engine_start(const core::engine_start& event)
 {
-    auto& material = control::current_engine().renderer->get_points_material();
+    auto& material = runtime::current_engine().renderer->get_points_material();
     material.set_size(6.0f);
     material.set_size_attenuation(true);
     material.set_color(rendering_engine::util::color{255, 255, 255, 255});
@@ -77,16 +77,16 @@ static void on_engine_start(const event_engine::engine_start& event)
     g_points = std::make_unique<rendering_engine::points>(&material);
     g_points->set_positions(positions, colors);
     g_points->upload();
-    control::current_engine().renderer->register_scene_renderable(g_points.get());
+    runtime::current_engine().renderer->register_scene_renderable(g_points.get());
 }
 
-static void on_engine_stop(const event_engine::engine_stop& event)
+static void on_engine_stop(const core::engine_stop& event)
 {
-    control::current_engine().renderer->unregister_scene_renderable(g_points.get());
+    runtime::current_engine().renderer->unregister_scene_renderable(g_points.get());
     g_points.reset();
 }
 
-static void on_frame(const event_engine::frame& event)
+static void on_frame(const core::frame& event)
 {
     g_rotation += g_rotation_speed * (static_cast<float>(get_delta_time()) / 1000);
     g_points->transform.set_rotation(math::vec3{0.0f, 0.0f, g_rotation});

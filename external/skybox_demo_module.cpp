@@ -29,9 +29,8 @@
 #include <memory>
 #include <vector>
 
-#include <control/engine.hpp>
-#include <infrastructure/log.hpp>
-#include <infrastructure/math/math.hpp>
+#include <core/log.hpp>
+#include <core/math/math.hpp>
 #include <rendering_engine/ibl/environment.hpp>
 #include <rendering_engine/lighting/directional_light.hpp>
 #include <rendering_engine/materials/standard_material.hpp>
@@ -39,10 +38,11 @@
 #include <rendering_engine/renderables/premade_3d/sphere.hpp>
 #include <rendering_engine/rendering_engine.hpp>
 #include <rendering_engine/util/color.hpp>
+#include <runtime/engine.hpp>
 
 namespace
 {
-    namespace math = infrastructure::math;
+    namespace math = core::math;
 
     // Resolution of each procedurally generated cube face. 256 keeps the
     // sun crisp and limits aliasing while the GPU prefilter stays cheap.
@@ -151,9 +151,9 @@ namespace
         return faces;
     }
 
-    void on_engine_start(const event_engine::engine_start& /*event*/)
+    void on_engine_start(const core::engine_start& /*event*/)
     {
-        auto& renderer = *control::current_engine().renderer;
+        auto& renderer = *runtime::current_engine().renderer;
 
         // Build the IBL environment from the procedural sky and make it the
         // scene background + ambient source. set_environment also stores it
@@ -214,9 +214,9 @@ namespace
         g_sun->cast_shadow = true;
     }
 
-    void on_engine_stop(const event_engine::engine_stop& /*event*/)
+    void on_engine_stop(const core::engine_stop& /*event*/)
     {
-        auto& renderer = *control::current_engine().renderer;
+        auto& renderer = *runtime::current_engine().renderer;
 
         // Clear the environment before it dies so neither the skybox pass
         // nor any material keeps a dangling cube-map handle.

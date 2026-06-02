@@ -26,14 +26,14 @@
 #include <cmath>
 #include <vector>
 
-#include <infrastructure/math/math.hpp>
+#include <core/math/math.hpp>
 #include <rendering_engine/lighting/directional_light.hpp>
 
 namespace rendering_engine::debug
 {
     namespace
     {
-        namespace math = infrastructure::math;
+        namespace math = core::math;
 
         // The light radiance is unbounded (colour * intensity), so clamp
         // each channel into the displayable [0, 1] before it becomes the

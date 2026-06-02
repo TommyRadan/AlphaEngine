@@ -22,14 +22,14 @@
 
 #include <rendering_engine/debug/line_helper.hpp>
 
-#include <control/engine.hpp>
 #include <rendering_engine/materials/line_material.hpp>
 #include <rendering_engine/rendering_engine.hpp>
+#include <runtime/engine.hpp>
 
 namespace rendering_engine::debug
 {
     line_helper::line_helper(const char* name)
-        : helper(name, helper_layer::overlay), m_line(&control::current_engine().renderer->get_debug_line_material())
+        : helper(name, helper_layer::overlay), m_line(&runtime::current_engine().renderer->get_debug_line_material())
     {
         // Every gizmo is a list of independent segments (vertex pairs).
         m_line.set_mode(line_mode::segments);
@@ -43,8 +43,8 @@ namespace rendering_engine::debug
         // when the pass requests an upload.
     }
 
-    void line_helper::set_segments(const std::vector<infrastructure::math::vec3>& positions,
-                                   const std::vector<infrastructure::math::vec3>& colors)
+    void line_helper::set_segments(const std::vector<core::math::vec3>& positions,
+                                   const std::vector<core::math::vec3>& colors)
     {
         m_line.set_positions(positions, colors);
         m_line.upload();

@@ -22,7 +22,7 @@
 
 #include <rendering_engine/renderables/premade_2d/label.hpp>
 
-#include <infrastructure/log.hpp>
+#include <core/log.hpp>
 #include <rendering_engine/util/image.hpp>
 
 rendering_engine::label::label(rendering_engine::util::font* font, float size, const std::string& text, material* mat)
@@ -42,9 +42,9 @@ void rendering_engine::label::set_text(const std::string& text)
     upload();
 }
 
-void rendering_engine::label::set_position(const infrastructure::math::vec3& position)
+void rendering_engine::label::set_position(const core::math::vec3& position)
 {
-    const infrastructure::math::vec3 delta = position - m_position;
+    const core::math::vec3 delta = position - m_position;
     m_position = position;
     for (auto& p : m_panes)
     {
@@ -76,9 +76,9 @@ void rendering_engine::label::rebuild_panes()
         int y1 = 0;
         const rendering_engine::util::image* image = m_font->get_image(c, &x0, &y0, &x1, &y1);
         const float width = (static_cast<float>(image->get_width()) / image->get_height()) * m_size;
-        auto pane = std::make_unique<rendering_engine::pane>(m_material, infrastructure::math::vec2{width, m_size});
+        auto pane = std::make_unique<rendering_engine::pane>(m_material, core::math::vec2{width, m_size});
         pane->set_image(*image);
-        pane->transform.set_position(infrastructure::math::vec3{m_position.x + cursor, m_position.y, m_position.z});
+        pane->transform.set_position(core::math::vec3{m_position.x + cursor, m_position.y, m_position.z});
         cursor += width + m_size * 0.1f;
         m_panes.push_back(std::move(pane));
     }

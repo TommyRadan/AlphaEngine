@@ -26,7 +26,6 @@
 #include <array>
 #include <string>
 
-#include <control/engine.hpp>
 #include <rendering_engine/gpu/bind_group.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
@@ -35,6 +34,7 @@
 #include <rendering_engine/gpu/shader.hpp>
 #include <rendering_engine/gpu/shader_compiler.hpp>
 #include <rendering_engine/passes/post/fullscreen_triangle.hpp>
+#include <runtime/engine.hpp>
 
 namespace
 {
@@ -169,7 +169,7 @@ namespace rendering_engine
 {
     bloom_pass::bloom_pass(gpu::texture scene_color, uint32_t width, uint32_t height)
     {
-        auto& gpu = *control::current_engine().gpu;
+        auto& gpu = *runtime::current_engine().gpu;
 
         // Degenerate backbuffer (no settings, zero-sized window): leave
         // the pass disabled so the scene target flows straight through to
@@ -357,7 +357,7 @@ namespace rendering_engine
 
     bloom_pass::~bloom_pass()
     {
-        auto& gpu = *control::current_engine().gpu;
+        auto& gpu = *runtime::current_engine().gpu;
 
         // Bind groups first, then the buffers / targets they reference.
         for (auto& level : m_levels)

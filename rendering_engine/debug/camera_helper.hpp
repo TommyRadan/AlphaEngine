@@ -22,7 +22,7 @@
 
 #pragma once
 
-#include <infrastructure/math/math.hpp>
+#include <core/math/math.hpp>
 #include <rendering_engine/debug/line_helper.hpp>
 #include <rendering_engine/util/color.hpp>
 
@@ -55,7 +55,7 @@ namespace rendering_engine::debug
 
         // Last view-projection the geometry was built from, so refresh()
         // only rebuilds when the camera moves.
-        infrastructure::math::mat4 m_last_view_projection{};
+        core::math::mat4 m_last_view_projection{};
         bool m_built{false};
     };
 } // namespace rendering_engine::debug

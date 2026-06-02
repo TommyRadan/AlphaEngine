@@ -24,7 +24,6 @@
 
 #include <string>
 
-#include <control/engine.hpp>
 #include <rendering_engine/gpu/bind_group.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
@@ -36,10 +35,11 @@
 #include <rendering_engine/lighting/lights_ubo.hpp>
 #include <rendering_engine/lighting/point_light.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
+#include <runtime/engine.hpp>
 
 namespace
 {
-    namespace math = infrastructure::math;
+    namespace math = core::math;
 
     // Per-face resolution. Smaller than the 2048 directional map because six
     // faces are kept resident; 1024 is plenty for the demo's small bodies.
@@ -111,7 +111,7 @@ namespace rendering_engine
 {
     point_shadow_pass::point_shadow_pass(std::vector<renderable*>* registry) : m_registry(registry)
     {
-        auto& gpu = *control::current_engine().gpu;
+        auto& gpu = *runtime::current_engine().gpu;
 
         for (int face = 0; face < point_shadow_face_count; ++face)
         {
@@ -198,7 +198,7 @@ namespace rendering_engine
 
     point_shadow_pass::~point_shadow_pass()
     {
-        auto& gpu = *control::current_engine().gpu;
+        auto& gpu = *runtime::current_engine().gpu;
         if (m_pipeline.valid())
         {
             gpu.destroy(m_pipeline);
@@ -256,12 +256,12 @@ namespace rendering_engine
         return m_depth_textures[face];
     }
 
-    const infrastructure::math::mat4& point_shadow_pass::light_view_projection(int face) const
+    const core::math::mat4& point_shadow_pass::light_view_projection(int face) const
     {
         return m_light_view_projections[face];
     }
 
-    const infrastructure::math::vec3& point_shadow_pass::light_position() const
+    const core::math::vec3& point_shadow_pass::light_position() const
     {
         return m_light_position;
     }
@@ -283,7 +283,7 @@ namespace rendering_engine
 
     void point_shadow_pass::record(gpu::command_encoder& encoder, const frame_context& /*ctx*/)
     {
-        auto& gpu = *control::current_engine().gpu;
+        auto& gpu = *runtime::current_engine().gpu;
 
         // Locate the first shadow-casting point light, tracking its index in
         // the packed point array so the lit shader can match it.

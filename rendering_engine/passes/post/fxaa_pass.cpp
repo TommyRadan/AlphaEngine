@@ -25,7 +25,6 @@
 #include <array>
 #include <string>
 
-#include <control/engine.hpp>
 #include <rendering_engine/gpu/bind_group.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
@@ -34,6 +33,7 @@
 #include <rendering_engine/gpu/shader.hpp>
 #include <rendering_engine/gpu/shader_compiler.hpp>
 #include <rendering_engine/passes/post/fullscreen_triangle.hpp>
+#include <runtime/engine.hpp>
 
 namespace
 {
@@ -125,7 +125,7 @@ namespace rendering_engine
 {
     fxaa_pass::fxaa_pass(gpu::texture input_color, uint32_t width, uint32_t height)
     {
-        auto& gpu = *control::current_engine().gpu;
+        auto& gpu = *runtime::current_engine().gpu;
 
         gpu::shader_module_descriptor vs_descriptor{};
         vs_descriptor.stage = gpu::shader_stage::vertex;
@@ -215,7 +215,7 @@ namespace rendering_engine
 
     fxaa_pass::~fxaa_pass()
     {
-        auto& gpu = *control::current_engine().gpu;
+        auto& gpu = *runtime::current_engine().gpu;
         if (m_pipeline.valid())
         {
             gpu.destroy(m_pipeline);

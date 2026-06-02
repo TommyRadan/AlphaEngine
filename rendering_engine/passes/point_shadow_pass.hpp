@@ -25,7 +25,7 @@
 #include <array>
 #include <vector>
 
-#include <infrastructure/math/math.hpp>
+#include <core/math/math.hpp>
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/passes/pass.hpp>
 #include <rendering_engine/renderables/draw_item.hpp>
@@ -72,10 +72,10 @@ namespace rendering_engine
         gpu::texture shadow_map(int face) const;
 
         // Light-space view-projection for face @p face, refreshed every record.
-        const infrastructure::math::mat4& light_view_projection(int face) const;
+        const core::math::mat4& light_view_projection(int face) const;
 
         // World-space position of the active caster, refreshed every record.
-        const infrastructure::math::vec3& light_position() const;
+        const core::math::vec3& light_position() const;
 
         // Whether a shadow-casting point light was found this frame.
         bool has_shadow() const;
@@ -107,8 +107,8 @@ namespace rendering_engine
 
         std::vector<draw_item> m_items;
 
-        std::array<infrastructure::math::mat4, point_shadow_face_count> m_light_view_projections{};
-        infrastructure::math::vec3 m_light_position{0.0f, 0.0f, 0.0f};
+        std::array<core::math::mat4, point_shadow_face_count> m_light_view_projections{};
+        core::math::vec3 m_light_position{0.0f, 0.0f, 0.0f};
         bool m_has_shadow{false};
         int m_shadow_point_index{-1};
     };

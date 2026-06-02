@@ -25,7 +25,7 @@
 #include <array>
 #include <vector>
 
-#include <infrastructure/math/vec3.hpp>
+#include <core/math/vec3.hpp>
 
 namespace rendering_engine::debug
 {
@@ -35,10 +35,10 @@ namespace rendering_engine::debug
     // bit 2 the Z axis — the layout shared by @ref box_helper (an
     // axis-aligned box) and @ref camera_helper (the eight unprojected
     // frustum corners), so the edge table is written once here.
-    inline void build_box_edges(const std::array<infrastructure::math::vec3, 8>& corners,
-                                const infrastructure::math::vec3& color,
-                                std::vector<infrastructure::math::vec3>& positions,
-                                std::vector<infrastructure::math::vec3>& colors)
+    inline void build_box_edges(const std::array<core::math::vec3, 8>& corners,
+                                const core::math::vec3& color,
+                                std::vector<core::math::vec3>& positions,
+                                std::vector<core::math::vec3>& colors)
     {
         static constexpr std::array<std::array<int, 2>, 12> edges{
             {{0, 1}, {1, 3}, {3, 2}, {2, 0}, {4, 5}, {5, 7}, {7, 6}, {6, 4}, {0, 4}, {1, 5}, {2, 6}, {3, 7}}};

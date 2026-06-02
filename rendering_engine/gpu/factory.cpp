@@ -34,7 +34,7 @@
 
 #include <stdexcept>
 
-#include <infrastructure/log.hpp>
+#include <core/log.hpp>
 #include <rendering_engine/gpu/device.hpp>
 
 namespace rendering_engine::gpu::backend::opengl

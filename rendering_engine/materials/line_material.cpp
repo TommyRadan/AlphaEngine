@@ -25,9 +25,9 @@
 #include <array>
 #include <string>
 
-#include <control/engine.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
+#include <runtime/engine.hpp>
 
 namespace
 {
@@ -132,7 +132,7 @@ namespace rendering_engine
         ubo_descriptor.size = material_ubo_size;
         ubo_descriptor.usage = gpu::buffer_usage_uniform | gpu::buffer_usage_copy_dst;
         ubo_descriptor.hint = gpu::buffer_usage_hint::dynamic_data;
-        auto& gpu = *control::current_engine().gpu;
+        auto& gpu = *runtime::current_engine().gpu;
         m_material_ubo = gpu.create_buffer(ubo_descriptor);
 
         // The per-material bind group never changes shape (one UBO, no
@@ -155,7 +155,7 @@ namespace rendering_engine
         // Drop the bind group before the buffer it references, then null
         // it so the base destructor's destruct_pipeline does not
         // double-free.
-        auto& gpu = *control::current_engine().gpu;
+        auto& gpu = *runtime::current_engine().gpu;
         if (m_per_material_bind_group.valid())
         {
             gpu.destroy(m_per_material_bind_group);
@@ -187,7 +187,7 @@ namespace rendering_engine
         payload[2] = static_cast<float>(m_color.b) / 255.0f;
         payload[3] = static_cast<float>(m_color.a) / 255.0f;
 
-        auto& gpu = *control::current_engine().gpu;
+        auto& gpu = *runtime::current_engine().gpu;
         gpu.write_buffer(m_material_ubo, payload.data(), material_ubo_size, 0);
     }
 } // namespace rendering_engine

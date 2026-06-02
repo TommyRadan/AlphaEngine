@@ -24,7 +24,7 @@
 
 #include <vector>
 
-#include <infrastructure/math/math.hpp>
+#include <core/math/math.hpp>
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/mesh/vertex.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
@@ -75,13 +75,12 @@ namespace rendering_engine
         // Set the line vertices; every vertex defaults to white and is
         // tinted by the material colour. Replaces any previous data.
         // Call @ref upload afterwards to push it to the GPU.
-        void set_positions(const std::vector<infrastructure::math::vec3>& positions);
+        void set_positions(const std::vector<core::math::vec3>& positions);
 
         // Set positions with a matching per-vertex colour list. The two
         // vectors must be the same length; a size mismatch logs and the
         // call is ignored. Call @ref upload afterwards.
-        void set_positions(const std::vector<infrastructure::math::vec3>& positions,
-                           const std::vector<infrastructure::math::vec3>& colors);
+        void set_positions(const std::vector<core::math::vec3>& positions, const std::vector<core::math::vec3>& colors);
 
         // Upload the staged line data into a GPU vertex buffer (and, in
         // @c strip mode, the matching segment index buffer). Safe to

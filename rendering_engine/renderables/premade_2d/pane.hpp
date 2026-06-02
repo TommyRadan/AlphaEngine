@@ -34,7 +34,7 @@ namespace rendering_engine
 
     struct pane : public renderable
     {
-        pane(material* mat, const infrastructure::math::vec2& size);
+        pane(material* mat, const core::math::vec2& size);
         ~pane() override;
 
         void set_color(const rendering_engine::util::color& color);
@@ -56,7 +56,7 @@ namespace rendering_engine
         unsigned int m_vertex_count{0};
         uint32_t m_vertex_stride{0};
 
-        infrastructure::math::vec2 m_size;
+        core::math::vec2 m_size;
         rendering_engine::util::color m_color{0, 0, 0, 0};
     };
 } // namespace rendering_engine

@@ -30,7 +30,7 @@
 
 #include <glad/gl.h>
 
-#include <infrastructure/log.hpp>
+#include <core/log.hpp>
 #include <rendering_engine/gpu/backend/opengl/gl_translate.hpp>
 
 namespace rendering_engine::gpu::backend::opengl

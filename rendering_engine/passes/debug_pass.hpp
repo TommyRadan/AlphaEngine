@@ -35,7 +35,7 @@ namespace rendering_engine
      * @brief Debug-overlay pass. Loads the previous colour, disables
      *        depth, collects draw items from the debug-renderable
      *        registry, sorts them by pipeline, and dispatches them;
-     *        broadcasts @ref event_engine::render_debug as the
+     *        broadcasts @ref core::render_debug as the
      *        documented escape hatch for debug-line / gizmo / frustum
      *        / bounds visualisations whose cadence does not match the
      *        registry walk.

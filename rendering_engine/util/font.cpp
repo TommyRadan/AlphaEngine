@@ -21,7 +21,7 @@
  */
 
 #define STB_TRUETYPE_IMPLEMENTATION
-#include <infrastructure/log.hpp>
+#include <core/log.hpp>
 #include <rendering_engine/util/font.hpp>
 
 #include <fstream>

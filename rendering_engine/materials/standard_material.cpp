@@ -25,12 +25,12 @@
 #include <array>
 #include <string>
 
-#include <control/engine.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/ibl/environment.hpp>
 #include <rendering_engine/mesh/tangent.hpp>
 #include <rendering_engine/mesh/vertex.hpp>
+#include <runtime/engine.hpp>
 
 namespace
 {
@@ -509,7 +509,7 @@ namespace rendering_engine
         ubo_descriptor.size = material_ubo_size;
         ubo_descriptor.usage = gpu::buffer_usage_uniform | gpu::buffer_usage_copy_dst;
         ubo_descriptor.hint = gpu::buffer_usage_hint::dynamic_data;
-        auto& gpu = *control::current_engine().gpu;
+        auto& gpu = *runtime::current_engine().gpu;
         m_material_ubo = gpu.create_buffer(ubo_descriptor);
 
         rebuild_bind_group();
@@ -520,7 +520,7 @@ namespace rendering_engine
         // Drop the bind group before the buffers / textures it
         // references, then null it so the base destructor's
         // destruct_pipeline does not double-free.
-        auto& gpu = *control::current_engine().gpu;
+        auto& gpu = *runtime::current_engine().gpu;
         if (m_per_material_bind_group.valid())
         {
             gpu.destroy(m_per_material_bind_group);
@@ -676,7 +676,7 @@ namespace rendering_engine
 
     gpu::texture standard_material::upload_map(const util::image& image)
     {
-        auto& gpu = *control::current_engine().gpu;
+        auto& gpu = *runtime::current_engine().gpu;
 
         gpu::texture_descriptor descriptor{};
         descriptor.dimension = gpu::texture_dimension::d2;
@@ -704,14 +704,14 @@ namespace rendering_engine
         {
             return;
         }
-        auto& gpu = *control::current_engine().gpu;
+        auto& gpu = *runtime::current_engine().gpu;
         gpu.destroy(map);
         map = {};
     }
 
     void standard_material::rebuild_bind_group()
     {
-        auto& gpu = *control::current_engine().gpu;
+        auto& gpu = *runtime::current_engine().gpu;
         if (m_per_material_bind_group.valid())
         {
             gpu.destroy(m_per_material_bind_group);
@@ -791,7 +791,7 @@ namespace rendering_engine
         payload[20] = m_environment != nullptr ? 1.0f : 0.0f;
         payload[21] = 1.0f;
 
-        auto& gpu = *control::current_engine().gpu;
+        auto& gpu = *runtime::current_engine().gpu;
         gpu.write_buffer(m_material_ubo, payload.data(), material_ubo_size, 0);
     }
 } // namespace rendering_engine

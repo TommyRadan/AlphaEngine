@@ -52,38 +52,38 @@
 #include "api/log.hpp"
 #include "api/time.hpp"
 
-#include <control/engine.hpp>
-#include <infrastructure/log.hpp>
-#include <infrastructure/math/math.hpp>
+#include <core/log.hpp>
+#include <core/math/math.hpp>
 #include <rendering_engine/lighting/ambient_light.hpp>
 #include <rendering_engine/lighting/point_light.hpp>
 #include <rendering_engine/materials/standard_material.hpp>
 #include <rendering_engine/mesh/mesh.hpp>
 #include <rendering_engine/rendering_engine.hpp>
 #include <rendering_engine/util/color.hpp>
-#include <scene_graph/light_component.hpp>
-#include <scene_graph/mesh_component.hpp>
-#include <scene_graph/node.hpp>
-#include <scene_graph/scene_graph.hpp>
+#include <runtime/components/light_component.hpp>
+#include <runtime/components/mesh_component.hpp>
+#include <runtime/engine.hpp>
+#include <runtime/node.hpp>
+#include <runtime/scene_graph.hpp>
 
 #include <cmath>
 #include <memory>
 #include <string>
 #include <vector>
 
-namespace math = infrastructure::math;
+namespace math = core::math;
 
 // A node that turns about the world X axis at a fixed rate; the orbit pivots
 // (planets one way, moons the other) are all just spinners.
 struct spinner
 {
-    scene_graph::node* node;
+    runtime::node* node;
     float rate; // radians per second; sign sets the direction
 };
 
 // Everything is owned here — the scene-graph root only holds non-owning links,
 // and materials must not outlive the renderer.
-static std::vector<std::unique_ptr<scene_graph::node>> g_nodes;
+static std::vector<std::unique_ptr<runtime::node>> g_nodes;
 static std::vector<std::unique_ptr<rendering_engine::standard_material>> g_materials;
 static std::vector<spinner> g_spinners;
 static std::unique_ptr<rendering_engine::ambient_light> g_ambient;
@@ -129,17 +129,17 @@ static rendering_engine::mesh make_sphere(int stacks, int slices)
     return mesh;
 }
 
-static scene_graph::node* make_child(scene_graph::node& parent)
+static runtime::node* make_child(runtime::node& parent)
 {
-    g_nodes.push_back(std::make_unique<scene_graph::node>());
-    scene_graph::node* node = g_nodes.back().get();
+    g_nodes.push_back(std::make_unique<runtime::node>());
+    runtime::node* node = g_nodes.back().get();
     parent.add(*node);
     return node;
 }
 
 static rendering_engine::standard_material* make_material(const rendering_engine::util::color& base, float roughness)
 {
-    auto material = control::current_engine().renderer->create_standard_material();
+    auto material = runtime::current_engine().renderer->create_standard_material();
     material->set_base_color(base);
     material->set_metalness(0.0f);
     material->set_roughness(roughness);
@@ -151,15 +151,15 @@ static rendering_engine::standard_material* make_material(const rendering_engine
 // Scale lives only on these childless leaves: scaling a node scales its whole
 // subtree, so the orbit/anchor nodes that carry children stay unscaled and only
 // the rendered spheres take a size.
-static scene_graph::node* make_visual(scene_graph::node& parent,
-                                      const math::vec3& offset,
-                                      float radius,
-                                      rendering_engine::standard_material* material)
+static runtime::node* make_visual(runtime::node& parent,
+                                  const math::vec3& offset,
+                                  float radius,
+                                  rendering_engine::standard_material* material)
 {
-    scene_graph::node* visual = make_child(parent);
+    runtime::node* visual = make_child(parent);
     visual->transform.set_position(offset);
     visual->transform.set_scale(math::vec3{radius, radius, radius});
-    visual->add_component<scene_graph::mesh_component>(scene_graph::mesh_component{material, g_sphere});
+    visual->add_component<runtime::mesh_component>(runtime::mesh_component{material, g_sphere});
     return visual;
 }
 
@@ -167,7 +167,7 @@ static scene_graph::node* make_visual(scene_graph::node& parent,
 // anchor out at @p distance along +Y, the planet sphere on the anchor, and
 // @p moons moons on their own retrograde pivots hung off the same anchor (so
 // the planet's scale never reaches them).
-static void make_planet(scene_graph::node& parent,
+static void make_planet(runtime::node& parent,
                         float distance,
                         float radius,
                         float orbit_rate,
@@ -176,10 +176,10 @@ static void make_planet(scene_graph::node& parent,
 {
     static int planet_no = 0;
 
-    scene_graph::node* orbit = make_child(parent);
+    runtime::node* orbit = make_child(parent);
     g_spinners.push_back(spinner{orbit, orbit_rate});
 
-    scene_graph::node* anchor = make_child(*orbit);
+    runtime::node* anchor = make_child(*orbit);
     anchor->name = "planet" + std::to_string(planet_no++); // reachable via scenes->root.find(...)
     anchor->transform.set_position(math::vec3{distance, 0.0f, 0.0f});
 
@@ -188,7 +188,7 @@ static void make_planet(scene_graph::node& parent,
     auto* moon_material = make_material(rendering_engine::util::color{170, 170, 180, 255}, 0.9f);
     for (int i = 0; i < moons; ++i)
     {
-        scene_graph::node* moon_pivot = make_child(*anchor);
+        runtime::node* moon_pivot = make_child(*anchor);
         // Retrograde: moons sweep opposite to the planets' orbits, and each
         // moon of a planet runs at its own rate so they do not overlap.
         g_spinners.push_back(spinner{moon_pivot, -1.7f - 0.6f * static_cast<float>(i)});
@@ -198,7 +198,7 @@ static void make_planet(scene_graph::node& parent,
     }
 }
 
-static void on_engine_start(const event_engine::engine_start& event)
+static void on_engine_start(const core::engine_start& event)
 {
     (void)event;
 
@@ -209,7 +209,7 @@ static void on_engine_start(const event_engine::engine_start& event)
     g_ambient->color = math::vec3{1.0f, 1.0f, 1.0f};
     g_ambient->intensity = 0.05f;
 
-    scene_graph::node& root = control::current_engine().scenes->root;
+    runtime::node& root = runtime::current_engine().scenes->root;
 
     // The sun is the only light: a point light at the world origin, so every
     // body is lit on its sun-facing side and dark on the far side, all the way
@@ -223,7 +223,7 @@ static void on_engine_start(const event_engine::engine_start& event)
 
     // The sun is a childless leaf, so giving it a scale is safe; its point
     // light sits at the same node and scale never touches a translation.
-    scene_graph::node* sun = make_visual(root, math::vec3{0.0f, 0.0f, 0.0f}, 1.0f, sun_material);
+    runtime::node* sun = make_visual(root, math::vec3{0.0f, 0.0f, 0.0f}, 1.0f, sun_material);
     sun->name = "sun";
     auto sun_light = std::make_unique<rendering_engine::point_light>();
     sun_light->color = math::vec3{1.0f, 0.96f, 0.88f};
@@ -232,7 +232,7 @@ static void on_engine_start(const event_engine::engine_start& event)
     sun_light->linear_attenuation = 0.0f;
     sun_light->quadratic_attenuation = 0.0f;
     sun_light->cast_shadow = true;
-    sun->add_component<scene_graph::light_component>(scene_graph::light_component{std::move(sun_light)});
+    sun->add_component<runtime::light_component>(runtime::light_component{std::move(sun_light)});
 
     // Planets: distance, radius, orbit rate (rad/s, all same sign), colour,
     // moon count. Inner planets orbit faster, the classic look.
@@ -242,7 +242,7 @@ static void on_engine_start(const event_engine::engine_start& event)
     make_planet(root, 4.6f, 0.45f, 0.24f, rendering_engine::util::color{150, 220, 200, 255}, 1);
 }
 
-static void on_engine_stop(const event_engine::engine_stop& event)
+static void on_engine_stop(const core::engine_stop& event)
 {
     (void)event;
     // Destroying the nodes frees their components, which unregister their models
@@ -254,7 +254,7 @@ static void on_engine_stop(const event_engine::engine_stop& event)
     g_ambient.reset();
 }
 
-static void on_frame(const event_engine::frame& event)
+static void on_frame(const core::frame& event)
 {
     (void)event;
 

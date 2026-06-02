@@ -22,14 +22,14 @@
 
 #include <stdexcept>
 
-#include <control/engine.hpp>
-#include <event_engine/event_engine.hpp>
-#include <infrastructure/log.hpp>
-#include <infrastructure/settings.hpp>
-#include <infrastructure/time.hpp>
+#include <core/event_engine.hpp>
+#include <core/log.hpp>
+#include <core/settings.hpp>
+#include <core/time.hpp>
 #include <rendering_engine/debug_ui/imgui_layer.hpp>
 #include <rendering_engine/util/color.hpp>
 #include <rendering_engine/window.hpp>
+#include <runtime/engine.hpp>
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
 
@@ -195,12 +195,12 @@ namespace rendering_engine
     {
         SDL_Event events = {0};
 
-        auto& eng = control::current_engine();
+        auto& eng = runtime::current_engine();
         auto& bus = *eng.events;
 
-        event_engine::frame frame;
+        core::frame frame;
         frame.m_delta_time = static_cast<float>(eng.time->delta_time());
-        bus.emit<event_engine::frame>(frame);
+        bus.emit<core::frame>(frame);
 
         SDL_PumpEvents();
         while (SDL_PollEvent(&events))
@@ -221,9 +221,9 @@ namespace rendering_engine
                 {
                     break;
                 }
-                event_engine::key_down key_down;
-                key_down.m_key_code = (event_engine::key_code)events.key.key;
-                bus.emit<event_engine::key_down>(key_down);
+                core::key_down key_down;
+                key_down.m_key_code = (core::key_code)events.key.key;
+                bus.emit<core::key_down>(key_down);
                 break;
             }
 
@@ -233,9 +233,9 @@ namespace rendering_engine
                 {
                     break;
                 }
-                event_engine::key_up key_up;
-                key_up.m_key_code = (event_engine::key_code)events.key.key;
-                bus.emit<event_engine::key_up>(key_up);
+                core::key_up key_up;
+                key_up.m_key_code = (core::key_code)events.key.key;
+                bus.emit<core::key_up>(key_up);
                 break;
             }
 
@@ -245,25 +245,25 @@ namespace rendering_engine
                 {
                     break;
                 }
-                event_engine::mouse_key_down mouse_key_down;
+                core::mouse_key_down mouse_key_down;
                 switch (events.button.button)
                 {
                 case SDL_BUTTON_LEFT:
-                    mouse_key_down.m_key_code = event_engine::mouse_key_code::left;
+                    mouse_key_down.m_key_code = core::mouse_key_code::left;
                     break;
 
                 case SDL_BUTTON_RIGHT:
-                    mouse_key_down.m_key_code = event_engine::mouse_key_code::right;
+                    mouse_key_down.m_key_code = core::mouse_key_code::right;
                     break;
 
                 case SDL_BUTTON_MIDDLE:
-                    mouse_key_down.m_key_code = event_engine::mouse_key_code::middle;
+                    mouse_key_down.m_key_code = core::mouse_key_code::middle;
                     break;
 
                 default:
                     break;
                 }
-                bus.emit<event_engine::mouse_key_down>(mouse_key_down);
+                bus.emit<core::mouse_key_down>(mouse_key_down);
                 break;
             }
 
@@ -273,26 +273,26 @@ namespace rendering_engine
                 {
                     break;
                 }
-                event_engine::mouse_key_up mouse_key_up;
-                mouse_key_up.m_key_code = event_engine::mouse_key_code::left;
+                core::mouse_key_up mouse_key_up;
+                mouse_key_up.m_key_code = core::mouse_key_code::left;
                 switch (events.button.button)
                 {
                 case SDL_BUTTON_LEFT:
-                    mouse_key_up.m_key_code = event_engine::mouse_key_code::left;
+                    mouse_key_up.m_key_code = core::mouse_key_code::left;
                     break;
 
                 case SDL_BUTTON_RIGHT:
-                    mouse_key_up.m_key_code = event_engine::mouse_key_code::right;
+                    mouse_key_up.m_key_code = core::mouse_key_code::right;
                     break;
 
                 case SDL_BUTTON_MIDDLE:
-                    mouse_key_up.m_key_code = event_engine::mouse_key_code::middle;
+                    mouse_key_up.m_key_code = core::mouse_key_code::middle;
                     break;
 
                 default:
                     break;
                 }
-                bus.emit<event_engine::mouse_key_up>(mouse_key_up);
+                bus.emit<core::mouse_key_up>(mouse_key_up);
                 break;
             }
 
@@ -302,15 +302,15 @@ namespace rendering_engine
                 {
                     break;
                 }
-                event_engine::mouse_move mouse_move;
+                core::mouse_move mouse_move;
                 mouse_move.m_x = static_cast<int>(events.motion.xrel);
                 mouse_move.m_y = static_cast<int>(events.motion.yrel);
-                bus.emit<event_engine::mouse_move>(mouse_move);
+                bus.emit<core::mouse_move>(mouse_move);
                 break;
             }
 
             case SDL_EVENT_QUIT:
-                bus.emit<event_engine::quit_requested>();
+                bus.emit<core::quit_requested>();
                 break;
 
             default:

@@ -24,7 +24,7 @@
 
 #include <vector>
 
-#include <infrastructure/math/math.hpp>
+#include <core/math/math.hpp>
 
 namespace rendering_engine
 {

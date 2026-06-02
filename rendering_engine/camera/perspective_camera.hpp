@@ -22,7 +22,7 @@
 
 #pragma once
 
-#include <infrastructure/math/math.hpp>
+#include <core/math/math.hpp>
 #include <rendering_engine/camera/camera.hpp>
 
 namespace rendering_engine

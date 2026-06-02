@@ -41,7 +41,7 @@ namespace rendering_engine
         label(rendering_engine::util::font* font, float size, const std::string& text, material* mat);
 
         void set_text(const std::string& text);
-        void set_position(const infrastructure::math::vec3& position);
+        void set_position(const core::math::vec3& position);
         float get_width() const;
 
         void upload() final;
@@ -55,7 +55,7 @@ namespace rendering_engine
         material* m_material;
         std::string m_text;
         float m_size;
-        infrastructure::math::vec3 m_position{0.0f};
+        core::math::vec3 m_position{0.0f};
         float m_width{0.0f};
         std::vector<std::unique_ptr<rendering_engine::pane>> m_panes;
 

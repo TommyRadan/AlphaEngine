@@ -20,8 +20,8 @@
  * SOFTWARE.
  */
 
-#include <infrastructure/math/math.hpp>
-#include <infrastructure/settings.hpp>
+#include <core/math/math.hpp>
+#include <core/settings.hpp>
 #include <rendering_engine/camera/camera.hpp>
 #include <rendering_engine/rendering_engine.hpp>
 
@@ -50,17 +50,17 @@ rendering_engine::camera* rendering_engine::camera::get_current_camera()
     return rendering_engine::camera::m_current_camera;
 }
 
-void rendering_engine::camera::look_at(const infrastructure::math::vec3& target)
+void rendering_engine::camera::look_at(const core::math::vec3& target)
 {
-    infrastructure::math::vec3 direction = target - transform.get_position();
-    if (infrastructure::math::length(direction) <= 0.0f)
+    core::math::vec3 direction = target - transform.get_position();
+    if (core::math::length(direction) <= 0.0f)
     {
         return;
     }
 
     // The view matrix derives its look-at target from the position plus the rotation vector, so the
     // camera's orientation lives in that rotation as a forward direction (see get_view_matrix).
-    transform.set_rotation(infrastructure::math::normalize(direction));
+    transform.set_rotation(core::math::normalize(direction));
     invalidate_view_matrix();
 }
 
@@ -69,16 +69,16 @@ void rendering_engine::camera::invalidate_view_matrix()
     m_is_view_matrix_dirty = true;
 }
 
-const infrastructure::math::mat4 rendering_engine::camera::get_view_matrix() const
+const core::math::mat4 rendering_engine::camera::get_view_matrix() const
 {
     if (!m_is_view_matrix_dirty)
     {
         return m_view_matrix;
     }
 
-    infrastructure::math::vec3 up_vector{0.0f, 0.0f, 1.0f};
-    infrastructure::math::vec3 look_at_target = transform.get_position() + transform.get_rotation();
-    m_view_matrix = infrastructure::math::look_at(transform.get_position(), look_at_target, up_vector);
+    core::math::vec3 up_vector{0.0f, 0.0f, 1.0f};
+    core::math::vec3 look_at_target = transform.get_position() + transform.get_rotation();
+    m_view_matrix = core::math::look_at(transform.get_position(), look_at_target, up_vector);
     m_is_view_matrix_dirty = false;
     return m_view_matrix;
 }
@@ -88,7 +88,7 @@ void rendering_engine::camera::invalidate_projection_matrix()
     m_is_projection_matrix_dirty = true;
 }
 
-const infrastructure::math::frustum rendering_engine::camera::get_frustum() const
+const core::math::frustum rendering_engine::camera::get_frustum() const
 {
-    return infrastructure::math::frustum::from_view_projection(get_projection_matrix() * get_view_matrix());
+    return core::math::frustum::from_view_projection(get_projection_matrix() * get_view_matrix());
 }

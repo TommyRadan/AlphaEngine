@@ -24,13 +24,13 @@
 
 #include <vector>
 
-#include <infrastructure/math/math.hpp>
+#include <core/math/math.hpp>
 
 namespace rendering_engine::debug
 {
     axes_helper::axes_helper(float size) : line_helper("Axes")
     {
-        namespace math = infrastructure::math;
+        namespace math = core::math;
 
         const math::vec3 origin{0.0f, 0.0f, 0.0f};
         const math::vec3 red{1.0f, 0.0f, 0.0f};

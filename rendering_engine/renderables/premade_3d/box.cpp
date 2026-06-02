@@ -25,14 +25,14 @@
 #include <cstdint>
 #include <vector>
 
-#include <control/engine.hpp>
-#include <infrastructure/log.hpp>
-#include <infrastructure/math/math.hpp>
+#include <core/log.hpp>
+#include <core/math/math.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/materials/material.hpp>
 #include <rendering_engine/mesh/tangent.hpp>
 #include <rendering_engine/mesh/vertex.hpp>
+#include <runtime/engine.hpp>
 
 rendering_engine::box::box(material* mat,
                            float width,
@@ -50,7 +50,7 @@ rendering_engine::box::box(material* mat,
 
 rendering_engine::box::~box()
 {
-    auto& gpu = *control::current_engine().gpu;
+    auto& gpu = *runtime::current_engine().gpu;
     if (m_draw_bind_group.valid())
     {
         gpu.destroy(m_draw_bind_group);
@@ -75,8 +75,8 @@ rendering_engine::box::~box()
 
 void rendering_engine::box::upload()
 {
-    using infrastructure::math::vec2;
-    using infrastructure::math::vec3;
+    using core::math::vec2;
+    using core::math::vec3;
 
     std::vector<vertex_position_uv_normal> vertices;
     std::vector<uint32_t> indices;
@@ -167,7 +167,7 @@ void rendering_engine::box::upload()
     m_index_count = static_cast<unsigned int>(indices.size());
     m_vertex_stride = sizeof(vertex_position_uv_normal_tangent);
 
-    auto& gpu = *control::current_engine().gpu;
+    auto& gpu = *runtime::current_engine().gpu;
 
     gpu::buffer_descriptor vertex_descriptor{};
     vertex_descriptor.size = tangent_vertices.size() * sizeof(vertex_position_uv_normal_tangent);
@@ -196,12 +196,12 @@ void rendering_engine::box::collect_draw_items(std::vector<draw_item>& out)
         return;
     }
 
-    auto& gpu = *control::current_engine().gpu;
+    auto& gpu = *runtime::current_engine().gpu;
 
     if (!m_draw_ubo.valid())
     {
         gpu::buffer_descriptor ubo_descriptor{};
-        ubo_descriptor.size = sizeof(infrastructure::math::mat4);
+        ubo_descriptor.size = sizeof(core::math::mat4);
         ubo_descriptor.usage = gpu::buffer_usage_uniform | gpu::buffer_usage_copy_dst;
         ubo_descriptor.hint = gpu::buffer_usage_hint::dynamic_data;
         m_draw_ubo = gpu.create_buffer(ubo_descriptor);
@@ -220,7 +220,7 @@ void rendering_engine::box::collect_draw_items(std::vector<draw_item>& out)
     }
 
     const auto model_matrix = transform.get_world_matrix();
-    gpu.write_buffer(m_draw_ubo, model_matrix.data(), sizeof(infrastructure::math::mat4), 0);
+    gpu.write_buffer(m_draw_ubo, model_matrix.data(), sizeof(core::math::mat4), 0);
 
     draw_item item{};
     item.mat = m_material;

@@ -30,7 +30,7 @@ namespace rendering_engine
     std::vector<vertex_position_uv_normal_tangent>
     generate_tangents(const std::vector<vertex_position_uv_normal>& vertices, const std::vector<uint32_t>& indices)
     {
-        namespace math = infrastructure::math;
+        namespace math = core::math;
 
         const std::size_t count = vertices.size();
         std::vector<math::vec3> tangent_accum(count, math::vec3{0.0f});
