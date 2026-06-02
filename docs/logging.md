@@ -1,6 +1,6 @@
 # Logging
 
-AlphaEngine logs through the thin wrapper in `infrastructure/log.hpp`, which
+AlphaEngine logs through the thin wrapper in `core/log.hpp`, which
 forwards to SDL's logging API (`SDL_LogMessageV`). Four macros are
 available today:
 
@@ -32,11 +32,11 @@ available today:
 
 ## Examples from the codebase
 
-- Subsystem lifecycle — `control/main_loop.cpp`:
+- Subsystem lifecycle — `runtime/main_loop.cpp`:
   `LOG_INF("Engine starting: initializing subsystems");`
 - GL capability banner — `rendering_engine/opengl/opengl.cpp`:
   `LOG_INF("OpenGL renderer: %s", gl_renderer);`
-- Settings summary — `infrastructure/settings.cpp`:
+- Settings summary — `core/settings.cpp`:
   `LOG_INF("Settings parsed: window=%ux%u ...");`
 - Module registration — `external/cube_module.cpp`:
   `LOG_INF("Registering external module: cube_module");`
@@ -47,7 +47,7 @@ available today:
 
 ## Adding new logs
 
-- Include `<infrastructure/log.hpp>` (not `"api/log.hpp"` — that one is the
+- Include `<core/log.hpp>` (not `"api/log.hpp"` — that one is the
   public game-module API).
 - Prefer a single well-formatted line with the relevant identifiers (shader
   id, program id, file path, event type) over multiple short lines.

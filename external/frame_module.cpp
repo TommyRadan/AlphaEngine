@@ -24,11 +24,11 @@
 #include "api/log.hpp"
 #include "api/time.hpp"
 
-#include <infrastructure/log.hpp>
+#include <core/log.hpp>
 
 #include <string>
 
-static void on_frame(const event_engine::frame& event)
+static void on_frame(const core::frame& event)
 {
     // PrintInfo(std::string{"Delta time: "} + std::to_string(GetDeltaTime()) + " ms");
     // PrintInfo(std::string{"FPS: "} + std::to_string(GetCurrentFPS()));

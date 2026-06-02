@@ -25,18 +25,18 @@
 #include <cstdint>
 #include <vector>
 
-#include <control/engine.hpp>
-#include <infrastructure/log.hpp>
-#include <infrastructure/math/math.hpp>
+#include <core/log.hpp>
+#include <core/math/math.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/materials/material.hpp>
+#include <runtime/engine.hpp>
 
 rendering_engine::line::line(material* mat) : m_material{mat} {}
 
 rendering_engine::line::~line()
 {
-    auto& gpu = *control::current_engine().gpu;
+    auto& gpu = *runtime::current_engine().gpu;
     if (m_draw_bind_group.valid())
     {
         gpu.destroy(m_draw_bind_group);
@@ -64,18 +64,18 @@ void rendering_engine::line::set_mode(line_mode mode)
     m_mode = mode;
 }
 
-void rendering_engine::line::set_positions(const std::vector<infrastructure::math::vec3>& positions)
+void rendering_engine::line::set_positions(const std::vector<core::math::vec3>& positions)
 {
     m_vertices.clear();
     m_vertices.reserve(positions.size());
     for (const auto& position : positions)
     {
-        m_vertices.push_back({position, infrastructure::math::vec3{1.0f, 1.0f, 1.0f}});
+        m_vertices.push_back({position, core::math::vec3{1.0f, 1.0f, 1.0f}});
     }
 }
 
-void rendering_engine::line::set_positions(const std::vector<infrastructure::math::vec3>& positions,
-                                           const std::vector<infrastructure::math::vec3>& colors)
+void rendering_engine::line::set_positions(const std::vector<core::math::vec3>& positions,
+                                           const std::vector<core::math::vec3>& colors)
 {
     if (positions.size() != colors.size())
     {
@@ -99,7 +99,7 @@ void rendering_engine::line::upload()
     m_vertex_stride = sizeof(vertex_position_color);
     m_index_count = 0;
 
-    auto& gpu = *control::current_engine().gpu;
+    auto& gpu = *runtime::current_engine().gpu;
 
     // Re-uploading replaces the previous buffers, so drop them first.
     if (m_vertex_buffer.valid())
@@ -171,7 +171,7 @@ void rendering_engine::line::collect_draw_items(std::vector<draw_item>& out)
         return;
     }
 
-    auto& gpu = *control::current_engine().gpu;
+    auto& gpu = *runtime::current_engine().gpu;
 
     if (!m_draw_ubo.valid())
     {
@@ -179,7 +179,7 @@ void rendering_engine::line::collect_draw_items(std::vector<draw_item>& out)
         // vertex shader: a single mat4 modelMatrix packed std140
         // (64 bytes, no padding).
         gpu::buffer_descriptor ubo_descriptor{};
-        ubo_descriptor.size = sizeof(infrastructure::math::mat4);
+        ubo_descriptor.size = sizeof(core::math::mat4);
         ubo_descriptor.usage = gpu::buffer_usage_uniform | gpu::buffer_usage_copy_dst;
         ubo_descriptor.hint = gpu::buffer_usage_hint::dynamic_data;
         m_draw_ubo = gpu.create_buffer(ubo_descriptor);
@@ -198,7 +198,7 @@ void rendering_engine::line::collect_draw_items(std::vector<draw_item>& out)
     }
 
     const auto model_matrix = transform.get_world_matrix();
-    gpu.write_buffer(m_draw_ubo, model_matrix.data(), sizeof(infrastructure::math::mat4), 0);
+    gpu.write_buffer(m_draw_ubo, model_matrix.data(), sizeof(core::math::mat4), 0);
 
     // The line topology is baked into the material's pipeline. A strip
     // carries an index buffer expanding the polyline into segment pairs;

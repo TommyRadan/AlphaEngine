@@ -35,18 +35,18 @@
 #include <imgui_impl_sdl3.h>
 #include <imgui_impl_vulkan.h>
 
-#include <control/engine.hpp>
-#include <event_engine/event.hpp>
-#include <event_engine/event_engine.hpp>
-#include <infrastructure/log.hpp>
-#include <infrastructure/settings.hpp>
-#include <infrastructure/time.hpp>
+#include <core/event.hpp>
+#include <core/event_engine.hpp>
+#include <core/log.hpp>
+#include <core/settings.hpp>
+#include <core/time.hpp>
 #include <rendering_engine/debug/helper.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_device.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_resources.hpp>
 #include <rendering_engine/gpu/command_encoder.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/window.hpp>
+#include <runtime/engine.hpp>
 #include <SDL3/SDL.h>
 
 namespace rendering_engine::debug_ui
@@ -122,7 +122,7 @@ namespace rendering_engine::debug_ui
         // heavier inspector panels.
         void draw_fps_overlay()
         {
-            const auto& time = *control::current_engine().time;
+            const auto& time = *runtime::current_engine().time;
 
             constexpr float pad = 10.0f;
             const ImGuiViewport* viewport = ImGui::GetMainViewport();
@@ -291,7 +291,7 @@ namespace rendering_engine::debug_ui
         {
             // Push this frame's time into the rolling history first so the
             // profiler reflects the live cadence.
-            const auto& time = *control::current_engine().time;
+            const auto& time = *runtime::current_engine().time;
             g_frame_times[g_frame_cursor] = static_cast<float>(time.delta_time());
             g_frame_cursor = (g_frame_cursor + 1) % k_frame_history;
 
@@ -306,9 +306,9 @@ namespace rendering_engine::debug_ui
         }
 
         // Record the built draw data into the swapchain-targeted debug
-        // pass. Fired from the @ref event_engine::render_debug listener
+        // pass. Fired from the @ref core::render_debug listener
         // while the render pass is still open.
-        void on_render_debug(const event_engine::render_debug& event)
+        void on_render_debug(const core::render_debug& event)
         {
             if (g_backend == backend_mode::none || !g_frame_ready)
             {
@@ -337,7 +337,7 @@ namespace rendering_engine::debug_ui
             g_frame_ready = false;
         }
 
-        bool init_vulkan(control::engine& eng)
+        bool init_vulkan(runtime::engine& eng)
         {
             auto* device = static_cast<gpu::backend::vulkan::vk_device*>(eng.gpu.get());
 
@@ -404,7 +404,7 @@ namespace rendering_engine::debug_ui
             return true;
         }
 
-        bool init_opengl(control::engine& eng)
+        bool init_opengl(runtime::engine& eng)
         {
             if (!ImGui_ImplSDL3_InitForOpenGL(eng.window->sdl_window(), eng.window->gl_context()))
             {
@@ -474,7 +474,7 @@ namespace rendering_engine::debug_ui
         {
             // The render queue must be idle before tearing the backend's
             // GPU resources down.
-            auto* device = static_cast<gpu::backend::vulkan::vk_device*>(control::current_engine().gpu.get());
+            auto* device = static_cast<gpu::backend::vulkan::vk_device*>(runtime::current_engine().gpu.get());
             vkDeviceWaitIdle(device->vk_handle());
             ImGui_ImplVulkan_Shutdown();
         }

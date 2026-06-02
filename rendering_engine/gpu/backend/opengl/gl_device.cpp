@@ -34,7 +34,7 @@
 #include <glad/gl.h>
 #include <SDL3/SDL_video.h>
 
-#include <infrastructure/log.hpp>
+#include <core/log.hpp>
 #include <rendering_engine/gpu/backend/opengl/gl_command_encoder.hpp>
 
 namespace rendering_engine::gpu::backend::opengl

@@ -36,7 +36,7 @@
  * ImGui renders through the OpenGL3 or the Vulkan backend, matching the
  * GPU backend the engine brought up. Either way the draw data is recorded
  * into the swapchain-targeted debug pass: the layer subscribes to
- * @ref event_engine::render_debug in @ref init and records there, inside
+ * @ref core::render_debug in @ref init and records there, inside
  * the still-open render pass, so the same injection point works for both
  * the immediate-mode OpenGL backend and Vulkan's recorded command buffer.
  */
@@ -48,7 +48,7 @@ namespace rendering_engine::debug_ui
     /**
      * @brief Brings ImGui and its SDL3 + OpenGL3 / Vulkan backends up
      *        against the live window and GPU device, and subscribes to
-     *        @ref event_engine::render_debug so the overlay is recorded
+     *        @ref core::render_debug so the overlay is recorded
      *        into the debug pass. Call once after the window, GPU device
      *        and passes are initialised. No-op in release.
      */
@@ -71,7 +71,7 @@ namespace rendering_engine::debug_ui
      * frame-time profiler, settings inspector) and calls @c ImGui::Render
      * so the draw data is ready. Must be called once per frame *before*
      * the rendering passes run, since the draw data is consumed inside the
-     * debug pass via @ref event_engine::render_debug. No-op in release.
+     * debug pass via @ref core::render_debug. No-op in release.
      */
     void begin_frame();
 

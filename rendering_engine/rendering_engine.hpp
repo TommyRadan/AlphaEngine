@@ -54,7 +54,7 @@ namespace rendering_engine
     /**
      * @brief Orchestrates the rendering subsystem (window, GL context, materials, passes).
      *
-     * Owned by @ref control::engine. @ref init brings up the window
+     * Owned by @ref runtime::engine. @ref init brings up the window
      * and OpenGL context, constructs the built-in passes (which own
      * their per-frame bind-group layouts) and the built-in materials
      * (which read those layouts when building their pipelines);
@@ -87,7 +87,7 @@ namespace rendering_engine
          * (active camera + swapchain target) so they cannot
          * disagree mid-frame. The built-in scene and UI passes
          * each broadcast their matching event
-         * (@ref event_engine::render_scene / @ref event_engine::render_ui)
+         * (@ref core::render_scene / @ref core::render_ui)
          * after the registry walk so debug / gizmo callers can
          * still subscribe. Does not swap buffers — callers are
          * responsible for presenting.

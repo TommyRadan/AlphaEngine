@@ -26,14 +26,14 @@
 #include <array>
 #include <vector>
 
-#include <infrastructure/math/math.hpp>
+#include <core/math/math.hpp>
 #include <rendering_engine/lighting/point_light.hpp>
 
 namespace rendering_engine::debug
 {
     namespace
     {
-        namespace math = infrastructure::math;
+        namespace math = core::math;
 
         math::vec3 clamp_color(const math::vec3& c)
         {

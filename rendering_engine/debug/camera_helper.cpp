@@ -25,7 +25,7 @@
 #include <array>
 #include <vector>
 
-#include <infrastructure/math/math.hpp>
+#include <core/math/math.hpp>
 #include <rendering_engine/camera/camera.hpp>
 #include <rendering_engine/debug/box_edges.hpp>
 
@@ -43,7 +43,7 @@ namespace rendering_engine::debug
             return;
         }
 
-        namespace math = infrastructure::math;
+        namespace math = core::math;
 
         const math::mat4 view_projection = m_camera->get_projection_matrix() * m_camera->get_view_matrix();
         if (m_built && view_projection == m_last_view_projection)

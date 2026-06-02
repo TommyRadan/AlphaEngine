@@ -30,7 +30,7 @@
 
 #include <rendering_engine/gpu/backend/vulkan/vk_device.hpp>
 
-#include <infrastructure/log.hpp>
+#include <core/log.hpp>
 
 namespace rendering_engine::gpu::backend::vulkan
 {

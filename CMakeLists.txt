@@ -76,12 +76,10 @@ include_directories(${CMAKE_SOURCE_DIR})
 # Main executable. Sources are contributed by per-directory CMakeLists.txt
 # files via target_sources(). The initial source is supplied here so the
 # target is well-formed before subdirectories extend it.
-add_executable(AlphaEngine control/main_loop.cpp)
+add_executable(AlphaEngine runtime/main_loop.cpp)
 
-add_subdirectory(control)
-add_subdirectory(event_engine)
-add_subdirectory(infrastructure)
-add_subdirectory(scene_graph)
+add_subdirectory(runtime)
+add_subdirectory(core)
 add_subdirectory(rendering_engine)
 add_subdirectory(external)
 

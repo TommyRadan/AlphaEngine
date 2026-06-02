@@ -25,26 +25,26 @@
 #include <array>
 #include <cstdint>
 
-#include <control/engine.hpp>
-#include <infrastructure/math/math.hpp>
+#include <core/math/math.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/materials/grid_material.hpp>
 #include <rendering_engine/renderables/draw_item.hpp>
 #include <rendering_engine/rendering_engine.hpp>
+#include <runtime/engine.hpp>
 
 namespace rendering_engine::debug
 {
     infinite_grid::infinite_grid(float /*fade_distance*/)
         : helper("Grid (infinite)", helper_layer::scene),
-          m_material(&control::current_engine().renderer->get_grid_material())
+          m_material(&runtime::current_engine().renderer->get_grid_material())
     {
         upload();
     }
 
     infinite_grid::~infinite_grid()
     {
-        auto& gpu = *control::current_engine().gpu;
+        auto& gpu = *runtime::current_engine().gpu;
         if (m_draw_bind_group.valid())
         {
             gpu.destroy(m_draw_bind_group);
@@ -64,17 +64,17 @@ namespace rendering_engine::debug
 
     void infinite_grid::upload()
     {
-        auto& gpu = *control::current_engine().gpu;
+        auto& gpu = *runtime::current_engine().gpu;
 
         // A single fullscreen triangle in clip space; the grid material's
         // vertex shader unprojects these corners to reconstruct the view
         // rays, so no transform is applied to the positions themselves.
-        const std::array<infrastructure::math::vec3, 3> vertices{infrastructure::math::vec3{-1.0f, -1.0f, 0.0f},
-                                                                 infrastructure::math::vec3{3.0f, -1.0f, 0.0f},
-                                                                 infrastructure::math::vec3{-1.0f, 3.0f, 0.0f}};
+        const std::array<core::math::vec3, 3> vertices{core::math::vec3{-1.0f, -1.0f, 0.0f},
+                                                       core::math::vec3{3.0f, -1.0f, 0.0f},
+                                                       core::math::vec3{-1.0f, 3.0f, 0.0f}};
 
         gpu::buffer_descriptor vertex_descriptor{};
-        vertex_descriptor.size = vertices.size() * sizeof(infrastructure::math::vec3);
+        vertex_descriptor.size = vertices.size() * sizeof(core::math::vec3);
         vertex_descriptor.usage = gpu::buffer_usage_vertex;
         vertex_descriptor.hint = gpu::buffer_usage_hint::static_data;
         vertex_descriptor.initial_data = vertices.data();
@@ -82,9 +82,9 @@ namespace rendering_engine::debug
 
         // Per-draw model matrix (identity for the origin grid); the
         // shader references it when reconstructing depth.
-        const auto model = infrastructure::math::mat4{};
+        const auto model = core::math::mat4{};
         gpu::buffer_descriptor ubo_descriptor{};
-        ubo_descriptor.size = sizeof(infrastructure::math::mat4);
+        ubo_descriptor.size = sizeof(core::math::mat4);
         ubo_descriptor.usage = gpu::buffer_usage_uniform | gpu::buffer_usage_copy_dst;
         ubo_descriptor.hint = gpu::buffer_usage_hint::static_data;
         ubo_descriptor.initial_data = model.data();
@@ -111,7 +111,7 @@ namespace rendering_engine::debug
         item.mat = m_material;
         item.vertex_buffer = m_vertex_buffer;
         item.per_draw_bind_group = m_draw_bind_group;
-        item.vertex_stride = sizeof(infrastructure::math::vec3);
+        item.vertex_stride = sizeof(core::math::vec3);
         item.vertex_count = 3;
         out.push_back(item);
     }

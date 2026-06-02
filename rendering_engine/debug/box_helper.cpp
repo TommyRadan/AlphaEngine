@@ -25,18 +25,18 @@
 #include <array>
 #include <vector>
 
-#include <infrastructure/math/math.hpp>
+#include <core/math/math.hpp>
 #include <rendering_engine/debug/box_edges.hpp>
 
 namespace rendering_engine::debug
 {
-    box_helper::box_helper(const infrastructure::math::aabb& box, util::color color)
+    box_helper::box_helper(const core::math::aabb& box, util::color color)
         : line_helper("Box"), m_box(box), m_color(color)
     {
         rebuild();
     }
 
-    void box_helper::set_box(const infrastructure::math::aabb& box)
+    void box_helper::set_box(const core::math::aabb& box)
     {
         m_box = box;
         rebuild();
@@ -44,7 +44,7 @@ namespace rendering_engine::debug
 
     void box_helper::rebuild()
     {
-        namespace math = infrastructure::math;
+        namespace math = core::math;
 
         // The eight corners of the box, indexed so bit 0 selects X,
         // bit 1 selects Y and bit 2 selects Z between min and max.

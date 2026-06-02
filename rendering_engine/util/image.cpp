@@ -26,7 +26,7 @@
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.hpp"
-#include <infrastructure/log.hpp>
+#include <core/log.hpp>
 
 rendering_engine::util::image::image() : m_image_data{nullptr}, m_width{0u}, m_height{0u} {}
 

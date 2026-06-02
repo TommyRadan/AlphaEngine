@@ -22,9 +22,9 @@
 
 #include <rendering_engine/materials/material.hpp>
 
-#include <control/engine.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/gpu/shader_compiler.hpp>
+#include <runtime/engine.hpp>
 
 namespace
 {
@@ -154,7 +154,7 @@ namespace rendering_engine
                                       const gpu::bind_group_layout_descriptor& material_layout,
                                       gpu::primitive_topology topology)
     {
-        auto& gpu = *control::current_engine().gpu;
+        auto& gpu = *runtime::current_engine().gpu;
 
         gpu::shader_module_descriptor vs_descriptor{};
         vs_descriptor.stage = gpu::shader_stage::vertex;
@@ -206,7 +206,7 @@ namespace rendering_engine
         // before the device tears its pools down, so the device is live
         // here. Callers that construct/destruct materials outside that
         // lifecycle must arrange the same ordering.
-        auto& gpu = *control::current_engine().gpu;
+        auto& gpu = *runtime::current_engine().gpu;
         if (m_per_material_bind_group.valid())
         {
             gpu.destroy(m_per_material_bind_group);

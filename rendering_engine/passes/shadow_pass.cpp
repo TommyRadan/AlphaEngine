@@ -25,7 +25,6 @@
 #include <cmath>
 #include <string>
 
-#include <control/engine.hpp>
 #include <rendering_engine/gpu/bind_group.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
@@ -37,10 +36,11 @@
 #include <rendering_engine/lighting/light.hpp>
 #include <rendering_engine/lighting/lights_ubo.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
+#include <runtime/engine.hpp>
 
 namespace
 {
-    namespace math = infrastructure::math;
+    namespace math = core::math;
 
     // Square shadow-map resolution. 2048 is the usual single-cascade
     // starting point — sharp enough for a moderate scene without the
@@ -113,7 +113,7 @@ namespace rendering_engine
 {
     shadow_pass::shadow_pass(std::vector<renderable*>* registry) : m_registry(registry)
     {
-        auto& gpu = *control::current_engine().gpu;
+        auto& gpu = *runtime::current_engine().gpu;
 
         // Off-screen target: a throwaway single-channel colour buffer
         // plus the sampled depth32_float attachment the lit materials
@@ -201,7 +201,7 @@ namespace rendering_engine
 
     shadow_pass::~shadow_pass()
     {
-        auto& gpu = *control::current_engine().gpu;
+        auto& gpu = *runtime::current_engine().gpu;
         if (m_pipeline.valid())
         {
             gpu.destroy(m_pipeline);
@@ -252,7 +252,7 @@ namespace rendering_engine
         return m_depth_texture;
     }
 
-    const infrastructure::math::mat4& shadow_pass::light_view_projection() const
+    const core::math::mat4& shadow_pass::light_view_projection() const
     {
         return m_light_view_projection;
     }
@@ -274,7 +274,7 @@ namespace rendering_engine
 
     void shadow_pass::record(gpu::command_encoder& encoder, const frame_context& /*ctx*/)
     {
-        auto& gpu = *control::current_engine().gpu;
+        auto& gpu = *runtime::current_engine().gpu;
 
         // Locate the first shadow-casting directional light, tracking
         // its index within the packed directional array so the lit

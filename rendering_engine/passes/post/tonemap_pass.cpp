@@ -28,7 +28,6 @@
 #include <cstring>
 #include <string>
 
-#include <control/engine.hpp>
 #include <rendering_engine/gpu/bind_group.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
@@ -37,6 +36,7 @@
 #include <rendering_engine/gpu/shader.hpp>
 #include <rendering_engine/gpu/shader_compiler.hpp>
 #include <rendering_engine/passes/post/fullscreen_triangle.hpp>
+#include <runtime/engine.hpp>
 
 namespace
 {
@@ -122,7 +122,7 @@ namespace rendering_engine
 {
     tonemap_pass::tonemap_pass(gpu::texture input_color)
     {
-        auto& gpu = *control::current_engine().gpu;
+        auto& gpu = *runtime::current_engine().gpu;
 
         gpu::shader_module_descriptor vs_descriptor{};
         vs_descriptor.stage = gpu::shader_stage::vertex;
@@ -213,7 +213,7 @@ namespace rendering_engine
 
     tonemap_pass::~tonemap_pass()
     {
-        auto& gpu = *control::current_engine().gpu;
+        auto& gpu = *runtime::current_engine().gpu;
         if (m_pipeline.valid())
         {
             gpu.destroy(m_pipeline);
@@ -296,7 +296,7 @@ namespace rendering_engine
 
     void tonemap_pass::upload_uniforms()
     {
-        auto& gpu = *control::current_engine().gpu;
+        auto& gpu = *runtime::current_engine().gpu;
         const std::array<std::byte, tonemap_ubo_size> bytes = pack_uniforms(m_exposure, m_operator);
         gpu.write_buffer(m_tonemap_ubo, bytes.data(), bytes.size(), 0);
     }

@@ -25,13 +25,13 @@
 #include <cmath>
 #include <vector>
 
-#include <control/engine.hpp>
-#include <infrastructure/log.hpp>
-#include <infrastructure/math/math.hpp>
+#include <core/log.hpp>
+#include <core/math/math.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/materials/material.hpp>
 #include <rendering_engine/mesh/vertex.hpp>
+#include <runtime/engine.hpp>
 
 rendering_engine::capsule::capsule(
     material* mat, float radius, float length, unsigned int cap_segments, unsigned int radial_segments)
@@ -42,7 +42,7 @@ rendering_engine::capsule::capsule(
 
 rendering_engine::capsule::~capsule()
 {
-    auto& gpu = *control::current_engine().gpu;
+    auto& gpu = *runtime::current_engine().gpu;
     if (m_draw_bind_group.valid())
     {
         gpu.destroy(m_draw_bind_group);
@@ -169,7 +169,7 @@ void rendering_engine::capsule::upload()
             const float cos_theta = std::cos(theta);
 
             vertex_position_uv_normal vertex;
-            vertex.pos = infrastructure::math::vec3{r.radial * cos_theta, r.y, r.radial * sin_theta};
+            vertex.pos = core::math::vec3{r.radial * cos_theta, r.y, r.radial * sin_theta};
 
             // The radial (XZ) component of the normal points outward in
             // the same direction as the ring offset; on the caps it is the
@@ -177,9 +177,9 @@ void rendering_engine::capsule::upload()
             // on the body it is purely radial (nh == 1, ny == 0). The
             // per-ring components are already unit-length, so the result is
             // a unit normal across every region.
-            vertex.normal = infrastructure::math::vec3{r.nh * cos_theta, r.ny, r.nh * sin_theta};
+            vertex.normal = core::math::vec3{r.nh * cos_theta, r.ny, r.nh * sin_theta};
 
-            vertex.uv = infrastructure::math::vec2{u, 1.0f - r.v};
+            vertex.uv = core::math::vec2{u, 1.0f - r.v};
             vertices.push_back(vertex);
         }
     }
@@ -213,7 +213,7 @@ void rendering_engine::capsule::upload()
     m_index_count = static_cast<unsigned int>(indices.size());
     m_vertex_stride = sizeof(vertex_position_uv_normal);
 
-    auto& gpu = *control::current_engine().gpu;
+    auto& gpu = *runtime::current_engine().gpu;
 
     gpu::buffer_descriptor vertex_descriptor{};
     vertex_descriptor.size = vertices.size() * sizeof(vertex_position_uv_normal);
@@ -242,12 +242,12 @@ void rendering_engine::capsule::collect_draw_items(std::vector<draw_item>& out)
         return;
     }
 
-    auto& gpu = *control::current_engine().gpu;
+    auto& gpu = *runtime::current_engine().gpu;
 
     if (!m_draw_ubo.valid())
     {
         gpu::buffer_descriptor ubo_descriptor{};
-        ubo_descriptor.size = sizeof(infrastructure::math::mat4);
+        ubo_descriptor.size = sizeof(core::math::mat4);
         ubo_descriptor.usage = gpu::buffer_usage_uniform | gpu::buffer_usage_copy_dst;
         ubo_descriptor.hint = gpu::buffer_usage_hint::dynamic_data;
         m_draw_ubo = gpu.create_buffer(ubo_descriptor);
@@ -266,7 +266,7 @@ void rendering_engine::capsule::collect_draw_items(std::vector<draw_item>& out)
     }
 
     const auto model_matrix = transform.get_world_matrix();
-    gpu.write_buffer(m_draw_ubo, model_matrix.data(), sizeof(infrastructure::math::mat4), 0);
+    gpu.write_buffer(m_draw_ubo, model_matrix.data(), sizeof(core::math::mat4), 0);
 
     draw_item item{};
     item.mat = m_material;

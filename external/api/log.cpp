@@ -21,7 +21,7 @@
  */
 
 #include "log.hpp"
-#include <infrastructure/log.hpp>
+#include <core/log.hpp>
 
 void print_info(const std::string& message)
 {

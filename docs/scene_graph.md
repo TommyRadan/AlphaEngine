@@ -1,6 +1,7 @@
 # Scene graph
 
-The `scene_graph` subsystem is an **entity/component** scene graph. It is the
+The scene graph (part of the `runtime` module) is an **entity/component** scene
+graph. It is the
 authority over *what exists in the world and where* — the hierarchy of objects
 and their transforms — while the rendering, audio, and other subsystems remain
 the authority over *how those objects are processed*.
@@ -12,7 +13,7 @@ transform and a set of parent/child links, and it gains behaviour by carrying
 **components**.
 
 ```
-scene_graph::context
+runtime::context
 └── node root
     ├── transform (intrinsic)
     ├── node "player"
@@ -49,10 +50,10 @@ Two reasons this is worth the indirection:
   than silently aliasing an unrelated object. This is the same scheme
   `rendering_engine::gpu::handle` already uses for GPU resources.
 
-The primitive behind this is `infrastructure::pool<T>` (`infrastructure/pool.hpp`):
-a generational slot pool that hands out `infrastructure::pool_handle<Tag>`.
-`scene_graph::component_store` keeps one such pool per component type, keyed by
-`std::type_index`, and is owned per-scene by `scene_graph::context`.
+The primitive behind this is `core::pool<T>` (`core/pool.hpp`):
+a generational slot pool that hands out `core::pool_handle<Tag>`.
+`runtime::component_store` keeps one such pool per component type, keyed by
+`std::type_index`, and is owned per-scene by `runtime::context`.
 
 ## Transforms and world matrices
 
@@ -84,7 +85,7 @@ the node transform's world version) without push-based invalidation.
 
 The model lands in stages:
 
-1. **Foundation (done).** `infrastructure::pool` + handle; `node` as an entity
+1. **Foundation (done).** `core::pool` + handle; `node` as an entity
    with a type-erased `component_store`; transform-hierarchy world-matrix
    propagation.
 2. **Component lifecycle hooks (done).** A component may define `on_attach(node&)`
@@ -103,7 +104,7 @@ The model lands in stages:
    registries hold the object's address), and an `on_update(node&)` hook tracks
    the node: a point light's position and a directional light's direction follow
    the node's world transform, and a camera's position follows its node.
-5. **Traversal (done).** `scene_graph::context::update()` walks the tree from
+5. **Traversal (done).** `runtime::context::update()` walks the tree from
    `root` once per frame — wired into `engine::tick` after game-module `on_frame`
    and before the draw — dispatching each component's `on_update` so node-derived
    state is refreshed against the settled world transforms. (A dirty-flag

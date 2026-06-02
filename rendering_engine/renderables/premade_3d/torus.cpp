@@ -25,13 +25,13 @@
 #include <cmath>
 #include <vector>
 
-#include <control/engine.hpp>
-#include <infrastructure/log.hpp>
-#include <infrastructure/math/math.hpp>
+#include <core/log.hpp>
+#include <core/math/math.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/materials/material.hpp>
 #include <rendering_engine/mesh/vertex.hpp>
+#include <runtime/engine.hpp>
 
 rendering_engine::torus::torus(
     material* mat, float radius, float tube, unsigned int radial_segments, unsigned int tubular_segments, float arc)
@@ -42,7 +42,7 @@ rendering_engine::torus::torus(
 
 rendering_engine::torus::~torus()
 {
-    auto& gpu = *control::current_engine().gpu;
+    auto& gpu = *runtime::current_engine().gpu;
     if (m_draw_bind_group.valid())
     {
         gpu.destroy(m_draw_bind_group);
@@ -90,17 +90,17 @@ void rendering_engine::torus::upload()
             const float cos_u = std::cos(u);
 
             vertex_position_uv_normal vertex;
-            vertex.pos = infrastructure::math::vec3{
+            vertex.pos = core::math::vec3{
                 (m_radius + m_tube * cos_v) * cos_u, (m_radius + m_tube * cos_v) * sin_u, m_tube * sin_v};
 
             // Normal points from the centre of the tube cross-section out to
             // the surface point; for a torus this is the unit vector
             // (cos_v*cos_u, cos_v*sin_u, sin_v).
-            const infrastructure::math::vec3 center{m_radius * cos_u, m_radius * sin_u, 0.0f};
-            vertex.normal = infrastructure::math::normalize(vertex.pos - center);
+            const core::math::vec3 center{m_radius * cos_u, m_radius * sin_u, 0.0f};
+            vertex.normal = core::math::normalize(vertex.pos - center);
 
-            vertex.uv = infrastructure::math::vec2{static_cast<float>(i) / static_cast<float>(m_tubular_segments),
-                                                   static_cast<float>(j) / static_cast<float>(m_radial_segments)};
+            vertex.uv = core::math::vec2{static_cast<float>(i) / static_cast<float>(m_tubular_segments),
+                                         static_cast<float>(j) / static_cast<float>(m_radial_segments)};
             vertices.push_back(vertex);
         }
     }
@@ -133,7 +133,7 @@ void rendering_engine::torus::upload()
     m_index_count = static_cast<unsigned int>(indices.size());
     m_vertex_stride = sizeof(vertex_position_uv_normal);
 
-    auto& gpu = *control::current_engine().gpu;
+    auto& gpu = *runtime::current_engine().gpu;
 
     gpu::buffer_descriptor vertex_descriptor{};
     vertex_descriptor.size = vertices.size() * sizeof(vertex_position_uv_normal);
@@ -162,12 +162,12 @@ void rendering_engine::torus::collect_draw_items(std::vector<draw_item>& out)
         return;
     }
 
-    auto& gpu = *control::current_engine().gpu;
+    auto& gpu = *runtime::current_engine().gpu;
 
     if (!m_draw_ubo.valid())
     {
         gpu::buffer_descriptor ubo_descriptor{};
-        ubo_descriptor.size = sizeof(infrastructure::math::mat4);
+        ubo_descriptor.size = sizeof(core::math::mat4);
         ubo_descriptor.usage = gpu::buffer_usage_uniform | gpu::buffer_usage_copy_dst;
         ubo_descriptor.hint = gpu::buffer_usage_hint::dynamic_data;
         m_draw_ubo = gpu.create_buffer(ubo_descriptor);
@@ -186,7 +186,7 @@ void rendering_engine::torus::collect_draw_items(std::vector<draw_item>& out)
     }
 
     const auto model_matrix = transform.get_world_matrix();
-    gpu.write_buffer(m_draw_ubo, model_matrix.data(), sizeof(infrastructure::math::mat4), 0);
+    gpu.write_buffer(m_draw_ubo, model_matrix.data(), sizeof(core::math::mat4), 0);
 
     draw_item item{};
     item.mat = m_material;

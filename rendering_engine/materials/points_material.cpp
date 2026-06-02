@@ -25,9 +25,9 @@
 #include <array>
 #include <string>
 
-#include <control/engine.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
+#include <runtime/engine.hpp>
 
 namespace
 {
@@ -166,7 +166,7 @@ namespace rendering_engine
         ubo_descriptor.size = material_ubo_size;
         ubo_descriptor.usage = gpu::buffer_usage_uniform | gpu::buffer_usage_copy_dst;
         ubo_descriptor.hint = gpu::buffer_usage_hint::dynamic_data;
-        auto& gpu = *control::current_engine().gpu;
+        auto& gpu = *runtime::current_engine().gpu;
         m_material_ubo = gpu.create_buffer(ubo_descriptor);
 
         rebuild_bind_group();
@@ -177,7 +177,7 @@ namespace rendering_engine
         // Drop the bind group before the buffers / texture it
         // references, then null it so the base destructor's
         // destruct_pipeline does not double-free.
-        auto& gpu = *control::current_engine().gpu;
+        auto& gpu = *runtime::current_engine().gpu;
         if (m_per_material_bind_group.valid())
         {
             gpu.destroy(m_per_material_bind_group);
@@ -220,7 +220,7 @@ namespace rendering_engine
 
     void points_material::set_sprite(const util::image& image)
     {
-        auto& gpu = *control::current_engine().gpu;
+        auto& gpu = *runtime::current_engine().gpu;
         if (m_sprite.valid())
         {
             gpu.destroy(m_sprite);
@@ -254,7 +254,7 @@ namespace rendering_engine
         {
             return;
         }
-        auto& gpu = *control::current_engine().gpu;
+        auto& gpu = *runtime::current_engine().gpu;
         gpu.destroy(m_sprite);
         m_sprite = {};
         rebuild_bind_group();
@@ -262,7 +262,7 @@ namespace rendering_engine
 
     void points_material::rebuild_bind_group()
     {
-        auto& gpu = *control::current_engine().gpu;
+        auto& gpu = *runtime::current_engine().gpu;
         if (m_per_material_bind_group.valid())
         {
             gpu.destroy(m_per_material_bind_group);
@@ -300,7 +300,7 @@ namespace rendering_engine
         payload[5] = m_size_attenuation ? 1.0f : 0.0f;
         payload[6] = m_sprite.valid() ? 1.0f : 0.0f;
 
-        auto& gpu = *control::current_engine().gpu;
+        auto& gpu = *runtime::current_engine().gpu;
         gpu.write_buffer(m_material_ubo, payload.data(), material_ubo_size, 0);
     }
 } // namespace rendering_engine

@@ -24,7 +24,7 @@
 
 #include <vector>
 
-#include <infrastructure/math/math.hpp>
+#include <core/math/math.hpp>
 #include <rendering_engine/debug/helper.hpp>
 #include <rendering_engine/renderables/line.hpp>
 #include <rendering_engine/util/transform.hpp>
@@ -54,8 +54,7 @@ namespace rendering_engine::debug
         // Replace the gizmo geometry with @p positions interpreted as
         // independent line segments (vertex pairs) and upload it. The two
         // vectors must be the same length.
-        void set_segments(const std::vector<infrastructure::math::vec3>& positions,
-                          const std::vector<infrastructure::math::vec3>& colors);
+        void set_segments(const std::vector<core::math::vec3>& positions, const std::vector<core::math::vec3>& colors);
 
         // Rebuild geometry from the helper's target before drawing.
         // Static helpers (axes) build once in their constructor and leave

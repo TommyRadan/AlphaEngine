@@ -25,7 +25,7 @@
  * @brief @c gpu::device — the backend-agnostic resource and command
  *        factory.
  *
- * Owned by @ref control::engine through @c eng.gpu and constructed via
+ * Owned by @ref runtime::engine through @c eng.gpu and constructed via
  * @ref create_device. Every renderable, renderer and frame driver in
  * the engine talks to this interface and never to backend-native types.
  */

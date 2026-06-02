@@ -24,14 +24,14 @@
 
 #include <vector>
 
-#include <infrastructure/math/math.hpp>
+#include <core/math/math.hpp>
 
 namespace rendering_engine::debug
 {
     grid_helper::grid_helper(float size, int divisions, util::color color, util::color center_color)
         : line_helper("Grid")
     {
-        namespace math = infrastructure::math;
+        namespace math = core::math;
 
         if (divisions < 1)
         {

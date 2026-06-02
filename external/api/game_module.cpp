@@ -26,13 +26,13 @@
 
 #include <vector>
 
-#include <control/engine.hpp>
-#include <event_engine/event_engine.hpp>
+#include <core/event_engine.hpp>
+#include <runtime/engine.hpp>
 
 namespace
 {
     // Game modules self-register at static-init time via GAME_MODULE(),
-    // which runs before main() and therefore before control::engine is
+    // which runs before main() and therefore before runtime::engine is
     // constructed. We stash their info in this function-local static and
     // flush it into the live event bus once the engine is up.
     std::vector<game_module_info>& pending_modules()
@@ -41,60 +41,60 @@ namespace
         return storage;
     }
 
-    void install_callbacks(event_engine::event_bus& bus, const game_module_info& info)
+    void install_callbacks(core::event_bus& bus, const game_module_info& info)
     {
         if (info.on_engine_start)
         {
-            bus.subscribe<event_engine::engine_start>(info.on_engine_start);
+            bus.subscribe<core::engine_start>(info.on_engine_start);
         }
         if (info.on_engine_stop)
         {
-            bus.subscribe<event_engine::engine_stop>(info.on_engine_stop);
+            bus.subscribe<core::engine_stop>(info.on_engine_stop);
         }
         if (info.on_frame)
         {
-            bus.subscribe<event_engine::frame>(info.on_frame);
+            bus.subscribe<core::frame>(info.on_frame);
         }
         if (info.on_render_scene)
         {
-            bus.subscribe<event_engine::render_scene>(info.on_render_scene);
+            bus.subscribe<core::render_scene>(info.on_render_scene);
         }
         if (info.on_render_ui)
         {
-            bus.subscribe<event_engine::render_ui>(info.on_render_ui);
+            bus.subscribe<core::render_ui>(info.on_render_ui);
         }
         if (info.on_mouse_key_down)
         {
-            bus.subscribe<event_engine::mouse_key_down>(info.on_mouse_key_down);
+            bus.subscribe<core::mouse_key_down>(info.on_mouse_key_down);
         }
         if (info.on_mouse_key_up)
         {
-            bus.subscribe<event_engine::mouse_key_up>(info.on_mouse_key_up);
+            bus.subscribe<core::mouse_key_up>(info.on_mouse_key_up);
         }
         if (info.on_key_down)
         {
-            bus.subscribe<event_engine::key_down>(info.on_key_down);
+            bus.subscribe<core::key_down>(info.on_key_down);
         }
         if (info.on_key_up)
         {
-            bus.subscribe<event_engine::key_up>(info.on_key_up);
+            bus.subscribe<core::key_up>(info.on_key_up);
         }
         if (info.on_mouse_move)
         {
-            bus.subscribe<event_engine::mouse_move>(info.on_mouse_move);
+            bus.subscribe<core::mouse_move>(info.on_mouse_move);
         }
     }
 } // namespace
 
 void register_game_module(struct game_module_info& info)
 {
-    // Defer: control::engine isn't built yet during static init.
+    // Defer: runtime::engine isn't built yet during static init.
     pending_modules().push_back(info);
 }
 
 void install_pending_game_modules()
 {
-    auto& bus = *control::current_engine().events;
+    auto& bus = *runtime::current_engine().events;
     for (const auto& info : pending_modules())
     {
         install_callbacks(bus, info);

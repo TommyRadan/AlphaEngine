@@ -22,25 +22,25 @@
 
 #include "time.hpp"
 
-#include <control/engine.hpp>
-#include <infrastructure/time.hpp>
+#include <core/time.hpp>
+#include <runtime/engine.hpp>
 
 float get_current_fps()
 {
-    return control::current_engine().time->current_fps();
+    return runtime::current_engine().time->current_fps();
 }
 
 int get_frame_count()
 {
-    return control::current_engine().time->frame_count();
+    return runtime::current_engine().time->frame_count();
 }
 
 double get_delta_time()
 {
-    return control::current_engine().time->delta_time();
+    return runtime::current_engine().time->delta_time();
 }
 
 float get_total_time()
 {
-    return control::current_engine().time->total_time();
+    return runtime::current_engine().time->total_time();
 }

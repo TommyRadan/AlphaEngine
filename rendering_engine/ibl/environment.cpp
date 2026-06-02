@@ -29,9 +29,8 @@
 #include <utility>
 #include <vector>
 
-#include <control/engine.hpp>
-#include <infrastructure/log.hpp>
-#include <infrastructure/math/math.hpp>
+#include <core/log.hpp>
+#include <core/math/math.hpp>
 #include <rendering_engine/gpu/bind_group.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/command_encoder.hpp>
@@ -41,10 +40,11 @@
 #include <rendering_engine/gpu/shader_compiler.hpp>
 #include <rendering_engine/gpu/texture.hpp>
 #include <rendering_engine/gpu/types.hpp>
+#include <runtime/engine.hpp>
 
 namespace
 {
-    namespace math = infrastructure::math;
+    namespace math = core::math;
     namespace gpu = rendering_engine::gpu;
 
     constexpr float pi = 3.14159265358979323846f;
@@ -507,7 +507,7 @@ namespace rendering_engine
 
     environment::~environment()
     {
-        auto& gpu = *control::current_engine().gpu;
+        auto& gpu = *runtime::current_engine().gpu;
         if (m_brdf_lut.valid())
         {
             gpu.destroy(m_brdf_lut);
@@ -556,7 +556,7 @@ namespace rendering_engine
     {
         upload_source(face_size, faces);
 
-        auto& gpu = *control::current_engine().gpu;
+        auto& gpu = *runtime::current_engine().gpu;
         if (gpu.supports_compute_prefilter())
         {
             build_derived_gpu(face_size);
@@ -569,7 +569,7 @@ namespace rendering_engine
 
     void environment::upload_source(uint32_t face_size, const std::array<std::vector<float>, 6>& faces)
     {
-        auto& gpu = *control::current_engine().gpu;
+        auto& gpu = *runtime::current_engine().gpu;
 
         // Source skybox cube: HDR with a full mip chain. Mip 0 is the
         // sharp background sampled by the skybox pass; the GPU prefilter
@@ -599,7 +599,7 @@ namespace rendering_engine
 
     void environment::build_derived_cpu(uint32_t face_size, const std::array<std::vector<float>, 6>& faces)
     {
-        auto& gpu = *control::current_engine().gpu;
+        auto& gpu = *runtime::current_engine().gpu;
 
         // Diffuse irradiance cube: each output texel integrates the source
         // over a cosine-weighted hemisphere about its direction.

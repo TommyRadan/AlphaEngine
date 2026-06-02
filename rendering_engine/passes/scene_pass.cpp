@@ -26,10 +26,9 @@
 #include <array>
 #include <cstring>
 
-#include <control/engine.hpp>
-#include <event_engine/event.hpp>
-#include <event_engine/event_engine.hpp>
-#include <infrastructure/math/math.hpp>
+#include <core/event.hpp>
+#include <core/event_engine.hpp>
+#include <core/math/math.hpp>
 #include <rendering_engine/camera/camera.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
@@ -40,6 +39,7 @@
 #include <rendering_engine/passes/point_shadow_pass.hpp>
 #include <rendering_engine/passes/shadow_pass.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
+#include <runtime/engine.hpp>
 
 namespace rendering_engine
 {
@@ -49,7 +49,7 @@ namespace rendering_engine
         // at offset 0, mat4 projectionMatrix at offset 64. mat4 is
         // 16-byte aligned and 64 bytes; no padding needed between
         // the two members.
-        constexpr size_t per_frame_ubo_size = 2 * sizeof(infrastructure::math::mat4);
+        constexpr size_t per_frame_ubo_size = 2 * sizeof(core::math::mat4);
 
         // Binding numbers within the per-frame bind group (slot 0). The
         // numbers must stay unique across both descriptor sets in a lit
@@ -72,7 +72,7 @@ namespace rendering_engine
         // std140 layout of the per-frame Shadow block: mat4
         // lightViewProj at offset 0, vec4 params at offset 64
         // (x enabled, y bias, z caster index). 80 bytes total.
-        constexpr size_t shadow_ubo_size = sizeof(infrastructure::math::mat4) + 4 * sizeof(float);
+        constexpr size_t shadow_ubo_size = sizeof(core::math::mat4) + 4 * sizeof(float);
 
         // Omni (point-light) shadow data also shares the per-frame group. The
         // next free binding number across both the UBO and sampler namespaces
@@ -85,13 +85,13 @@ namespace rendering_engine
         // offset 0 (384 bytes), vec4 lightPos at 384, vec4 params at 400
         // (x enabled, y bias, z caster point index). 416 bytes total.
         constexpr size_t point_shadow_ubo_size =
-            point_shadow_face_count * sizeof(infrastructure::math::mat4) + 2 * 4 * sizeof(float);
+            point_shadow_face_count * sizeof(core::math::mat4) + 2 * 4 * sizeof(float);
     } // namespace
 
     scene_pass::scene_pass(std::vector<renderable*>* registry, shadow_pass* shadow, point_shadow_pass* point_shadow)
         : m_registry(registry), m_shadow(shadow), m_point_shadow(point_shadow)
     {
-        auto& gpu = *control::current_engine().gpu;
+        auto& gpu = *runtime::current_engine().gpu;
 
         gpu::bind_group_layout_descriptor frame_layout_descriptor{};
         frame_layout_descriptor.entries.push_back({camera_binding, gpu::binding_kind::uniform_buffer});
@@ -184,7 +184,7 @@ namespace rendering_engine
 
     scene_pass::~scene_pass()
     {
-        auto& gpu = *control::current_engine().gpu;
+        auto& gpu = *runtime::current_engine().gpu;
         if (m_frame_bind_group.valid())
         {
             gpu.destroy(m_frame_bind_group);
@@ -229,7 +229,7 @@ namespace rendering_engine
 
     void scene_pass::record(gpu::command_encoder& encoder, const frame_context& ctx)
     {
-        auto& eng = control::current_engine();
+        auto& eng = runtime::current_engine();
         auto& gpu = *eng.gpu;
 
         // Render into the HDR scene-colour target so the post chain
@@ -261,8 +261,8 @@ namespace rendering_engine
         std::array<float, 32> ubo_payload{};
         const auto view = ctx.active_camera->get_view_matrix();
         const auto projection = ctx.active_camera->get_projection_matrix();
-        std::memcpy(ubo_payload.data(), view.data(), sizeof(infrastructure::math::mat4));
-        std::memcpy(ubo_payload.data() + 16, projection.data(), sizeof(infrastructure::math::mat4));
+        std::memcpy(ubo_payload.data(), view.data(), sizeof(core::math::mat4));
+        std::memcpy(ubo_payload.data() + 16, projection.data(), sizeof(core::math::mat4));
         gpu.write_buffer(m_frame_ubo, ubo_payload.data(), per_frame_ubo_size, 0);
 
         // Pack every live light into the std140 lights block and upload
@@ -280,8 +280,7 @@ namespace rendering_engine
         std::array<float, 20> shadow_payload{};
         if (m_shadow != nullptr && m_shadow->has_shadow())
         {
-            std::memcpy(
-                shadow_payload.data(), m_shadow->light_view_projection().data(), sizeof(infrastructure::math::mat4));
+            std::memcpy(shadow_payload.data(), m_shadow->light_view_projection().data(), sizeof(core::math::mat4));
             shadow_payload[16] = 1.0f;
             shadow_payload[17] = m_shadow->depth_bias();
             shadow_payload[18] = static_cast<float>(m_shadow->shadow_light_index());
@@ -298,7 +297,7 @@ namespace rendering_engine
             {
                 std::memcpy(point_shadow_payload.data() + face * 16,
                             m_point_shadow->light_view_projection(face).data(),
-                            sizeof(infrastructure::math::mat4));
+                            sizeof(core::math::mat4));
             }
             const auto& pos = m_point_shadow->light_position();
             point_shadow_payload[96] = pos.x;
@@ -365,7 +364,7 @@ namespace rendering_engine
             }
         }
 
-        eng.events->emit<event_engine::render_scene>(pass_encoder.get());
+        eng.events->emit<core::render_scene>(pass_encoder.get());
         pass_encoder->end();
     }
 } // namespace rendering_engine

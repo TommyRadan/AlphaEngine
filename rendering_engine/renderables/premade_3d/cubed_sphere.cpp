@@ -24,13 +24,13 @@
 
 #include <vector>
 
-#include <control/engine.hpp>
-#include <infrastructure/log.hpp>
-#include <infrastructure/math/math.hpp>
+#include <core/log.hpp>
+#include <core/math/math.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/materials/material.hpp>
 #include <rendering_engine/mesh/vertex.hpp>
+#include <runtime/engine.hpp>
 
 namespace
 {
@@ -42,36 +42,36 @@ namespace
     // the face from outside, v increases downward.
     struct face_def
     {
-        infrastructure::math::vec3 origin;
-        infrastructure::math::vec3 u_axis;
-        infrastructure::math::vec3 v_axis;
+        core::math::vec3 origin;
+        core::math::vec3 u_axis;
+        core::math::vec3 v_axis;
     };
 
     const face_def faces[6] = {
         // +X (right)
-        {infrastructure::math::vec3{+1.0f, +1.0f, +1.0f},
-         infrastructure::math::vec3{0.0f, 0.0f, -2.0f},
-         infrastructure::math::vec3{0.0f, -2.0f, 0.0f}},
+        {core::math::vec3{+1.0f, +1.0f, +1.0f},
+         core::math::vec3{0.0f, 0.0f, -2.0f},
+         core::math::vec3{0.0f, -2.0f, 0.0f}},
         // -X (left)
-        {infrastructure::math::vec3{-1.0f, +1.0f, -1.0f},
-         infrastructure::math::vec3{0.0f, 0.0f, +2.0f},
-         infrastructure::math::vec3{0.0f, -2.0f, 0.0f}},
+        {core::math::vec3{-1.0f, +1.0f, -1.0f},
+         core::math::vec3{0.0f, 0.0f, +2.0f},
+         core::math::vec3{0.0f, -2.0f, 0.0f}},
         // +Y (top)
-        {infrastructure::math::vec3{-1.0f, +1.0f, -1.0f},
-         infrastructure::math::vec3{+2.0f, 0.0f, 0.0f},
-         infrastructure::math::vec3{0.0f, 0.0f, +2.0f}},
+        {core::math::vec3{-1.0f, +1.0f, -1.0f},
+         core::math::vec3{+2.0f, 0.0f, 0.0f},
+         core::math::vec3{0.0f, 0.0f, +2.0f}},
         // -Y (bottom)
-        {infrastructure::math::vec3{-1.0f, -1.0f, +1.0f},
-         infrastructure::math::vec3{+2.0f, 0.0f, 0.0f},
-         infrastructure::math::vec3{0.0f, 0.0f, -2.0f}},
+        {core::math::vec3{-1.0f, -1.0f, +1.0f},
+         core::math::vec3{+2.0f, 0.0f, 0.0f},
+         core::math::vec3{0.0f, 0.0f, -2.0f}},
         // +Z (back)
-        {infrastructure::math::vec3{-1.0f, +1.0f, +1.0f},
-         infrastructure::math::vec3{+2.0f, 0.0f, 0.0f},
-         infrastructure::math::vec3{0.0f, -2.0f, 0.0f}},
+        {core::math::vec3{-1.0f, +1.0f, +1.0f},
+         core::math::vec3{+2.0f, 0.0f, 0.0f},
+         core::math::vec3{0.0f, -2.0f, 0.0f}},
         // -Z (front)
-        {infrastructure::math::vec3{+1.0f, +1.0f, -1.0f},
-         infrastructure::math::vec3{-2.0f, 0.0f, 0.0f},
-         infrastructure::math::vec3{0.0f, -2.0f, 0.0f}},
+        {core::math::vec3{+1.0f, +1.0f, -1.0f},
+         core::math::vec3{-2.0f, 0.0f, 0.0f},
+         core::math::vec3{0.0f, -2.0f, 0.0f}},
     };
 } // namespace
 
@@ -82,7 +82,7 @@ rendering_engine::cubed_sphere::cubed_sphere(material* mat, unsigned int subdivi
 
 rendering_engine::cubed_sphere::~cubed_sphere()
 {
-    auto& gpu = *control::current_engine().gpu;
+    auto& gpu = *runtime::current_engine().gpu;
     if (m_draw_bind_group.valid())
     {
         gpu.destroy(m_draw_bind_group);
@@ -129,13 +129,13 @@ void rendering_engine::cubed_sphere::upload()
             for (unsigned int i = 0; i < rows; ++i)
             {
                 const float u = static_cast<float>(i) / static_cast<float>(n);
-                const infrastructure::math::vec3 cube_pos = f.origin + u * f.u_axis + v * f.v_axis;
-                const infrastructure::math::vec3 sphere_pos = infrastructure::math::normalize(cube_pos);
+                const core::math::vec3 cube_pos = f.origin + u * f.u_axis + v * f.v_axis;
+                const core::math::vec3 sphere_pos = core::math::normalize(cube_pos);
 
                 vertex_position_uv_normal vertex;
                 vertex.pos = sphere_pos;
                 vertex.normal = sphere_pos;
-                vertex.uv = infrastructure::math::vec2{u, v};
+                vertex.uv = core::math::vec2{u, v};
                 vertices.push_back(vertex);
             }
         }
@@ -164,7 +164,7 @@ void rendering_engine::cubed_sphere::upload()
     m_index_count = static_cast<unsigned int>(indices.size());
     m_vertex_stride = sizeof(vertex_position_uv_normal);
 
-    auto& gpu = *control::current_engine().gpu;
+    auto& gpu = *runtime::current_engine().gpu;
 
     gpu::buffer_descriptor vertex_descriptor{};
     vertex_descriptor.size = vertices.size() * sizeof(vertex_position_uv_normal);
@@ -193,12 +193,12 @@ void rendering_engine::cubed_sphere::collect_draw_items(std::vector<draw_item>& 
         return;
     }
 
-    auto& gpu = *control::current_engine().gpu;
+    auto& gpu = *runtime::current_engine().gpu;
 
     if (!m_draw_ubo.valid())
     {
         gpu::buffer_descriptor ubo_descriptor{};
-        ubo_descriptor.size = sizeof(infrastructure::math::mat4);
+        ubo_descriptor.size = sizeof(core::math::mat4);
         ubo_descriptor.usage = gpu::buffer_usage_uniform | gpu::buffer_usage_copy_dst;
         ubo_descriptor.hint = gpu::buffer_usage_hint::dynamic_data;
         m_draw_ubo = gpu.create_buffer(ubo_descriptor);
@@ -217,7 +217,7 @@ void rendering_engine::cubed_sphere::collect_draw_items(std::vector<draw_item>& 
     }
 
     const auto model_matrix = transform.get_world_matrix();
-    gpu.write_buffer(m_draw_ubo, model_matrix.data(), sizeof(infrastructure::math::mat4), 0);
+    gpu.write_buffer(m_draw_ubo, model_matrix.data(), sizeof(core::math::mat4), 0);
 
     draw_item item{};
     item.mat = m_material;

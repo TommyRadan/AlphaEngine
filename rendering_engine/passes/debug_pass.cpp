@@ -24,12 +24,12 @@
 
 #include <algorithm>
 
-#include <control/engine.hpp>
-#include <event_engine/event.hpp>
-#include <event_engine/event_engine.hpp>
+#include <core/event.hpp>
+#include <core/event_engine.hpp>
 #include <rendering_engine/gpu/render_target.hpp>
 #include <rendering_engine/materials/material.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
+#include <runtime/engine.hpp>
 
 namespace rendering_engine
 {
@@ -40,7 +40,7 @@ namespace rendering_engine
 
     void debug_pass::record(gpu::command_encoder& encoder, const frame_context& ctx)
     {
-        auto& eng = control::current_engine();
+        auto& eng = runtime::current_engine();
 
         gpu::render_pass_descriptor descriptor{};
         descriptor.target = ctx.swapchain_target;
@@ -101,7 +101,7 @@ namespace rendering_engine
             }
         }
 
-        eng.events->emit<event_engine::render_debug>(pass_encoder.get());
+        eng.events->emit<core::render_debug>(pass_encoder.get());
         pass_encoder->end();
     }
 } // namespace rendering_engine

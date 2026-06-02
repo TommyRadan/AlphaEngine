@@ -46,12 +46,12 @@
 #include <SDL3/SDL_stdinc.h>
 #include <SDL3/SDL_vulkan.h>
 
-#include <control/engine.hpp>
-#include <infrastructure/log.hpp>
-#include <infrastructure/settings.hpp>
+#include <core/log.hpp>
+#include <core/settings.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_command_encoder.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_translate.hpp>
 #include <rendering_engine/window.hpp>
+#include <runtime/engine.hpp>
 
 namespace rendering_engine::gpu::backend::vulkan
 {
@@ -559,7 +559,7 @@ namespace rendering_engine::gpu::backend::vulkan
 
     void vk_device::create_surface()
     {
-        auto& eng = control::current_engine();
+        auto& eng = runtime::current_engine();
         if (eng.window == nullptr || eng.window->sdl_window() == nullptr)
         {
             LOG_FTL("vk_device::create_surface: window subsystem missing");
