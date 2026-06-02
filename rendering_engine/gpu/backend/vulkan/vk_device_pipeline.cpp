@@ -206,7 +206,8 @@ namespace rendering_engine::gpu::backend::vulkan
                 VkVertexInputBindingDescription bd{};
                 bd.binding = slot;
                 bd.stride = vbl.stride;
-                bd.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+                bd.inputRate = vbl.step_mode == vertex_step_mode::instance ? VK_VERTEX_INPUT_RATE_INSTANCE
+                                                                           : VK_VERTEX_INPUT_RATE_VERTEX;
                 vk_bindings.push_back(bd);
                 for (const auto& attr : vbl.attributes)
                 {

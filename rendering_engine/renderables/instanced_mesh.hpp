@@ -38,14 +38,16 @@ namespace rendering_engine
     // Draws one shared mesh many times in a single instanced draw, each
     // copy with its own world transform and tint — the engine analog of
     // THREE.InstancedMesh. The geometry (vertex + index buffers) and the
-    // material are shared across every instance; only a per-instance
-    // storage buffer of @c {mat4 model; vec4 color;} records varies.
+    // material are shared across every instance; a per-instance vertex
+    // stream of @c {mat4 model; vec4 color;} records supplies what varies.
     //
-    // The renderable emits a single indexed-indirect @ref draw_item whose
-    // command record carries the instance count, so the whole batch costs
-    // one draw call. It must be fronted by an @ref instanced_material,
-    // whose vertex shader reads the per-instance record by
-    // @c gl_InstanceIndex; pass that material to the constructor.
+    // The renderable emits a single indexed-indirect @ref draw_item: the
+    // command record carries the instance count, and the per-instance
+    // stream is bound to vertex slot 1 and stepped once per instance
+    // (@c glVertexAttribDivisor / @c VK_VERTEX_INPUT_RATE_INSTANCE), so the
+    // whole batch costs one draw call without relying on @c gl_InstanceIndex.
+    // It must be fronted by an @ref instanced_material; pass that material
+    // to the constructor.
     struct instanced_mesh : public renderable
     {
         // @p mat is non-owning and is expected to be an
@@ -84,9 +86,10 @@ namespace rendering_engine
 
     private:
         // Per-instance record mirrored on the CPU and uploaded into the
-        // storage buffer. Layout matches the std430 @c instance_data block
-        // in the instanced material's vertex shader: mat4 (64 bytes) then
-        // vec4 (16 bytes), 80 bytes total with no trailing padding.
+        // per-instance vertex stream. Layout matches the instanced
+        // material's slot-1 vertex attributes: a mat4 model (four vec4
+        // columns, 64 bytes) followed by a vec4 colour (16 bytes), 80 bytes
+        // with no trailing padding.
         struct instance_record
         {
             core::math::mat4 model{};
@@ -97,8 +100,8 @@ namespace rendering_engine
         uint32_t m_capacity{0};
         uint32_t m_instance_count{0};
 
-        // CPU mirror of the per-instance storage buffer, re-uploaded when
-        // an instance changes.
+        // CPU mirror of the per-instance vertex stream, re-uploaded when an
+        // instance changes.
         std::vector<instance_record> m_instances;
         bool m_instances_dirty{true};
 
@@ -110,7 +113,6 @@ namespace rendering_engine
         gpu::buffer m_index_buffer{};
         gpu::buffer m_instance_buffer{};
         gpu::buffer m_indirect_buffer{};
-        gpu::bind_group m_draw_bind_group{};
 
         uint32_t m_index_count{0};
         uint32_t m_vertex_stride{0};

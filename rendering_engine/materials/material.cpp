@@ -130,10 +130,29 @@ namespace rendering_engine
                                       const gpu::bind_group_layout_descriptor& material_layout,
                                       gpu::primitive_topology topology)
     {
+        construct_pipeline(vertex_source,
+                           fragment_source,
+                           std::vector<gpu::vertex_buffer_layout>{vertex_layout},
+                           draw_layout,
+                           frame_layout,
+                           params,
+                           material_layout,
+                           topology);
+    }
+
+    void material::construct_pipeline(const std::string& vertex_source,
+                                      const std::string& fragment_source,
+                                      const std::vector<gpu::vertex_buffer_layout>& vertex_layouts,
+                                      const gpu::bind_group_layout_descriptor& draw_layout,
+                                      gpu::bind_group_layout frame_layout,
+                                      const material_params& params,
+                                      const gpu::bind_group_layout_descriptor& material_layout,
+                                      gpu::primitive_topology topology)
+    {
         m_params = params;
         construct_pipeline(vertex_source,
                            fragment_source,
-                           vertex_layout,
+                           vertex_layouts,
                            draw_layout,
                            frame_layout,
                            to_depth_state(params),
@@ -146,6 +165,29 @@ namespace rendering_engine
     void material::construct_pipeline(const std::string& vertex_source,
                                       const std::string& fragment_source,
                                       const gpu::vertex_buffer_layout& vertex_layout,
+                                      const gpu::bind_group_layout_descriptor& draw_layout,
+                                      gpu::bind_group_layout frame_layout,
+                                      const gpu::depth_state& depth,
+                                      const gpu::blend_state& blend,
+                                      const gpu::rasterizer_state& rasterizer,
+                                      const gpu::bind_group_layout_descriptor& material_layout,
+                                      gpu::primitive_topology topology)
+    {
+        construct_pipeline(vertex_source,
+                           fragment_source,
+                           std::vector<gpu::vertex_buffer_layout>{vertex_layout},
+                           draw_layout,
+                           frame_layout,
+                           depth,
+                           blend,
+                           rasterizer,
+                           material_layout,
+                           topology);
+    }
+
+    void material::construct_pipeline(const std::string& vertex_source,
+                                      const std::string& fragment_source,
+                                      const std::vector<gpu::vertex_buffer_layout>& vertex_layouts,
                                       const gpu::bind_group_layout_descriptor& draw_layout,
                                       gpu::bind_group_layout frame_layout,
                                       const gpu::depth_state& depth,
@@ -182,7 +224,7 @@ namespace rendering_engine
         gpu::pipeline_descriptor pipeline_descriptor{};
         pipeline_descriptor.vertex_shader = m_vertex_shader;
         pipeline_descriptor.fragment_shader = m_fragment_shader;
-        pipeline_descriptor.vertex_buffers.push_back(vertex_layout);
+        pipeline_descriptor.vertex_buffers = vertex_layouts;
         pipeline_descriptor.topology = topology;
         pipeline_descriptor.depth = depth;
         pipeline_descriptor.blend = blend;

@@ -351,8 +351,18 @@ namespace rendering_engine
                 last_pipeline_id = pid;
             }
 
-            pass_encoder->set_bind_group(item.mat->per_draw_slot(), item.per_draw_bind_group);
+            // Instanced renderables keep their per-instance data in a
+            // vertex stream (slot 1), not a per-draw bind group, so the
+            // per-draw group is optional.
+            if (item.per_draw_bind_group.valid())
+            {
+                pass_encoder->set_bind_group(item.mat->per_draw_slot(), item.per_draw_bind_group);
+            }
             pass_encoder->set_vertex_buffer(0, item.vertex_buffer, 0, item.vertex_stride);
+            if (item.instance_buffer.valid())
+            {
+                pass_encoder->set_vertex_buffer(1, item.instance_buffer, 0, item.instance_stride);
+            }
             if (item.index_buffer.valid())
             {
                 pass_encoder->set_index_buffer(item.index_buffer, item.index_format);

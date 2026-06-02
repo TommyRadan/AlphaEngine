@@ -46,9 +46,9 @@ namespace
     // the lattice is pushed forward along +X to sit in front of it.
     constexpr uint32_t grid_side = 16;
     constexpr uint32_t instance_count = grid_side * grid_side * grid_side; // 4096
-    constexpr float spacing = 0.7f;
-    constexpr float cube_scale = 0.32f;
-    constexpr float forward_offset = 2.0f;
+    constexpr float spacing = 0.6f;
+    constexpr float cube_scale = 0.3f;
+    constexpr float forward_offset = 8.0f;
 
     std::unique_ptr<rendering_engine::instanced_mesh> g_cubes;
     std::vector<core::math::vec3> g_base_positions;

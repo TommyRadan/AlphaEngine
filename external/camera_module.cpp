@@ -44,6 +44,11 @@ static void on_engine_start(const core::engine_start& event)
     attach_camera(g_camera_id);
 
     set_camera_pos(g_camera_id, -5.0, 0.0, 0.0);
+    // Give the camera a sensible initial forward (+X, toward the origin
+    // where the demos place their geometry). Without it the forward is the
+    // zero vector and the view matrix is degenerate, so nothing is visible
+    // until the first mouse move.
+    set_camera_rot(g_camera_id, 1.0, 0.0, 0.0);
 }
 
 static void on_engine_stop(const core::engine_stop& event)
