@@ -356,7 +356,16 @@ namespace rendering_engine
             if (item.index_buffer.valid())
             {
                 pass_encoder->set_index_buffer(item.index_buffer, item.index_format);
-                pass_encoder->draw_indexed(item.index_count, 0);
+                if (item.indirect_buffer.valid())
+                {
+                    // Instanced draw: index and instance counts come from
+                    // the indirect command record (see @ref instanced_mesh).
+                    pass_encoder->draw_indexed_indirect(item.indirect_buffer, 0);
+                }
+                else
+                {
+                    pass_encoder->draw_indexed(item.index_count, 0);
+                }
             }
             else
             {

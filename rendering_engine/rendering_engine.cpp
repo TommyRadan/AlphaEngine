@@ -34,6 +34,7 @@
 #include <rendering_engine/ibl/environment.hpp>
 #include <rendering_engine/materials/basic_material.hpp>
 #include <rendering_engine/materials/grid_material.hpp>
+#include <rendering_engine/materials/instanced_material.hpp>
 #include <rendering_engine/materials/line_material.hpp>
 #include <rendering_engine/materials/phong_material.hpp>
 #include <rendering_engine/materials/points_material.hpp>
@@ -145,6 +146,7 @@ void rendering_engine::context::init()
     // slot 0 for the scene_pass's per-frame group; the ui material
     // has no per-frame group.
     m_basic_material = std::make_unique<basic_material>(scene_frame_layout);
+    m_instanced_material = std::make_unique<instanced_material>(scene_frame_layout);
     m_phong_material = std::make_unique<phong_material>(scene_frame_layout);
     m_standard_material = std::make_unique<standard_material>(scene_frame_layout);
     m_points_material = std::make_unique<points_material>(scene_frame_layout);
@@ -155,8 +157,8 @@ void rendering_engine::context::init()
     // Analytic infinite-grid material; shares the scene per-frame layout.
     m_grid_material = std::make_unique<grid_material>(scene_frame_layout);
     m_ui_material = std::make_unique<ui_material>();
-    LOG_INF("Rendering Engine: basic_material, phong_material, standard_material, points_material, line_material and "
-            "ui_material constructed");
+    LOG_INF("Rendering Engine: basic_material, instanced_material, phong_material, standard_material, points_material, "
+            "line_material and ui_material constructed");
 
     // Register the built-in passes in render order: scene writes into
     // the HDR target, the skybox pass fills the untouched background of
@@ -234,6 +236,7 @@ void rendering_engine::context::quit()
     m_points_material.reset();
     m_standard_material.reset();
     m_phong_material.reset();
+    m_instanced_material.reset();
     m_basic_material.reset();
 
     // Release the off-screen HDR target before the device tears its
@@ -325,6 +328,11 @@ void rendering_engine::context::unregister_debug_renderable(renderable* r)
 rendering_engine::basic_material& rendering_engine::context::get_basic_material()
 {
     return *m_basic_material;
+}
+
+rendering_engine::instanced_material& rendering_engine::context::get_instanced_material()
+{
+    return *m_instanced_material;
 }
 
 rendering_engine::phong_material& rendering_engine::context::get_phong_material()

@@ -18,8 +18,9 @@ target_sources(AlphaEngine PRIVATE
 #
 # line_demo_module.cpp (coloured helix line strip), points_demo_module.cpp
 # (coloured Fibonacci-sphere point cloud), skybox_demo_module.cpp
-# (procedural sky + IBL sphere grid) and phong_demo_module.cpp (Blinn-Phong
-# lit sphere) are the other showcases; swap any one filename in for
+# (procedural sky + IBL sphere grid), phong_demo_module.cpp (Blinn-Phong
+# lit sphere) and instanced_demo_module.cpp (a wall of cubes drawn in one
+# instanced draw call) are the other showcases; swap any one filename in for
 # scene_graph_demo_module.cpp to bring it back.
 
 add_subdirectory(api)

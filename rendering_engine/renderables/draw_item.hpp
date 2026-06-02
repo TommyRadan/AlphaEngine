@@ -37,11 +37,20 @@ namespace rendering_engine
     // @c set_pipeline only when the pipeline changes. An invalid
     // @ref index_buffer means non-indexed draw — the pass calls
     // @c draw(vertex_count) instead of @c draw_indexed(index_count).
+    //
+    // A valid @ref indirect_buffer turns the indexed draw into an
+    // indexed *indirect* draw: the pass binds the index buffer and
+    // calls @c draw_indexed_indirect, sourcing the index count and the
+    // instance count from the buffer's @c DrawElementsIndirectCommand
+    // record instead of from @ref index_count. This is how
+    // @ref instanced_mesh emits a single instanced draw over shared
+    // geometry; only the index path supports it.
     struct draw_item
     {
         material* mat{nullptr};
         gpu::buffer vertex_buffer{};
         gpu::buffer index_buffer{};
+        gpu::buffer indirect_buffer{};
         gpu::bind_group per_draw_bind_group{};
         uint32_t vertex_count{0};
         uint32_t index_count{0};
