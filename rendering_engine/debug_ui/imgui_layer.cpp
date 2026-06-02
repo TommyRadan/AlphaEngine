@@ -212,29 +212,29 @@ namespace rendering_engine::debug_ui
                 return;
             }
 
-            const auto& settings = *control::current_engine().settings;
+            const auto& settings = *runtime::current_engine().settings;
             ImGui::SetNextWindowSize(ImVec2{320.0f, 0.0f}, ImGuiCond_FirstUseEver);
             if (ImGui::Begin("Settings", &g_show_settings))
             {
                 ImGui::SeparatorText("Window");
-                ImGui::Text("Size: %u x %u", settings.get_window_width(), settings.get_window_height());
-                ImGui::Text("Aspect: %.3f", static_cast<double>(settings.get_aspect_ratio()));
-                ImGui::Text("Mode: %s", window_type_name(settings.get_window_type()));
-                ImGui::Text("Double buffered: %s", settings.is_double_buffered() ? "yes" : "no");
-                ImGui::Text("Vsync: %s", settings.is_vsync_enabled() ? "on" : "off");
+                ImGui::Text("Size: %u x %u", settings.window.width, settings.window.height);
+                ImGui::Text("Aspect: %.3f", static_cast<double>(settings.window.aspect_ratio()));
+                ImGui::Text("Mode: %s", window_type_name(settings.window.type));
+                ImGui::Text("Double buffered: %s", settings.window.double_buffered ? "yes" : "no");
+                ImGui::Text("Vsync: %s", settings.window.vsync ? "on" : "off");
 
                 ImGui::SeparatorText("Camera / input");
-                ImGui::Text("Field of view: %.1f", static_cast<double>(settings.get_field_of_view()));
-                ImGui::Text("Mouse sensitivity: %.4f", static_cast<double>(settings.get_mouse_sensitivity()));
-                ImGui::Text("Mouse reversed: %s", settings.is_mouse_reversed() ? "yes" : "no");
+                ImGui::Text("Field of view: %.1f", static_cast<double>(settings.camera.field_of_view));
+                ImGui::Text("Mouse sensitivity: %.4f", static_cast<double>(settings.input.mouse_sensitivity));
+                ImGui::Text("Mouse reversed: %s", settings.input.mouse_reversed ? "yes" : "no");
 
                 ImGui::SeparatorText("GPU");
-                ImGui::Text("Backend: %s", graphics_backend_name(settings.get_graphics_backend()));
+                ImGui::Text("Backend: %s", graphics_backend_name(settings.graphics.backend));
             }
             ImGui::End();
         }
 
-        // Lists every live debug gizmo (the THREE.*Helper analogues) with
+        // Lists every live debug gizmo with
         // a checkbox bound to its visibility, plus master show / hide
         // shortcuts. The helper registry is shared with the renderer, so
         // the toggles take effect on the next debug-pass draw.

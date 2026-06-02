@@ -29,8 +29,7 @@
 
 namespace rendering_engine
 {
-    // Built-in unlit 3D scene material — the analogue of
-    // @c THREE.MeshBasicMaterial. Position+UV vertex stream, MVP
+    // Built-in unlit 3D scene material. Position+UV vertex stream, MVP
     // transform in the vertex shader, fragment colour is a flat base
     // tint optionally modulated by an albedo texture.
     //

@@ -34,7 +34,7 @@ namespace rendering_engine
 {
     struct material;
 
-    // A point cloud — the analogue of @c THREE.Points. It owns a list
+    // A point cloud. It owns a list
     // of point positions (with optional per-point colours) and submits
     // a single non-indexed @ref draw_item against a point-list material
     // (@ref points_material), so the scene pass rasterizes one GL point

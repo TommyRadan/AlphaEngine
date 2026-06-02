@@ -26,7 +26,7 @@ namespace rendering_engine
 {
     namespace
     {
-        // Canonical three.js TetrahedronGeometry base vertices and faces.
+        // Canonical tetrahedron base vertices and faces.
         const std::vector<float> base_vertices = {
             1.0f,
             1.0f,

@@ -36,8 +36,8 @@ namespace rendering_engine
     // generated as a single seamless lat/lon grid — the top hemisphere,
     // the cylindrical body, and the bottom hemisphere share rings so
     // there are no cracks. Vertex format is position + uv + normal; UVs
-    // wrap radially and run along the axis. Mirrors three.js
-    // CapsuleGeometry(radius, length, capSegments, radialSegments).
+    // wrap radially and run along the axis. Parameterised by
+    // (radius, length, cap_segments, radial_segments).
     struct capsule : public renderable
     {
         explicit capsule(material* mat,

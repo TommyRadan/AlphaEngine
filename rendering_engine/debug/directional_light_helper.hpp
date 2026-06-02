@@ -32,8 +32,7 @@ namespace rendering_engine
 
 namespace rendering_engine::debug
 {
-    // Gizmo for a directional light — the analogue of
-    // @c THREE.DirectionalLightHelper. Draws a small square facing the
+    // Gizmo for a directional light. Draws a small square facing the
     // light's travel direction at the world origin plus a ray along that
     // direction, both tinted with the light's colour. The geometry tracks
     // the light's direction / colour every frame, so the helper must not

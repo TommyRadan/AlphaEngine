@@ -30,7 +30,7 @@ namespace rendering_engine
 {
     struct material;
 
-    // Flat disc lying in the XY plane (Three.js CircleGeometry). Built from a
+    // Flat disc lying in the XY plane. Built from a
     // centre vertex and a triangle fan of rim vertices. Vertex format is
     // position + uv + normal; every normal points along +Z. Front faces are
     // CCW when viewed from +Z.

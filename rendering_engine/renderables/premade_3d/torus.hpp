@@ -30,7 +30,7 @@ namespace rendering_engine
 {
     struct material;
 
-    // Torus (donut) surface parameterised after Three.js TorusGeometry.
+    // Torus (donut) surface.
     // @c radius is the distance from the centre of the torus to the centre
     // of the tube, @c tube is the radius of the tube itself. @c radial_segments
     // controls the tessellation around the tube cross-section, @c tubular_segments

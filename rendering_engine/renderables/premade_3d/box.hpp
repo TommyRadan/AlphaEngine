@@ -30,8 +30,8 @@ namespace rendering_engine
 {
     struct material;
 
-    // Parameterized box centered at the origin, mirroring Three.js
-    // BoxGeometry: per-axis dimensions plus per-axis segment counts.
+    // Parameterized box centered at the origin: per-axis dimensions plus
+    // per-axis segment counts.
     // Each of the six faces is a tessellated grid with its own [0,1]
     // UVs and a constant outward-pointing normal, so the box can be
     // textured and normal-mapped. Vertex format is

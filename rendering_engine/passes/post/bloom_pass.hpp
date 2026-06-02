@@ -31,7 +31,7 @@ namespace rendering_engine
 {
     /**
      * @brief Adds an HDR bloom glow to the scene-colour target before
-     *        tonemap, the analogue of @c THREE.UnrealBloomPass.
+     *        tonemap.
      *
      * Runs entirely on the existing @c rgba16f scene target produced by
      * @ref scene_pass and slots into the post chain between it and

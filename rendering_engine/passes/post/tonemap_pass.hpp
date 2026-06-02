@@ -29,7 +29,7 @@ namespace rendering_engine
 {
     /**
      * @brief Tonemap operator the @ref tonemap_pass applies to the
-     *        HDR scene colour, the analogue of @c THREE.ToneMapping.
+     *        HDR scene colour.
      *
      * The enumerator values are the contract with the fragment
      * shader's @c Tonemap UBO — they are uploaded verbatim and
@@ -38,12 +38,11 @@ namespace rendering_engine
     enum class tonemap_operator : int
     {
         /// No curve: the exposed colour is only clamped and gamma
-        /// encoded (THREE.NoToneMapping / LinearToneMapping).
+        /// encoded.
         none = 0,
-        /// Reinhard's x / (1 + x) shoulder (THREE.ReinhardToneMapping).
+        /// Reinhard's x / (1 + x) shoulder.
         reinhard = 1,
-        /// Krzysztof Narkowicz's ACES filmic approximation
-        /// (THREE.ACESFilmicToneMapping). The default.
+        /// Krzysztof Narkowicz's ACES filmic approximation. The default.
         aces = 2,
     };
 

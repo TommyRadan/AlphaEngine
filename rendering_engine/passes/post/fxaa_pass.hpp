@@ -28,8 +28,7 @@
 namespace rendering_engine
 {
     /**
-     * @brief Fast approximate anti-aliasing on the tonemapped LDR image,
-     *        the analogue of @c THREE.FXAAShader.
+     * @brief Fast approximate anti-aliasing on the tonemapped LDR image.
      *
      * The cheapest post-process AA: a single fullscreen pass that finds
      * luminance edges in the already-shaded LDR image and blends along

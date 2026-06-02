@@ -30,7 +30,7 @@ namespace rendering_engine
 
     // Regular dodecahedron (20 vertices, 12 pentagonal faces triangulated into
     // 36 triangles) built on the shared polyhedron generator with the canonical
-    // three.js base table.
+    // base table.
     struct dodecahedron : public polyhedron
     {
         explicit dodecahedron(material* mat, float radius = 1.0f, unsigned int detail = 0);

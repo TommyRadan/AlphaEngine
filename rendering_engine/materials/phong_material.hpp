@@ -29,8 +29,7 @@
 
 namespace rendering_engine
 {
-    // Built-in lit 3D scene material — the analogue of
-    // @c THREE.MeshPhongMaterial. Position+UV+normal vertex stream,
+    // Built-in lit 3D scene material. Position+UV+normal vertex stream,
     // MVP transform in the vertex shader, and Blinn-Phong shading in
     // the fragment shader driven by the per-frame lights UBO the
     // @ref scene_pass uploads at slot 0, binding 2. The first actually
@@ -61,7 +60,7 @@ namespace rendering_engine
         void set_specular(const util::color& color);
 
         // Blinn-Phong specular exponent. Larger values yield a tighter,
-        // sharper highlight. Three.js analog: MeshPhongMaterial.shininess.
+        // sharper highlight.
         void set_shininess(float shininess);
 
         // Bind a diffuse texture; the fragment shader multiplies it into

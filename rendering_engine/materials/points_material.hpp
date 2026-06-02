@@ -29,8 +29,7 @@
 
 namespace rendering_engine
 {
-    // Built-in unlit point-cloud material — the analogue of
-    // @c THREE.PointsMaterial. Its pipeline bakes
+    // Built-in unlit point-cloud material. Its pipeline bakes
     // @c primitive_topology::points, so a @ref points renderable that
     // fronts it rasterizes one GL point sprite per vertex.
     //
@@ -64,8 +63,7 @@ namespace rendering_engine
         void set_size(float size);
 
         // Toggle perspective size attenuation. Off: constant pixel size
-        // (the @c THREE.PointsMaterial default with @c sizeAttenuation
-        // false). On: points shrink with view-space distance.
+        // (size attenuation disabled). On: points shrink with view-space distance.
         void set_size_attenuation(bool enabled);
 
         // Bind a sprite texture; the fragment shader samples it at

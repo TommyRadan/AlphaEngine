@@ -26,7 +26,7 @@ namespace rendering_engine
 {
     namespace
     {
-        // Canonical three.js OctahedronGeometry base vertices and faces.
+        // Canonical octahedron base vertices and faces.
         const std::vector<float> base_vertices = {
             1.0f,
             0.0f,

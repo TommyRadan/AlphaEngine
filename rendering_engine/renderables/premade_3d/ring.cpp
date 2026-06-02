@@ -81,11 +81,10 @@ void rendering_engine::ring::upload()
     std::vector<vertex_position_uv_normal> vertices;
     vertices.reserve(rows * columns);
 
-    const infrastructure::math::vec3 normal{0.0f, 0.0f, 1.0f};
+    const core::math::vec3 normal{0.0f, 0.0f, 1.0f};
 
     // Radial/angular grid: row j sweeps the radius from inner to outer, column
-    // i sweeps the angle from theta_start across theta_length (Three.js
-    // RingGeometry).
+    // i sweeps the angle from theta_start across theta_length.
     float radius = m_inner_radius;
     const float radius_step = (m_outer_radius - m_inner_radius) / static_cast<float>(phi_segments);
 

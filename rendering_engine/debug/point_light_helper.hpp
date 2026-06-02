@@ -32,7 +32,7 @@ namespace rendering_engine
 
 namespace rendering_engine::debug
 {
-    // Gizmo for a point light — the analogue of @c THREE.PointLightHelper.
+    // Gizmo for a point light.
     // Draws a small octahedron wireframe at the light's world position,
     // tinted with the light's colour. The geometry tracks the light's
     // position / colour every frame, so the helper must not outlive the

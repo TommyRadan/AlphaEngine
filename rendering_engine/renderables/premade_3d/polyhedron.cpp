@@ -27,26 +27,26 @@
 #include <utility>
 #include <vector>
 
-#include <control/engine.hpp>
-#include <infrastructure/log.hpp>
-#include <infrastructure/math/math.hpp>
+#include <core/log.hpp>
+#include <core/math/math.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/materials/material.hpp>
 #include <rendering_engine/mesh/vertex.hpp>
+#include <runtime/engine.hpp>
 
 namespace
 {
     constexpr float pi = 3.14159265358979323846f;
 
-    // Spherical UV from a unit-length position, matching three.js
-    // PolyhedronGeometry: azimuth = atan2(z, -x), inclination = acos(-y).
+    // Spherical UV from a unit-length position:
+    // azimuth = atan2(z, -x), inclination = acos(-y).
     // u = azimuth / (2*pi) + 0.5, v = inclination / pi + 0.5.
-    infrastructure::math::vec2 spherical_uv(const infrastructure::math::vec3& dir)
+    core::math::vec2 spherical_uv(const core::math::vec3& dir)
     {
         const float azimuth = std::atan2(dir.z, -dir.x);
         const float inclination = std::acos(-dir.y);
-        return infrastructure::math::vec2{azimuth / (2.0f * pi) + 0.5f, inclination / pi + 0.5f};
+        return core::math::vec2{azimuth / (2.0f * pi) + 0.5f, inclination / pi + 0.5f};
     }
 } // namespace
 
@@ -107,8 +107,8 @@ namespace rendering_engine
 
         // Each base triangle is subdivided into a triangular grid. We build a
         // fresh (non-indexed) vertex list so per-triangle UV seam corrections
-        // do not bleed across shared edges, then emit sequential indices. This
-        // mirrors three.js, which produces a non-indexed buffer geometry.
+        // do not bleed across shared edges, then emit sequential indices,
+        // producing a non-indexed buffer geometry.
         for (size_t f = 0; f < m_base_indices.size(); f += 3)
         {
             const vec3 a = base_dir(m_base_indices[f + 0]);
@@ -116,15 +116,13 @@ namespace rendering_engine
             const vec3 c = base_dir(m_base_indices[f + 2]);
 
             // Build a grid of unit-length directions over the triangle (a, b, c)
-            // using slerp-equivalent linear interpolation + renormalize, matching
-            // three.js subdivision. v[i][j] for i in [0, cols], j in [0, i].
+            // using slerp-equivalent linear interpolation + renormalize.
+            // v[i][j] for i in [0, cols], j in [0, i].
             std::vector<std::vector<vec3>> grid(cols + 1);
             for (unsigned int i = 0; i <= cols; ++i)
             {
-                const vec3 ai =
-                    infrastructure::math::normalize(a + (c - a) * (static_cast<float>(i) / static_cast<float>(cols)));
-                const vec3 bi =
-                    infrastructure::math::normalize(b + (c - b) * (static_cast<float>(i) / static_cast<float>(cols)));
+                const vec3 ai = core::math::normalize(a + (c - a) * (static_cast<float>(i) / static_cast<float>(cols)));
+                const vec3 bi = core::math::normalize(b + (c - b) * (static_cast<float>(i) / static_cast<float>(cols)));
 
                 const unsigned int rows = cols - i;
                 grid[i].resize(rows + 1);
@@ -136,14 +134,14 @@ namespace rendering_engine
                     }
                     else
                     {
-                        grid[i][j] = infrastructure::math::normalize(
-                            ai + (bi - ai) * (static_cast<float>(j) / static_cast<float>(rows)));
+                        grid[i][j] =
+                            core::math::normalize(ai + (bi - ai) * (static_cast<float>(j) / static_cast<float>(rows)));
                     }
                 }
             }
 
-            // Emit triangles from the grid (two orientations per cell), matching
-            // three.js winding so the outward normal faces away from the centre.
+            // Emit triangles from the grid (two orientations per cell), wound
+            // so the outward normal faces away from the centre.
             const auto push_vertex = [&](const vec3& dir)
             {
                 vertex_position_uv_normal vertex;
@@ -175,8 +173,8 @@ namespace rendering_engine
             }
         }
 
-        // Basic seam / pole UV correction, mirroring three.js correctUVs +
-        // correctPoles at a per-triangle level. Because the vertex buffer is
+        // Basic seam / pole UV correction at a per-triangle level.
+        // Because the vertex buffer is
         // non-indexed, each triangle owns three consecutive vertices, so we can
         // fix wrap-around and pole singularities without affecting neighbours.
         for (size_t t = 0; t + 3 <= vertices.size(); t += 3)

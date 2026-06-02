@@ -33,8 +33,8 @@ namespace rendering_engine
 
 namespace rendering_engine::debug
 {
-    // Wireframe of a camera's view frustum — the analogue of
-    // @c THREE.CameraHelper. The eight clip-space corners are unprojected
+    // Wireframe of a camera's view frustum.
+    // The eight clip-space corners are unprojected
     // through the inverse view-projection into world space and drawn as a
     // hexahedron, so the gizmo shows exactly what the camera sees. The
     // geometry tracks the camera's view-projection every frame, so the

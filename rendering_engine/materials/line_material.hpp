@@ -28,8 +28,7 @@
 
 namespace rendering_engine
 {
-    // Built-in unlit line material — the analogue of
-    // @c THREE.LineBasicMaterial. Its pipeline bakes
+    // Built-in unlit line material. Its pipeline bakes
     // @c primitive_topology::lines, so a @ref line renderable that
     // fronts it rasterizes one line segment per index/vertex pair (a
     // connected strip or independent segments depending on the
@@ -37,7 +36,7 @@ namespace rendering_engine
     //
     // Vertex stream: position (vec3) + per-vertex colour (vec3). The
     // fragment colour is the per-vertex colour modulated by the shared
-    // tint, matching @c THREE.LineBasicMaterial with @c vertexColors.
+    // tint.
     //
     // Slot layout mirrors @ref basic_material: the per-frame group at
     // slot 0 (camera, owned by the @ref scene_pass), the per-draw group
@@ -46,8 +45,7 @@ namespace rendering_engine
     //
     // Line width is fixed at one pixel: the Vulkan backend pins
     // @c lineWidth to 1.0 and wide lines are not portable on either
-    // backend, so — like @c THREE.LineBasicMaterial in WebGL — the
-    // @c linewidth knob is intentionally omitted.
+    // backend, so the @c linewidth knob is intentionally omitted.
     struct line_material : public material
     {
         // @p frame_layout is the per-frame bind-group layout owned by

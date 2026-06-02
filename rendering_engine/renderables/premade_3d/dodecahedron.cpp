@@ -28,12 +28,11 @@ namespace rendering_engine
 {
     namespace
     {
-        // Golden ratio t = (1 + sqrt(5)) / 2 and its reciprocal r = 1 / t,
-        // matching three.js DodecahedronGeometry.
+        // Golden ratio t = (1 + sqrt(5)) / 2 and its reciprocal r = 1 / t.
         const float t = (1.0f + std::sqrt(5.0f)) / 2.0f;
         const float r = 1.0f / t;
 
-        // Canonical three.js DodecahedronGeometry base vertices (20). The
+        // Canonical dodecahedron base vertices (20). The
         // polyhedron generator normalises these onto the sphere.
         const std::vector<float> base_vertices = {
             // (+-1, +-1, +-1)
@@ -102,7 +101,7 @@ namespace rendering_engine
             r,
         };
 
-        // Canonical three.js DodecahedronGeometry faces: 12 pentagons, each
+        // Canonical dodecahedron faces: 12 pentagons, each
         // triangulated into three triangles (36 triangles / 108 indices).
         const std::vector<uint32_t> base_indices = {
             3,  11, 7,  3,  7,  15, 3,  15, 13, 7,  19, 17, 7,  17, 6,  7,  6,  15, 17, 4,  8,  17, 8,  10, 17, 10, 6,

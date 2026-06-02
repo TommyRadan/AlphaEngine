@@ -28,8 +28,8 @@
 namespace rendering_engine::debug
 {
     // A finite square reference grid on the X/Y ground plane (the engine
-    // is Z-up) centred at the origin — a bounded line-based analogue of
-    // @c THREE.GridHelper. The line through the centre on each axis is
+    // is Z-up) centred at the origin — a bounded line-based grid.
+    // The line through the centre on each axis is
     // drawn in @p center_color so the origin reads at a glance; the
     // remaining lines use @p color. For an unbounded grid that integrates
     // with the scene depth, see @ref infinite_grid.

@@ -35,9 +35,9 @@ namespace rendering_engine
     struct material;
 
     // How successive vertices are joined into segments. @c strip joins
-    // every vertex to the next (the @c THREE.Line analogue — a connected
-    // polyline); @c segments treats vertices as independent pairs (the
-    // @c THREE.LineSegments analogue), so vertices 0-1 form one segment,
+    // every vertex to the next (a connected
+    // polyline); @c segments treats vertices as independent pairs,
+    // so vertices 0-1 form one segment,
     // 2-3 the next, and so on.
     enum class line_mode
     {
@@ -45,7 +45,7 @@ namespace rendering_engine
         segments,
     };
 
-    // A line — the analogue of @c THREE.Line / @c THREE.LineSegments. It
+    // A line (connected strip or independent segments). It
     // owns a list of vertex positions (with optional per-vertex colours)
     // and submits a single @ref draw_item against a line-topology
     // material (@ref line_material), so the scene pass rasterizes the

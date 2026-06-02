@@ -29,7 +29,7 @@ namespace rendering_engine
     struct material;
 
     // Regular octahedron (6 vertices, 8 triangular faces) built on the shared
-    // polyhedron generator with the canonical three.js base table.
+    // polyhedron generator with the canonical base table.
     struct octahedron : public polyhedron
     {
         explicit octahedron(material* mat, float radius = 1.0f, unsigned int detail = 0);

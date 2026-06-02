@@ -32,8 +32,8 @@ namespace rendering_engine
 
 namespace rendering_engine::debug
 {
-    // The CAD-style infinite ground grid — an unbounded analogue of
-    // @c THREE.GridHelper. Unlike the line-based @ref grid_helper it is a
+    // The CAD-style infinite ground grid — an unbounded grid.
+    // Unlike the line-based @ref grid_helper it is a
     // scene-pass renderable: a single fullscreen triangle fronts the
     // analytic @ref grid_material, whose fragment shader reconstructs the
     // ground plane (z = 0, the engine is Z-up), draws minor / major lines

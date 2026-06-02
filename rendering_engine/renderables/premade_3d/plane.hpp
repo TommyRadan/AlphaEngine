@@ -31,8 +31,8 @@ namespace rendering_engine
     struct material;
 
     // Flat subdivided plane lying in the XY plane, centred on the origin.
-    // Mirrors Three.js PlaneGeometry(width, height, widthSegments,
-    // heightSegments). Vertex format is position + uv + normal; every
+    // Parameterised by (width, height, width_segments, height_segments).
+    // Vertex format is position + uv + normal; every
     // normal points along +Z and UVs span [0, 1] across the surface.
     struct plane : public renderable
     {

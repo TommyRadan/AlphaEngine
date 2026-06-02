@@ -57,10 +57,9 @@ namespace rendering_engine
 
         // Linear RGB radiance. Multiplied by @ref intensity before
         // upload.
-        infrastructure::math::vec3 color{1.0f, 1.0f, 1.0f};
+        core::math::vec3 color{1.0f, 1.0f, 1.0f};
 
-        // Scalar multiplier on @ref color. Three.js analog:
-        // Light.intensity.
+        // Scalar multiplier on @ref color.
         float intensity{1.0f};
 
     private:

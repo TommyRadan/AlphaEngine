@@ -159,7 +159,7 @@ namespace rendering_engine
          *
          * Shares the scene per-frame layout (camera at slot 0) with
          * @ref get_line_material, but draws depth-less so the debug
-         * helpers (the THREE.*Helper analogues) always read on top in the
+         * helpers always read on top in the
          * depth-less debug pass. Constructed in @ref init; used by the
          * @ref debug::helper family.
          */
@@ -179,8 +179,7 @@ namespace rendering_engine
 
         /**
          * @brief Sets (or clears) the scene's image-based-lighting
-         *        environment — the analogue of @c THREE.Scene.environment
-         *        plus @c background.
+         *        environment plus background.
          *
          * Points the skybox pass at @p env's cube map so it draws as the
          * background, and attaches the same environment to the built-in
