@@ -28,6 +28,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 #include <runtime/component.hpp>
 #include <runtime/node.hpp>
@@ -82,5 +83,13 @@ namespace runtime
          * behaviour beyond being a conventional, always-present parent.
          */
         node root;
+
+    private:
+        // Reusable scratch for the breadth-first world-matrix prepass in
+        // @ref update: the active nodes at the current depth and the next one.
+        // Kept as members so the per-frame walk reuses one allocation that
+        // grows to the scene's high-water mark rather than allocating each tick.
+        std::vector<node*> m_band;
+        std::vector<node*> m_next_band;
     };
 } // namespace runtime
