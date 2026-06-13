@@ -231,6 +231,31 @@ namespace
             return normalize(mat3(T, B, N) * sampled);
         }
 
+        // Geometric specular anti-aliasing (Tokuyoshi & Kaplanyan 2019,
+        // "Improved Geometric Specular Antialiasing"). Sub-pixel curvature
+        // of the shading normal turns a near-mirror surface into a
+        // flickering highlight as the camera moves, and MSAA cannot help
+        // because the aliasing is in the shading function, not the geometry
+        // edge. Estimate the screen-space variance of N from its
+        // derivatives, fold it into the GGX alpha as extra lobe width, and
+        // hand back a widened perceptual roughness. The result is always
+        // >= the input, so it acts as a per-pixel roughness floor. See #144.
+        float specular_aa_roughness(vec3 N, float roughness)
+        {
+            const float screenVariance = 0.25; // SIGMA^2, kernel strength
+            const float maxKernel = 0.18;      // KAPPA, ceiling on added width
+            vec3 dndx = dFdx(N);
+            vec3 dndy = dFdy(N);
+            float variance = screenVariance * (dot(dndx, dndx) + dot(dndy, dndy));
+            float kernel = min(2.0 * variance, maxKernel);
+            // Filter in GGX-alpha space (alpha = perceptual^2), then map the
+            // widened alpha back to a perceptual roughness for the rest of
+            // the shader (the IBL LOD select and the GGX re-square).
+            float alpha = roughness * roughness;
+            float filteredAlpha = sqrt(alpha * alpha + kernel);
+            return sqrt(filteredAlpha);
+        }
+
         float distribution_ggx(vec3 N, vec3 H, float roughness)
         {
             float a = roughness * roughness;
@@ -313,6 +338,8 @@ namespace
         // 1.0 = fully lit, 0.0 = fully shadowed. Only the caster light
         // index is occluded; every other directional light returns 1.0.
         // 3x3 PCF softens the shadow edge by one texel.
+        )fs"
+                                        R"fs(
         float directional_shadow(int lightIndex, vec3 N, vec3 L)
         {
             if (u_shadow.params.x == 0.0 || lightIndex != int(u_shadow.params.z))
@@ -449,6 +476,10 @@ namespace
             roughness = clamp(roughness, 0.04, 1.0);
 
             vec3 N = shading_normal();
+            // Widen roughness by the sub-pixel normal variance so sharp
+            // metals stop shimmering as the camera moves (issue #144).
+            // Runs after the clamp so it can only ever roughen further.
+            roughness = specular_aa_roughness(N, roughness);
             vec3 V = normalize(cameraPosition - worldPosition);
             vec3 F0 = mix(vec3(0.04), albedo, metalness);
 
