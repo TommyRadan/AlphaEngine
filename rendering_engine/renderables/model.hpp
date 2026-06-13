@@ -22,6 +22,8 @@
 
 #pragma once
 
+#include <memory>
+
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/mesh/mesh.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
@@ -30,6 +32,7 @@
 namespace rendering_engine
 {
     struct material;
+    struct mesh_asset;
 
     struct model : public renderable
     {
@@ -41,16 +44,31 @@ namespace rendering_engine
 
         rendering_engine::util::transform transform;
 
+        // Uploads a private copy of @p mesh owned by this model. Prefer
+        // @ref set_mesh to share a cached upload between models drawing the
+        // same geometry.
         void upload_mesh(const rendering_engine::mesh& mesh);
 
-        // No-op — meshes upload through @ref upload_mesh, which is the
-        // entry point @c model uses instead of @ref renderable::upload.
+        // Draws geometry cached by @ref asset_cache instead of uploading a
+        // private copy. The model holds a reference for as long as it draws the
+        // mesh; the shared GPU buffer is released once no model references it.
+        // Mutually exclusive with @ref upload_mesh — use one.
+        void set_mesh(std::shared_ptr<mesh_asset> mesh);
+
+        // No-op — meshes upload through @ref upload_mesh / @ref set_mesh, which
+        // are the entry points @c model uses instead of @ref renderable::upload.
         void upload() final {}
 
         void collect_draw_items(std::vector<draw_item>& out) final;
 
     private:
         material* m_material{nullptr};
+
+        // Shared geometry from @ref asset_cache, set via @ref set_mesh. When
+        // present it is drawn instead of the privately-owned
+        // @ref m_vertex_buffer and is not freed here.
+        std::shared_ptr<mesh_asset> m_mesh;
+
         gpu::buffer m_vertex_buffer{};
         gpu::buffer m_draw_ubo{};
         gpu::bind_group m_draw_bind_group{};

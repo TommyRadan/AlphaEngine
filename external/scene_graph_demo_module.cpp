@@ -54,10 +54,11 @@
 
 #include <core/log.hpp>
 #include <core/math/math.hpp>
+#include <rendering_engine/assets/asset_cache.hpp>
 #include <rendering_engine/lighting/ambient_light.hpp>
 #include <rendering_engine/lighting/point_light.hpp>
 #include <rendering_engine/materials/standard_material.hpp>
-#include <rendering_engine/mesh/mesh.hpp>
+#include <rendering_engine/mesh/vertex.hpp>
 #include <rendering_engine/rendering_engine.hpp>
 #include <rendering_engine/util/color.hpp>
 #include <runtime/components/light_component.hpp>
@@ -87,10 +88,12 @@ static std::vector<std::unique_ptr<runtime::node>> g_nodes;
 static std::vector<std::unique_ptr<rendering_engine::standard_material>> g_materials;
 static std::vector<spinner> g_spinners;
 static std::unique_ptr<rendering_engine::ambient_light> g_ambient;
-static rendering_engine::mesh g_sphere;
+// One sphere upload shared by every body in the system, fetched from the asset
+// cache; each visual references it instead of uploading its own copy.
+static std::shared_ptr<rendering_engine::mesh_asset> g_sphere;
 static float g_time = 0.0f;
 
-static rendering_engine::mesh make_sphere(int stacks, int slices)
+static std::vector<rendering_engine::vertex_position_uv_normal> make_sphere(int stacks, int slices)
 {
     std::vector<rendering_engine::vertex_position_uv_normal> v;
     const float pi = 3.14159265358979f;
@@ -124,9 +127,7 @@ static rendering_engine::mesh make_sphere(int stacks, int slices)
         }
     }
 
-    rendering_engine::mesh mesh;
-    mesh.upload_obj(v);
-    return mesh;
+    return v;
 }
 
 static runtime::node* make_child(runtime::node& parent)
@@ -202,7 +203,11 @@ static void on_engine_start(const core::engine_start& event)
 {
     (void)event;
 
-    g_sphere = make_sphere(18, 36);
+    // Build the sphere once and share it across every body via the asset cache;
+    // the key encodes the tessellation so a second request returns this upload.
+    g_sphere = runtime::current_engine().assets->get_or_create_mesh(
+        "scene_graph_demo:sphere:18x36",
+        [] { return rendering_engine::mesh_data::from_vertices(make_sphere(18, 36)); });
 
     // Dim fill so the night side of each body is not pure black.
     g_ambient = std::make_unique<rendering_engine::ambient_light>();
@@ -252,6 +257,9 @@ static void on_engine_stop(const core::engine_stop& event)
     g_nodes.clear();
     g_materials.clear();
     g_ambient.reset();
+    // Drop the last reference to the shared sphere so its GPU buffers are freed
+    // (the models held the others) before the renderer and device tear down.
+    g_sphere.reset();
 }
 
 static void on_frame(const core::frame& event)

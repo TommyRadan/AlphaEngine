@@ -26,6 +26,7 @@
 #include <cstdint>
 
 #include <core/log.hpp>
+#include <rendering_engine/assets/mesh_asset.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/materials/instanced_material.hpp>
@@ -106,6 +107,16 @@ void rendering_engine::instanced_mesh::upload_geometry(const std::vector<vertex_
     m_index_buffer = gpu.create_buffer(index_descriptor);
 }
 
+void rendering_engine::instanced_mesh::set_geometry(std::shared_ptr<mesh_asset> mesh)
+{
+    m_mesh = std::move(mesh);
+    if (m_mesh)
+    {
+        m_index_count = m_mesh->index_count;
+        m_vertex_stride = m_mesh->vertex_stride;
+    }
+}
+
 uint32_t rendering_engine::instanced_mesh::instance_capacity() const
 {
     return m_capacity;
@@ -153,7 +164,11 @@ void rendering_engine::instanced_mesh::collect_draw_items(std::vector<draw_item>
         LOG_WRN("instanced_mesh::collect_draw_items: no material");
         return;
     }
-    if (!m_vertex_buffer.valid() || !m_index_buffer.valid())
+    // Draw the shared cached geometry if one was set, otherwise the buffers
+    // uploaded privately via upload_geometry.
+    const gpu::buffer vertex_buffer = m_mesh ? m_mesh->vertex_buffer : m_vertex_buffer;
+    const gpu::buffer index_buffer = m_mesh ? m_mesh->index_buffer : m_index_buffer;
+    if (!vertex_buffer.valid() || !index_buffer.valid())
     {
         return;
     }
@@ -212,8 +227,8 @@ void rendering_engine::instanced_mesh::collect_draw_items(std::vector<draw_item>
 
     draw_item item{};
     item.mat = m_material;
-    item.vertex_buffer = m_vertex_buffer;
-    item.index_buffer = m_index_buffer;
+    item.vertex_buffer = vertex_buffer;
+    item.index_buffer = index_buffer;
     item.indirect_buffer = m_indirect_buffer;
     item.instance_buffer = m_instance_buffer;
     item.index_count = m_index_count;
