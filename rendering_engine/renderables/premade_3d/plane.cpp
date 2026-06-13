@@ -22,10 +22,12 @@
 
 #include <rendering_engine/renderables/premade_3d/plane.hpp>
 
+#include <string>
 #include <vector>
 
 #include <core/log.hpp>
 #include <core/math/math.hpp>
+#include <rendering_engine/assets/asset_cache.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/materials/material.hpp>
@@ -52,89 +54,77 @@ rendering_engine::plane::~plane()
         gpu.destroy(m_draw_ubo);
         m_draw_ubo = {};
     }
-    if (m_index_buffer.valid())
-    {
-        gpu.destroy(m_index_buffer);
-        m_index_buffer = {};
-    }
-    if (m_vertex_buffer.valid())
-    {
-        gpu.destroy(m_vertex_buffer);
-        m_vertex_buffer = {};
-    }
+    // m_mesh is shared geometry owned by the asset cache; it is released by its
+    // shared_ptr, not destroyed here.
 }
 
 void rendering_engine::plane::upload()
 {
-    const unsigned int columns = m_width_segments + 1;
-    const unsigned int rows = m_height_segments + 1;
-
-    std::vector<vertex_position_uv_normal> vertices;
-    vertices.reserve(columns * rows);
-
-    const float half_width = m_width * 0.5f;
-    const float half_height = m_height * 0.5f;
-
-    for (unsigned int i = 0; i < rows; ++i)
-    {
-        const float v = static_cast<float>(i) / static_cast<float>(m_height_segments);
-        const float y = v * m_height - half_height;
-
-        for (unsigned int j = 0; j < columns; ++j)
-        {
-            const float u = static_cast<float>(j) / static_cast<float>(m_width_segments);
-            const float x = u * m_width - half_width;
-
-            vertex_position_uv_normal vertex;
-            vertex.pos = core::math::vec3{x, y, 0.0f};
-            vertex.uv = core::math::vec2{u, 1.0f - v};
-            vertex.normal = core::math::vec3{0.0f, 0.0f, 1.0f};
-            vertices.push_back(vertex);
-        }
-    }
-
-    std::vector<uint32_t> indices;
-    indices.reserve(m_width_segments * m_height_segments * 6);
-
-    for (unsigned int i = 0; i < m_height_segments; ++i)
-    {
-        for (unsigned int j = 0; j < m_width_segments; ++j)
-        {
-            const uint32_t a = i * columns + j;
-            const uint32_t b = a + 1;
-            const uint32_t c = a + columns;
-            const uint32_t d = c + 1;
-
-            // CCW winding when viewed from the +Z side (the front face),
-            // so the +Z normal points toward the camera looking down -Z.
-            indices.push_back(a);
-            indices.push_back(b);
-            indices.push_back(d);
-
-            indices.push_back(a);
-            indices.push_back(d);
-            indices.push_back(c);
-        }
-    }
-
-    m_index_count = static_cast<unsigned int>(indices.size());
     m_vertex_stride = sizeof(vertex_position_uv_normal);
 
-    auto& gpu = *runtime::current_engine().gpu;
+    // Build and upload through the asset cache, keyed by dimensions and segment
+    // counts so two planes of the same geometry share one upload. The builder
+    // only runs on a cache miss.
+    m_mesh = runtime::current_engine().assets->get_or_create_mesh(
+        "plane:" + std::to_string(m_width) + "x" + std::to_string(m_height) + ":" + std::to_string(m_width_segments) +
+            "x" + std::to_string(m_height_segments),
+        [this]
+        {
+            const unsigned int columns = m_width_segments + 1;
+            const unsigned int rows = m_height_segments + 1;
 
-    gpu::buffer_descriptor vertex_descriptor{};
-    vertex_descriptor.size = vertices.size() * sizeof(vertex_position_uv_normal);
-    vertex_descriptor.usage = gpu::buffer_usage_vertex;
-    vertex_descriptor.hint = gpu::buffer_usage_hint::static_data;
-    vertex_descriptor.initial_data = vertices.data();
-    m_vertex_buffer = gpu.create_buffer(vertex_descriptor);
+            std::vector<vertex_position_uv_normal> vertices;
+            vertices.reserve(columns * rows);
 
-    gpu::buffer_descriptor index_descriptor{};
-    index_descriptor.size = indices.size() * sizeof(uint32_t);
-    index_descriptor.usage = gpu::buffer_usage_index;
-    index_descriptor.hint = gpu::buffer_usage_hint::static_data;
-    index_descriptor.initial_data = indices.data();
-    m_index_buffer = gpu.create_buffer(index_descriptor);
+            const float half_width = m_width * 0.5f;
+            const float half_height = m_height * 0.5f;
+
+            for (unsigned int i = 0; i < rows; ++i)
+            {
+                const float v = static_cast<float>(i) / static_cast<float>(m_height_segments);
+                const float y = v * m_height - half_height;
+
+                for (unsigned int j = 0; j < columns; ++j)
+                {
+                    const float u = static_cast<float>(j) / static_cast<float>(m_width_segments);
+                    const float x = u * m_width - half_width;
+
+                    vertex_position_uv_normal vertex;
+                    vertex.pos = core::math::vec3{x, y, 0.0f};
+                    vertex.uv = core::math::vec2{u, 1.0f - v};
+                    vertex.normal = core::math::vec3{0.0f, 0.0f, 1.0f};
+                    vertices.push_back(vertex);
+                }
+            }
+
+            std::vector<uint32_t> indices;
+            indices.reserve(m_width_segments * m_height_segments * 6);
+
+            for (unsigned int i = 0; i < m_height_segments; ++i)
+            {
+                for (unsigned int j = 0; j < m_width_segments; ++j)
+                {
+                    const uint32_t a = i * columns + j;
+                    const uint32_t b = a + 1;
+                    const uint32_t c = a + columns;
+                    const uint32_t d = c + 1;
+
+                    // CCW winding when viewed from the +Z side (the front face),
+                    // so the +Z normal points toward the camera looking down -Z.
+                    indices.push_back(a);
+                    indices.push_back(b);
+                    indices.push_back(d);
+
+                    indices.push_back(a);
+                    indices.push_back(d);
+                    indices.push_back(c);
+                }
+            }
+
+            return mesh_data::from_vertices(vertices, std::move(indices));
+        });
+
+    m_index_count = m_mesh->index_count;
 }
 
 void rendering_engine::plane::collect_draw_items(std::vector<draw_item>& out)
@@ -144,7 +134,7 @@ void rendering_engine::plane::collect_draw_items(std::vector<draw_item>& out)
         LOG_WRN("plane::collect_draw_items: no material");
         return;
     }
-    if (!m_vertex_buffer.valid() || !m_index_buffer.valid())
+    if (!m_mesh)
     {
         return;
     }
@@ -177,8 +167,8 @@ void rendering_engine::plane::collect_draw_items(std::vector<draw_item>& out)
 
     draw_item item{};
     item.mat = m_material;
-    item.vertex_buffer = m_vertex_buffer;
-    item.index_buffer = m_index_buffer;
+    item.vertex_buffer = m_mesh->vertex_buffer;
+    item.index_buffer = m_mesh->index_buffer;
     item.per_draw_bind_group = m_draw_bind_group;
     item.index_count = m_index_count;
     item.vertex_stride = m_vertex_stride;
@@ -187,12 +177,12 @@ void rendering_engine::plane::collect_draw_items(std::vector<draw_item>& out)
 
 rendering_engine::gpu::buffer rendering_engine::plane::get_vertex_buffer() const
 {
-    return m_vertex_buffer;
+    return m_mesh ? m_mesh->vertex_buffer : gpu::buffer{};
 }
 
 rendering_engine::gpu::buffer rendering_engine::plane::get_index_buffer() const
 {
-    return m_index_buffer;
+    return m_mesh ? m_mesh->index_buffer : gpu::buffer{};
 }
 
 unsigned int rendering_engine::plane::get_index_count() const
