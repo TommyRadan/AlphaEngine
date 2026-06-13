@@ -24,6 +24,7 @@
 
 #include <core/log.hpp>
 #include <core/math/math.hpp>
+#include <rendering_engine/assets/mesh_asset.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/materials/material.hpp>
@@ -67,6 +68,12 @@ void rendering_engine::model::upload_mesh(const rendering_engine::mesh& mesh)
     m_vertex_buffer = gpu.create_buffer(vertex_descriptor);
 }
 
+void rendering_engine::model::set_mesh(std::shared_ptr<mesh_asset> mesh)
+{
+    m_mesh = std::move(mesh);
+    m_vertex_stride = m_mesh ? m_mesh->vertex_stride : 0;
+}
+
 void rendering_engine::model::collect_draw_items(std::vector<draw_item>& out)
 {
     if (m_material == nullptr)
@@ -74,7 +81,12 @@ void rendering_engine::model::collect_draw_items(std::vector<draw_item>& out)
         LOG_WRN("model::collect_draw_items: no material");
         return;
     }
-    if (!m_vertex_buffer.valid())
+
+    // Draw the shared cached mesh if one was set, otherwise the buffer uploaded
+    // privately via upload_mesh.
+    const gpu::buffer vertex_buffer = m_mesh ? m_mesh->vertex_buffer : m_vertex_buffer;
+    const uint32_t vertex_count = m_mesh ? m_mesh->vertex_count : static_cast<uint32_t>(m_vertex_count);
+    if (!vertex_buffer.valid())
     {
         return;
     }
@@ -110,9 +122,9 @@ void rendering_engine::model::collect_draw_items(std::vector<draw_item>& out)
 
     draw_item item{};
     item.mat = m_material;
-    item.vertex_buffer = m_vertex_buffer;
+    item.vertex_buffer = vertex_buffer;
     item.per_draw_bind_group = m_draw_bind_group;
-    item.vertex_count = static_cast<uint32_t>(m_vertex_count);
+    item.vertex_count = vertex_count;
     item.vertex_stride = m_vertex_stride;
     out.push_back(item);
 }

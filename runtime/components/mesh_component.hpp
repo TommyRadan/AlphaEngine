@@ -35,6 +35,7 @@ namespace rendering_engine
 {
     struct material;
     struct mesh;
+    struct mesh_asset;
 } // namespace rendering_engine
 
 namespace runtime
@@ -70,6 +71,16 @@ namespace runtime
          * later, in @ref on_attach, once the owning node is known.
          */
         mesh_component(rendering_engine::material* material, const rendering_engine::mesh& mesh);
+
+        /**
+         * @brief Builds a model drawing a cached @p mesh with @p material.
+         *
+         * Shares one GPU upload across every component handed the same
+         * @ref rendering_engine::mesh_asset (e.g. many bodies built from one
+         * sphere), rather than uploading a private copy per component. The model
+         * is registered for drawing later, in @ref on_attach.
+         */
+        mesh_component(rendering_engine::material* material, std::shared_ptr<rendering_engine::mesh_asset> mesh);
 
         /**
          * @brief Wires the model into the scene — parents it under @p owner and

@@ -23,6 +23,7 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <vector>
 
 #include <core/math/math.hpp>
@@ -34,6 +35,7 @@
 namespace rendering_engine
 {
     struct material;
+    struct mesh_asset;
 
     // Draws one shared mesh many times in a single instanced draw, each
     // copy with its own world transform and tint — the engine analog of
@@ -60,9 +62,18 @@ namespace rendering_engine
         // Upload the shared geometry drawn once per instance. Vertices use
         // the position+uv+normal record (the instanced material reads only
         // the position); indices are 32-bit. Call once after construction,
-        // before the first frame.
+        // before the first frame. Allocates buffers owned by this renderable;
+        // prefer @ref set_geometry to share a cached upload between several
+        // instanced meshes.
         void upload_geometry(const std::vector<vertex_position_uv_normal>& vertices,
                              const std::vector<uint32_t>& indices);
+
+        // Draw a mesh cached by @ref asset_cache instead of uploading a private
+        // copy. The shared geometry's lifetime is tied to the handle: this
+        // renderable holds a reference for as long as it draws it, and the GPU
+        // buffers are released when the last instanced mesh referencing them is
+        // destroyed. Mutually exclusive with @ref upload_geometry — use one.
+        void set_geometry(std::shared_ptr<mesh_asset> mesh);
 
         // Geometry uploads through @ref upload_geometry; this is a no-op so
         // @ref instanced_mesh still satisfies the @ref renderable interface.
@@ -108,6 +119,12 @@ namespace rendering_engine
         // Instance count last written into the indirect command, so the
         // command is only rewritten when the active count actually changes.
         uint32_t m_uploaded_instance_count{0};
+
+        // Shared geometry from @ref asset_cache, set via @ref set_geometry. When
+        // present its buffers are drawn instead of the privately-owned
+        // @ref m_vertex_buffer / @ref m_index_buffer, and it is not freed here —
+        // the shared_ptr releases it once no instanced mesh references it.
+        std::shared_ptr<mesh_asset> m_mesh;
 
         gpu::buffer m_vertex_buffer{};
         gpu::buffer m_index_buffer{};

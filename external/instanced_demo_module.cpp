@@ -26,6 +26,7 @@
 
 #include <core/log.hpp>
 #include <core/math/math.hpp>
+#include <rendering_engine/assets/asset_cache.hpp>
 #include <rendering_engine/materials/instanced_material.hpp>
 #include <rendering_engine/mesh/vertex.hpp>
 #include <rendering_engine/renderables/instanced_mesh.hpp>
@@ -107,12 +108,20 @@ namespace
         auto& material = runtime::current_engine().renderer->get_instanced_material();
         material.set_color(rendering_engine::util::color{255, 255, 255, 255});
 
-        std::vector<rendering_engine::vertex_position_uv_normal> vertices;
-        std::vector<uint32_t> indices;
-        build_unit_cube(vertices, indices);
+        // Fetch the cube geometry through the asset cache so the upload is
+        // shared and deduplicated by key rather than baked into this renderable.
+        auto cube = runtime::current_engine().assets->get_or_create_mesh(
+            "instanced_demo:unit_cube",
+            []
+            {
+                std::vector<rendering_engine::vertex_position_uv_normal> vertices;
+                std::vector<uint32_t> indices;
+                build_unit_cube(vertices, indices);
+                return rendering_engine::mesh_data::from_vertices(vertices, std::move(indices));
+            });
 
         g_cubes = std::make_unique<rendering_engine::instanced_mesh>(&material, instance_count);
-        g_cubes->upload_geometry(vertices, indices);
+        g_cubes->set_geometry(std::move(cube));
 
         g_base_positions.reserve(instance_count);
         const float centre = static_cast<float>(grid_side - 1) * 0.5f;

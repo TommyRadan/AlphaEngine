@@ -33,6 +33,13 @@ runtime::mesh_component::mesh_component(rendering_engine::material* material, co
     m_model->upload_mesh(mesh);
 }
 
+runtime::mesh_component::mesh_component(rendering_engine::material* material,
+                                        std::shared_ptr<rendering_engine::mesh_asset> mesh)
+    : m_model{std::make_unique<rendering_engine::model>(material)}
+{
+    m_model->set_mesh(std::move(mesh));
+}
+
 void runtime::mesh_component::on_attach(node& owner)
 {
     if (!m_model)
