@@ -30,6 +30,7 @@
 #include <memory>
 #include <vector>
 
+#include <rendering_engine/fog.hpp>
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/render_stats.hpp>
 
@@ -211,6 +212,17 @@ namespace rendering_engine
          */
         void set_environment(const environment* env);
 
+        /**
+         * @brief Sets the scene-wide atmospheric fog.
+         *
+         * Stored and copied into the per-view @c PerFrame UBO by the
+         * scene pass each frame, so the built-in lit materials
+         * (@ref phong_material, @ref standard_material) blend toward the
+         * fog colour by camera distance. Pass a @ref fog_settings with
+         * @ref fog_mode::none (the default) to disable fog.
+         */
+        void set_fog(const fog_settings& fog);
+
     private:
         std::vector<renderable*> m_scene_renderables;
         std::vector<renderable*> m_ui_renderables;
@@ -247,6 +259,11 @@ namespace rendering_engine
         // The active scene environment, or null. Stored so newly created
         // materials inherit the image-based lighting. Non-owning.
         const environment* m_environment{nullptr};
+
+        // Scene-wide atmospheric fog, set via @ref set_fog and copied
+        // into the frame context each @ref render so the scene pass can
+        // upload it. Defaults to @ref fog_mode::none (disabled).
+        fog_settings m_fog{};
 
         // Built-in materials, constructed after the passes in
         // @ref init so they can read the passes' per-frame bind-group

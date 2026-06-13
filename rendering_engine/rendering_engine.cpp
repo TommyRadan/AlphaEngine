@@ -275,6 +275,7 @@ void rendering_engine::context::render()
                       m_scene_color_texture,
                       m_ldr_color_target,
                       m_ldr_color_texture};
+    ctx.fog = m_fog;
 
     auto encoder = gpu.create_command_encoder();
     for (auto& p : m_passes)
@@ -407,4 +408,9 @@ void rendering_engine::context::set_environment(const environment* env)
             m_standard_material->clear_environment();
         }
     }
+}
+
+void rendering_engine::context::set_fog(const fog_settings& fog)
+{
+    m_fog = fog;
 }

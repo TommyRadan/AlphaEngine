@@ -64,6 +64,8 @@ namespace
         {
             mat4 viewMatrix;
             mat4 projectionMatrix;
+            vec4 fogColor;  // rgb colour, a = mode (0 none, 1 linear, 2 exp2)
+            vec4 fogParams; // x near, y far, z density
         } u_frame;
 
         layout(set = 1, binding = 1, std140) uniform PerDraw
@@ -97,6 +99,16 @@ namespace
         layout(location = 3) in vec3 cameraPosition;
 
         layout(location = 0) out vec4 fragColor;
+
+        // The per-view block (slot 0, binding 0). Only the fog members
+        // are read here; the matrices are consumed in the vertex stage.
+        layout(set = 0, binding = 0, std140) uniform PerFrame
+        {
+            mat4 viewMatrix;
+            mat4 projectionMatrix;
+            vec4 fogColor;  // rgb colour, a = mode (0 none, 1 linear, 2 exp2)
+            vec4 fogParams; // x near, y far, z density
+        } u_frame;
 
         const int MAX_DIRECTIONAL = 4;
         const int MAX_POINT = 16;
@@ -173,6 +185,31 @@ namespace
             return lit / 25.0;
         }
 
+        // Blend @p color toward the scene fog colour by camera distance.
+        // Mode 0 disables fog; 1 is a linear near/far ramp; 2 is
+        // exponential-squared (THREE.FogExp2). Applied in linear/HDR
+        // space before the tonemap pass.
+        vec3 apply_fog(vec3 color)
+        {
+            float mode = u_frame.fogColor.a;
+            if (mode < 0.5)
+            {
+                return color;
+            }
+            float dist = distance(cameraPosition, worldPosition);
+            float factor; // 1 = no fog, 0 = full fog
+            if (mode < 1.5)
+            {
+                factor = clamp((u_frame.fogParams.y - dist) / (u_frame.fogParams.y - u_frame.fogParams.x), 0.0, 1.0);
+            }
+            else
+            {
+                float d = u_frame.fogParams.z * dist;
+                factor = exp(-d * d);
+            }
+            return mix(u_frame.fogColor.rgb, color, factor);
+        }
+
         void main()
         {
             vec3 N = normalize(worldNormal);
@@ -228,6 +265,7 @@ namespace
                 }
             }
 
+            result = apply_fog(result);
             fragColor = vec4(result, u_material.diffuseColor.a);
         }
 )fs";
