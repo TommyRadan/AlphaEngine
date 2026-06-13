@@ -27,6 +27,7 @@
 
 #pragma once
 
+#include <rendering_engine/fog.hpp>
 #include <rendering_engine/gpu/command_encoder.hpp>
 #include <rendering_engine/gpu/handle.hpp>
 
@@ -67,6 +68,12 @@ namespace rendering_engine
         // @ref swapchain_target. Also owned by @ref context.
         gpu::render_target ldr_color_target{};
         gpu::texture ldr_color_texture{};
+
+        // Scene-wide atmospheric fog, copied from @ref context::set_fog
+        // each frame. The scene pass packs it into the per-view PerFrame
+        // UBO so the lit materials can blend toward it by camera
+        // distance. Defaults to @ref fog_mode::none (no fog).
+        fog_settings fog{};
     };
 
     /**

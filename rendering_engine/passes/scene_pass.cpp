@@ -45,18 +45,20 @@ namespace rendering_engine
 {
     namespace
     {
-        // std140 layout for the per-frame camera UBO: mat4 viewMatrix
-        // at offset 0, mat4 projectionMatrix at offset 64. mat4 is
-        // 16-byte aligned and 64 bytes; no padding needed between
-        // the two members.
-        constexpr size_t per_frame_ubo_size = 2 * sizeof(core::math::mat4);
+        // std140 layout for the per-view PerFrame UBO: mat4 viewMatrix
+        // at offset 0, mat4 projectionMatrix at offset 64, then the fog
+        // block — vec4 fogColor at 128 (rgb colour, a = fog mode) and
+        // vec4 fogParams at 144 (x near, y far, z density). mat4 / vec4
+        // are 16-byte aligned, so no padding is needed between members.
+        // 160 bytes total.
+        constexpr size_t per_frame_ubo_size = 2 * sizeof(core::math::mat4) + 2 * sizeof(core::math::vec4);
 
         // Binding numbers within the per-frame bind group (slot 0). The
         // numbers must stay unique across both descriptor sets in a lit
         // pipeline because OpenGL flattens UBO bindings into a single
-        // namespace through ARB_gl_spirv: binding 0 = camera here,
-        // binding 1 = the per-draw model matrix (set 1), so the lights
-        // block takes binding 2.
+        // namespace through ARB_gl_spirv: binding 0 = the PerFrame view
+        // block (camera matrices + fog), binding 1 = the per-draw model
+        // matrix (set 1), so the lights block takes binding 2.
         constexpr uint32_t camera_binding = 0;
         constexpr uint32_t lights_binding = 2;
 
@@ -269,12 +271,22 @@ namespace rendering_engine
 
         // Refill the per-frame UBO before any draw consults it.
         // Layout matches the GLSL @c PerFrame block: viewMatrix at
-        // offset 0, projectionMatrix at offset sizeof(mat4).
-        std::array<float, 32> ubo_payload{};
+        // offset 0, projectionMatrix at offset sizeof(mat4), then the
+        // fog block (fogColor at float 32, fogParams at float 36).
+        std::array<float, 40> ubo_payload{};
         const auto view = ctx.active_camera->get_view_matrix();
         const auto projection = ctx.active_camera->get_projection_matrix();
         std::memcpy(ubo_payload.data(), view.data(), sizeof(core::math::mat4));
         std::memcpy(ubo_payload.data() + 16, projection.data(), sizeof(core::math::mat4));
+        // fogColor.rgb + fogColor.a = mode (0 none, 1 linear, 2 exp2);
+        // the lit shaders skip the blend when the mode is 0.
+        ubo_payload[32] = ctx.fog.color.x;
+        ubo_payload[33] = ctx.fog.color.y;
+        ubo_payload[34] = ctx.fog.color.z;
+        ubo_payload[35] = static_cast<float>(static_cast<int>(ctx.fog.mode));
+        ubo_payload[36] = ctx.fog.near_distance;
+        ubo_payload[37] = ctx.fog.far_distance;
+        ubo_payload[38] = ctx.fog.density;
         gpu.write_buffer(m_frame_ubo, ubo_payload.data(), per_frame_ubo_size, 0);
 
         // Pack every live light into the std140 lights block and upload
