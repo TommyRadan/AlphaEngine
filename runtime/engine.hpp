@@ -61,6 +61,7 @@ namespace rendering_engine
     {
         struct device;
     }
+    struct asset_cache;
     struct context;
 } // namespace rendering_engine
 namespace runtime
@@ -122,6 +123,7 @@ namespace runtime
         std::unique_ptr<core::event_bus> events;
         std::unique_ptr<rendering_engine::window> window;
         std::unique_ptr<rendering_engine::gpu::device> gpu;
+        std::unique_ptr<rendering_engine::asset_cache> assets;
         std::unique_ptr<rendering_engine::context> renderer;
         std::unique_ptr<runtime::context> scenes;
 

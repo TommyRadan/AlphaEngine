@@ -30,6 +30,7 @@
 #include <core/log.hpp>
 #include <core/settings.hpp>
 #include <core/time.hpp>
+#include <rendering_engine/assets/asset_cache.hpp>
 #include <rendering_engine/debug_ui/imgui_layer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/rendering_engine.hpp>
@@ -92,6 +93,10 @@ namespace runtime
         events = std::make_unique<core::event_bus>();
         window = std::make_unique<rendering_engine::window>();
         gpu = rendering_engine::gpu::create_device(to_backend_type(settings->graphics.backend));
+        // The asset cache hands out GPU-resource-backed handles, so it is
+        // constructed after the device; its loaders are only usable once the
+        // device is brought up in init().
+        assets = std::make_unique<rendering_engine::asset_cache>();
         // The built-in materials inside @c renderer are deferred
         // until init() because they compile GL shader programs and
         // need the GL context to be live first.
@@ -106,6 +111,10 @@ namespace runtime
         // that reach for current_engine() still see a valid engine.
         scenes.reset();
         renderer.reset();
+        // Destroyed after its consumers (renderer / scenes) so their handles
+        // are already released, and before the gpu device so any asset still
+        // alive can free its GPU resource against a live device.
+        assets.reset();
         gpu.reset();
         window.reset();
         events.reset();
@@ -132,6 +141,9 @@ namespace runtime
         install_pending_game_modules();
 
         renderer->init();
+        // The renderer brings the gpu device up, so the asset cache — whose
+        // loaders need a live device — is initialised right after it.
+        assets->init();
         scenes->init();
 
         // Register our own quit_requested listener now that the event
@@ -142,6 +154,7 @@ namespace runtime
     void engine::quit()
     {
         scenes->quit();
+        assets->quit();
         renderer->quit();
         events->quit();
     }

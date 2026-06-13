@@ -6,6 +6,7 @@ target_sources(AlphaEngine PRIVATE
     window.hpp
 )
 
+add_subdirectory(assets)
 add_subdirectory(camera)
 add_subdirectory(debug)
 add_subdirectory(debug_ui)
