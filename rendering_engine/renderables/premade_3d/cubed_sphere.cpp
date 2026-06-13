@@ -22,10 +22,12 @@
 
 #include <rendering_engine/renderables/premade_3d/cubed_sphere.hpp>
 
+#include <string>
 #include <vector>
 
 #include <core/log.hpp>
 #include <core/math/math.hpp>
+#include <rendering_engine/assets/asset_cache.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/materials/material.hpp>
@@ -93,92 +95,79 @@ rendering_engine::cubed_sphere::~cubed_sphere()
         gpu.destroy(m_draw_ubo);
         m_draw_ubo = {};
     }
-    if (m_index_buffer.valid())
-    {
-        gpu.destroy(m_index_buffer);
-        m_index_buffer = {};
-    }
-    if (m_vertex_buffer.valid())
-    {
-        gpu.destroy(m_vertex_buffer);
-        m_vertex_buffer = {};
-    }
+    // m_mesh is shared geometry owned by the asset cache; it is released by its
+    // shared_ptr, not destroyed here.
 }
 
 void rendering_engine::cubed_sphere::upload()
 {
-    const unsigned int n = m_subdivisions;
-    const unsigned int rows = n + 1;
-    const unsigned int verts_per_face = rows * rows;
-    const unsigned int quads_per_face = n * n;
-
-    std::vector<vertex_position_uv_normal> vertices;
-    vertices.reserve(6 * verts_per_face);
-
-    std::vector<uint32_t> indices;
-    indices.reserve(6 * quads_per_face * 6);
-
-    for (int face = 0; face < 6; ++face)
-    {
-        const auto& f = faces[face];
-        const uint32_t base = static_cast<uint32_t>(vertices.size());
-
-        for (unsigned int j = 0; j < rows; ++j)
-        {
-            const float v = static_cast<float>(j) / static_cast<float>(n);
-            for (unsigned int i = 0; i < rows; ++i)
-            {
-                const float u = static_cast<float>(i) / static_cast<float>(n);
-                const core::math::vec3 cube_pos = f.origin + u * f.u_axis + v * f.v_axis;
-                const core::math::vec3 sphere_pos = core::math::normalize(cube_pos);
-
-                vertex_position_uv_normal vertex;
-                vertex.pos = sphere_pos;
-                vertex.normal = sphere_pos;
-                vertex.uv = core::math::vec2{u, v};
-                vertices.push_back(vertex);
-            }
-        }
-
-        for (unsigned int j = 0; j < n; ++j)
-        {
-            for (unsigned int i = 0; i < n; ++i)
-            {
-                const uint32_t a = base + j * rows + i; // (i,   j)   — top-left
-                const uint32_t b = a + 1;               // (i+1, j)   — top-right
-                const uint32_t c = a + rows;            // (i,   j+1) — bottom-left
-                const uint32_t d = c + 1;               // (i+1, j+1) — bottom-right
-
-                // CCW winding when viewed from outside: TL -> BL -> BR
-                indices.push_back(a);
-                indices.push_back(c);
-                indices.push_back(d);
-
-                indices.push_back(a);
-                indices.push_back(d);
-                indices.push_back(b);
-            }
-        }
-    }
-
-    m_index_count = static_cast<unsigned int>(indices.size());
     m_vertex_stride = sizeof(vertex_position_uv_normal);
 
-    auto& gpu = *runtime::current_engine().gpu;
+    // Build and upload through the asset cache, keyed by the per-face
+    // subdivision so two cubed spheres of the same resolution share one
+    // upload. The builder only runs on a cache miss.
+    m_mesh = runtime::current_engine().assets->get_or_create_mesh(
+        "cubed_sphere:" + std::to_string(m_subdivisions),
+        [this]
+        {
+            const unsigned int n = m_subdivisions;
+            const unsigned int rows = n + 1;
+            const unsigned int verts_per_face = rows * rows;
+            const unsigned int quads_per_face = n * n;
 
-    gpu::buffer_descriptor vertex_descriptor{};
-    vertex_descriptor.size = vertices.size() * sizeof(vertex_position_uv_normal);
-    vertex_descriptor.usage = gpu::buffer_usage_vertex;
-    vertex_descriptor.hint = gpu::buffer_usage_hint::static_data;
-    vertex_descriptor.initial_data = vertices.data();
-    m_vertex_buffer = gpu.create_buffer(vertex_descriptor);
+            std::vector<vertex_position_uv_normal> vertices;
+            vertices.reserve(6 * verts_per_face);
 
-    gpu::buffer_descriptor index_descriptor{};
-    index_descriptor.size = indices.size() * sizeof(uint32_t);
-    index_descriptor.usage = gpu::buffer_usage_index;
-    index_descriptor.hint = gpu::buffer_usage_hint::static_data;
-    index_descriptor.initial_data = indices.data();
-    m_index_buffer = gpu.create_buffer(index_descriptor);
+            std::vector<uint32_t> indices;
+            indices.reserve(6 * quads_per_face * 6);
+
+            for (int face = 0; face < 6; ++face)
+            {
+                const auto& f = faces[face];
+                const uint32_t base = static_cast<uint32_t>(vertices.size());
+
+                for (unsigned int j = 0; j < rows; ++j)
+                {
+                    const float v = static_cast<float>(j) / static_cast<float>(n);
+                    for (unsigned int i = 0; i < rows; ++i)
+                    {
+                        const float u = static_cast<float>(i) / static_cast<float>(n);
+                        const core::math::vec3 cube_pos = f.origin + u * f.u_axis + v * f.v_axis;
+                        const core::math::vec3 sphere_pos = core::math::normalize(cube_pos);
+
+                        vertex_position_uv_normal vertex;
+                        vertex.pos = sphere_pos;
+                        vertex.normal = sphere_pos;
+                        vertex.uv = core::math::vec2{u, v};
+                        vertices.push_back(vertex);
+                    }
+                }
+
+                for (unsigned int j = 0; j < n; ++j)
+                {
+                    for (unsigned int i = 0; i < n; ++i)
+                    {
+                        const uint32_t a = base + j * rows + i; // (i,   j)   — top-left
+                        const uint32_t b = a + 1;               // (i+1, j)   — top-right
+                        const uint32_t c = a + rows;            // (i,   j+1) — bottom-left
+                        const uint32_t d = c + 1;               // (i+1, j+1) — bottom-right
+
+                        // CCW winding when viewed from outside: TL -> BL -> BR
+                        indices.push_back(a);
+                        indices.push_back(c);
+                        indices.push_back(d);
+
+                        indices.push_back(a);
+                        indices.push_back(d);
+                        indices.push_back(b);
+                    }
+                }
+            }
+
+            return mesh_data::from_vertices(vertices, std::move(indices));
+        });
+
+    m_index_count = m_mesh->index_count;
 }
 
 void rendering_engine::cubed_sphere::collect_draw_items(std::vector<draw_item>& out)
@@ -188,7 +177,7 @@ void rendering_engine::cubed_sphere::collect_draw_items(std::vector<draw_item>& 
         LOG_WRN("cubed_sphere::collect_draw_items: no material");
         return;
     }
-    if (!m_vertex_buffer.valid() || !m_index_buffer.valid())
+    if (!m_mesh)
     {
         return;
     }
@@ -221,8 +210,8 @@ void rendering_engine::cubed_sphere::collect_draw_items(std::vector<draw_item>& 
 
     draw_item item{};
     item.mat = m_material;
-    item.vertex_buffer = m_vertex_buffer;
-    item.index_buffer = m_index_buffer;
+    item.vertex_buffer = m_mesh->vertex_buffer;
+    item.index_buffer = m_mesh->index_buffer;
     item.per_draw_bind_group = m_draw_bind_group;
     item.index_count = m_index_count;
     item.vertex_stride = m_vertex_stride;
@@ -231,12 +220,12 @@ void rendering_engine::cubed_sphere::collect_draw_items(std::vector<draw_item>& 
 
 rendering_engine::gpu::buffer rendering_engine::cubed_sphere::get_vertex_buffer() const
 {
-    return m_vertex_buffer;
+    return m_mesh ? m_mesh->vertex_buffer : gpu::buffer{};
 }
 
 rendering_engine::gpu::buffer rendering_engine::cubed_sphere::get_index_buffer() const
 {
-    return m_index_buffer;
+    return m_mesh ? m_mesh->index_buffer : gpu::buffer{};
 }
 
 unsigned int rendering_engine::cubed_sphere::get_index_count() const

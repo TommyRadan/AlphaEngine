@@ -22,6 +22,8 @@
 
 #pragma once
 
+#include <memory>
+
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
 #include <rendering_engine/util/transform.hpp>
@@ -29,6 +31,7 @@
 namespace rendering_engine
 {
     struct material;
+    struct mesh_asset;
 
     // Torus (donut) surface.
     // @c radius is the distance from the centre of the torus to the centre
@@ -66,8 +69,7 @@ namespace rendering_engine
         unsigned int m_index_count{0};
         uint32_t m_vertex_stride{0};
 
-        gpu::buffer m_vertex_buffer{};
-        gpu::buffer m_index_buffer{};
+        std::shared_ptr<mesh_asset> m_mesh;
         gpu::buffer m_draw_ubo{};
         gpu::bind_group m_draw_bind_group{};
     };

@@ -23,6 +23,7 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <vector>
 
 #include <rendering_engine/gpu/handle.hpp>
@@ -32,6 +33,7 @@
 namespace rendering_engine
 {
     struct material;
+    struct mesh_asset;
 
     // Generic polyhedron generator.
     // Takes a base mesh expressed as a flat list of vertex positions (x, y, z
@@ -71,8 +73,9 @@ namespace rendering_engine
         unsigned int m_index_count{0};
         uint32_t m_vertex_stride{0};
 
-        gpu::buffer m_vertex_buffer{};
-        gpu::buffer m_index_buffer{};
+        // Shared geometry from the asset cache, keyed by base tables + radius +
+        // detail; freed when the last polyhedron referencing it is destroyed.
+        std::shared_ptr<mesh_asset> m_mesh;
         gpu::buffer m_draw_ubo{};
         gpu::bind_group m_draw_bind_group{};
     };
