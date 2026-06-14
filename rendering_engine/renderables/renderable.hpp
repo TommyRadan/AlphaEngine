@@ -44,5 +44,15 @@ namespace rendering_engine
         virtual ~renderable() = default;
         virtual void upload() = 0;
         virtual void collect_draw_items(std::vector<draw_item>& out) = 0;
+
+        // Whether this renderable contributes occluders to the shadow
+        // passes. Defaults to true; non-physical geometry (debug
+        // helpers, fullscreen-triangle effects) overrides it to false so
+        // the depth-only shadow pipeline never rasterizes its clip-space
+        // or gizmo vertices into the shadow map as a phantom caster.
+        virtual bool casts_shadow() const
+        {
+            return true;
+        }
     };
 } // namespace rendering_engine

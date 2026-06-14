@@ -71,6 +71,15 @@ namespace rendering_engine::debug
         // debug UI flips this per helper; defaults to visible.
         bool visible{true};
 
+        // Debug gizmos are never shadow casters: the scene-layer grid is
+        // a clip-space fullscreen triangle and the overlay gizmos are
+        // thin lines, so feeding either to the depth-only shadow pipeline
+        // writes garbage occluders into the shadow map.
+        bool casts_shadow() const override
+        {
+            return false;
+        }
+
     protected:
         // Linear-RGB triple in [0, 1] from a 0..255 @ref util::color,
         // ignoring alpha.
