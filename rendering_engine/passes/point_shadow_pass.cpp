@@ -353,6 +353,10 @@ namespace rendering_engine
             m_items.clear();
             for (auto* r : *m_registry)
             {
+                if (!r->casts_shadow())
+                {
+                    continue;
+                }
                 r->collect_draw_items(m_items);
             }
 
