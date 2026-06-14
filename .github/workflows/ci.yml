@@ -167,8 +167,11 @@ jobs:
       - name: Configure (MSVC)
         shell: pwsh
         run: |
+          # windows-latest ships Visual Studio 2026 (generator v18); the
+          # older "Visual Studio 17 2022" is no longer installed on the
+          # image, so configure against the 2026 toolchain.
           cmake -S . -B build `
-            -G "Visual Studio 17 2022" `
+            -G "Visual Studio 18 2026" `
             -A x64
           if ($LASTEXITCODE -ne 0) { throw "cmake configure failed" }
 
