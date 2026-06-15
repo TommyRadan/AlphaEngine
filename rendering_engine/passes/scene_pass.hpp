@@ -87,6 +87,14 @@ namespace rendering_engine
         // its line-based gizmos with the same camera the scene used.
         gpu::bind_group frame_bind_group() const;
 
+        // Per-frame bind group carrying the *unjittered* camera, for
+        // consumers that draw after the TAA resolve (the debug pass) and so
+        // would otherwise show the projection jitter as an un-averaged
+        // sub-pixel wobble. Identical to @ref frame_bind_group in every
+        // other binding, and the same handle when temporal-AA jitter is off
+        // (there is nothing to undo). Stable across frames.
+        gpu::bind_group overlay_frame_bind_group() const;
+
     private:
         // Non-owning back-pointer to the engine context's
         // scene-renderable registry. The context outlives every
@@ -106,6 +114,14 @@ namespace rendering_engine
         gpu::buffer m_shadow_ubo{};
         gpu::buffer m_point_shadow_ubo{};
         gpu::bind_group m_frame_bind_group{};
+
+        // Unjittered twin of @ref m_frame_bind_group for the debug pass.
+        // Only created when temporal-AA jitter is active; otherwise the
+        // accessor hands back the main group (the matrices are identical).
+        // Shares every other binding with the main group — only its camera
+        // UBO differs, holding the projection without the sub-pixel offset.
+        gpu::buffer m_overlay_frame_ubo{};
+        gpu::bind_group m_overlay_frame_bind_group{};
 
         // Shadow passes feeding the per-frame group. Non-owning — the
         // engine context owns the passes and orders them before this one.
