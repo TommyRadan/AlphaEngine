@@ -41,25 +41,28 @@
 #include <vector>
 
 // Shadow showcase for the auto-fit directional shadow frustum (issue
-// #146). A field of spheres and tall pillars is spread over a wide ground
-// plane — deliberately much larger than the old fixed 12x12 light box, so
-// the shadow pass *has* to fit the frustum to the view to cover it. With
-// the auto-fit:
+// #146). A field of spheres and tall pillars sits on a wide ground plane,
+// spread past the old fixed light box (+/-6 around the origin) but kept
+// within the shadow distance so the whole field stays crisp. With the
+// auto-fit:
 //
-//   * every object casts a crisp, sharply-edged shadow no matter where it
-//     sits on the plane (the old fixed box only reached ~6 units from the
-//     origin, so objects past that got no shadow at all);
+//   * every object casts a sharp shadow wherever it sits on the plane (the
+//     old fixed box only reached ~6 units from the origin, so objects past
+//     that got no shadow at all);
 //   * the pillars cast long thin shadows whose edges stay smooth instead
-//     of stair-stepping, because the map's 2048 texels now land on the
+//     of stair-stepping, because the 4096 map's texels now land on the
 //     visible region rather than being spread over empty world space;
 //   * the sun slowly orbits, so the shadows sweep across the plane — watch
 //     that the edges stay stable (no crawling) thanks to the texel-snapped,
 //     bounding-sphere fit.
 //
+// This is a single cascade, so the crispness holds out to the shadow
+// distance (shadow_pass.cpp) and then stops; covering a large world
+// sharply is the cascaded-shadow-map follow-on.
+//
 // To A/B test against the old behaviour, temporarily force the fixed-box
-// fallback in rendering_engine/passes/shadow_pass.cpp (skip the
-// camera branch in record()) and rebuild: the far objects lose their
-// shadows and the near ones turn blocky.
+// fallback in rendering_engine/passes/shadow_pass.cpp (skip the camera
+// branch in record()) and rebuild: the far objects lose their shadows.
 //
 // Controls (from camera_module): WASD to move, hold left mouse to look,
 // space/ctrl to rise/sink, shift to move faster. Roam around — the
@@ -114,7 +117,7 @@ static void on_engine_start(const core::engine_start& event)
     g_ground_material->set_roughness(0.95f);
 
     g_ground = std::make_unique<rendering_engine::plane>(g_ground_material.get(), 60.0f, 60.0f);
-    g_ground->transform.set_position(math::vec3{14.0f, 0.0f, ground_z});
+    g_ground->transform.set_position(math::vec3{6.0f, 0.0f, ground_z});
     g_ground->upload();
     renderer.register_scene_renderable(g_ground.get());
 
@@ -125,10 +128,11 @@ static void on_engine_start(const core::engine_start& event)
     rendering_engine::standard_material* pillar_material =
         make_material(rendering_engine::util::color{120, 200, 140, 255}, 0.6f);
 
-    // A grid of unit spheres spread well beyond the origin so the field
-    // reaches past the old fixed light box. The camera looks from -X, so
-    // the grid recedes along +X and spreads across +/-Y.
-    constexpr int depth_rows = 4;   // along +X, away from the camera
+    // A grid of unit spheres spread across the plane. The camera looks
+    // from -X, so the grid recedes along +X and spreads across +/-Y. It is
+    // kept inside the shadow distance so the whole field stays crisp, yet
+    // it reaches well past the old fixed light box (+/-6 around the origin).
+    constexpr int depth_rows = 3;   // along +X, away from the camera
     constexpr int lateral_cols = 5; // across +/-Y
     rendering_engine::standard_material* tints[] = {warm, cool, pale};
     for (int row = 0; row < depth_rows; ++row)
@@ -137,8 +141,8 @@ static void on_engine_start(const core::engine_start& event)
         {
             rendering_engine::standard_material* tint = tints[(row + col) % 3];
             auto ball = std::make_unique<rendering_engine::sphere>(tint);
-            const float x = static_cast<float>(row) * 6.0f;
-            const float y = (static_cast<float>(col) - static_cast<float>(lateral_cols - 1) * 0.5f) * 6.0f;
+            const float x = static_cast<float>(row) * 5.0f;
+            const float y = (static_cast<float>(col) - static_cast<float>(lateral_cols - 1) * 0.5f) * 4.0f;
             // Unit sphere (radius 1): centre one radius above the plane so it
             // rests on the ground and casts a contact shadow.
             ball->transform.set_position(math::vec3{x, y, ground_z + 1.0f});
@@ -152,9 +156,9 @@ static void on_engine_start(const core::engine_start& event)
     // where stair-stepping is most obvious, so the smooth edges are the
     // clearest evidence the auto-fit is working.
     const math::vec3 pillar_spots[] = {
-        math::vec3{3.0f, -9.0f, 0.0f},
-        math::vec3{9.0f, 9.0f, 0.0f},
-        math::vec3{15.0f, -3.0f, 0.0f},
+        math::vec3{2.0f, -8.0f, 0.0f},
+        math::vec3{8.0f, 7.0f, 0.0f},
+        math::vec3{11.0f, -3.0f, 0.0f},
     };
     constexpr float pillar_height = 5.0f;
     for (const math::vec3& spot : pillar_spots)

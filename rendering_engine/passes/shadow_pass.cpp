@@ -45,10 +45,11 @@ namespace
 {
     namespace math = core::math;
 
-    // Square shadow-map resolution. 2048 is the usual single-cascade
-    // starting point — sharp enough for a moderate scene without the
-    // memory of a 4k map.
-    constexpr uint32_t shadow_map_size = 2048;
+    // Square shadow-map resolution. 4096 keeps the auto-fit box's texels
+    // dense enough for crisp edges across a single cascade; a configurable
+    // resolution (and cascades for large scenes) is the issue #146
+    // follow-on.
+    constexpr uint32_t shadow_map_size = 4096;
 
     // Fixed-box fallback used only when no camera is attached, so the
     // map still holds something sensible to clear/sample. With a camera
@@ -61,13 +62,16 @@ namespace
     constexpr float light_far = 80.0f;
 
     // Auto-fit parameters. The light box is fitted to the camera's view
-    // frustum capped to @ref shadow_distance world units of depth — past
-    // that, shadows are too far to read, and fitting to the camera's full
-    // 10 km far plane would spread the map's texels uselessly thin.
+    // frustum capped to @ref shadow_distance world units of depth. This is
+    // a single cascade, so the cap is the crispness/coverage trade-off: the
+    // wider the camera FOV and the further the cap, the larger the fitted
+    // box and the fewer texels each occluder gets. 25 keeps a moderate
+    // playable area sharp; covering a large world crisply is what the
+    // cascaded-shadow-map follow-on (issue #146) is for.
     // @ref caster_depth_scale pulls the light's near plane back toward the
     // light (as a multiple of the fit radius) so occluders sitting between
     // the light and the visible region still rasterize into the map.
-    constexpr float shadow_distance = 60.0f;
+    constexpr float shadow_distance = 25.0f;
     constexpr float caster_depth_scale = 6.0f;
 
     // Base depth-comparison bias; the lit shader slope-scales it by the
