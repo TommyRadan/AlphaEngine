@@ -45,6 +45,7 @@
 #include <rendering_engine/passes/point_shadow_pass.hpp>
 #include <rendering_engine/passes/post/bloom_pass.hpp>
 #include <rendering_engine/passes/post/fxaa_pass.hpp>
+#include <rendering_engine/passes/post/taa_pass.hpp>
 #include <rendering_engine/passes/post/tonemap_pass.hpp>
 #include <rendering_engine/passes/scene_pass.hpp>
 #include <rendering_engine/passes/shadow_pass.hpp>
@@ -131,9 +132,26 @@ void rendering_engine::context::init()
     // glow back into the same target, so tonemap maps the bloomed result.
     auto bloom = std::make_unique<bloom_pass>(m_scene_color_texture, width, height);
     auto post = std::make_unique<tonemap_pass>(m_scene_color_texture);
-    // FXAA closes the post chain: it samples the LDR target tonemap
-    // resolved into and writes the anti-aliased result to the swapchain.
-    auto fxaa = std::make_unique<fxaa_pass>(m_ldr_color_texture, width, height);
+    // Temporal AA optionally slots in between tonemap and FXAA: it
+    // accumulates the projection-jittered frames the scene pass produces
+    // (Halton sub-pixel offsets, applied only while this is enabled) into a
+    // stable, supersampled LDR image, then FXAA cleans up whatever spatial
+    // edges remain. Gated on the temporal_aa setting; when off the LDR
+    // target flows straight into FXAA exactly as before. The TAA resolve
+    // becomes FXAA's input so the swapchain still receives a single
+    // anti-aliased image.
+    const bool taa_enabled =
+        (eng.settings != nullptr) && eng.settings->graphics.temporal_aa && width != 0 && height != 0;
+    std::unique_ptr<taa_pass> taa;
+    gpu::texture fxaa_input = m_ldr_color_texture;
+    if (taa_enabled)
+    {
+        taa = std::make_unique<taa_pass>(m_ldr_color_texture, width, height);
+        fxaa_input = taa->output_texture();
+    }
+    // FXAA closes the post chain: it samples the LDR/TAA result and writes
+    // the anti-aliased image to the swapchain.
+    auto fxaa = std::make_unique<fxaa_pass>(fxaa_input, width, height);
     auto ui = std::make_unique<ui_pass>(&m_ui_renderables);
 #if _DEBUG
     // The debug pass binds the scene pass's per-frame camera group at
@@ -165,8 +183,10 @@ void rendering_engine::context::init()
     // that target with the environment cube map, the bloom post pass
     // blurs its bright pixels back
     // into that target, the tonemap post pass maps the result to LDR in
-    // the off-screen LDR target, the FXAA post pass anti-aliases that LDR
-    // image onto the swapchain, and the UI pass composites on top. The
+    // the off-screen LDR target, the optional TAA post pass accumulates the
+    // jittered LDR frames into a supersampled image, the FXAA post pass
+    // anti-aliases that result onto the swapchain, and the UI pass
+    // composites on top. The
     // debug pass is appended in debug builds only so debug visuals read on
     // top of the game UI; release builds drop it entirely so the
     // overlay registry has no consumer and the stage costs nothing.
@@ -182,6 +202,10 @@ void rendering_engine::context::init()
     m_passes.push_back(std::move(skybox));
     m_passes.push_back(std::move(bloom));
     m_passes.push_back(std::move(post));
+    if (taa)
+    {
+        m_passes.push_back(std::move(taa));
+    }
     m_passes.push_back(std::move(fxaa));
     m_passes.push_back(std::move(ui));
 #if _DEBUG

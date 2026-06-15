@@ -77,6 +77,19 @@ struct graphics_settings
      * (`opengl` or `vulkan`).
      */
     graphics_backend backend;
+
+    /**
+     * @brief Whether temporal anti-aliasing is enabled.
+     *
+     * When on, the scene pass jitters the projection matrix with a
+     * Halton sub-pixel sequence and the @ref rendering_engine::taa_pass
+     * accumulates the jittered frames into a stable, supersampled image
+     * (a neighbourhood colour clamp keeps moving content from ghosting).
+     * Read once during rendering-engine init. Enabled by default; set
+     * the @c ALPHAENGINE_TAA environment variable to `0` / `off` /
+     * `false` to disable it (or `1` / `on` / `true` to force it on).
+     */
+    bool temporal_aa;
 };
 
 /** @brief Camera configuration. */

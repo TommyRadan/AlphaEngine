@@ -4,6 +4,8 @@ target_sources(AlphaEngine PRIVATE
     fullscreen_triangle.hpp
     fxaa_pass.cpp
     fxaa_pass.hpp
+    taa_pass.cpp
+    taa_pass.hpp
     tonemap_pass.cpp
     tonemap_pass.hpp
 )

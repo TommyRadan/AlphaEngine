@@ -60,6 +60,25 @@ namespace
         LOG_ERR("settings: unknown ALPHAENGINE_GRAPHICS_BACKEND='%s'; falling back to opengl", value);
         return graphics_backend::opengl;
     }
+
+    bool parse_temporal_aa()
+    {
+        const char* value = std::getenv("ALPHAENGINE_TAA");
+        if (value == nullptr || value[0] == '\0')
+        {
+            return true;
+        }
+        if (std::strcmp(value, "0") == 0 || std::strcmp(value, "off") == 0 || std::strcmp(value, "false") == 0)
+        {
+            return false;
+        }
+        if (std::strcmp(value, "1") == 0 || std::strcmp(value, "on") == 0 || std::strcmp(value, "true") == 0)
+        {
+            return true;
+        }
+        LOG_ERR("settings: unknown ALPHAENGINE_TAA='%s'; falling back to enabled", value);
+        return true;
+    }
 } // namespace
 
 float window_settings::aspect_ratio() const noexcept
@@ -104,12 +123,13 @@ settings::settings()
     // Vsync off in both configurations: the frame rate is left uncapped.
     window.vsync = false;
     graphics.backend = parse_graphics_backend();
+    graphics.temporal_aa = parse_temporal_aa();
     camera.field_of_view = 70.0f;
     input.mouse_sensitivity = 0.005f;
     input.mouse_reversed = false;
 
     LOG_INF("Settings parsed: window=%ux%u type=%d double_buffered=%d vsync=%d fov=%.1f "
-            "mouse_sensitivity=%.4f mouse_reversed=%d graphics_backend=%s name='%s'",
+            "mouse_sensitivity=%.4f mouse_reversed=%d graphics_backend=%s temporal_aa=%d name='%s'",
             window.width,
             window.height,
             static_cast<int>(window.type),
@@ -119,5 +139,6 @@ settings::settings()
             input.mouse_sensitivity,
             input.mouse_reversed ? 1 : 0,
             graphics_backend_name(graphics.backend),
+            graphics.temporal_aa ? 1 : 0,
             window.name.c_str());
 }
