@@ -136,13 +136,18 @@ void rendering_engine::box::upload()
                         const uint32_t c = a + columns;
                         const uint32_t d = c + 1;
 
+                        // a/b advance along +u, c/d along +v, and the outward
+                        // normal is cross(u, v); the triangles must therefore
+                        // wind a->d->c / a->b->d to come out CCW when viewed
+                        // from outside (the a->c->d / a->d->b order is CW and
+                        // would be culled, turning the box inside-out).
                         indices.push_back(a);
-                        indices.push_back(c);
                         indices.push_back(d);
+                        indices.push_back(c);
 
                         indices.push_back(a);
-                        indices.push_back(d);
                         indices.push_back(b);
+                        indices.push_back(d);
                     }
                 }
             };
