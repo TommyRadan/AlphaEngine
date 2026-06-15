@@ -44,14 +44,18 @@ namespace
     // clamp below is what stops that long tail from ghosting under motion.
     constexpr float taa_feedback = 0.9f;
 
-    // The reprojection-free temporal resolve. The current jittered frame
-    // is blended with last frame's accumulated result; because the
-    // projection jitter moves the sub-pixel sample location every frame,
-    // that blend converges to a supersampled image on a static view. To
-    // keep moving content from smearing the stale history is first
-    // constrained to the 3x3 colour box around the current texel (the
-    // standard neighbourhood clamp), so any history that has drifted
-    // outside what the present frame plausibly contains is pulled back in.
+    // The temporal resolve. The current jittered frame is blended with last
+    // frame's accumulated result; because the projection jitter moves the
+    // sub-pixel sample location every frame, that blend converges to a
+    // supersampled image. The history is first reprojected along the
+    // per-pixel motion vectors (history sampled at texCoord - velocity) so a
+    // moving camera keeps the accumulated detail glued to the surface rather
+    // than smearing it across the screen. It is then constrained to the 3x3
+    // colour box around the current texel (the standard neighbourhood clamp)
+    // so history that survives reprojection but no longer matches the
+    // present frame — at disocclusions, or for the unmodelled object motion
+    // — is pulled back in; history that reprojects outside the frame is
+    // dropped entirely in favour of the current sample.
     //
     // u_taa.params.xy is (1/width, 1/height) — the per-texel step the
     // neighbourhood taps walk by — and params.z is the history feedback
@@ -65,8 +69,9 @@ namespace
 
         layout(set = 0, binding = 0) uniform sampler2D currentColor;
         layout(set = 0, binding = 1) uniform sampler2D historyColor;
+        layout(set = 0, binding = 2) uniform sampler2D velocity;
 
-        layout(set = 0, binding = 2, std140) uniform Taa
+        layout(set = 0, binding = 3, std140) uniform Taa
         {
             vec4 params; // x = 1/width, y = 1/height, z = history feedback, w unused
         } u_taa;
@@ -78,7 +83,7 @@ namespace
             vec3 current = texture(currentColor, texCoord).rgb;
 
             // 3x3 neighbourhood min/max of the current frame: the colour
-            // box the history is clamped into before blending.
+            // box the reprojected history is clamped into before blending.
             vec3 box_min = current;
             vec3 box_max = current;
             for (int y = -1; y <= 1; ++y)
@@ -95,10 +100,22 @@ namespace
                 }
             }
 
-            vec3 history = texture(historyColor, texCoord).rgb;
+            // Reproject the history along this pixel's motion vector. A
+            // sample that lands off-screen has no valid history, so fall
+            // back to the current frame (feedback 0) there.
+            vec2 motion = texture(velocity, texCoord).xy;
+            vec2 history_uv = texCoord - motion;
+            float feedback = u_taa.params.z;
+            if (any(lessThan(history_uv, vec2(0.0))) || any(greaterThan(history_uv, vec2(1.0))))
+            {
+                feedback = 0.0;
+                history_uv = texCoord;
+            }
+
+            vec3 history = texture(historyColor, history_uv).rgb;
             history = clamp(history, box_min, box_max);
 
-            vec3 resolved = mix(current, history, u_taa.params.z);
+            vec3 resolved = mix(current, history, feedback);
             fragColor = vec4(resolved, 1.0);
         }
 )fs";
@@ -125,7 +142,7 @@ namespace
 
 namespace rendering_engine
 {
-    taa_pass::taa_pass(gpu::texture current_color, uint32_t width, uint32_t height)
+    taa_pass::taa_pass(gpu::texture current_color, gpu::texture velocity, uint32_t width, uint32_t height)
     {
         auto& gpu = *runtime::current_engine().gpu;
 
@@ -179,7 +196,8 @@ namespace rendering_engine
         gpu::bind_group_layout_descriptor resolve_layout{};
         resolve_layout.entries.push_back({0, gpu::binding_kind::texture});
         resolve_layout.entries.push_back({1, gpu::binding_kind::texture});
-        resolve_layout.entries.push_back({2, gpu::binding_kind::uniform_buffer});
+        resolve_layout.entries.push_back({2, gpu::binding_kind::texture});
+        resolve_layout.entries.push_back({3, gpu::binding_kind::uniform_buffer});
         m_resolve_layout = gpu.create_bind_group_layout(resolve_layout);
 
         gpu::bind_group_layout_descriptor copy_layout{};
@@ -254,8 +272,14 @@ namespace rendering_engine
         history_slot.texture_value = m_history_texture;
         resolve_bind_group_descriptor.entries.push_back(history_slot);
 
+        gpu::binding_value velocity_slot{};
+        velocity_slot.binding = 2;
+        velocity_slot.kind = gpu::binding_kind::texture;
+        velocity_slot.texture_value = velocity;
+        resolve_bind_group_descriptor.entries.push_back(velocity_slot);
+
         gpu::binding_value params_slot{};
-        params_slot.binding = 2;
+        params_slot.binding = 3;
         params_slot.kind = gpu::binding_kind::uniform_buffer;
         params_slot.buffer_value = m_resolve_ubo;
         resolve_bind_group_descriptor.entries.push_back(params_slot);

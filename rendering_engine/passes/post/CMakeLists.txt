@@ -8,4 +8,6 @@ target_sources(AlphaEngine PRIVATE
     taa_pass.hpp
     tonemap_pass.cpp
     tonemap_pass.hpp
+    velocity_pass.cpp
+    velocity_pass.hpp
 )
