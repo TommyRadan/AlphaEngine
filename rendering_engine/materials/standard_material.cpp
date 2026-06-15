@@ -337,7 +337,7 @@ namespace
 
         // 1.0 = fully lit, 0.0 = fully shadowed. Only the caster light
         // index is occluded; every other directional light returns 1.0.
-        // 3x3 PCF softens the shadow edge by one texel.
+        // A 5x5 PCF kernel softens the shadow edge.
         )fs"
                                         R"fs(
         float directional_shadow(int lightIndex, vec3 N, vec3 L)
@@ -357,8 +357,9 @@ namespace
             vec2 texelSize = 1.0 / vec2(textureSize(shadowMap, 0));
             // 5x5 PCF: a wider kernel softens the penumbra so the shadow
             // edge stays smooth even where the light-space texel-to-world
-            // ratio is coarse. Issue #146 tracks a resolution-independent
-            // filter (PCSS) and a tighter-fit map.
+            // ratio is coarse. The shadow pass now auto-fits the light box
+            // to the view frustum; a resolution-independent filter (PCSS)
+            // and cascades remain a follow-on.
             float lit = 0.0;
             for (int x = -2; x <= 2; ++x)
             {

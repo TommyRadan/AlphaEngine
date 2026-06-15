@@ -155,7 +155,7 @@ namespace
 
         // 1.0 = fully lit, 0.0 = fully shadowed. Only the caster light
         // index is occluded; every other directional light returns 1.0.
-        // 3x3 PCF softens the shadow edge by one texel.
+        // A 5x5 PCF kernel softens the shadow edge.
         float directional_shadow(int lightIndex, vec3 N, vec3 L)
         {
             if (u_shadow.params.x == 0.0 || lightIndex != int(u_shadow.params.z))

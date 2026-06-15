@@ -22,9 +22,12 @@
 
 #include <rendering_engine/passes/shadow_pass.hpp>
 
+#include <algorithm>
+#include <array>
 #include <cmath>
 #include <string>
 
+#include <rendering_engine/camera/camera.hpp>
 #include <rendering_engine/gpu/bind_group.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
@@ -47,17 +50,25 @@ namespace
     // memory of a 4k map.
     constexpr uint32_t shadow_map_size = 2048;
 
-    // Orthographic light frustum covering the scene. The box is centred
-    // on the world origin and oriented along the light direction. The
-    // half-extent is kept just large enough to enclose the demo's ground
-    // plane footprint and props: a tighter box spends more of the 2048
-    // shadow-map texels on the actual occluders, so the penumbra is
-    // sharper. Issue #146 tracks deriving this from the scene/camera
-    // bounds (and cascades) instead of a hardcoded extent.
+    // Fixed-box fallback used only when no camera is attached, so the
+    // map still holds something sensible to clear/sample. With a camera
+    // the frustum is auto-fitted to the view each frame (see
+    // @ref fit_light_to_camera) — the box is centred on the world origin
+    // and oriented along the light direction.
     constexpr float ortho_half_extent = 6.0f;
     constexpr float light_distance = 30.0f;
     constexpr float light_near = 1.0f;
     constexpr float light_far = 80.0f;
+
+    // Auto-fit parameters. The light box is fitted to the camera's view
+    // frustum capped to @ref shadow_distance world units of depth — past
+    // that, shadows are too far to read, and fitting to the camera's full
+    // 10 km far plane would spread the map's texels uselessly thin.
+    // @ref caster_depth_scale pulls the light's near plane back toward the
+    // light (as a multiple of the fit radius) so occluders sitting between
+    // the light and the visible region still rasterize into the map.
+    constexpr float shadow_distance = 60.0f;
+    constexpr float caster_depth_scale = 6.0f;
 
     // Base depth-comparison bias; the lit shader slope-scales it by the
     // surface's angle to the light to keep grazing faces from acne
@@ -107,6 +118,89 @@ namespace
             fragColor = vec4(1.0);
         }
 )fs";
+
+    // Build a directional light's view-projection auto-fitted to the
+    // camera's view frustum. The frustum is capped to @ref shadow_distance
+    // depth, then enclosed in its bounding sphere — a rotation-invariant,
+    // constant-radius fit so the box doesn't pulse as the camera turns —
+    // and the box centre is snapped to whole-texel increments so the
+    // shadow edges don't crawl as the camera moves.
+    math::mat4 fit_light_to_camera(const math::vec3& dir,
+                                   const math::vec3& up,
+                                   const math::mat4& camera_view,
+                                   const math::mat4& camera_projection)
+    {
+        const math::mat4 inverse_view_proj = math::inverse(camera_projection * camera_view);
+
+        // Unproject the eight NDC-cube corners to world space, capping the
+        // far corners at shadow_distance. View-space depth is linear along
+        // each near->far edge, so the cap is a plain world-space lerp.
+        std::array<math::vec3, 8> corners{};
+        std::size_t count = 0;
+        for (int xi = 0; xi < 2; ++xi)
+        {
+            for (int yi = 0; yi < 2; ++yi)
+            {
+                const float x = xi == 0 ? -1.0f : 1.0f;
+                const float y = yi == 0 ? -1.0f : 1.0f;
+
+                const math::vec4 near_h = inverse_view_proj * math::vec4{x, y, -1.0f, 1.0f};
+                const math::vec4 far_h = inverse_view_proj * math::vec4{x, y, 1.0f, 1.0f};
+                const math::vec3 near_corner{near_h.x / near_h.w, near_h.y / near_h.w, near_h.z / near_h.w};
+                const math::vec3 far_corner{far_h.x / far_h.w, far_h.y / far_h.w, far_h.z / far_h.w};
+
+                // Camera looks down -z, so forward depth is -(view * p).z.
+                const math::vec4 near_view = camera_view * math::vec4{near_corner, 1.0f};
+                const math::vec4 far_view = camera_view * math::vec4{far_corner, 1.0f};
+                const float near_depth = -near_view.z;
+                const float far_depth = -far_view.z;
+                float t = 1.0f;
+                if (far_depth > near_depth)
+                {
+                    t = std::clamp((shadow_distance - near_depth) / (far_depth - near_depth), 0.0f, 1.0f);
+                }
+
+                corners[count++] = near_corner;
+                corners[count++] = math::lerp(near_corner, far_corner, t);
+            }
+        }
+
+        // Bounding sphere of the capped frustum.
+        math::vec3 center{0.0f, 0.0f, 0.0f};
+        for (const auto& c : corners)
+        {
+            center += c;
+        }
+        center /= static_cast<float>(corners.size());
+
+        float radius = 0.0f;
+        for (const auto& c : corners)
+        {
+            radius = std::max(radius, math::length(c - center));
+        }
+        // Quantize the radius so sub-texel size jitter doesn't shimmer.
+        radius = std::ceil(radius * 16.0f) / 16.0f;
+
+        // Snap the centre to whole-texel increments in light space.
+        const float texels_per_unit = static_cast<float>(shadow_map_size) / (radius * 2.0f);
+        const math::mat4 texel_view = math::scale(math::vec3{texels_per_unit, texels_per_unit, texels_per_unit}) *
+                                      math::look_at(math::vec3{0.0f, 0.0f, 0.0f}, dir, up);
+        const math::mat4 texel_view_inverse = math::inverse(texel_view);
+        math::vec4 center_texel = texel_view * math::vec4{center, 1.0f};
+        center_texel.x = std::floor(center_texel.x);
+        center_texel.y = std::floor(center_texel.y);
+        const math::vec4 snapped = texel_view_inverse * center_texel;
+        center = math::vec3{snapped.x, snapped.y, snapped.z};
+
+        // Orthographic box of the sphere, with the eye pulled back toward
+        // the light so off-screen casters between the light and the view
+        // still render into the depth map.
+        const math::vec3 eye = center - dir * (radius * caster_depth_scale);
+        const math::mat4 light_view = math::look_at(eye, center, up);
+        const math::mat4 light_projection =
+            math::ortho(-radius, radius, -radius, radius, 0.0f, radius * (caster_depth_scale + 1.0f));
+        return light_projection * light_view;
+    }
 } // namespace
 
 namespace rendering_engine
@@ -324,21 +418,32 @@ namespace rendering_engine
             return;
         }
 
-        // Build the light's orthographic view-projection: look from a
-        // point back along the light direction toward the world origin.
-        // Pick an up vector that is not parallel to the direction so
-        // look_at stays well-defined regardless of the world's up axis.
+        // Build the light's orthographic view-projection. Pick an up
+        // vector that is not parallel to the direction so look_at stays
+        // well-defined regardless of the world's up axis.
         const math::vec3 dir = math::normalize(caster->direction);
         math::vec3 up{0.0f, 1.0f, 0.0f};
         if (std::abs(math::dot(dir, up)) > 0.99f)
         {
             up = math::vec3{0.0f, 0.0f, 1.0f};
         }
-        const math::vec3 eye = dir * (-light_distance);
-        const math::mat4 view = math::look_at(eye, math::vec3{0.0f, 0.0f, 0.0f}, up);
-        const math::mat4 projection = math::ortho(
-            -ortho_half_extent, ortho_half_extent, -ortho_half_extent, ortho_half_extent, light_near, light_far);
-        m_light_view_projection = projection * view;
+
+        // With a camera, auto-fit the box to the visible frustum so the
+        // shadow map's texels land on what the viewer actually sees;
+        // otherwise fall back to a fixed box centred on the origin.
+        if (const camera* cam = camera::get_current_camera(); cam != nullptr)
+        {
+            m_light_view_projection =
+                fit_light_to_camera(dir, up, cam->get_view_matrix(), cam->get_projection_matrix());
+        }
+        else
+        {
+            const math::vec3 eye = dir * (-light_distance);
+            const math::mat4 view = math::look_at(eye, math::vec3{0.0f, 0.0f, 0.0f}, up);
+            const math::mat4 projection = math::ortho(
+                -ortho_half_extent, ortho_half_extent, -ortho_half_extent, ortho_half_extent, light_near, light_far);
+            m_light_view_projection = projection * view;
+        }
 
         gpu.write_buffer(m_light_ubo, m_light_view_projection.data(), sizeof(math::mat4), 0);
 

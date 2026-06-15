@@ -44,12 +44,15 @@ namespace rendering_engine
      * its per-frame bind group, and the lit fragment shaders sample it
      * to occlude that light's contribution.
      *
-     * The light's view is an orthographic box centred on the world
-     * origin and oriented along the light direction — the standard
-     * starting point for a single directional caster. When no
-     * directional light has @c cast_shadow set the pass still clears
-     * the map and reports @ref has_shadow as false so the lit shaders
-     * fall back to unshadowed lighting.
+     * The light's view is an orthographic box oriented along the light
+     * direction. When a camera is attached the box is auto-fitted to the
+     * camera's view frustum each frame (capped to a fixed shadow
+     * distance, enclosed in its bounding sphere, and texel-snapped for
+     * stability) so the shadow map's texels concentrate on what the
+     * viewer sees; with no camera it falls back to a fixed box centred on
+     * the world origin. When no directional light has @c cast_shadow set
+     * the pass still clears the map and reports @ref has_shadow as false
+     * so the lit shaders fall back to unshadowed lighting.
      *
      * The pass reuses the same scene-renderable registry as the
      * @ref scene_pass and the per-draw model-matrix bind group each
