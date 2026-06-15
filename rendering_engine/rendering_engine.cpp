@@ -47,6 +47,7 @@
 #include <rendering_engine/passes/post/fxaa_pass.hpp>
 #include <rendering_engine/passes/post/taa_pass.hpp>
 #include <rendering_engine/passes/post/tonemap_pass.hpp>
+#include <rendering_engine/passes/post/velocity_pass.hpp>
 #include <rendering_engine/passes/scene_pass.hpp>
 #include <rendering_engine/passes/shadow_pass.hpp>
 #include <rendering_engine/passes/skybox_pass.hpp>
@@ -142,11 +143,17 @@ void rendering_engine::context::init()
     // anti-aliased image.
     const bool taa_enabled =
         (eng.settings != nullptr) && eng.settings->graphics.temporal_aa && width != 0 && height != 0;
+    std::unique_ptr<velocity_pass> velocity;
     std::unique_ptr<taa_pass> taa;
     gpu::texture fxaa_input = m_ldr_color_texture;
     if (taa_enabled)
     {
-        taa = std::make_unique<taa_pass>(m_ldr_color_texture, width, height);
+        // Per-pixel motion vectors are reconstructed from the scene depth
+        // buffer, so the velocity pass samples the HDR target's depth
+        // attachment. They drive the TAA history reprojection.
+        const gpu::texture scene_depth = eng.gpu->render_target_depth_texture(m_scene_color_target);
+        velocity = std::make_unique<velocity_pass>(scene_depth, width, height);
+        taa = std::make_unique<taa_pass>(m_ldr_color_texture, velocity->velocity_texture(), width, height);
         fxaa_input = taa->output_texture();
     }
     // FXAA closes the post chain: it samples the LDR/TAA result and writes
@@ -180,8 +187,10 @@ void rendering_engine::context::init()
 
     // Register the built-in passes in render order: scene writes into
     // the HDR target, the skybox pass fills the untouched background of
-    // that target with the environment cube map, the bloom post pass
-    // blurs its bright pixels back
+    // that target with the environment cube map, the optional velocity
+    // pass reconstructs per-pixel motion vectors from the finalised depth
+    // for the TAA reprojection, the bloom post pass blurs its bright pixels
+    // back
     // into that target, the tonemap post pass maps the result to LDR in
     // the off-screen LDR target, the optional TAA post pass accumulates the
     // jittered LDR frames into a supersampled image, the FXAA post pass
@@ -200,6 +209,13 @@ void rendering_engine::context::init()
     m_passes.push_back(std::move(point_shadow));
     m_passes.push_back(std::move(scene));
     m_passes.push_back(std::move(skybox));
+    // Motion vectors are computed from the finalised scene depth, before
+    // the post chain consumes the colour, so the velocity pass sits right
+    // after the geometry and skybox. Only present when TAA is enabled.
+    if (velocity)
+    {
+        m_passes.push_back(std::move(velocity));
+    }
     m_passes.push_back(std::move(bloom));
     m_passes.push_back(std::move(post));
     if (taa)

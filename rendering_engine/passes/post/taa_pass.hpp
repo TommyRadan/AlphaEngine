@@ -45,13 +45,15 @@ namespace rendering_engine
      * the perceptual image keeps HDR fireflies from dominating the history)
      * and feeds @ref fxaa_pass, which closes the post chain. Each frame:
      *
-     *  1. The resolve stage blends the current LDR frame with the
-     *     reprojection-free history at the same pixel. A 3x3 neighbourhood
-     *     colour clamp constrains the history to the current frame's local
-     *     min/max box before the blend, so a static camera converges to a
-     *     supersampled image while moving content is pulled back toward the
-     *     present frame instead of smearing (ghosting). This is the classic
-     *     velocity-less TAA; per-object motion vectors are a follow-up.
+     *  1. The resolve stage reprojects the colour history along the
+     *     per-pixel motion vectors from @ref velocity_pass — sampling the
+     *     history at @c texCoord - velocity rather than the same pixel — so
+     *     a moving camera keeps the accumulated detail aligned to the
+     *     surface instead of smearing it. A 3x3 neighbourhood colour clamp
+     *     then constrains that reprojected history to the current frame's
+     *     local min/max box before the blend, suppressing the ghosting that
+     *     reprojection alone leaves at disocclusions; history that
+     *     reprojects off-screen is dropped in favour of the current frame.
      *  2. A copy stage stores the resolved frame into the history target
      *     for the next frame to read.
      *
@@ -72,9 +74,11 @@ namespace rendering_engine
     struct taa_pass : pass
     {
         // @p current_color is the LDR texture @ref tonemap_pass renders
-        // into; @p width / @p height are the backbuffer dimensions the
-        // history and resolve targets are sized against.
-        taa_pass(gpu::texture current_color, uint32_t width, uint32_t height);
+        // into; @p velocity is the motion-vector texture @ref velocity_pass
+        // produces, sampled to reproject the history; @p width / @p height
+        // are the backbuffer dimensions the history and resolve targets are
+        // sized against.
+        taa_pass(gpu::texture current_color, gpu::texture velocity, uint32_t width, uint32_t height);
         ~taa_pass() override;
 
         taa_pass(const taa_pass&) = delete;
@@ -96,8 +100,8 @@ namespace rendering_engine
         gpu::buffer m_vertex_buffer{};
         gpu::buffer m_resolve_ubo{};
 
-        // {currentColor @0, historyColor @1, params @2} for the resolve
-        // stage; {src @0} for the history-store copy.
+        // {currentColor @0, historyColor @1, velocity @2, params @3} for
+        // the resolve stage; {src @0} for the history-store copy.
         gpu::bind_group_layout m_resolve_layout{};
         gpu::bind_group_layout m_copy_layout{};
 
