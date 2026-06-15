@@ -118,6 +118,18 @@ namespace rendering_engine
         // disables collection.
         render_stats* m_stats{nullptr};
 
+        // Temporal-AA projection jitter. When @c m_taa_jitter is set (the
+        // temporal_aa setting is on and the window has a usable size), each
+        // record() offsets the camera projection by a Halton sub-pixel step
+        // before uploading it, so consecutive frames sample the scene at
+        // slightly different positions for the @ref taa_pass to accumulate.
+        // @c m_jitter_index cycles the Halton sequence; the two reciprocal
+        // dimensions scale the NDC offset to a sub-pixel amount.
+        bool m_taa_jitter{false};
+        uint32_t m_jitter_index{0};
+        float m_inv_width{0.0f};
+        float m_inv_height{0.0f};
+
         // Reused across frames so the underlying allocation persists.
         std::vector<draw_item> m_items;
     };

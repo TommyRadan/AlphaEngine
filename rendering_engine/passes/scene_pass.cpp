@@ -29,6 +29,7 @@
 #include <core/event.hpp>
 #include <core/event_engine.hpp>
 #include <core/math/math.hpp>
+#include <core/settings.hpp>
 #include <rendering_engine/camera/camera.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
@@ -88,6 +89,29 @@ namespace rendering_engine
         // (x enabled, y bias, z caster point index). 416 bytes total.
         constexpr size_t point_shadow_ubo_size =
             point_shadow_face_count * sizeof(core::math::mat4) + 2 * 4 * sizeof(float);
+
+        // Length of the Halton sub-pixel jitter sequence the temporal-AA
+        // path cycles through. Sixteen distinct offsets give the
+        // accumulation enough sample positions to resolve cleanly without
+        // the pattern repeating often enough to be visible.
+        constexpr uint32_t taa_jitter_period = 16;
+
+        // Halton low-discrepancy sequence — the standard source of the
+        // well-spread sub-pixel offsets temporal AA jitters the projection
+        // by. @p index is 1-based (index 0 degenerates to 0); base 2 drives
+        // the x offset, base 3 the y.
+        float halton(uint32_t index, uint32_t base)
+        {
+            float result = 0.0f;
+            float fraction = 1.0f;
+            while (index > 0)
+            {
+                fraction /= static_cast<float>(base);
+                result += fraction * static_cast<float>(index % base);
+                index /= base;
+            }
+            return result;
+        }
     } // namespace
 
     scene_pass::scene_pass(std::vector<renderable*>* registry,
@@ -185,6 +209,19 @@ namespace rendering_engine
         }
 
         m_frame_bind_group = gpu.create_bind_group(frame_bind_group_descriptor);
+
+        // Enable projection jitter only when temporal AA is on and the
+        // window has a usable size; the @ref taa_pass accumulates the
+        // jittered frames. The reciprocal dimensions scale each Halton
+        // offset down to a sub-pixel NDC amount.
+        const ::settings* config = runtime::current_engine().settings.get();
+        if (config != nullptr && config->graphics.temporal_aa && config->window.width != 0 &&
+            config->window.height != 0)
+        {
+            m_taa_jitter = true;
+            m_inv_width = 1.0f / static_cast<float>(config->window.width);
+            m_inv_height = 1.0f / static_cast<float>(config->window.height);
+        }
     }
 
     scene_pass::~scene_pass()
@@ -275,7 +312,24 @@ namespace rendering_engine
         // fog block (fogColor at float 32, fogParams at float 36).
         std::array<float, 40> ubo_payload{};
         const auto view = ctx.active_camera->get_view_matrix();
-        const auto projection = ctx.active_camera->get_projection_matrix();
+        core::math::mat4 projection = ctx.active_camera->get_projection_matrix();
+
+        // Temporal-AA sub-pixel jitter: offset the projection by a Halton
+        // step so this frame samples the scene a fraction of a pixel away
+        // from the last. Column-major storage puts the clip-space x/y shear
+        // terms (row 0/1 of column 2) at m[8] / m[9]; nudging them shifts
+        // the whole frame uniformly in NDC after the perspective divide.
+        // The jitter feeds the taa_pass accumulation and is otherwise
+        // invisible — culling still uses the camera's unjittered frustum.
+        if (m_taa_jitter)
+        {
+            m_jitter_index = (m_jitter_index + 1u) % taa_jitter_period;
+            const float jitter_x = (halton(m_jitter_index + 1u, 2u) - 0.5f) * 2.0f * m_inv_width;
+            const float jitter_y = (halton(m_jitter_index + 1u, 3u) - 0.5f) * 2.0f * m_inv_height;
+            projection.m[8] += jitter_x;
+            projection.m[9] += jitter_y;
+        }
+
         std::memcpy(ubo_payload.data(), view.data(), sizeof(core::math::mat4));
         std::memcpy(ubo_payload.data() + 16, projection.data(), sizeof(core::math::mat4));
         // fogColor.rgb + fogColor.a = mode (0 none, 1 linear, 2 exp2);
