@@ -122,6 +122,21 @@ namespace rendering_engine
     {
         auto& gpu = *runtime::current_engine().gpu;
 
+        // Enable projection jitter only when temporal AA is on and the
+        // window has a usable size; the @ref taa_pass accumulates the
+        // jittered frames. The reciprocal dimensions scale each Halton
+        // offset down to a sub-pixel NDC amount. Read up front so the
+        // bind-group setup below knows whether to build the unjittered
+        // overlay twin the debug pass binds.
+        const ::settings* config = runtime::current_engine().settings.get();
+        if (config != nullptr && config->graphics.temporal_aa && config->window.width != 0 &&
+            config->window.height != 0)
+        {
+            m_taa_jitter = true;
+            m_inv_width = 1.0f / static_cast<float>(config->window.width);
+            m_inv_height = 1.0f / static_cast<float>(config->window.height);
+        }
+
         gpu::bind_group_layout_descriptor frame_layout_descriptor{};
         frame_layout_descriptor.entries.push_back({camera_binding, gpu::binding_kind::uniform_buffer});
         frame_layout_descriptor.entries.push_back({lights_binding, gpu::binding_kind::uniform_buffer});
@@ -140,6 +155,13 @@ namespace rendering_engine
         ubo_descriptor.usage = gpu::buffer_usage_uniform | gpu::buffer_usage_copy_dst;
         ubo_descriptor.hint = gpu::buffer_usage_hint::dynamic_data;
         m_frame_ubo = gpu.create_buffer(ubo_descriptor);
+
+        // The unjittered camera UBO only exists when jitter is active; it
+        // backs the overlay bind group built below.
+        if (m_taa_jitter)
+        {
+            m_overlay_frame_ubo = gpu.create_buffer(ubo_descriptor);
+        }
 
         gpu::buffer_descriptor lights_descriptor{};
         lights_descriptor.size = sizeof(gpu_lights);
@@ -210,23 +232,30 @@ namespace rendering_engine
 
         m_frame_bind_group = gpu.create_bind_group(frame_bind_group_descriptor);
 
-        // Enable projection jitter only when temporal AA is on and the
-        // window has a usable size; the @ref taa_pass accumulates the
-        // jittered frames. The reciprocal dimensions scale each Halton
-        // offset down to a sub-pixel NDC amount.
-        const ::settings* config = runtime::current_engine().settings.get();
-        if (config != nullptr && config->graphics.temporal_aa && config->window.width != 0 &&
-            config->window.height != 0)
+        // The overlay twin shares every binding with the main group except
+        // the camera UBO (entries[0], pushed first above), which it points
+        // at the unjittered buffer so the debug pass projects without the
+        // sub-pixel jitter.
+        if (m_taa_jitter)
         {
-            m_taa_jitter = true;
-            m_inv_width = 1.0f / static_cast<float>(config->window.width);
-            m_inv_height = 1.0f / static_cast<float>(config->window.height);
+            frame_bind_group_descriptor.entries[0].buffer_value = m_overlay_frame_ubo;
+            m_overlay_frame_bind_group = gpu.create_bind_group(frame_bind_group_descriptor);
         }
     }
 
     scene_pass::~scene_pass()
     {
         auto& gpu = *runtime::current_engine().gpu;
+        if (m_overlay_frame_bind_group.valid())
+        {
+            gpu.destroy(m_overlay_frame_bind_group);
+            m_overlay_frame_bind_group = {};
+        }
+        if (m_overlay_frame_ubo.valid())
+        {
+            gpu.destroy(m_overlay_frame_ubo);
+            m_overlay_frame_ubo = {};
+        }
         if (m_frame_bind_group.valid())
         {
             gpu.destroy(m_frame_bind_group);
@@ -267,6 +296,13 @@ namespace rendering_engine
     gpu::bind_group scene_pass::frame_bind_group() const
     {
         return m_frame_bind_group;
+    }
+
+    gpu::bind_group scene_pass::overlay_frame_bind_group() const
+    {
+        // Falls back to the (already unjittered) main group when jitter is
+        // off, so the debug pass needs no special-casing.
+        return m_overlay_frame_bind_group.valid() ? m_overlay_frame_bind_group : m_frame_bind_group;
     }
 
     void scene_pass::record(gpu::command_encoder& encoder, const frame_context& ctx)
@@ -312,24 +348,7 @@ namespace rendering_engine
         // fog block (fogColor at float 32, fogParams at float 36).
         std::array<float, 40> ubo_payload{};
         const auto view = ctx.active_camera->get_view_matrix();
-        core::math::mat4 projection = ctx.active_camera->get_projection_matrix();
-
-        // Temporal-AA sub-pixel jitter: offset the projection by a Halton
-        // step so this frame samples the scene a fraction of a pixel away
-        // from the last. Column-major storage puts the clip-space x/y shear
-        // terms (row 0/1 of column 2) at m[8] / m[9]; nudging them shifts
-        // the whole frame uniformly in NDC after the perspective divide.
-        // The jitter feeds the taa_pass accumulation and is otherwise
-        // invisible — culling still uses the camera's unjittered frustum.
-        if (m_taa_jitter)
-        {
-            m_jitter_index = (m_jitter_index + 1u) % taa_jitter_period;
-            const float jitter_x = (halton(m_jitter_index + 1u, 2u) - 0.5f) * 2.0f * m_inv_width;
-            const float jitter_y = (halton(m_jitter_index + 1u, 3u) - 0.5f) * 2.0f * m_inv_height;
-            projection.m[8] += jitter_x;
-            projection.m[9] += jitter_y;
-        }
-
+        const core::math::mat4 projection = ctx.active_camera->get_projection_matrix();
         std::memcpy(ubo_payload.data(), view.data(), sizeof(core::math::mat4));
         std::memcpy(ubo_payload.data() + 16, projection.data(), sizeof(core::math::mat4));
         // fogColor.rgb + fogColor.a = mode (0 none, 1 linear, 2 exp2);
@@ -341,6 +360,34 @@ namespace rendering_engine
         ubo_payload[36] = ctx.fog.near_distance;
         ubo_payload[37] = ctx.fog.far_distance;
         ubo_payload[38] = ctx.fog.density;
+
+        // The overlay group carries the unjittered projection so the debug
+        // pass — which paints after the TAA resolve and so cannot average
+        // the jitter away — draws steady gizmos. Upload it before applying
+        // the jitter below.
+        if (m_overlay_frame_ubo.valid())
+        {
+            gpu.write_buffer(m_overlay_frame_ubo, ubo_payload.data(), per_frame_ubo_size, 0);
+        }
+
+        // Temporal-AA sub-pixel jitter: offset the projection by a Halton
+        // step so this frame samples the scene a fraction of a pixel away
+        // from the last. Column-major storage puts the clip-space x/y shear
+        // terms (row 0/1 of column 2) at m[8] / m[9]; nudging them shifts
+        // the whole frame uniformly in NDC after the perspective divide.
+        // The jitter feeds the taa_pass accumulation and is otherwise
+        // invisible — culling still uses the camera's unjittered frustum,
+        // and the overlay group above keeps the unjittered matrices.
+        if (m_taa_jitter)
+        {
+            m_jitter_index = (m_jitter_index + 1u) % taa_jitter_period;
+            const float jitter_x = (halton(m_jitter_index + 1u, 2u) - 0.5f) * 2.0f * m_inv_width;
+            const float jitter_y = (halton(m_jitter_index + 1u, 3u) - 0.5f) * 2.0f * m_inv_height;
+            core::math::mat4 jittered = projection;
+            jittered.m[8] += jitter_x;
+            jittered.m[9] += jitter_y;
+            std::memcpy(ubo_payload.data() + 16, jittered.data(), sizeof(core::math::mat4));
+        }
         gpu.write_buffer(m_frame_ubo, ubo_payload.data(), per_frame_ubo_size, 0);
 
         // Pack every live light into the std140 lights block and upload

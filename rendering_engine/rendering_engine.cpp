@@ -163,7 +163,10 @@ void rendering_engine::context::init()
 #if _DEBUG
     // The debug pass binds the scene pass's per-frame camera group at
     // slot 0 so the line-based debug gizmos project with the same camera.
-    auto debug = std::make_unique<debug_pass>(&m_debug_renderables, scene->frame_bind_group());
+    // It uses the unjittered overlay group: the debug pass paints after the
+    // TAA resolve, so the projection jitter would otherwise show up as a
+    // sub-pixel wobble on the gizmos rather than being averaged away.
+    auto debug = std::make_unique<debug_pass>(&m_debug_renderables, scene->overlay_frame_bind_group());
 #endif
 
     // Construct the built-in materials against the per-frame layouts
