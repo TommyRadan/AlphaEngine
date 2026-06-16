@@ -47,7 +47,7 @@ namespace
         const char* value = std::getenv("ALPHAENGINE_GRAPHICS_BACKEND");
         if (value == nullptr || value[0] == '\0')
         {
-            return graphics_backend::opengl;
+            return graphics_backend::vulkan;
         }
         if (std::strcmp(value, "opengl") == 0)
         {
@@ -57,8 +57,8 @@ namespace
         {
             return graphics_backend::vulkan;
         }
-        LOG_ERR("settings: unknown ALPHAENGINE_GRAPHICS_BACKEND='%s'; falling back to opengl", value);
-        return graphics_backend::opengl;
+        LOG_ERR("settings: unknown ALPHAENGINE_GRAPHICS_BACKEND='%s'; falling back to vulkan", value);
+        return graphics_backend::vulkan;
     }
 
     bool parse_temporal_aa()

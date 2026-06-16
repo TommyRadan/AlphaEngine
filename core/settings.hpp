@@ -72,7 +72,7 @@ struct graphics_settings
      * @brief GPU backend the engine should bring up at startup.
      *
      * Read once during @ref runtime::engine construction. The default
-     * is @ref graphics_backend::opengl; the value can be overridden
+     * is @ref graphics_backend::vulkan; the value can be overridden
      * via the @c ALPHAENGINE_GRAPHICS_BACKEND environment variable
      * (`opengl` or `vulkan`).
      */
