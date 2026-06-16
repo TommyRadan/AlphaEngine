@@ -246,7 +246,42 @@ namespace rendering_engine::gpu::backend::vulkan
         swap.has_depth = true;
         m_swapchain_target.id = m_render_targets.insert(swap);
 
+        create_default_textures();
+
         m_initialised = true;
+    }
+
+    void vk_device::create_default_textures()
+    {
+        // Opaque white 1x1 placeholders. White is a neutral default for
+        // the maps these stand in for (albedo / IBL etc. are gated by the
+        // material's uniform flags, so the sampled value is unused — it
+        // only has to be a valid resource of the right dimension).
+        const uint32_t white = 0xFFFFFFFFu;
+
+        texture_descriptor td2{};
+        td2.dimension = texture_dimension::d2;
+        td2.format = texture_format::rgba8_unorm;
+        td2.width = 1;
+        td2.height = 1;
+        m_default_texture_2d = create_texture(td2);
+        write_texture(m_default_texture_2d, &white, sizeof(white));
+
+        texture_descriptor tdc{};
+        tdc.dimension = texture_dimension::cube;
+        tdc.format = texture_format::rgba8_unorm;
+        tdc.width = 1;
+        tdc.height = 1;
+        m_default_texture_cube = create_texture(tdc);
+        for (uint32_t face = 0; face < 6; ++face)
+        {
+            write_cube_face(m_default_texture_cube, static_cast<cube_face>(face), &white, sizeof(white));
+        }
+    }
+
+    texture vk_device::default_texture(texture_dimension dim) const noexcept
+    {
+        return dim == texture_dimension::cube ? m_default_texture_cube : m_default_texture_2d;
     }
 
     void vk_device::quit()
@@ -258,6 +293,17 @@ namespace rendering_engine::gpu::backend::vulkan
         if (m_device != VK_NULL_HANDLE)
         {
             vkDeviceWaitIdle(m_device);
+        }
+
+        if (m_default_texture_2d.valid())
+        {
+            destroy(m_default_texture_2d);
+            m_default_texture_2d = {};
+        }
+        if (m_default_texture_cube.valid())
+        {
+            destroy(m_default_texture_cube);
+            m_default_texture_cube = {};
         }
 
         // GPU is idle: anything queued by destroy() during the run
@@ -1493,15 +1539,23 @@ namespace rendering_engine::gpu::backend::vulkan
             {
                 attachments[1].format = VK_FORMAT_D32_SFLOAT;
             }
+            // Off-screen depth is sampled by later post passes (the velocity
+            // pass reads sceneDepth), so it leaves the pass in the
+            // shader-read layout the combined-image-sampler descriptor
+            // expects, mirroring the off-screen colour attachment above. A
+            // LOAD therefore resumes from that same layout. The swapchain
+            // depth is never sampled, so it stays in the attachment layout.
+            const VkImageLayout depth_rest_layout = target.is_swapchain
+                                                        ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+                                                        : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
             attachments[1].samples = VK_SAMPLE_COUNT_1_BIT;
             attachments[1].loadOp = depth_load;
             attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
             attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
             attachments[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-            attachments[1].initialLayout = depth_load == VK_ATTACHMENT_LOAD_OP_LOAD
-                                               ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
-                                               : VK_IMAGE_LAYOUT_UNDEFINED;
-            attachments[1].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+            attachments[1].initialLayout =
+                depth_load == VK_ATTACHMENT_LOAD_OP_LOAD ? depth_rest_layout : VK_IMAGE_LAYOUT_UNDEFINED;
+            attachments[1].finalLayout = depth_rest_layout;
             refs[1].attachment = 1;
             refs[1].layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
         }
@@ -1535,9 +1589,14 @@ namespace rendering_engine::gpu::backend::vulkan
         deps[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
         deps[1].srcSubpass = 0;
         deps[1].dstSubpass = VK_SUBPASS_EXTERNAL;
-        deps[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        // Release both colour and depth writes for a subsequent pass's
+        // fragment-shader reads: tonemap samples the HDR colour and the
+        // velocity pass samples the scene depth, so the depth write
+        // (completed at late fragment tests) must be made visible too.
+        deps[1].srcStageMask =
+            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
         deps[1].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-        deps[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        deps[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
         deps[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 
         VkRenderPassCreateInfo rpi{};

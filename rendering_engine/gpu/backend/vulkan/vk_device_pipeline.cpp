@@ -540,7 +540,28 @@ namespace rendering_engine::gpu::backend::vulkan
                 auto* tex = m_textures.lookup(entry.texture_value.id);
                 if (tex == nullptr || tex->view == VK_NULL_HANDLE)
                 {
-                    continue;
+                    // Unset/invalid sampler slot. Vulkan requires every
+                    // statically-used descriptor to reference a valid
+                    // resource, so substitute the 1x1 placeholder of the
+                    // dimension this binding declares (a material may
+                    // leave maps unbound — e.g. no albedo, or no IBL
+                    // cube when no environment is attached). OpenGL just
+                    // leaves the sampler unbound, which is why it never
+                    // tripped here.
+                    texture_dimension dim = texture_dimension::d2;
+                    for (const auto& layout_entry : layout_record->descriptor.entries)
+                    {
+                        if (layout_entry.binding == entry.binding)
+                        {
+                            dim = layout_entry.dimension;
+                            break;
+                        }
+                    }
+                    tex = m_textures.lookup(default_texture(dim).id);
+                    if (tex == nullptr || tex->view == VK_NULL_HANDLE)
+                    {
+                        continue;
+                    }
                 }
                 VkDescriptorImageInfo ii{};
                 ii.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;

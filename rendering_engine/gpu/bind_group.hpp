@@ -72,6 +72,13 @@ namespace rendering_engine::gpu
         // For @c storage_texture only: shader-side access mode.
         // Ignored for other kinds.
         storage_access storage_access_mode{storage_access::read_write};
+
+        // For @c texture only: the sampler dimensionality the shader
+        // declares (e.g. @c samplerCube vs @c sampler2D). Explicit-
+        // binding backends use it to pick a matching placeholder when a
+        // bind group leaves this slot unset; the OpenGL backend ignores
+        // it. Defaults to 2D.
+        texture_dimension dimension{texture_dimension::d2};
     };
 
     struct bind_group_layout_descriptor

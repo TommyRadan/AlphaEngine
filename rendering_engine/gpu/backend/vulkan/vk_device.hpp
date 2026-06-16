@@ -214,8 +214,17 @@ namespace rendering_engine::gpu::backend::vulkan
         void enqueue_destroy(std::function<void()> fn);
         void drain_pending_destroys();
 
+        // 1x1 placeholder textures (one 2D, one cube) bound in place of
+        // an unset sampler slot. Vulkan requires every statically-used
+        // descriptor to reference a valid resource, so create_bind_group
+        // substitutes the matching-dimension default when a material
+        // leaves a texture binding empty (the OpenGL backend just leaves
+        // the sampler unbound). Created in init(), released in quit().
+        texture default_texture(texture_dimension dim) const noexcept;
+
     private:
         void create_instance();
+        void create_default_textures();
         void create_debug_messenger();
         void destroy_debug_messenger();
         void create_surface();
@@ -270,6 +279,11 @@ namespace rendering_engine::gpu::backend::vulkan
 
         bool m_validation_enabled{false};
         bool m_initialised{false};
+
+        // Placeholder textures for unset sampler bindings; see
+        // default_texture().
+        texture m_default_texture_2d{};
+        texture m_default_texture_cube{};
 
         std::vector<std::function<void()>> m_pending_destroys;
 

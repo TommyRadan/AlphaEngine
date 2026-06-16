@@ -562,8 +562,15 @@ namespace rendering_engine
         material_layout.entries.push_back({material_metalness_map_binding, gpu::binding_kind::texture});
         material_layout.entries.push_back({material_roughness_map_binding, gpu::binding_kind::texture});
         material_layout.entries.push_back({material_emissive_map_binding, gpu::binding_kind::texture});
-        material_layout.entries.push_back({material_irradiance_map_binding, gpu::binding_kind::texture});
-        material_layout.entries.push_back({material_prefiltered_map_binding, gpu::binding_kind::texture});
+        // irradiance and prefiltered are samplerCube; flag them so a
+        // backend that placeholders an unbound slot picks a cube, not a
+        // 2D, texture when no environment is attached. brdfLut is 2D.
+        gpu::bind_group_layout_entry irradiance_entry{material_irradiance_map_binding, gpu::binding_kind::texture};
+        irradiance_entry.dimension = gpu::texture_dimension::cube;
+        material_layout.entries.push_back(irradiance_entry);
+        gpu::bind_group_layout_entry prefiltered_entry{material_prefiltered_map_binding, gpu::binding_kind::texture};
+        prefiltered_entry.dimension = gpu::texture_dimension::cube;
+        material_layout.entries.push_back(prefiltered_entry);
         material_layout.entries.push_back({material_brdf_lut_binding, gpu::binding_kind::texture});
 
         // Opaque lit surface: depth tested and written, no blending.

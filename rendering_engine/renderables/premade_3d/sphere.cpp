@@ -32,6 +32,7 @@
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/materials/material.hpp>
+#include <rendering_engine/mesh/tangent.hpp>
 #include <rendering_engine/mesh/vertex.hpp>
 #include <runtime/engine.hpp>
 
@@ -59,7 +60,11 @@ rendering_engine::sphere::~sphere()
 
 void rendering_engine::sphere::upload()
 {
-    m_vertex_stride = sizeof(vertex_position_uv_normal);
+    // Tangent-complete vertices so the sphere can be drawn by tangent-aware
+    // materials (standard/PBR) without the vertex stride falling short of the
+    // pipeline's tangent attribute. The position/uv/normal offsets are
+    // unchanged, so materials that ignore the tangent still read correctly.
+    m_vertex_stride = sizeof(vertex_position_uv_normal_tangent);
 
     // Build and upload through the asset cache, keyed by tessellation so two
     // spheres of the same resolution share one upload. The builder only runs on
@@ -124,7 +129,8 @@ void rendering_engine::sphere::upload()
                 }
             }
 
-            return mesh_data::from_vertices(vertices, std::move(indices));
+            const auto tangent_vertices = generate_tangents(vertices, indices);
+            return mesh_data::from_vertices(tangent_vertices, std::move(indices));
         });
 
     m_index_count = m_mesh->index_count;
