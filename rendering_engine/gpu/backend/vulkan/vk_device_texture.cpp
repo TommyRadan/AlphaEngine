@@ -28,6 +28,8 @@
 
 #include <rendering_engine/gpu/backend/vulkan/vk_device.hpp>
 
+#include <algorithm>
+#include <cmath>
 #include <cstring>
 
 #include <core/log.hpp>
@@ -54,6 +56,37 @@ namespace rendering_engine::gpu::backend::vulkan
             si.anisotropyEnable = VK_FALSE;
             si.maxAnisotropy = 1.0f;
             return si;
+        }
+
+        // Full mip-chain length for a texture of the given footprint:
+        // floor(log2(max(w, h))) + 1, matching glGenerateMipmap's chain.
+        uint32_t full_mip_chain(uint32_t width, uint32_t height)
+        {
+            const uint32_t largest = std::max(width, height);
+            uint32_t levels = 1;
+            uint32_t extent = largest;
+            while (extent > 1)
+            {
+                extent >>= 1;
+                ++levels;
+            }
+            return levels;
+        }
+
+        // vkCmdBlitImage with VK_FILTER_LINEAR — the down-sampling
+        // primitive @ref vk_device::generate_mipmaps relies on — is only
+        // valid when the format advertises blit-src, blit-dst and linear
+        // sample filtering with optimal tiling. The engine's mipmapped
+        // textures are rgba8_unorm / rgba16_float, which support this on
+        // every desktop GPU, but a format that doesn't gets a single
+        // level rather than an undefined chain.
+        bool format_supports_linear_blit(VkPhysicalDevice physical_device, VkFormat format)
+        {
+            VkFormatProperties props{};
+            vkGetPhysicalDeviceFormatProperties(physical_device, format, &props);
+            const VkFormatFeatureFlags required = VK_FORMAT_FEATURE_BLIT_SRC_BIT | VK_FORMAT_FEATURE_BLIT_DST_BIT |
+                                                  VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
+            return (props.optimalTilingFeatures & required) == required;
         }
 
         void transition_image(VkCommandBuffer cmd,
@@ -103,6 +136,19 @@ namespace rendering_engine::gpu::backend::vulkan
         record.is_depth = is_depth_format(descriptor.format);
         record.array_layers = record.is_cube ? 6u : 1u;
         record.mip_levels = 1;
+
+        // A mipmapped colour texture allocates its whole chain up front so
+        // every level is addressable; @ref generate_mipmaps fills levels
+        // 1..n via vkCmdBlitImage. Depth targets and 3D textures keep a
+        // single level (the engine never requests mips for either, and a
+        // 3D blit would also have to halve depth). Formats without linear
+        // blit support fall back to one level rather than leaving the
+        // chain undefined.
+        if (descriptor.mipmaps && !record.is_depth && !record.is_3d &&
+            format_supports_linear_blit(m_physical_device, record.vk_format))
+        {
+            record.mip_levels = full_mip_chain(record.width, record.height);
+        }
 
         VkImageUsageFlags usage =
             VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
@@ -325,11 +371,126 @@ namespace rendering_engine::gpu::backend::vulkan
         upload_region(*this, *record, static_cast<uint32_t>(face), {record->width, record->height, 1}, data, size);
     }
 
-    void vk_device::generate_mipmaps(texture /*handle*/)
+    void vk_device::generate_mipmaps(texture handle)
     {
-        // Stub: textures currently allocate one mip level. Full mip
-        // chain generation via vkCmdBlitImage is a follow-up that the
-        // engine's existing call sites do not exercise.
+        auto* record = m_textures.lookup(handle.id);
+        if (record == nullptr || record->image == VK_NULL_HANDLE || record->mip_levels <= 1)
+        {
+            // Single-level textures (including any whose format could not
+            // back a linear blit at create time) have nothing to derive.
+            return;
+        }
+
+        const uint32_t layers = record->array_layers;
+        VkCommandBuffer cmd = begin_one_shot();
+
+        // The upload path leaves every level in SHADER_READ_ONLY with only
+        // level 0 populated. Move the whole chain to TRANSFER_DST so the
+        // canonical blit-down loop starts from a known layout (contents of
+        // level 0 are preserved — only an UNDEFINED old layout discards).
+        transition_image(cmd,
+                         record->image,
+                         VK_IMAGE_ASPECT_COLOR_BIT,
+                         record->layout,
+                         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                         record->mip_levels,
+                         layers);
+
+        VkImageMemoryBarrier barrier{};
+        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        barrier.image = record->image;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        barrier.subresourceRange.baseArrayLayer = 0;
+        barrier.subresourceRange.layerCount = layers;
+        barrier.subresourceRange.levelCount = 1;
+
+        int32_t mip_w = static_cast<int32_t>(record->width);
+        int32_t mip_h = static_cast<int32_t>(record->height);
+
+        for (uint32_t level = 1; level < record->mip_levels; ++level)
+        {
+            // The finer (level - 1) image becomes the blit source.
+            barrier.subresourceRange.baseMipLevel = level - 1;
+            barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+            barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+            vkCmdPipelineBarrier(cmd,
+                                 VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                 VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                 0,
+                                 0,
+                                 nullptr,
+                                 0,
+                                 nullptr,
+                                 1,
+                                 &barrier);
+
+            const int32_t dst_w = mip_w > 1 ? mip_w / 2 : 1;
+            const int32_t dst_h = mip_h > 1 ? mip_h / 2 : 1;
+
+            VkImageBlit blit{};
+            blit.srcOffsets[1] = {mip_w, mip_h, 1};
+            blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            blit.srcSubresource.mipLevel = level - 1;
+            blit.srcSubresource.baseArrayLayer = 0;
+            blit.srcSubresource.layerCount = layers;
+            blit.dstOffsets[1] = {dst_w, dst_h, 1};
+            blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            blit.dstSubresource.mipLevel = level;
+            blit.dstSubresource.baseArrayLayer = 0;
+            blit.dstSubresource.layerCount = layers;
+            vkCmdBlitImage(cmd,
+                           record->image,
+                           VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                           record->image,
+                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                           1,
+                           &blit,
+                           VK_FILTER_LINEAR);
+
+            // The source level is done; hand it to the samplers.
+            barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+            barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+            barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            vkCmdPipelineBarrier(cmd,
+                                 VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                 VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                                 0,
+                                 0,
+                                 nullptr,
+                                 0,
+                                 nullptr,
+                                 1,
+                                 &barrier);
+
+            mip_w = dst_w;
+            mip_h = dst_h;
+        }
+
+        // The coarsest level was only ever a blit destination; transition
+        // it to the sampled layout alongside the rest of the chain.
+        barrier.subresourceRange.baseMipLevel = record->mip_levels - 1;
+        barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        vkCmdPipelineBarrier(cmd,
+                             VK_PIPELINE_STAGE_TRANSFER_BIT,
+                             VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                             0,
+                             0,
+                             nullptr,
+                             0,
+                             nullptr,
+                             1,
+                             &barrier);
+
+        end_one_shot(cmd);
+        record->layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     }
 
     sampler vk_device::create_sampler(const sampler_descriptor& descriptor)
