@@ -111,6 +111,46 @@ jobs:
           run-clang-tidy -p build -quiet "${pattern}"
 
   # ---------------------------------------------------------------------------
+  # test: build and run the device-free unit-test suite on Linux. The suite
+  # (tests/, GoogleTest) compiles only the pure-logic subsystem sources, so it
+  # needs no GPU or window — it builds and runs headless. The root CMakeLists
+  # still calls find_package(Vulkan/OpenGL REQUIRED) during configure, so the
+  # dev headers are installed even though the test binary links neither. Uses
+  # the default GCC toolchain (libstdc++); the -stdlib=libc++ flag is scoped to
+  # the AlphaEngine target only, so the tests are unaffected.
+  # ---------------------------------------------------------------------------
+  test:
+    name: unit-tests (linux)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install toolchain and dev headers
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake \
+            ninja-build \
+            g++ \
+            libgl1-mesa-dev \
+            libvulkan-dev
+
+      - name: Configure
+        run: |
+          cmake -S . -B build \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DALPHAENGINE_BUILD_TESTS=ON
+
+      - name: Build tests
+        run: cmake --build build --target AlphaEngineTests
+
+      - name: Run tests
+        run: ctest --test-dir build --output-on-failure
+
+  # ---------------------------------------------------------------------------
   # build: Windows MSVC build matrix (Debug + Release). Both the OpenGL and
   # Vulkan backends are compiled into the same binary and the runtime choice
   # is driven by settings::get_graphics_backend(); the Vulkan SDK is therefore
