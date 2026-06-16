@@ -272,7 +272,14 @@ namespace rendering_engine::gpu::backend::vulkan
         render_target m_swapchain_target{};
 
         VkSemaphore m_image_available{VK_NULL_HANDLE};
-        VkSemaphore m_render_finished{VK_NULL_HANDLE};
+        // One render-finished semaphore per swapchain image, indexed by the
+        // acquired image index. A semaphore tied to a specific image is not
+        // re-signaled until that image is re-acquired, which the acquire/fence
+        // flow already gates, so the present operation never races a later
+        // frame's submit (VUID-vkQueueSubmit-pSignalSemaphores-00067). Created
+        // and destroyed alongside the swapchain so it tracks image-count
+        // changes on resize.
+        std::vector<VkSemaphore> m_render_finished;
         VkFence m_in_flight_fence{VK_NULL_HANDLE};
         uint32_t m_current_image_index{0};
         bool m_have_current_image{false};

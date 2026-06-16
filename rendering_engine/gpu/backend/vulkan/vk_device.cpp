@@ -989,6 +989,19 @@ namespace rendering_engine::gpu::backend::vulkan
         dvi.subresourceRange.layerCount = 1;
         vkCreateImageView(m_device, &dvi, nullptr, &m_swapchain_depth_view);
 
+        // One render-finished semaphore per swapchain image (see the field
+        // declaration). Sized to the actual image count so it tracks resize.
+        VkSemaphoreCreateInfo rfi{};
+        rfi.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+        m_render_finished.resize(actual);
+        for (uint32_t i = 0; i < actual; ++i)
+        {
+            if (vkCreateSemaphore(m_device, &rfi, nullptr, &m_render_finished[i]) != VK_SUCCESS)
+            {
+                throw std::runtime_error{"swapchain render-finished semaphore"};
+            }
+        }
+
         LOG_INF("Vulkan swapchain: %ux%u images=%u", extent.width, extent.height, actual);
     }
 
@@ -1022,6 +1035,14 @@ namespace rendering_engine::gpu::backend::vulkan
         }
         m_swapchain_image_views.clear();
         m_swapchain_images.clear();
+        for (auto s : m_render_finished)
+        {
+            if (s != VK_NULL_HANDLE)
+            {
+                vkDestroySemaphore(m_device, s, nullptr);
+            }
+        }
+        m_render_finished.clear();
         if (m_swapchain != VK_NULL_HANDLE)
         {
             vkDestroySwapchainKHR(m_device, m_swapchain, nullptr);
@@ -1036,8 +1057,10 @@ namespace rendering_engine::gpu::backend::vulkan
         VkFenceCreateInfo fi{};
         fi.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
         fi.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+        // The render-finished semaphores live with the swapchain (one per
+        // image); only the image-available semaphore and the in-flight fence
+        // are owned here.
         if (vkCreateSemaphore(m_device, &si, nullptr, &m_image_available) != VK_SUCCESS ||
-            vkCreateSemaphore(m_device, &si, nullptr, &m_render_finished) != VK_SUCCESS ||
             vkCreateFence(m_device, &fi, nullptr, &m_in_flight_fence) != VK_SUCCESS)
         {
             throw std::runtime_error{"vk sync objects"};
@@ -1054,11 +1077,6 @@ namespace rendering_engine::gpu::backend::vulkan
         {
             vkDestroySemaphore(m_device, m_image_available, nullptr);
             m_image_available = VK_NULL_HANDLE;
-        }
-        if (m_render_finished != VK_NULL_HANDLE)
-        {
-            vkDestroySemaphore(m_device, m_render_finished, nullptr);
-            m_render_finished = VK_NULL_HANDLE;
         }
         if (m_in_flight_fence != VK_NULL_HANDLE)
         {
@@ -1335,7 +1353,7 @@ namespace rendering_engine::gpu::backend::vulkan
         si.commandBufferCount = 1;
         si.pCommandBuffers = &cmd;
         si.signalSemaphoreCount = 1;
-        si.pSignalSemaphores = &m_render_finished;
+        si.pSignalSemaphores = &m_render_finished[m_current_image_index];
         const VkResult submit_result = vkQueueSubmit(m_graphics_queue, 1, &si, m_in_flight_fence);
         if (submit_result != VK_SUCCESS)
         {
@@ -1345,7 +1363,7 @@ namespace rendering_engine::gpu::backend::vulkan
         VkPresentInfoKHR pi{};
         pi.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
         pi.waitSemaphoreCount = 1;
-        pi.pWaitSemaphores = &m_render_finished;
+        pi.pWaitSemaphores = &m_render_finished[m_current_image_index];
         pi.swapchainCount = 1;
         pi.pSwapchains = &m_swapchain;
         pi.pImageIndices = &m_current_image_index;
