@@ -17,6 +17,7 @@ using namespace core::math;
 namespace
 {
     constexpr float k_eps = 1e-4f;
+    constexpr float k_pi = 3.14159265358979323846f;
 
     void expect_vec3_near(const vec3& actual, const vec3& expected, float eps = k_eps)
     {
@@ -110,7 +111,7 @@ TEST(mat4, scale_scales_a_point)
 
 TEST(mat4, rotate_90_about_z_maps_x_to_y)
 {
-    mat4 r = rotate(static_cast<float>(M_PI) * 0.5f, vec3(0.0f, 0.0f, 1.0f));
+    mat4 r = rotate(k_pi * 0.5f, vec3(0.0f, 0.0f, 1.0f));
     vec4 rotated = r * vec4(1.0f, 0.0f, 0.0f, 1.0f);
     EXPECT_NEAR(rotated.x, 0.0f, k_eps);
     EXPECT_NEAR(rotated.y, 1.0f, k_eps);
@@ -158,7 +159,7 @@ TEST(mat4, perspective_maps_near_plane_to_minus_one_ndc)
 {
     const float near_z = 1.0f;
     const float far_z = 100.0f;
-    mat4 p = perspective(static_cast<float>(M_PI) * 0.25f, 1.0f, near_z, far_z);
+    mat4 p = perspective(k_pi * 0.25f, 1.0f, near_z, far_z);
     // A point on the near plane (view space -near_z) maps to NDC z == -1
     // after the perspective divide (OpenGL-style clip range).
     vec4 clip = p * vec4(0.0f, 0.0f, -near_z, 1.0f);

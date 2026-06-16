@@ -16,12 +16,13 @@ using namespace core::math;
 namespace
 {
     constexpr float k_eps = 1e-5f;
+    constexpr float k_pi = 3.14159265358979323846f;
 
     // A view-projection for a camera at the origin looking down -Z.
     mat4 make_view_projection()
     {
         mat4 view = look_at(vec3(0.0f, 0.0f, 0.0f), vec3(0.0f, 0.0f, -1.0f), vec3(0.0f, 1.0f, 0.0f));
-        mat4 proj = perspective(static_cast<float>(M_PI) * 0.5f, 1.0f, 0.1f, 100.0f);
+        mat4 proj = perspective(k_pi * 0.5f, 1.0f, 0.1f, 100.0f);
         return proj * view;
     }
 }

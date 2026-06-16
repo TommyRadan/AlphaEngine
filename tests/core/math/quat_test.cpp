@@ -15,7 +15,8 @@ using namespace core::math;
 namespace
 {
     constexpr float k_eps = 1e-4f;
-    const float k_half_pi = static_cast<float>(M_PI) * 0.5f;
+    constexpr float k_pi = 3.14159265358979323846f;
+    constexpr float k_half_pi = k_pi * 0.5f;
 
     void expect_vec3_near(const vec3& actual, const vec3& expected, float eps = k_eps)
     {
