@@ -23,10 +23,10 @@
 #include <rendering_engine/assets/asset_cache.hpp>
 
 #include <core/log.hpp>
+#include <rendering_engine/assets/asset_device.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/util/color.hpp>
 #include <rendering_engine/util/image.hpp>
-#include <runtime/engine.hpp>
 
 namespace rendering_engine
 {
@@ -106,7 +106,7 @@ namespace rendering_engine
         // Miss: decode the image (throws on failure) and upload it once.
         const util::image image{path.string()};
 
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = asset_device();
         gpu::texture_descriptor descriptor{};
         descriptor.dimension = gpu::texture_dimension::d2;
         descriptor.format = gpu::texture_format::rgba8_unorm;
@@ -169,7 +169,7 @@ namespace rendering_engine
             LOG_WRN("asset_cache: mesh builder for '%s' produced empty geometry", key.c_str());
         }
 
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = asset_device();
         auto asset = std::make_shared<mesh_asset>();
 
         gpu::buffer_descriptor vertex_descriptor{};

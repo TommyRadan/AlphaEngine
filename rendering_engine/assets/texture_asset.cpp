@@ -22,20 +22,20 @@
 
 #include <rendering_engine/assets/texture_asset.hpp>
 
+#include <rendering_engine/assets/asset_device.hpp>
 #include <rendering_engine/gpu/device.hpp>
-#include <runtime/engine.hpp>
 
 namespace rendering_engine
 {
     texture_asset::~texture_asset()
     {
-        // Mirror the renderables: resolve the live device through the engine
-        // and release the handle. The engine tears the asset cache (and the
-        // renderer / scenes that hold these handles) down ahead of the gpu
-        // device, so the device is always alive when this runs.
+        // Resolve the live device through the asset-layer accessor and release
+        // the handle. The engine tears the asset cache (and the renderer /
+        // scenes that hold these handles) down ahead of the gpu device, so the
+        // device is always installed when this runs.
         if (texture.valid())
         {
-            runtime::current_engine().gpu->destroy(texture);
+            asset_device().destroy(texture);
         }
     }
 } // namespace rendering_engine
