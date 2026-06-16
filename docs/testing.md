@@ -53,12 +53,31 @@ All device-free:
   `enqueue`/`flush` ordering, deferral of events enqueued during a flush.
 - `core::jobs` — `parallel_for` coverage and correctness, `dispatch` +
   `wait_idle` completion.
+- `runtime::node` — parent/child links and re-parenting, cached world matrices,
+  `world_position` / `set_world_position`, `find`, active / effective-active
+  flags, and the component-store attach/get/remove path.
+- `asset_cache` — dedup by structural key, builder-runs-only-on-miss,
+  `collect_unused()` / weak-ref semantics, and that a `mesh_asset` releases its
+  GPU buffers when the last handle drops.
 
-Not yet covered (tracked as follow-up): `runtime::node` (transform hierarchy)
-and `asset_cache` (dedup / `collect_unused` weak-ref semantics). `asset_cache`
-reaches its GPU device through the `runtime::current_engine()` global, so
-testing it headless needs a fake `gpu::device` and a decision on how to inject
-it — deferred to a later change.
+### Testing the asset layer headless
+
+`asset_cache` and the reference-counted asset handles (`texture_asset`,
+`mesh_asset`) need a `gpu::device` to upload and free resources — including from
+their destructors. They used to reach the device through the
+`runtime::current_engine()` global, which would have pulled the whole engine
+(window, both gpu backends, glslang) into anything that links them.
+
+They now resolve the device through a small accessor,
+`rendering_engine::asset_device()` (declared in
+`rendering_engine/assets/asset_device.hpp`). The engine installs the live
+device via `set_asset_device()` once the renderer has brought it up, and clears
+it as the device is torn down — so production behaviour is identical. Tests
+install a lightweight `test_support::fake_device` (see
+`tests/support/fake_device.hpp`) that hands back unique handles and records
+create/destroy traffic, then exercise the cache with no engine, window, or
+backend present. This is what keeps the asset-cache tests in the same lean,
+headless binary as the rest of the suite.
 
 ## Style and naming scope
 
