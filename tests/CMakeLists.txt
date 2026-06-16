@@ -14,6 +14,7 @@
 # docs/testing.md.
 
 set(ALPHAENGINE_TEST_SOURCES_UNDER_TEST
+    # core (device-free)
     ${CMAKE_SOURCE_DIR}/core/math/aabb.cpp
     ${CMAKE_SOURCE_DIR}/core/math/frustum.cpp
     ${CMAKE_SOURCE_DIR}/core/math/mat3.cpp
@@ -28,6 +29,21 @@ set(ALPHAENGINE_TEST_SOURCES_UNDER_TEST
     ${CMAKE_SOURCE_DIR}/core/jobs.cpp
     ${CMAKE_SOURCE_DIR}/core/log.cpp
     ${CMAKE_SOURCE_DIR}/core/version.cpp
+    # runtime::node — scene-graph hierarchy (depends only on math + the
+    # component store; no renderer or device).
+    ${CMAKE_SOURCE_DIR}/runtime/node.cpp
+    ${CMAKE_SOURCE_DIR}/rendering_engine/util/transform.cpp
+    # asset_cache and the asset handles. These resolve their gpu device through
+    # asset_device(), so the tests install a fake device and link none of the
+    # gpu backends. device.cpp supplies the abstract device's out-of-line dtor;
+    # util/image and util/font back the texture/font loaders the cache compiles.
+    ${CMAKE_SOURCE_DIR}/rendering_engine/assets/asset_cache.cpp
+    ${CMAKE_SOURCE_DIR}/rendering_engine/assets/asset_device.cpp
+    ${CMAKE_SOURCE_DIR}/rendering_engine/assets/mesh_asset.cpp
+    ${CMAKE_SOURCE_DIR}/rendering_engine/assets/texture_asset.cpp
+    ${CMAKE_SOURCE_DIR}/rendering_engine/gpu/device.cpp
+    ${CMAKE_SOURCE_DIR}/rendering_engine/util/image.cpp
+    ${CMAKE_SOURCE_DIR}/rendering_engine/util/font.cpp
 )
 
 set(ALPHAENGINE_TEST_SOURCES
@@ -38,6 +54,8 @@ set(ALPHAENGINE_TEST_SOURCES
     core/pool_test.cpp
     core/event_bus_test.cpp
     core/jobs_test.cpp
+    runtime/node_test.cpp
+    rendering_engine/assets/asset_cache_test.cpp
 )
 
 add_executable(AlphaEngineTests
@@ -45,9 +63,16 @@ add_executable(AlphaEngineTests
     ${ALPHAENGINE_TEST_SOURCES_UNDER_TEST}
 )
 
-# The subsystem sources resolve <core/...> against the repo root, which the
-# top-level include_directories() already publishes. glm backs core/math, SDL3
-# backs core/log, and Threads backs core/jobs.
+# tests/ for the support/ helpers (fake_device); vendor/stb for the
+# header-only stb backends util/image and util/font compile against. The repo
+# root is already on the include path via the top-level include_directories().
+target_include_directories(AlphaEngineTests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/vendor/stb
+)
+
+# glm backs core/math + transforms, SDL3 backs core/log, Threads backs
+# core/jobs. The asset layer links no gpu backend — the fake device stands in.
 target_link_libraries(AlphaEngineTests PRIVATE
     GTest::gtest_main
     glm::glm
