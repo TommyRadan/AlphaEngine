@@ -555,13 +555,21 @@ namespace rendering_engine::gpu::backend::vulkan
             case binding_kind::storage_texture:
             {
                 auto* tex = m_textures.lookup(entry.texture_value.id);
-                if (tex == nullptr || tex->view == VK_NULL_HANDLE)
+                if (tex == nullptr || tex->image == VK_NULL_HANDLE)
+                {
+                    continue;
+                }
+                // A storage descriptor must name exactly one mip level,
+                // so it binds the lazily-built single-level view rather
+                // than the whole-chain sampling view.
+                const VkImageView storage_view = storage_image_view(*tex, entry.storage_level);
+                if (storage_view == VK_NULL_HANDLE)
                 {
                     continue;
                 }
                 VkDescriptorImageInfo ii{};
                 ii.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-                ii.imageView = tex->view;
+                ii.imageView = storage_view;
                 image_infos.push_back(ii);
                 w.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
                 w.pImageInfo = &image_infos.back();

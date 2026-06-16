@@ -32,8 +32,10 @@
  * The backend ships with a single frame in flight, runtime SPIR-V
  * via @ref gpu::compile_glsl_to_spirv (already used by the GL
  * backend), no multi-threaded recording, no real GPU allocator.
- * Compute, indirect, storage and barrier methods are implemented as
- * focused stubs that the engine's existing pass set never exercises.
+ * Compute pipelines and storage-image bind groups are implemented
+ * (the IBL convolution runs on the GPU just like OpenGL); indirect
+ * and barrier methods remain focused stubs that the engine's
+ * existing pass set does not lean on.
  */
 
 #pragma once
@@ -63,6 +65,14 @@ namespace rendering_engine::gpu::backend::vulkan
 
         void init() override;
         void quit() override;
+
+        // The backend implements compute pipelines, storage-image
+        // bind groups and the layout transitions the IBL convolution
+        // needs, so the GPU prefilter path is taken just like OpenGL.
+        bool supports_compute_prefilter() const override
+        {
+            return true;
+        }
 
         buffer create_buffer(const buffer_descriptor& descriptor) override;
         texture create_texture(const texture_descriptor& descriptor) override;
@@ -161,6 +171,22 @@ namespace rendering_engine::gpu::backend::vulkan
         // One-shot command buffer for resource uploads.
         VkCommandBuffer begin_one_shot();
         void end_one_shot(VkCommandBuffer cmd);
+
+        // Lazily create (and cache on the texture) the single-mip image
+        // view used to bind @p tex as a storage image at @p level. Cube
+        // and 3D textures bind every layer through one view; the level
+        // selects the subresource. Returns VK_NULL_HANDLE if the level
+        // is out of range or the view cannot be created.
+        VkImageView storage_image_view(vk_texture& tex, uint32_t level);
+
+        // Record a layout transition for a storage-capable texture into
+        // @p cmd: to VK_IMAGE_LAYOUT_GENERAL for compute writes when
+        // @p to_general is true, otherwise back to the sampled layout.
+        // Updates the tracked layout and returns true only when a
+        // transition was actually recorded (the image was not already
+        // in the requested layout), so callers can de-duplicate the
+        // restore at compute-pass end.
+        bool transition_storage_image(VkCommandBuffer cmd, texture handle, bool to_general);
 
         // Per-frame draw counters surfaced as a one-shot log for the
         // first few frames so a missing draw call is visible without

@@ -51,6 +51,14 @@ namespace rendering_engine::gpu
         // single-mip.
         bool mipmaps{false};
 
+        // When true, the texture may be bound as a storage image (a
+        // shader-writable @c storage_texture binding, e.g. the IBL
+        // compute convolution). Explicit-binding backends (Vulkan)
+        // add storage usage to the underlying image; the OpenGL
+        // backend allows image binding unconditionally and ignores
+        // this flag.
+        bool storage{false};
+
         // Per-texture sampler state. The GL backend bakes these via
         // @c glTexParameteri at create time so a texture is fully
         // configured by its descriptor; standalone @ref sampler

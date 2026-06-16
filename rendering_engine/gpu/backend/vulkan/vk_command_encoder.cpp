@@ -401,6 +401,19 @@ namespace rendering_engine::gpu::backend::vulkan
         {
             return;
         }
+        // The descriptors declare storage images as VK_IMAGE_LAYOUT_GENERAL,
+        // so move any bound storage texture there before the dispatch reads
+        // the set. transition_storage_image returns true only on the first
+        // move, so a texture bound across several mip dispatches is tracked
+        // (and later restored) exactly once.
+        for (const auto& entry : bg->entries)
+        {
+            if (entry.kind == binding_kind::storage_texture &&
+                m_device.transition_storage_image(m_cmd, entry.texture_value, true))
+            {
+                m_storage_textures.push_back(entry.texture_value);
+            }
+        }
         vkCmdBindDescriptorSets(m_cmd,
                                 VK_PIPELINE_BIND_POINT_COMPUTE,
                                 m_current_pipeline_layout,
@@ -421,6 +434,14 @@ namespace rendering_engine::gpu::backend::vulkan
 
     void vk_compute_pass_encoder::end()
     {
+        // Hand the freshly-written storage images back to the sampled
+        // layout so the lighting passes that read them (irradiance,
+        // prefiltered, BRDF LUT) see a SHADER_READ_ONLY_OPTIMAL image.
+        for (texture handle : m_storage_textures)
+        {
+            m_device.transition_storage_image(m_cmd, handle, false);
+        }
+        m_storage_textures.clear();
         m_active = false;
     }
 
