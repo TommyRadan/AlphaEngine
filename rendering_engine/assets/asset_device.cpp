@@ -20,26 +20,28 @@
  * SOFTWARE.
  */
 
-#include <rendering_engine/assets/mesh_asset.hpp>
-
 #include <rendering_engine/assets/asset_device.hpp>
-#include <rendering_engine/gpu/device.hpp>
+
+#include <cassert>
 
 namespace rendering_engine
 {
-    mesh_asset::~mesh_asset()
+    namespace
     {
-        // Free in the reverse of the create order used by the cache, matching
-        // the premade renderables' teardown. The device outlives the cache, so
-        // it is always installed here.
-        auto& gpu = asset_device();
-        if (index_buffer.valid())
-        {
-            gpu.destroy(index_buffer);
-        }
-        if (vertex_buffer.valid())
-        {
-            gpu.destroy(vertex_buffer);
-        }
+        // The device the asset layer creates/frees resources against. Installed
+        // by the engine for the device's lifetime; null outside a run (or in a
+        // test before a fake is installed).
+        gpu::device* g_asset_device = nullptr;
+    } // namespace
+
+    gpu::device& asset_device()
+    {
+        assert(g_asset_device != nullptr && "asset_device() called before a device was installed");
+        return *g_asset_device;
+    }
+
+    void set_asset_device(gpu::device* device)
+    {
+        g_asset_device = device;
     }
 } // namespace rendering_engine

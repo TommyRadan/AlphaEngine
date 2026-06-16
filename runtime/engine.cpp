@@ -31,6 +31,7 @@
 #include <core/settings.hpp>
 #include <core/time.hpp>
 #include <rendering_engine/assets/asset_cache.hpp>
+#include <rendering_engine/assets/asset_device.hpp>
 #include <rendering_engine/debug_ui/imgui_layer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/rendering_engine.hpp>
@@ -115,6 +116,9 @@ namespace runtime
         // are already released, and before the gpu device so any asset still
         // alive can free its GPU resource against a live device.
         assets.reset();
+        // The asset layer no longer has a device to free against once the
+        // device is gone; clear the accessor before destroying it.
+        rendering_engine::set_asset_device(nullptr);
         gpu.reset();
         window.reset();
         events.reset();
@@ -142,7 +146,11 @@ namespace runtime
 
         renderer->init();
         // The renderer brings the gpu device up, so the asset cache — whose
-        // loaders need a live device — is initialised right after it.
+        // loaders need a live device — is initialised right after it. Publish
+        // the live device to the asset layer first, so the cache and the
+        // reference-counted asset handles resolve it without reaching into the
+        // engine global.
+        rendering_engine::set_asset_device(gpu.get());
         assets->init();
         scenes->init();
 
