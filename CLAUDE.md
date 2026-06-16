@@ -14,7 +14,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **SDL3 and GLM are fetched from source** by CMake via `FetchContent` — no system packages are required. GLM is pinned to tag `1.0.1` and header-only; SDL3 is built statically. OpenGL, glad, and stb are linked in as well (glad is built from `vendor/glad`, stb is header-only in `vendor/`). Logging is backed by SDL3's logging API behind `core/log.hpp`.
 - **The Vulkan SDK is a required build dependency.** Both the OpenGL and Vulkan backends are always compiled into the binary; CMake calls `find_package(Vulkan REQUIRED)` unconditionally. On Windows the LunarG SDK exposes `VULKAN_SDK`; on Linux install `libvulkan-dev`.
 - **Output:** `Binaries/AlphaEngine.exe` (Ninja / single-config) or `Binaries/<Configuration>/AlphaEngine.exe` (Visual Studio multi-config).
-- **No test suite exists.** CI does not run tests; don't invent a test target.
+- **Unit tests** live under `tests/` (GoogleTest, fetched via `FetchContent`) and run through `ctest`. They are built by default (`-DALPHAENGINE_BUILD_TESTS=ON`) and cover the device-free engine core (`core/math`, `core::pool`, `core::event_bus`, `core::jobs`). CI runs them on Linux. `tests/` is excluded from the format/tidy scope. Build + run: `cmake --build build --target AlphaEngineTests && ctest --test-dir build --output-on-failure`. See `docs/testing.md`.
 
 ## Style and naming gates
 
