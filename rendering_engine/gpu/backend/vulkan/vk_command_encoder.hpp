@@ -28,6 +28,8 @@
 
 #pragma once
 
+#include <vector>
+
 #include <vulkan/vulkan.h>
 
 #include <rendering_engine/gpu/command_encoder.hpp>
@@ -92,6 +94,13 @@ namespace rendering_engine::gpu::backend::vulkan
         VkCommandBuffer m_cmd{VK_NULL_HANDLE};
         VkPipelineLayout m_current_pipeline_layout{VK_NULL_HANDLE};
         bool m_active{false};
+        // Storage-image textures moved to VK_IMAGE_LAYOUT_GENERAL while
+        // bound for compute writes. Restored to the sampled layout in
+        // end() so later passes read them as combined image samplers.
+        // Each image is tracked once (the device reports whether it
+        // actually transitioned), even when bound across several
+        // dispatches.
+        std::vector<texture> m_storage_textures;
     };
 
     struct vk_command_encoder : public command_encoder

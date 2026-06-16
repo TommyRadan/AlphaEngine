@@ -751,6 +751,7 @@ namespace rendering_engine
             td.width = size;
             td.height = size;
             td.mipmaps = mipmapped;
+            td.storage = true;
             td.min_filter = gpu::filter_mode::linear;
             td.mag_filter = gpu::filter_mode::linear;
             td.mipmap_filter = mipmapped ? gpu::mipmap_mode::linear : gpu::mipmap_mode::none;

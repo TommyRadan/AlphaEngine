@@ -89,6 +89,17 @@ namespace rendering_engine::gpu::backend::vulkan
             return (props.optimalTilingFeatures & required) == required;
         }
 
+        // A texture requested as a storage image only gets the usage bit
+        // when the format can actually back one with optimal tiling —
+        // otherwise vkCreateImage would fail. rgba16f (the IBL format)
+        // is a guaranteed storage format; this guards the general case.
+        bool format_supports_storage_image(VkPhysicalDevice physical_device, VkFormat format)
+        {
+            VkFormatProperties props{};
+            vkGetPhysicalDeviceFormatProperties(physical_device, format, &props);
+            return (props.optimalTilingFeatures & VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT) != 0;
+        }
+
         void transition_image(VkCommandBuffer cmd,
                               VkImage image,
                               VkImageAspectFlags aspect,
@@ -149,6 +160,14 @@ namespace rendering_engine::gpu::backend::vulkan
         {
             record.mip_levels = full_mip_chain(record.width, record.height);
         }
+        record.storage_views.assign(record.mip_levels, VK_NULL_HANDLE);
+
+        // Storage usage is opt-in (the @c storage descriptor flag) so the
+        // common sampled texture keeps its framebuffer-compression-
+        // friendly usage set; only resources bound as storage images
+        // (the IBL convolution outputs) pay for the extra bit.
+        record.storage = descriptor.storage && !record.is_depth &&
+                         format_supports_storage_image(m_physical_device, record.vk_format);
 
         VkImageUsageFlags usage =
             VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
@@ -159,6 +178,10 @@ namespace rendering_engine::gpu::backend::vulkan
         else
         {
             usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+        }
+        if (record.storage)
+        {
+            usage |= VK_IMAGE_USAGE_STORAGE_BIT;
         }
 
         VkImageCreateInfo ii{};
@@ -244,13 +267,14 @@ namespace rendering_engine::gpu::backend::vulkan
         VkDevice dev = m_device;
         VkSampler sampler = record->default_sampler;
         VkImageView view = record->view;
+        std::vector<VkImageView> storage_views = std::move(record->storage_views);
         VkImage image = record->external ? VK_NULL_HANDLE : record->image;
         VkDeviceMemory memory = record->memory;
         // Deferred for the same reason as destroy(buffer): a texture
         // sampled by an in-flight command buffer must outlive the
         // submission that referenced it.
         enqueue_destroy(
-            [dev, sampler, view, image, memory]
+            [dev, sampler, view, storage_views = std::move(storage_views), image, memory]
             {
                 if (sampler != VK_NULL_HANDLE)
                 {
@@ -259,6 +283,13 @@ namespace rendering_engine::gpu::backend::vulkan
                 if (view != VK_NULL_HANDLE)
                 {
                     vkDestroyImageView(dev, view, nullptr);
+                }
+                for (VkImageView storage_view : storage_views)
+                {
+                    if (storage_view != VK_NULL_HANDLE)
+                    {
+                        vkDestroyImageView(dev, storage_view, nullptr);
+                    }
                 }
                 if (image != VK_NULL_HANDLE)
                 {
@@ -523,5 +554,60 @@ namespace rendering_engine::gpu::backend::vulkan
             }
             m_samplers.remove(handle.id);
         }
+    }
+
+    VkImageView vk_device::storage_image_view(vk_texture& tex, uint32_t level)
+    {
+        if (level >= tex.storage_views.size() || tex.image == VK_NULL_HANDLE)
+        {
+            return VK_NULL_HANDLE;
+        }
+        if (tex.storage_views[level] != VK_NULL_HANDLE)
+        {
+            return tex.storage_views[level];
+        }
+
+        VkImageViewCreateInfo vi{};
+        vi.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        vi.image = tex.image;
+        // The view type matches the GLSL image dimensionality: an
+        // @c imageCube cube level (every face through one view) or an
+        // @c image2D / @c image3D slice.
+        vi.viewType =
+            tex.is_cube ? VK_IMAGE_VIEW_TYPE_CUBE : (tex.is_3d ? VK_IMAGE_VIEW_TYPE_3D : VK_IMAGE_VIEW_TYPE_2D);
+        vi.format = tex.vk_format;
+        vi.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        vi.subresourceRange.baseMipLevel = level;
+        vi.subresourceRange.levelCount = 1;
+        vi.subresourceRange.baseArrayLayer = 0;
+        vi.subresourceRange.layerCount = tex.array_layers;
+        if (vkCreateImageView(m_device, &vi, nullptr, &tex.storage_views[level]) != VK_SUCCESS)
+        {
+            tex.storage_views[level] = VK_NULL_HANDLE;
+        }
+        return tex.storage_views[level];
+    }
+
+    bool vk_device::transition_storage_image(VkCommandBuffer cmd, texture handle, bool to_general)
+    {
+        auto* record = m_textures.lookup(handle.id);
+        if (record == nullptr || record->image == VK_NULL_HANDLE)
+        {
+            return false;
+        }
+        const VkImageLayout target = to_general ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        if (record->layout == target)
+        {
+            return false;
+        }
+        transition_image(cmd,
+                         record->image,
+                         VK_IMAGE_ASPECT_COLOR_BIT,
+                         record->layout,
+                         target,
+                         record->mip_levels,
+                         record->array_layers);
+        record->layout = target;
+        return true;
     }
 } // namespace rendering_engine::gpu::backend::vulkan

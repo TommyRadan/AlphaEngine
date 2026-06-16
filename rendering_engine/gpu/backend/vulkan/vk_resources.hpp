@@ -62,6 +62,14 @@ namespace rendering_engine::gpu::backend::vulkan
         VkDeviceMemory memory{VK_NULL_HANDLE};
         VkImageView view{VK_NULL_HANDLE};
 
+        // Single-mip image views used when the texture is bound as a
+        // storage image (the @c storage_texture binding kind), indexed
+        // by mip level and built lazily in @c create_bind_group. A
+        // storage descriptor must reference exactly one mip level, so
+        // these are distinct from @c view (the whole-chain sampling
+        // view). Released alongside the texture.
+        std::vector<VkImageView> storage_views;
+
         // Built-in sampler set from the texture descriptor — mirrors
         // the GL backend's "sampler is part of the texture" model so
         // existing call sites continue to work without authoring a
@@ -77,6 +85,7 @@ namespace rendering_engine::gpu::backend::vulkan
         uint32_t mip_levels{1};
         uint32_t array_layers{1};
         bool mipmaps{false};
+        bool storage{false};
         bool is_depth{false};
         bool is_cube{false};
         bool is_3d{false};
