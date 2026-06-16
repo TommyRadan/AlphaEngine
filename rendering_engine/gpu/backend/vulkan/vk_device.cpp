@@ -1319,6 +1319,9 @@ namespace rendering_engine::gpu::backend::vulkan
                 LOG_ERR("vkQueueSubmit (no-image) failed: %s", vk_result_to_string(submit_result));
             }
             vkQueueWaitIdle(m_graphics_queue);
+            // The queue is idle, so this one-off (off-screen-only) command
+            // buffer is finished and can be returned to the pool now.
+            vkFreeCommandBuffers(m_device, m_command_pool, 1, &cmd);
             encoder.reset();
             return;
         }
@@ -1357,6 +1360,18 @@ namespace rendering_engine::gpu::backend::vulkan
         }
         m_have_current_image = false;
         encoder.reset();
+
+        // The command buffer is in flight until this frame's fence
+        // signals. Hand it back to the pool through the deferred queue,
+        // which begin_frame drains only after vkWaitForFences — so it is
+        // freed once the GPU is done, not leaked for the lifetime of the
+        // run. (Previously release_command_buffer detached it from the
+        // encoder but nothing ever freed it, so the pool grew by one
+        // command buffer per frame and teardown of the whole pile stalled
+        // shutdown for tens of seconds.)
+        const VkDevice device = m_device;
+        const VkCommandPool pool = m_command_pool;
+        enqueue_destroy([device, pool, cmd] { vkFreeCommandBuffers(device, pool, 1, &cmd); });
 
         if (m_frame_index < k_diagnostic_frames)
         {
