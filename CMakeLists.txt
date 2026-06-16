@@ -25,6 +25,11 @@
 cmake_minimum_required(VERSION 3.16)
 project(AlphaEngine C CXX)
 
+# Build the device-free unit-test suite (tests/) and register it with ctest.
+# Defaults ON so a plain configure produces the tests; switch off to skip the
+# GoogleTest fetch entirely (e.g. for a lean release configure).
+option(ALPHAENGINE_BUILD_TESTS "Build the unit-test suite" ON)
+
 # Set build type to Debug if not specified
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Debug)
@@ -209,3 +214,25 @@ target_compile_definitions(AlphaEngine PRIVATE $<$<CONFIG:Debug>:ALPHAENGINE_HAS
 if(APPLE)
     target_link_libraries(AlphaEngine "-framework CoreFoundation -framework IOKit -framework CoreVideo")
 endif(APPLE)
+
+# GoogleTest — fetched and built statically from source, matching the
+# no-system-packages philosophy used for SDL3/GLM/glslang. The test target
+# compiles the device-free subsystem sources directly (see tests/) so the
+# suite links no GPU/window code. gtest_force_shared_crt keeps GoogleTest on
+# the same dynamic CRT as the rest of the MSVC build.
+if(ALPHAENGINE_BUILD_TESTS)
+    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+    set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
+    set(BUILD_GMOCK ON CACHE BOOL "" FORCE)
+    FetchContent_Declare(
+        googletest
+        GIT_REPOSITORY https://github.com/google/googletest.git
+        GIT_TAG v1.15.2
+        GIT_SHALLOW TRUE
+    )
+    FetchContent_MakeAvailable(googletest)
+
+    enable_testing()
+    include(GoogleTest)
+    add_subdirectory(tests)
+endif()
