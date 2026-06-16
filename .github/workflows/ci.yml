@@ -130,12 +130,22 @@ jobs:
         run: |
           set -euxo pipefail
           sudo apt-get update
+          # SDL3 is built from source via FetchContent; on Linux its CMake
+          # requires X11 (or Wayland) development libraries or it fails to
+          # configure, even though the device-free tests never open a window.
           sudo apt-get install -y --no-install-recommends \
             cmake \
             ninja-build \
             g++ \
             libgl1-mesa-dev \
-            libvulkan-dev
+            libvulkan-dev \
+            libx11-dev \
+            libxext-dev \
+            libxrandr-dev \
+            libxcursor-dev \
+            libxi-dev \
+            libxfixes-dev \
+            libxss-dev
 
       - name: Configure
         run: |
