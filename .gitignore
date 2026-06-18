@@ -31,4 +31,5 @@ compile_commands.json
 CTestTestfile.cmake
 
 /build/
+/build-tidy/
 /Binaries/
