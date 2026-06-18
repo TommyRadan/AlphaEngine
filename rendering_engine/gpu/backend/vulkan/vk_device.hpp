@@ -170,9 +170,22 @@ namespace rendering_engine::gpu::backend::vulkan
         void begin_frame();
         void end_frame();
 
-        // One-shot command buffer for resource uploads.
+        // One-shot command buffer for resource uploads. begin_one_shot reuses
+        // a single dedicated upload command buffer (reset on each call), and
+        // end_one_shot submits it against a dedicated fence and waits on that
+        // fence rather than draining the whole graphics queue with
+        // vkQueueWaitIdle. Uploads are synchronous: the data is resident when
+        // end_one_shot returns. Not re-entrant — one upload at a time.
         VkCommandBuffer begin_one_shot();
         void end_one_shot(VkCommandBuffer cmd);
+
+        // Copy @p size bytes from @p data into the shared, growable host-visible
+        // staging buffer and return the buffer to copy out of (source offset 0).
+        // Reused across every upload instead of allocating and freeing a staging
+        // buffer per call; safe because uploads are synchronous (end_one_shot
+        // waits before the next upload reuses the buffer). Returns VK_NULL_HANDLE
+        // on allocation failure or zero size.
+        VkBuffer stage_upload(const void* data, VkDeviceSize size);
 
         // Per-frame-in-flight command-buffer pool. The single per-frame
         // encoder borrows a primary command buffer with acquire_command_buffer
@@ -348,6 +361,22 @@ namespace rendering_engine::gpu::backend::vulkan
         // destroyed in quit().
         std::array<std::vector<VkCommandBuffer>, k_max_frames_in_flight> m_command_buffer_free;
         std::array<std::vector<VkCommandBuffer>, k_max_frames_in_flight> m_command_buffer_in_flight;
+
+        // Reusable upload command buffer + fence backing begin_one_shot /
+        // end_one_shot. The command buffer is allocated lazily and reset on
+        // reuse; the fence lets an upload wait on its own submission instead of
+        // idling the whole queue. The command buffer is freed implicitly with
+        // the command pool; the fence is owned by create/destroy_sync_objects.
+        VkCommandBuffer m_upload_cmd{VK_NULL_HANDLE};
+        VkFence m_upload_fence{VK_NULL_HANDLE};
+
+        // Shared, growable, persistently-mapped host-visible staging buffer used
+        // by every CPU->GPU upload (see stage_upload). Grown on demand to the
+        // largest request; freed in quit().
+        VkBuffer m_staging_buffer{VK_NULL_HANDLE};
+        VkDeviceMemory m_staging_memory{VK_NULL_HANDLE};
+        void* m_staging_mapped{nullptr};
+        VkDeviceSize m_staging_capacity{0};
 
         // Frame-level diagnostic counters. Logged at submit() for
         // @c k_diagnostic_frames frames after init so the user can
