@@ -25,6 +25,7 @@
 #include <core/math/math.hpp>
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/passes/pass.hpp>
+#include <rendering_engine/render_graph/frame_graph.hpp>
 
 namespace rendering_engine
 {
@@ -69,6 +70,17 @@ namespace rendering_engine
         velocity_pass& operator=(const velocity_pass&) = delete;
 
         void record(gpu::command_encoder& encoder, const frame_context& ctx) override;
+
+        const char* name() const override
+        {
+            return "velocity";
+        }
+
+        void declare_io(render_graph::pass_io_builder& io) const override
+        {
+            io.read("scene_color");
+            io.write("velocity");
+        }
 
         // The motion-vector texture the TAA resolve samples (signed UV
         // displacement in xy). Stable across frames; invalid when the pass

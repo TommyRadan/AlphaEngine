@@ -32,6 +32,7 @@
 
 #include <rendering_engine/fog.hpp>
 #include <rendering_engine/gpu/handle.hpp>
+#include <rendering_engine/render_graph/frame_graph.hpp>
 #include <rendering_engine/render_stats.hpp>
 
 namespace rendering_engine
@@ -241,6 +242,12 @@ namespace rendering_engine
         // and torn down first in @ref quit, before the materials and
         // GPU device the passes reference.
         std::vector<std::unique_ptr<pass>> m_passes;
+
+        // Declarative view over @ref m_passes built once in @ref init: each
+        // pass declares the resources it reads/writes, the graph validates the
+        // ordering, and @ref render executes through it. Execution order equals
+        // the @ref m_passes order, so the graph does not change rendering.
+        render_graph::frame_graph m_frame_graph;
 
         // Non-owning back-pointer to the skybox pass owned by
         // @ref m_passes. Kept so @ref set_environment can swap its cube

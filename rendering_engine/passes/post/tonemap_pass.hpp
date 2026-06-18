@@ -24,6 +24,7 @@
 
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/passes/pass.hpp>
+#include <rendering_engine/render_graph/frame_graph.hpp>
 
 namespace rendering_engine
 {
@@ -85,6 +86,17 @@ namespace rendering_engine
         tonemap_pass& operator=(const tonemap_pass&) = delete;
 
         void record(gpu::command_encoder& encoder, const frame_context& ctx) override;
+
+        const char* name() const override
+        {
+            return "tonemap";
+        }
+
+        void declare_io(render_graph::pass_io_builder& io) const override
+        {
+            io.read("scene_color");
+            io.write("ldr_color");
+        }
 
         /// @brief Sets the pre-curve exposure scale; rewrites the UBO.
         void set_exposure(float exposure);

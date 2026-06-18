@@ -24,6 +24,7 @@
 
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/passes/pass.hpp>
+#include <rendering_engine/render_graph/frame_graph.hpp>
 
 namespace rendering_engine
 {
@@ -71,6 +72,17 @@ namespace rendering_engine
         fxaa_pass& operator=(const fxaa_pass&) = delete;
 
         void record(gpu::command_encoder& encoder, const frame_context& ctx) override;
+
+        const char* name() const override
+        {
+            return "fxaa";
+        }
+
+        void declare_io(render_graph::pass_io_builder& io) const override
+        {
+            io.read("ldr_color");
+            io.write("swapchain");
+        }
 
     private:
         gpu::shader_module m_vertex_shader{};

@@ -35,6 +35,11 @@ namespace rendering_engine
 {
     struct camera;
 
+    namespace render_graph
+    {
+        class pass_io_builder;
+    }
+
     /**
      * @brief Per-frame state shared with every pass.
      *
@@ -102,5 +107,30 @@ namespace rendering_engine
          * @c encoder.begin_render_pass and close it before returning.
          */
         virtual void record(gpu::command_encoder& encoder, const frame_context& ctx) = 0;
+
+        /**
+         * @brief Stable identifier used in frame-graph diagnostics.
+         *
+         * Defaults to a generic name; passes override it so dependency
+         * warnings name the offending stage.
+         */
+        virtual const char* name() const
+        {
+            return "pass";
+        }
+
+        /**
+         * @brief Declares the logical resources this pass reads and writes.
+         *
+         * Called once when the frame graph is built so it can validate that
+         * every read is produced before it is consumed. Defaults to declaring
+         * nothing — such a pass is executed in place but invisible to the
+         * dependency check. Passes name resources with the stable strings the
+         * engine imports (e.g. "scene_color", "swapchain").
+         */
+        virtual void declare_io(render_graph::pass_io_builder& io) const
+        {
+            (void)io;
+        }
     };
 } // namespace rendering_engine

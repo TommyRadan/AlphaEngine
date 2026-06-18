@@ -25,6 +25,7 @@
 #include <vector>
 
 #include <rendering_engine/passes/pass.hpp>
+#include <rendering_engine/render_graph/frame_graph.hpp>
 #include <rendering_engine/renderables/draw_item.hpp>
 
 namespace rendering_engine
@@ -68,6 +69,17 @@ namespace rendering_engine
         debug_pass& operator=(const debug_pass&) = delete;
 
         void record(gpu::command_encoder& encoder, const frame_context& ctx) override;
+
+        const char* name() const override
+        {
+            return "debug";
+        }
+
+        void declare_io(render_graph::pass_io_builder& io) const override
+        {
+            io.read("swapchain");
+            io.write("swapchain");
+        }
 
     private:
         // Non-owning back-pointer to the engine context's

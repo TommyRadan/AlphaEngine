@@ -26,6 +26,7 @@
 
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/passes/pass.hpp>
+#include <rendering_engine/render_graph/frame_graph.hpp>
 #include <rendering_engine/render_stats.hpp>
 #include <rendering_engine/renderables/draw_item.hpp>
 
@@ -74,6 +75,18 @@ namespace rendering_engine
         scene_pass& operator=(const scene_pass&) = delete;
 
         void record(gpu::command_encoder& encoder, const frame_context& ctx) override;
+
+        const char* name() const override
+        {
+            return "scene";
+        }
+
+        void declare_io(render_graph::pass_io_builder& io) const override
+        {
+            io.read("shadow_map");
+            io.read("point_shadow");
+            io.write("scene_color");
+        }
 
         // Layout for the per-frame bind group bound at slot 0 each
         // frame. The matching material's pipeline_descriptor must

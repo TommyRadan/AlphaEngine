@@ -28,6 +28,7 @@
 #include <core/math/math.hpp>
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/passes/pass.hpp>
+#include <rendering_engine/render_graph/frame_graph.hpp>
 #include <rendering_engine/renderables/draw_item.hpp>
 
 namespace rendering_engine
@@ -66,6 +67,16 @@ namespace rendering_engine
         point_shadow_pass& operator=(const point_shadow_pass&) = delete;
 
         void record(gpu::command_encoder& encoder, const frame_context& ctx) override;
+
+        const char* name() const override
+        {
+            return "point_shadow";
+        }
+
+        void declare_io(render_graph::pass_io_builder& io) const override
+        {
+            io.write("point_shadow");
+        }
 
         // Depth texture for face @p face (0..5). Stable for the pass's lifetime
         // so the scene pass can bake the handles into its per-frame bind group.
