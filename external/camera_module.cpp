@@ -95,7 +95,7 @@ static void on_frame(const core::frame& event)
         speed = 30.0f;
     }
 
-    float distance = speed * ((float)get_delta_time() / 1000);
+    float distance = speed * (event.m_delta_time / 1000.0f);
     core::math::vec3 up_vector{0.0f, 0.0f, 1.0f};
     core::math::vec3 new_position = position;
 
