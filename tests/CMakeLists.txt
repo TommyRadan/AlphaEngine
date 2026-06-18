@@ -81,4 +81,7 @@ target_link_libraries(AlphaEngineTests PRIVATE
 )
 
 # Register every TEST() with ctest so `ctest --output-on-failure` runs them.
-gtest_discover_tests(AlphaEngineTests)
+# Discovery runs the freshly-built test binary with --gtest_list_tests at build
+# time; the default 5s timeout is too tight for a cold-start MSVC Debug binary
+# on CI (it intermittently times out), so give it generous headroom.
+gtest_discover_tests(AlphaEngineTests DISCOVERY_TIMEOUT 60)
