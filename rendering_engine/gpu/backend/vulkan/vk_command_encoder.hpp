@@ -105,7 +105,10 @@ namespace rendering_engine::gpu::backend::vulkan
 
     struct vk_command_encoder : public command_encoder
     {
-        explicit vk_command_encoder(vk_device& device);
+        // @p recording_context selects which per-context command pool this
+        // encoder's buffer comes from; encoders on distinct contexts may be
+        // recorded concurrently on different threads.
+        vk_command_encoder(vk_device& device, uint32_t recording_context);
         ~vk_command_encoder() override;
 
         std::unique_ptr<render_pass_encoder> begin_render_pass(const render_pass_descriptor& descriptor) override;
@@ -122,9 +125,17 @@ namespace rendering_engine::gpu::backend::vulkan
         // destructor leaves it in flight rather than freeing it.
         VkCommandBuffer release_command_buffer() noexcept;
 
+        // The recording context (and thus command pool) this encoder draws
+        // from; submit returns the buffer to it for recycling.
+        uint32_t recording_context() const noexcept
+        {
+            return m_recording_context;
+        }
+
     private:
         vk_device& m_device;
         VkCommandBuffer m_cmd{VK_NULL_HANDLE};
         bool m_began{false};
+        uint32_t m_recording_context{0};
     };
 } // namespace rendering_engine::gpu::backend::vulkan

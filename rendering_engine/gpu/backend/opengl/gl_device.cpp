@@ -346,7 +346,7 @@ namespace rendering_engine::gpu::backend::opengl
 
     // -- Command recording ----------------------------------------
 
-    std::unique_ptr<command_encoder> gl_device::create_command_encoder()
+    std::unique_ptr<command_encoder> gl_device::create_command_encoder(uint32_t /*recording_context*/)
     {
         return std::make_unique<gl_command_encoder>(*this);
     }

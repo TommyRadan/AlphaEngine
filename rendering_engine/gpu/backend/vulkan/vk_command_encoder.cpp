@@ -425,12 +425,13 @@ namespace rendering_engine::gpu::backend::vulkan
 
     // -- vk_command_encoder -----------------------------------------
 
-    vk_command_encoder::vk_command_encoder(vk_device& device) : m_device{device}
+    vk_command_encoder::vk_command_encoder(vk_device& device, uint32_t recording_context)
+        : m_device{device}, m_recording_context{recording_context}
     {
-        // Borrow a reset primary command buffer from the current frame-in-flight
-        // slot's pool (allocated on a miss) rather than allocating a fresh one
-        // every frame.
-        m_cmd = device.acquire_command_buffer();
+        // Borrow a reset primary command buffer from this recording context's
+        // pool (allocated on a miss) rather than allocating a fresh one every
+        // frame.
+        m_cmd = device.acquire_command_buffer(recording_context);
         if (m_cmd == VK_NULL_HANDLE)
         {
             LOG_ERR("vk_command_encoder: acquire_command_buffer returned null");
@@ -443,7 +444,7 @@ namespace rendering_engine::gpu::backend::vulkan
         if (begin_result != VK_SUCCESS)
         {
             LOG_ERR("vkBeginCommandBuffer failed: %s", vk_result_to_string(begin_result));
-            device.discard_command_buffer(m_cmd);
+            device.discard_command_buffer(recording_context, m_cmd);
             m_cmd = VK_NULL_HANDLE;
             return;
         }
@@ -455,8 +456,8 @@ namespace rendering_engine::gpu::backend::vulkan
         if (m_cmd != VK_NULL_HANDLE)
         {
             // Destroyed without being submitted (release_command_buffer was not
-            // called): return the buffer to the pool rather than leaking it.
-            m_device.discard_command_buffer(m_cmd);
+            // called): return the buffer to its pool rather than leaking it.
+            m_device.discard_command_buffer(m_recording_context, m_cmd);
             m_cmd = VK_NULL_HANDLE;
         }
     }

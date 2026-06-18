@@ -107,8 +107,20 @@ namespace rendering_engine::gpu::backend::vulkan
         texture render_target_color_texture(render_target handle) override;
         texture render_target_depth_texture(render_target handle) override;
 
-        std::unique_ptr<command_encoder> create_command_encoder() override;
+        std::unique_ptr<command_encoder> create_command_encoder(uint32_t recording_context = 0) override;
         void submit(std::unique_ptr<command_encoder> encoder) override;
+
+        // Vulkan records passes concurrently into per-context command pools and
+        // submits the resulting buffers as one ordered batch.
+        bool supports_parallel_recording() const override
+        {
+            return true;
+        }
+        uint32_t recording_context_count() const override
+        {
+            return k_max_recording_contexts;
+        }
+        void submit_frame(std::vector<std::unique_ptr<command_encoder>> encoders) override;
 
         // Internal accessors used by the encoder to map handles
         // back to records. Definitions in vk_device.cpp.
@@ -207,19 +219,21 @@ namespace rendering_engine::gpu::backend::vulkan
         // on allocation failure or zero size.
         VkBuffer stage_upload(const void* data, VkDeviceSize size);
 
-        // Per-frame-in-flight command-buffer pool. The single per-frame
-        // encoder borrows a primary command buffer with acquire_command_buffer
-        // (reusing a reset buffer from the current slot's free list, or
-        // allocating one on a miss). submit() parks the submitted buffer until
-        // the slot's fence signals, then begin_frame recycles it back to the
-        // free list — so steady-state rendering reuses a handful of buffers
-        // instead of allocating and freeing one per frame in flight every
-        // frame. discard_command_buffer returns an un-submitted buffer (an
-        // error/early-out path) straight to the free list. Both target the
-        // current frame-in-flight slot and are main-thread-only like the rest
-        // of the device.
-        VkCommandBuffer acquire_command_buffer();
-        void discard_command_buffer(VkCommandBuffer cmd);
+        // Per-recording-context, per-frame-in-flight command-buffer pool. An
+        // encoder borrows a primary command buffer from its @p recording_context
+        // with acquire_command_buffer (reusing a reset buffer from that
+        // context's current-slot free list, or allocating one on a miss).
+        // submit parks the submitted buffer until the slot's fence signals,
+        // then begin_frame recycles it back to the free list — so steady-state
+        // rendering reuses a handful of buffers per context instead of
+        // allocating and freeing them every frame. discard_command_buffer
+        // returns an un-submitted buffer (an error/early-out path) straight to
+        // the free list. Each recording context has its own VkCommandPool, so
+        // distinct contexts can be recorded on different threads concurrently
+        // (Vulkan command pools are not internally synchronised); a given
+        // context is only ever touched by one thread at a time.
+        VkCommandBuffer acquire_command_buffer(uint32_t recording_context);
+        void discard_command_buffer(uint32_t recording_context, VkCommandBuffer cmd);
 
         // Lazily create (and cache on the texture) the single-mip image
         // view used to bind @p tex as a storage image at @p level. Cube
@@ -287,9 +301,9 @@ namespace rendering_engine::gpu::backend::vulkan
         void destroy_sync_objects();
 
         // Reset every command buffer submitted under @p frame_in_flight's fence
-        // and move it back to that slot's free list. Called from begin_frame
-        // after the slot's fence has signalled, so the GPU is finished with
-        // them.
+        // across all recording contexts and move it back to that context's free
+        // list. Called from begin_frame after the slot's fence has signalled,
+        // so the GPU is finished with them.
         void recycle_in_flight_command_buffers(uint32_t frame_in_flight);
 
         handle_pool<vk_buffer> m_buffers;
@@ -373,14 +387,26 @@ namespace rendering_engine::gpu::backend::vulkan
 
         std::array<std::vector<std::function<void()>>, k_max_frames_in_flight> m_pending_destroys;
 
-        // Reset, ready-to-record primary command buffers per frame-in-flight
-        // slot, plus the buffers submitted under that slot's fence that are
-        // waiting to be recycled. See acquire_command_buffer; recycled by
-        // recycle_in_flight_command_buffers once the slot's fence signals. The
-        // backing buffers are freed implicitly when the command pool is
-        // destroyed in quit().
-        std::array<std::vector<VkCommandBuffer>, k_max_frames_in_flight> m_command_buffer_free;
-        std::array<std::vector<VkCommandBuffer>, k_max_frames_in_flight> m_command_buffer_in_flight;
+        // Upper bound on concurrently-recorded encoders. Each gets its own
+        // command pool because Vulkan command pools cannot be recorded from
+        // more than one thread at once; the engine caps the groups it fans out
+        // to by this, by the worker count, and by the pass count.
+        static constexpr uint32_t k_max_recording_contexts = 8;
+
+        // One command pool per recording context, each with its own
+        // per-frame-in-flight free / in-flight command-buffer lists. A context
+        // is only ever touched by one thread at a time (the engine maps each
+        // parallel group to a distinct context), so no locking is needed on the
+        // lists themselves; the pool is created lazily on first use. Recycled by
+        // recycle_in_flight_command_buffers once the slot's fence signals; the
+        // pools (and their buffers) are destroyed in quit().
+        struct recording_context
+        {
+            VkCommandPool pool{VK_NULL_HANDLE};
+            std::array<std::vector<VkCommandBuffer>, k_max_frames_in_flight> free;
+            std::array<std::vector<VkCommandBuffer>, k_max_frames_in_flight> in_flight;
+        };
+        std::array<recording_context, k_max_recording_contexts> m_recording_contexts;
 
         // Guards the lazily-built render-pass and graphics-pipeline caches
         // (acquire_render_pass / begin_info_for / graphics_pipeline_for) so the
