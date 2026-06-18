@@ -116,37 +116,16 @@ namespace rendering_engine::gpu::backend::vulkan
             }
             else
             {
-                VkBufferCreateInfo si{};
-                si.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-                si.size = descriptor.size;
-                si.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-                si.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-                VkBuffer staging = VK_NULL_HANDLE;
-                vkCreateBuffer(m_device, &si, nullptr, &staging);
-                VkMemoryRequirements smr{};
-                vkGetBufferMemoryRequirements(m_device, staging, &smr);
-                VkMemoryAllocateInfo sai{};
-                sai.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-                sai.allocationSize = smr.size;
-                sai.memoryTypeIndex = find_memory_type(
-                    smr.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-                VkDeviceMemory staging_mem = VK_NULL_HANDLE;
-                vkAllocateMemory(m_device, &sai, nullptr, &staging_mem);
-                vkBindBufferMemory(m_device, staging, staging_mem, 0);
-
-                void* mapped = nullptr;
-                vkMapMemory(m_device, staging_mem, 0, descriptor.size, 0, &mapped);
-                std::memcpy(mapped, descriptor.initial_data, descriptor.size);
-                vkUnmapMemory(m_device, staging_mem);
-
-                VkCommandBuffer cmd = begin_one_shot();
-                VkBufferCopy region{};
-                region.size = descriptor.size;
-                vkCmdCopyBuffer(cmd, staging, record.object, 1, &region);
-                end_one_shot(cmd);
-
-                vkDestroyBuffer(m_device, staging, nullptr);
-                vkFreeMemory(m_device, staging_mem, nullptr);
+                // Device-local: stage through the shared host-visible buffer.
+                const VkBuffer staging = stage_upload(descriptor.initial_data, descriptor.size);
+                if (staging != VK_NULL_HANDLE)
+                {
+                    VkCommandBuffer cmd = begin_one_shot();
+                    VkBufferCopy region{};
+                    region.size = descriptor.size;
+                    vkCmdCopyBuffer(cmd, staging, record.object, 1, &region);
+                    end_one_shot(cmd);
+                }
             }
         }
 
@@ -203,36 +182,18 @@ namespace rendering_engine::gpu::backend::vulkan
             std::memcpy(static_cast<uint8_t*>(record->mapped) + offset, data, size);
             return;
         }
-        VkBufferCreateInfo si{};
-        si.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-        si.size = size;
-        si.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-        si.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        VkBuffer staging = VK_NULL_HANDLE;
-        vkCreateBuffer(m_device, &si, nullptr, &staging);
-        VkMemoryRequirements smr{};
-        vkGetBufferMemoryRequirements(m_device, staging, &smr);
-        VkMemoryAllocateInfo sai{};
-        sai.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-        sai.allocationSize = smr.size;
-        sai.memoryTypeIndex = find_memory_type(
-            smr.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-        VkDeviceMemory staging_mem = VK_NULL_HANDLE;
-        vkAllocateMemory(m_device, &sai, nullptr, &staging_mem);
-        vkBindBufferMemory(m_device, staging, staging_mem, 0);
-        void* mapped = nullptr;
-        vkMapMemory(m_device, staging_mem, 0, size, 0, &mapped);
-        std::memcpy(mapped, data, size);
-        vkUnmapMemory(m_device, staging_mem);
-
+        // Device-local buffer: stage through the shared host-visible buffer
+        // and copy on the GPU.
+        const VkBuffer staging = stage_upload(data, size);
+        if (staging == VK_NULL_HANDLE)
+        {
+            return;
+        }
         VkCommandBuffer cmd = begin_one_shot();
         VkBufferCopy region{};
         region.dstOffset = offset;
         region.size = size;
         vkCmdCopyBuffer(cmd, staging, record->object, 1, &region);
         end_one_shot(cmd);
-
-        vkDestroyBuffer(m_device, staging, nullptr);
-        vkFreeMemory(m_device, staging_mem, nullptr);
     }
 } // namespace rendering_engine::gpu::backend::vulkan

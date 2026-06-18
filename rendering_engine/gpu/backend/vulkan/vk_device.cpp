@@ -447,16 +447,35 @@ namespace rendering_engine::gpu::backend::vulkan
             vkDestroyDescriptorPool(m_device, m_descriptor_pool, nullptr);
             m_descriptor_pool = VK_NULL_HANDLE;
         }
+        // The shared staging buffer is owned here, not by the handle pools.
+        if (m_staging_mapped != nullptr)
+        {
+            vkUnmapMemory(m_device, m_staging_memory);
+            m_staging_mapped = nullptr;
+        }
+        if (m_staging_buffer != VK_NULL_HANDLE)
+        {
+            vkDestroyBuffer(m_device, m_staging_buffer, nullptr);
+            m_staging_buffer = VK_NULL_HANDLE;
+        }
+        if (m_staging_memory != VK_NULL_HANDLE)
+        {
+            vkFreeMemory(m_device, m_staging_memory, nullptr);
+            m_staging_memory = VK_NULL_HANDLE;
+        }
+        m_staging_capacity = 0;
+
         if (m_command_pool != VK_NULL_HANDLE)
         {
             // Destroying the pool implicitly frees every command buffer
-            // allocated from it (both the free and in-flight lists), so just
-            // drop our handles to them.
+            // allocated from it (the free/in-flight lists and the reusable
+            // upload buffer), so just drop our handles to them.
             for (uint32_t i = 0; i < k_max_frames_in_flight; ++i)
             {
                 m_command_buffer_free[i].clear();
                 m_command_buffer_in_flight[i].clear();
             }
+            m_upload_cmd = VK_NULL_HANDLE;
             vkDestroyCommandPool(m_device, m_command_pool, nullptr);
             m_command_pool = VK_NULL_HANDLE;
         }
@@ -1089,6 +1108,15 @@ namespace rendering_engine::gpu::backend::vulkan
             }
         }
         m_frame_in_flight = 0;
+
+        // Dedicated fence for the synchronous upload path (begin/end_one_shot).
+        // Created unsignalled; end_one_shot resets and waits on it per upload.
+        VkFenceCreateInfo ufi{};
+        ufi.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+        if (vkCreateFence(m_device, &ufi, nullptr, &m_upload_fence) != VK_SUCCESS)
+        {
+            throw std::runtime_error{"vk upload fence"};
+        }
     }
 
     void vk_device::destroy_sync_objects()
@@ -1109,6 +1137,11 @@ namespace rendering_engine::gpu::backend::vulkan
                 vkDestroyFence(m_device, m_in_flight_fences[i], nullptr);
                 m_in_flight_fences[i] = VK_NULL_HANDLE;
             }
+        }
+        if (m_upload_fence != VK_NULL_HANDLE)
+        {
+            vkDestroyFence(m_device, m_upload_fence, nullptr);
+            m_upload_fence = VK_NULL_HANDLE;
         }
     }
 
@@ -1560,21 +1593,30 @@ namespace rendering_engine::gpu::backend::vulkan
 
     VkCommandBuffer vk_device::begin_one_shot()
     {
-        VkCommandBufferAllocateInfo ai{};
-        ai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-        ai.commandPool = m_command_pool;
-        ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-        ai.commandBufferCount = 1;
-        VkCommandBuffer cmd = VK_NULL_HANDLE;
-        if (vkAllocateCommandBuffers(m_device, &ai, &cmd) != VK_SUCCESS)
+        if (m_upload_cmd == VK_NULL_HANDLE)
         {
-            return VK_NULL_HANDLE;
+            VkCommandBufferAllocateInfo ai{};
+            ai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+            ai.commandPool = m_command_pool;
+            ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+            ai.commandBufferCount = 1;
+            if (vkAllocateCommandBuffers(m_device, &ai, &m_upload_cmd) != VK_SUCCESS)
+            {
+                m_upload_cmd = VK_NULL_HANDLE;
+                return VK_NULL_HANDLE;
+            }
+        }
+        else
+        {
+            // Previous upload finished (end_one_shot waited on the fence), so
+            // the buffer is safe to reset and re-record.
+            vkResetCommandBuffer(m_upload_cmd, 0);
         }
         VkCommandBufferBeginInfo bi{};
         bi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
         bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-        vkBeginCommandBuffer(cmd, &bi);
-        return cmd;
+        vkBeginCommandBuffer(m_upload_cmd, &bi);
+        return m_upload_cmd;
     }
 
     void vk_device::end_one_shot(VkCommandBuffer cmd)
@@ -1588,9 +1630,72 @@ namespace rendering_engine::gpu::backend::vulkan
         si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
         si.commandBufferCount = 1;
         si.pCommandBuffers = &cmd;
-        vkQueueSubmit(m_graphics_queue, 1, &si, VK_NULL_HANDLE);
-        vkQueueWaitIdle(m_graphics_queue);
-        vkFreeCommandBuffers(m_device, m_command_pool, 1, &cmd);
+        // Wait on the upload's own fence rather than vkQueueWaitIdle so the
+        // upload does not force a full drain of the graphics queue. The buffer
+        // is kept allocated for the next begin_one_shot to reuse.
+        vkResetFences(m_device, 1, &m_upload_fence);
+        vkQueueSubmit(m_graphics_queue, 1, &si, m_upload_fence);
+        vkWaitForFences(m_device, 1, &m_upload_fence, VK_TRUE, UINT64_MAX);
+    }
+
+    VkBuffer vk_device::stage_upload(const void* data, VkDeviceSize size)
+    {
+        if (data == nullptr || size == 0)
+        {
+            return VK_NULL_HANDLE;
+        }
+        if (size > m_staging_capacity)
+        {
+            // Grow to fit the largest upload seen. The previous upload has
+            // completed (uploads are synchronous), so tearing the old buffer
+            // down here cannot race the GPU.
+            if (m_staging_mapped != nullptr)
+            {
+                vkUnmapMemory(m_device, m_staging_memory);
+                m_staging_mapped = nullptr;
+            }
+            if (m_staging_buffer != VK_NULL_HANDLE)
+            {
+                vkDestroyBuffer(m_device, m_staging_buffer, nullptr);
+                m_staging_buffer = VK_NULL_HANDLE;
+            }
+            if (m_staging_memory != VK_NULL_HANDLE)
+            {
+                vkFreeMemory(m_device, m_staging_memory, nullptr);
+                m_staging_memory = VK_NULL_HANDLE;
+            }
+            m_staging_capacity = 0;
+
+            VkBufferCreateInfo bi{};
+            bi.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+            bi.size = size;
+            bi.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+            bi.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+            if (vkCreateBuffer(m_device, &bi, nullptr, &m_staging_buffer) != VK_SUCCESS)
+            {
+                m_staging_buffer = VK_NULL_HANDLE;
+                return VK_NULL_HANDLE;
+            }
+            VkMemoryRequirements mr{};
+            vkGetBufferMemoryRequirements(m_device, m_staging_buffer, &mr);
+            VkMemoryAllocateInfo ai{};
+            ai.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+            ai.allocationSize = mr.size;
+            ai.memoryTypeIndex = find_memory_type(
+                mr.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+            if (vkAllocateMemory(m_device, &ai, nullptr, &m_staging_memory) != VK_SUCCESS)
+            {
+                vkDestroyBuffer(m_device, m_staging_buffer, nullptr);
+                m_staging_buffer = VK_NULL_HANDLE;
+                m_staging_memory = VK_NULL_HANDLE;
+                return VK_NULL_HANDLE;
+            }
+            vkBindBufferMemory(m_device, m_staging_buffer, m_staging_memory, 0);
+            vkMapMemory(m_device, m_staging_memory, 0, VK_WHOLE_SIZE, 0, &m_staging_mapped);
+            m_staging_capacity = size;
+        }
+        std::memcpy(m_staging_mapped, data, static_cast<size_t>(size));
+        return m_staging_buffer;
     }
 
     uint32_t vk_device::find_memory_type(uint32_t type_filter, VkMemoryPropertyFlags properties) const
