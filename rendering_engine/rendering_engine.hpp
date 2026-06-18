@@ -252,11 +252,9 @@ namespace rendering_engine
         // When true, @ref render fans the frame's passes out across the job
         // pool (each contiguous group recorded into its own command buffer on a
         // worker, then submitted as one ordered batch), keeping the passes that
-        // broadcast main-thread-only events on the main thread. Opt-in via the
-        // ALPHAENGINE_PARALLEL_RECORDING env var and only when the backend
-        // supports it and the job pool has workers; off by default since the
-        // serial path is the verified one and the scene pass (the bulk of the
-        // work) stays on the main thread regardless.
+        // broadcast main-thread-only events on the main thread. Enabled
+        // automatically whenever the backend supports parallel recording
+        // (Vulkan) and the job pool has workers.
         bool m_parallel_recording{false};
 
         // Non-owning back-pointer to the skybox pass owned by
