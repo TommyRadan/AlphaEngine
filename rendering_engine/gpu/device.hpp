@@ -172,6 +172,14 @@ namespace rendering_engine::gpu
 
         // -- Command recording --------------------------------------------
 
+        // Acquire the resources a frame needs before any pass records (the
+        // swapchain image on Vulkan). Idempotent within a frame. The engine
+        // calls this up front on the parallel path so the swapchain image is
+        // ready before passes record on worker threads; the serial path lets
+        // the backend acquire lazily, so the default is a no-op and OpenGL
+        // (which has no explicit acquire) never overrides it.
+        virtual void begin_frame() {}
+
         // Allocate a new command encoder bound to @p recording_context. A
         // backend that records passes in parallel (Vulkan) gives each context
         // its own command pool so encoders on distinct contexts record on

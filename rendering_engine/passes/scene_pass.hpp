@@ -88,6 +88,13 @@ namespace rendering_engine
             io.write("scene_color");
         }
 
+        // Broadcasts core::render_scene during record(); stays on the main
+        // thread under parallel recording.
+        bool main_thread_only() const override
+        {
+            return true;
+        }
+
         // Layout for the per-frame bind group bound at slot 0 each
         // frame. The matching material's pipeline_descriptor must
         // reserve slot 0 for this layout.

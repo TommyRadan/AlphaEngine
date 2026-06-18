@@ -249,6 +249,16 @@ namespace rendering_engine
         // the @ref m_passes order, so the graph does not change rendering.
         render_graph::frame_graph m_frame_graph;
 
+        // When true, @ref render fans the frame's passes out across the job
+        // pool (each contiguous group recorded into its own command buffer on a
+        // worker, then submitted as one ordered batch), keeping the passes that
+        // broadcast main-thread-only events on the main thread. Opt-in via the
+        // ALPHAENGINE_PARALLEL_RECORDING env var and only when the backend
+        // supports it and the job pool has workers; off by default since the
+        // serial path is the verified one and the scene pass (the bulk of the
+        // work) stays on the main thread regardless.
+        bool m_parallel_recording{false};
+
         // Non-owning back-pointer to the skybox pass owned by
         // @ref m_passes. Kept so @ref set_environment can swap its cube
         // map after construction. Null until @ref init runs.

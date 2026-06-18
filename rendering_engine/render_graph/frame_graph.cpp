@@ -45,9 +45,9 @@ namespace rendering_engine::render_graph
         m_external.emplace_back(resource);
     }
 
-    void frame_graph::add_pass(std::string name, pass_io_builder io, execute_fn execute)
+    void frame_graph::add_pass(std::string name, pass_io_builder io, execute_fn execute, bool main_thread_only)
     {
-        m_nodes.push_back({std::move(name), std::move(io), std::move(execute)});
+        m_nodes.push_back({std::move(name), std::move(io), std::move(execute), main_thread_only});
     }
 
     bool frame_graph::compile()
@@ -84,13 +84,33 @@ namespace rendering_engine::render_graph
 
     void frame_graph::execute(gpu::command_encoder& encoder, const frame_context& ctx) const
     {
-        for (const auto& n : m_nodes)
+        execute_range(encoder, ctx, 0, m_nodes.size());
+    }
+
+    void
+    frame_graph::execute_range(gpu::command_encoder& encoder, const frame_context& ctx, size_t begin, size_t end) const
+    {
+        const size_t last = std::min(end, m_nodes.size());
+        for (size_t i = begin; i < last; ++i)
         {
-            if (n.execute)
+            if (m_nodes[i].execute)
             {
-                n.execute(encoder, ctx);
+                m_nodes[i].execute(encoder, ctx);
             }
         }
+    }
+
+    bool frame_graph::range_main_thread_only(size_t begin, size_t end) const
+    {
+        const size_t last = std::min(end, m_nodes.size());
+        for (size_t i = begin; i < last; ++i)
+        {
+            if (m_nodes[i].main_thread_only)
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     void frame_graph::clear()
