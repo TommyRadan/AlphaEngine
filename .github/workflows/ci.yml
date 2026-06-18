@@ -191,7 +191,25 @@ jobs:
           $version = "${env:VULKAN_SDK_VERSION}"
           $url = "https://sdk.lunarg.com/sdk/download/$version/windows/VulkanSDK-$version-Installer.exe"
           Write-Host "Downloading Vulkan SDK $version from $url"
-          Invoke-WebRequest -Uri $url -OutFile VulkanSDK.exe -UseBasicParsing
+          # The LunarG download is large and occasionally drops mid-transfer
+          # ("connection forcibly closed"), so retry with backoff rather than
+          # failing the whole job on a single transient network error.
+          $maxAttempts = 4
+          for ($attempt = 1; $attempt -le $maxAttempts; $attempt++)
+          {
+            try
+            {
+              Invoke-WebRequest -Uri $url -OutFile VulkanSDK.exe -UseBasicParsing
+              break
+            }
+            catch
+            {
+              if ($attempt -eq $maxAttempts) { throw }
+              $delay = [math]::Pow(2, $attempt)
+              Write-Host "Download attempt $attempt failed: $($_.Exception.Message). Retrying in $delay s..."
+              Start-Sleep -Seconds $delay
+            }
+          }
           # Silent install: --accept-licenses --default-answer --confirm-command
           # are the LunarG installer's unattended flags.
           Start-Process -FilePath .\VulkanSDK.exe `
