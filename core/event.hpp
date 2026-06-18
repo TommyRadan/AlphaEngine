@@ -92,6 +92,22 @@ namespace core
     };
 
     /**
+     * @brief Per-rendered-frame update event (variable rate).
+     *
+     * Broadcast once per render frame, carrying the real time since the
+     * previous render frame. Use this for visual / input-driven animation that
+     * must stay smooth at the render rate — a camera that moves with the player,
+     * spinning props — so motion does not judder when the render rate runs far
+     * ahead of the fixed-step rate. Use @ref frame instead for deterministic,
+     * frame-rate-independent simulation.
+     */
+    struct render_update
+    {
+        /** @brief Time since the previous render frame, in milliseconds. */
+        float m_delta_time;
+    };
+
+    /**
      * @brief Broadcast while the 3D scene pass is active; renderables should
      *        record draw calls against the carried pass encoder.
      */

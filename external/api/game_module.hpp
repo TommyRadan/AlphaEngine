@@ -31,6 +31,7 @@ struct game_module_info
     std::function<void(const core::engine_start&)> on_engine_start;
     std::function<void(const core::engine_stop&)> on_engine_stop;
     std::function<void(const core::frame&)> on_frame;
+    std::function<void(const core::render_update&)> on_render_update;
     std::function<void(const core::render_scene&)> on_render_scene;
     std::function<void(const core::render_ui&)> on_render_ui;
     std::function<void(const core::key_down&)> on_key_down;
@@ -40,9 +41,9 @@ struct game_module_info
     std::function<void(const core::mouse_move&)> on_mouse_move;
 
     game_module_info()
-        : on_engine_start{nullptr}, on_engine_stop{nullptr}, on_frame{nullptr}, on_render_scene{nullptr},
-          on_render_ui{nullptr}, on_key_down{nullptr}, on_key_up{nullptr}, on_mouse_key_down{nullptr},
-          on_mouse_key_up{nullptr}, on_mouse_move{nullptr}
+        : on_engine_start{nullptr}, on_engine_stop{nullptr}, on_frame{nullptr}, on_render_update{nullptr},
+          on_render_scene{nullptr}, on_render_ui{nullptr}, on_key_down{nullptr}, on_key_up{nullptr},
+          on_mouse_key_down{nullptr}, on_mouse_key_up{nullptr}, on_mouse_move{nullptr}
     {
     }
 };
