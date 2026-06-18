@@ -100,6 +100,48 @@ namespace rendering_engine::gpu::backend::vulkan
             return (props.optimalTilingFeatures & VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT) != 0;
         }
 
+        // The pipeline stage + access mask that characterise an image while it
+        // sits in a given layout, used to scope a layout-transition barrier to
+        // exactly the work it must order rather than ALL_COMMANDS. Used for
+        // both sides of the barrier (old layout -> src, new layout -> dst).
+        struct layout_sync
+        {
+            VkPipelineStageFlags stage;
+            VkAccessFlags access;
+        };
+
+        layout_sync sync_for_layout(VkImageLayout layout)
+        {
+            switch (layout)
+            {
+            case VK_IMAGE_LAYOUT_UNDEFINED:
+                // Nothing to wait for / flush when discarding prior contents.
+                return {VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0};
+            case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
+                return {VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT};
+            case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:
+                return {VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_READ_BIT};
+            case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:
+                return {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                        VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT};
+            case VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL:
+                return {VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+                        VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT};
+            case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:
+                // Sampled from either the fragment or a compute shader.
+                return {VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                        VK_ACCESS_SHADER_READ_BIT};
+            case VK_IMAGE_LAYOUT_GENERAL:
+                // Storage-image read/write from compute (the IBL convolution).
+                return {VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT};
+            case VK_IMAGE_LAYOUT_PRESENT_SRC_KHR:
+                return {VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0};
+            default:
+                // Unknown layout: fall back to the conservative full barrier.
+                return {VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT};
+            }
+        }
+
         void transition_image(VkCommandBuffer cmd,
                               VkImage image,
                               VkImageAspectFlags aspect,
@@ -108,6 +150,9 @@ namespace rendering_engine::gpu::backend::vulkan
                               uint32_t mip_levels,
                               uint32_t layer_count)
         {
+            const layout_sync src = sync_for_layout(old_layout);
+            const layout_sync dst = sync_for_layout(new_layout);
+
             VkImageMemoryBarrier b{};
             b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
             b.oldLayout = old_layout;
@@ -118,18 +163,9 @@ namespace rendering_engine::gpu::backend::vulkan
             b.subresourceRange.aspectMask = aspect;
             b.subresourceRange.levelCount = mip_levels;
             b.subresourceRange.layerCount = layer_count;
-            b.srcAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
-            b.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
-            vkCmdPipelineBarrier(cmd,
-                                 VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-                                 VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-                                 0,
-                                 0,
-                                 nullptr,
-                                 0,
-                                 nullptr,
-                                 1,
-                                 &b);
+            b.srcAccessMask = src.access;
+            b.dstAccessMask = dst.access;
+            vkCmdPipelineBarrier(cmd, src.stage, dst.stage, 0, 0, nullptr, 0, nullptr, 1, &b);
         }
     } // namespace
 

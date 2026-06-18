@@ -53,4 +53,12 @@ namespace rendering_engine::gpu::backend::vulkan
 
     bool is_depth_format(texture_format format);
     VkImageAspectFlags aspect_for_format(texture_format format);
+
+    // Decode the backend-agnostic barrier masks into precise Vulkan masks.
+    // pipeline_stage_none / access_none decode to 0; callers substitute
+    // TOP_OF_PIPE / BOTTOM_OF_PIPE for an empty stage mask as appropriate.
+    // The storage_buffer/image access bits fold into SHADER_READ/WRITE since
+    // Vulkan has no distinct storage-access bit.
+    VkPipelineStageFlags to_vk_pipeline_stage(pipeline_stage stages);
+    VkAccessFlags to_vk_access(access_flag flags);
 } // namespace rendering_engine::gpu::backend::vulkan
