@@ -45,6 +45,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <vector>
 
 #include <vulkan/vulkan.h>
@@ -151,6 +152,25 @@ namespace rendering_engine::gpu::backend::vulkan
                                          VkAttachmentLoadOp color_load,
                                          VkAttachmentLoadOp depth_load,
                                          bool use_depth);
+
+        // The render pass + framebuffer a render-pass encoder begins with.
+        struct render_pass_begin_info
+        {
+            VkRenderPass render_pass{VK_NULL_HANDLE};
+            VkFramebuffer framebuffer{VK_NULL_HANDLE};
+        };
+
+        // Resolve the render pass and framebuffer to begin for @p target with
+        // the given load ops, under the cache lock. @p swapchain_image selects
+        // the framebuffer for the swapchain target (ignored off-screen, which
+        // has a single framebuffer). Folds the lazy render-pass/framebuffer
+        // build and the framebuffer pick into one critical section so passes
+        // recorded on worker threads cannot race the shared variant list.
+        render_pass_begin_info begin_info_for(vk_render_target& target,
+                                              VkAttachmentLoadOp color_load,
+                                              VkAttachmentLoadOp depth_load,
+                                              bool use_depth,
+                                              uint32_t swapchain_image);
 
         // Look up — or lazily build — the @c VkPipeline for
         // @p handle that is compatible with @p render_pass. The
@@ -361,6 +381,16 @@ namespace rendering_engine::gpu::backend::vulkan
         // destroyed in quit().
         std::array<std::vector<VkCommandBuffer>, k_max_frames_in_flight> m_command_buffer_free;
         std::array<std::vector<VkCommandBuffer>, k_max_frames_in_flight> m_command_buffer_in_flight;
+
+        // Guards the lazily-built render-pass and graphics-pipeline caches
+        // (acquire_render_pass / begin_info_for / graphics_pipeline_for) so the
+        // jobs-driven parallel pass recording can build/look up cache entries
+        // from several threads at once. Uncontended on the serial path.
+        std::mutex m_cache_mutex;
+        // Guards the per-frame draw/pass counters, which every recorded draw
+        // bumps; separate from m_cache_mutex so a draw counter update does not
+        // serialise against a cache lookup.
+        std::mutex m_stats_mutex;
 
         // Reusable upload command buffer + fence backing begin_one_shot /
         // end_one_shot. The command buffer is allocated lazily and reset on
