@@ -174,6 +174,20 @@ namespace rendering_engine::gpu::backend::vulkan
         VkCommandBuffer begin_one_shot();
         void end_one_shot(VkCommandBuffer cmd);
 
+        // Per-frame-in-flight command-buffer pool. The single per-frame
+        // encoder borrows a primary command buffer with acquire_command_buffer
+        // (reusing a reset buffer from the current slot's free list, or
+        // allocating one on a miss). submit() parks the submitted buffer until
+        // the slot's fence signals, then begin_frame recycles it back to the
+        // free list — so steady-state rendering reuses a handful of buffers
+        // instead of allocating and freeing one per frame in flight every
+        // frame. discard_command_buffer returns an un-submitted buffer (an
+        // error/early-out path) straight to the free list. Both target the
+        // current frame-in-flight slot and are main-thread-only like the rest
+        // of the device.
+        VkCommandBuffer acquire_command_buffer();
+        void discard_command_buffer(VkCommandBuffer cmd);
+
         // Lazily create (and cache on the texture) the single-mip image
         // view used to bind @p tex as a storage image at @p level. Cube
         // and 3D textures bind every layer through one view; the level
@@ -238,6 +252,12 @@ namespace rendering_engine::gpu::backend::vulkan
         void destroy_swapchain();
         void create_sync_objects();
         void destroy_sync_objects();
+
+        // Reset every command buffer submitted under @p frame_in_flight's fence
+        // and move it back to that slot's free list. Called from begin_frame
+        // after the slot's fence has signalled, so the GPU is finished with
+        // them.
+        void recycle_in_flight_command_buffers(uint32_t frame_in_flight);
 
         handle_pool<vk_buffer> m_buffers;
         handle_pool<vk_texture> m_textures;
@@ -319,6 +339,15 @@ namespace rendering_engine::gpu::backend::vulkan
         texture m_default_texture_cube{};
 
         std::array<std::vector<std::function<void()>>, k_max_frames_in_flight> m_pending_destroys;
+
+        // Reset, ready-to-record primary command buffers per frame-in-flight
+        // slot, plus the buffers submitted under that slot's fence that are
+        // waiting to be recycled. See acquire_command_buffer; recycled by
+        // recycle_in_flight_command_buffers once the slot's fence signals. The
+        // backing buffers are freed implicitly when the command pool is
+        // destroyed in quit().
+        std::array<std::vector<VkCommandBuffer>, k_max_frames_in_flight> m_command_buffer_free;
+        std::array<std::vector<VkCommandBuffer>, k_max_frames_in_flight> m_command_buffer_in_flight;
 
         // Frame-level diagnostic counters. Logged at submit() for
         // @c k_diagnostic_frames frames after init so the user can
