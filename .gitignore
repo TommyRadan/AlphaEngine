@@ -33,3 +33,4 @@ CTestTestfile.cmake
 /build/
 /build-tidy/
 /Binaries/
+imgui.ini
