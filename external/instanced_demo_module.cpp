@@ -158,7 +158,7 @@ namespace
         g_base_positions.clear();
     }
 
-    void on_frame(const core::frame& event)
+    void on_render_update(const core::render_update& event)
     {
         (void)event;
         if (!g_cubes)
@@ -194,7 +194,7 @@ GAME_MODULE()
     struct game_module_info info = {};
     info.on_engine_start = on_engine_start;
     info.on_engine_stop = on_engine_stop;
-    info.on_frame = on_frame;
+    info.on_render_update = on_render_update;
     register_game_module(info);
     return true;
 }
