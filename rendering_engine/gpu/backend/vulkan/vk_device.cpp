@@ -449,6 +449,14 @@ namespace rendering_engine::gpu::backend::vulkan
         }
         if (m_command_pool != VK_NULL_HANDLE)
         {
+            // Destroying the pool implicitly frees every command buffer
+            // allocated from it (both the free and in-flight lists), so just
+            // drop our handles to them.
+            for (uint32_t i = 0; i < k_max_frames_in_flight; ++i)
+            {
+                m_command_buffer_free[i].clear();
+                m_command_buffer_in_flight[i].clear();
+            }
             vkDestroyCommandPool(m_device, m_command_pool, nullptr);
             m_command_pool = VK_NULL_HANDLE;
         }
@@ -1357,8 +1365,10 @@ namespace rendering_engine::gpu::backend::vulkan
             }
             vkQueueWaitIdle(m_graphics_queue);
             // The queue is idle, so this one-off (off-screen-only) command
-            // buffer is finished and can be returned to the pool now.
-            vkFreeCommandBuffers(m_device, m_command_pool, 1, &cmd);
+            // buffer is finished; reset it and return it to the current slot's
+            // free list for reuse instead of freeing it.
+            vkResetCommandBuffer(cmd, 0);
+            m_command_buffer_free[m_frame_in_flight].push_back(cmd);
             encoder.reset();
             return;
         }
@@ -1399,17 +1409,12 @@ namespace rendering_engine::gpu::backend::vulkan
         encoder.reset();
 
         // The command buffer is in flight until this frame's fence signals.
-        // Hand it back to the pool through this slot's deferred queue, which
-        // begin_frame drains only after waiting on the slot fence — so it is
-        // freed once the GPU is done, not leaked for the lifetime of the run.
-        // enqueue_destroy targets the current frame-in-flight slot, so this
-        // must run before m_frame_in_flight advances below. (Previously
-        // release_command_buffer detached it from the encoder but nothing ever
-        // freed it, so the pool grew by one command buffer per frame and
-        // teardown of the whole pile stalled shutdown for tens of seconds.)
-        const VkDevice device = m_device;
-        const VkCommandPool pool = m_command_pool;
-        enqueue_destroy([device, pool, cmd] { vkFreeCommandBuffers(device, pool, 1, &cmd); });
+        // Park it on this slot's in-flight list; begin_frame recycles it (reset
+        // + back to the free list) after waiting on the slot fence, so the same
+        // buffers are reused when this slot comes around again instead of being
+        // allocated and freed every frame. This indexes the current slot, so it
+        // must run before m_frame_in_flight advances below.
+        m_command_buffer_in_flight[m_frame_in_flight].push_back(cmd);
 
         if (m_frame_index < k_diagnostic_frames)
         {
@@ -1452,6 +1457,55 @@ namespace rendering_engine::gpu::backend::vulkan
         }
     }
 
+    VkCommandBuffer vk_device::acquire_command_buffer()
+    {
+        auto& free_list = m_command_buffer_free[m_frame_in_flight];
+        if (!free_list.empty())
+        {
+            // Recycled buffers were reset when returned, so they are back in
+            // the initial state and ready for vkBeginCommandBuffer.
+            VkCommandBuffer cmd = free_list.back();
+            free_list.pop_back();
+            return cmd;
+        }
+        VkCommandBufferAllocateInfo ai{};
+        ai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        ai.commandPool = m_command_pool;
+        ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        ai.commandBufferCount = 1;
+        VkCommandBuffer cmd = VK_NULL_HANDLE;
+        if (vkAllocateCommandBuffers(m_device, &ai, &cmd) != VK_SUCCESS)
+        {
+            return VK_NULL_HANDLE;
+        }
+        return cmd;
+    }
+
+    void vk_device::discard_command_buffer(VkCommandBuffer cmd)
+    {
+        if (cmd == VK_NULL_HANDLE)
+        {
+            return;
+        }
+        // The buffer was never submitted (an encoder error/early-out), so the
+        // GPU never referenced it — reset and return it to the current slot's
+        // free list for immediate reuse.
+        vkResetCommandBuffer(cmd, 0);
+        m_command_buffer_free[m_frame_in_flight].push_back(cmd);
+    }
+
+    void vk_device::recycle_in_flight_command_buffers(uint32_t frame_in_flight)
+    {
+        auto& in_flight = m_command_buffer_in_flight[frame_in_flight];
+        auto& free_list = m_command_buffer_free[frame_in_flight];
+        for (VkCommandBuffer cmd : in_flight)
+        {
+            vkResetCommandBuffer(cmd, 0);
+            free_list.push_back(cmd);
+        }
+        in_flight.clear();
+    }
+
     void vk_device::begin_frame()
     {
         if (m_have_current_image)
@@ -1463,6 +1517,7 @@ namespace rendering_engine::gpu::backend::vulkan
         // enqueued for destruction — that work is now done, so the resources
         // are no longer referenced by the GPU.
         vkWaitForFences(m_device, 1, &m_in_flight_fences[m_frame_in_flight], VK_TRUE, UINT64_MAX);
+        recycle_in_flight_command_buffers(m_frame_in_flight);
         drain_pending_destroys(m_frame_in_flight);
         const VkResult r = vkAcquireNextImageKHR(m_device,
                                                  m_swapchain,

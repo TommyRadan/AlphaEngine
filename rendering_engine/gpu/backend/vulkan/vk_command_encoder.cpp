@@ -449,16 +449,13 @@ namespace rendering_engine::gpu::backend::vulkan
 
     vk_command_encoder::vk_command_encoder(vk_device& device) : m_device{device}
     {
-        VkCommandBufferAllocateInfo ai{};
-        ai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-        ai.commandPool = device.command_pool();
-        ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-        ai.commandBufferCount = 1;
-        const VkResult alloc_result = vkAllocateCommandBuffers(device.vk_handle(), &ai, &m_cmd);
-        if (alloc_result != VK_SUCCESS)
+        // Borrow a reset primary command buffer from the current frame-in-flight
+        // slot's pool (allocated on a miss) rather than allocating a fresh one
+        // every frame.
+        m_cmd = device.acquire_command_buffer();
+        if (m_cmd == VK_NULL_HANDLE)
         {
-            LOG_ERR("vkAllocateCommandBuffers failed: %s", vk_result_to_string(alloc_result));
-            m_cmd = VK_NULL_HANDLE;
+            LOG_ERR("vk_command_encoder: acquire_command_buffer returned null");
             return;
         }
         VkCommandBufferBeginInfo bi{};
@@ -468,7 +465,7 @@ namespace rendering_engine::gpu::backend::vulkan
         if (begin_result != VK_SUCCESS)
         {
             LOG_ERR("vkBeginCommandBuffer failed: %s", vk_result_to_string(begin_result));
-            vkFreeCommandBuffers(device.vk_handle(), device.command_pool(), 1, &m_cmd);
+            device.discard_command_buffer(m_cmd);
             m_cmd = VK_NULL_HANDLE;
             return;
         }
@@ -479,7 +476,9 @@ namespace rendering_engine::gpu::backend::vulkan
     {
         if (m_cmd != VK_NULL_HANDLE)
         {
-            vkFreeCommandBuffers(m_device.vk_handle(), m_device.command_pool(), 1, &m_cmd);
+            // Destroyed without being submitted (release_command_buffer was not
+            // called): return the buffer to the pool rather than leaking it.
+            m_device.discard_command_buffer(m_cmd);
             m_cmd = VK_NULL_HANDLE;
         }
     }
