@@ -528,33 +528,34 @@ namespace rendering_engine::gpu::backend::vulkan
         vkCmdFillBuffer(m_cmd, buf->object, offset, size, value);
     }
 
-    void vk_command_encoder::barrier(pipeline_stage /*src_stage*/,
-                                     pipeline_stage /*dst_stage*/,
-                                     access_flag /*src_access*/,
-                                     access_flag /*dst_access*/)
+    void vk_command_encoder::barrier(pipeline_stage src_stage,
+                                     pipeline_stage dst_stage,
+                                     access_flag src_access,
+                                     access_flag dst_access)
     {
         if (m_cmd == VK_NULL_HANDLE)
         {
             return;
         }
-        // Conservative full barrier. The engine's existing usage
-        // ranges are coarse enough that a stage-precise mapping is
-        // not needed yet; revisit when compute / storage workloads
-        // start churning per-frame.
+        // Translate the caller's stage/access intent into precise Vulkan masks
+        // instead of a blanket ALL_COMMANDS full barrier. An empty stage mask
+        // is illegal, so an unspecified source waits from the top of the pipe
+        // and an unspecified destination blocks at the bottom.
+        VkPipelineStageFlags src = to_vk_pipeline_stage(src_stage);
+        VkPipelineStageFlags dst = to_vk_pipeline_stage(dst_stage);
+        if (src == 0u)
+        {
+            src = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+        }
+        if (dst == 0u)
+        {
+            dst = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+        }
         VkMemoryBarrier mb{};
         mb.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
-        mb.srcAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
-        mb.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
-        vkCmdPipelineBarrier(m_cmd,
-                             VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-                             VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-                             0,
-                             1,
-                             &mb,
-                             0,
-                             nullptr,
-                             0,
-                             nullptr);
+        mb.srcAccessMask = to_vk_access(src_access);
+        mb.dstAccessMask = to_vk_access(dst_access);
+        vkCmdPipelineBarrier(m_cmd, src, dst, 0, 1, &mb, 0, nullptr, 0, nullptr);
     }
 
     VkCommandBuffer vk_command_encoder::release_command_buffer() noexcept

@@ -304,4 +304,128 @@ namespace rendering_engine::gpu::backend::vulkan
             return VK_IMAGE_ASPECT_COLOR_BIT;
         }
     }
+
+    VkPipelineStageFlags to_vk_pipeline_stage(pipeline_stage stages)
+    {
+        // The convenience superset maps straight to its Vulkan twin; the
+        // per-bit decode below would otherwise miss the unnamed high bits.
+        if (stages == pipeline_stage_all_commands)
+        {
+            return VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+        }
+        VkPipelineStageFlags out = 0;
+        if ((stages & pipeline_stage_vertex_input) != 0u)
+        {
+            out |= VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
+        }
+        if ((stages & pipeline_stage_vertex_shader) != 0u)
+        {
+            out |= VK_PIPELINE_STAGE_VERTEX_SHADER_BIT;
+        }
+        if ((stages & pipeline_stage_tessellation_control_shader) != 0u)
+        {
+            out |= VK_PIPELINE_STAGE_TESSELLATION_CONTROL_SHADER_BIT;
+        }
+        if ((stages & pipeline_stage_tessellation_evaluation_shader) != 0u)
+        {
+            out |= VK_PIPELINE_STAGE_TESSELLATION_EVALUATION_SHADER_BIT;
+        }
+        if ((stages & pipeline_stage_geometry_shader) != 0u)
+        {
+            out |= VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT;
+        }
+        if ((stages & pipeline_stage_fragment_shader) != 0u)
+        {
+            out |= VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        }
+        if ((stages & pipeline_stage_compute_shader) != 0u)
+        {
+            out |= VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+        }
+        if ((stages & pipeline_stage_color_attachment_output) != 0u)
+        {
+            out |= VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        }
+        if ((stages & pipeline_stage_early_fragment_tests) != 0u)
+        {
+            out |= VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+        }
+        if ((stages & pipeline_stage_late_fragment_tests) != 0u)
+        {
+            out |= VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+        }
+        if ((stages & pipeline_stage_transfer) != 0u)
+        {
+            out |= VK_PIPELINE_STAGE_TRANSFER_BIT;
+        }
+        if ((stages & pipeline_stage_draw_indirect) != 0u)
+        {
+            out |= VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT;
+        }
+        return out;
+    }
+
+    VkAccessFlags to_vk_access(access_flag flags)
+    {
+        VkAccessFlags out = 0;
+        if ((flags & access_indirect_command_read) != 0u)
+        {
+            out |= VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
+        }
+        if ((flags & access_index_read) != 0u)
+        {
+            out |= VK_ACCESS_INDEX_READ_BIT;
+        }
+        if ((flags & access_vertex_attribute_read) != 0u)
+        {
+            out |= VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
+        }
+        if ((flags & access_uniform_read) != 0u)
+        {
+            out |= VK_ACCESS_UNIFORM_READ_BIT;
+        }
+        if ((flags & access_shader_read) != 0u)
+        {
+            out |= VK_ACCESS_SHADER_READ_BIT;
+        }
+        if ((flags & access_shader_write) != 0u)
+        {
+            out |= VK_ACCESS_SHADER_WRITE_BIT;
+        }
+        if ((flags & access_color_attachment_read) != 0u)
+        {
+            out |= VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
+        }
+        if ((flags & access_color_attachment_write) != 0u)
+        {
+            out |= VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        }
+        if ((flags & access_depth_stencil_attachment_read) != 0u)
+        {
+            out |= VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
+        }
+        if ((flags & access_depth_stencil_attachment_write) != 0u)
+        {
+            out |= VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        }
+        if ((flags & access_transfer_read) != 0u)
+        {
+            out |= VK_ACCESS_TRANSFER_READ_BIT;
+        }
+        if ((flags & access_transfer_write) != 0u)
+        {
+            out |= VK_ACCESS_TRANSFER_WRITE_BIT;
+        }
+        // Vulkan has no dedicated storage-buffer / storage-image access bit;
+        // both read paths are SHADER_READ and both writes are SHADER_WRITE.
+        if ((flags & (access_storage_buffer_read | access_storage_image_read)) != 0u)
+        {
+            out |= VK_ACCESS_SHADER_READ_BIT;
+        }
+        if ((flags & (access_storage_buffer_write | access_storage_image_write)) != 0u)
+        {
+            out |= VK_ACCESS_SHADER_WRITE_BIT;
+        }
+        return out;
+    }
 } // namespace rendering_engine::gpu::backend::vulkan
