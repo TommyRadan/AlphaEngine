@@ -80,8 +80,9 @@ namespace rendering_engine
          * @brief Pumps the SDL event queue and translates OS input into
          *        engine events broadcast through @ref core::event_bus.
          *
-         * Also broadcasts a @ref core::frame event carrying the
-         * current delta time. Call once per main-loop iteration.
+         * Variable-rate: call once per rendered frame. The fixed-step
+         * @ref core::frame update is driven separately by
+         * @ref runtime::engine::tick.
          */
         void tick();
 

@@ -23,7 +23,11 @@
 #include <core/time.hpp>
 #include <SDL3/SDL.h>
 
-core::time::time() : m_frame_count{0}, m_delta_time{0} {}
+core::time::time(double fixed_delta_time, int max_steps_per_frame)
+    : m_frame_count{0}, m_delta_time{0}, m_fixed_delta_time{fixed_delta_time}, m_accumulator{0},
+      m_max_steps_per_frame{max_steps_per_frame}
+{
+}
 
 void core::time::perform_tick()
 {
@@ -56,4 +60,39 @@ const float core::time::current_fps() const
     if (m_delta_time < 0.001)
         return 0;
     return (float)(1000.0 / m_delta_time);
+}
+
+const double core::time::fixed_delta_time() const
+{
+    return m_fixed_delta_time;
+}
+
+void core::time::accumulate(double frame_delta_time)
+{
+    m_accumulator += frame_delta_time;
+
+    // Spiral-of-death guard: never let the accumulator hold more than
+    // m_max_steps_per_frame whole steps. Anything beyond is dropped, so
+    // the simulation runs slower than real time during a stall rather
+    // than trying (and failing) to catch up.
+    const double max_accumulated = m_fixed_delta_time * m_max_steps_per_frame;
+    if (m_accumulator > max_accumulated)
+    {
+        m_accumulator = max_accumulated;
+    }
+}
+
+bool core::time::next_fixed_step()
+{
+    if (m_accumulator < m_fixed_delta_time)
+    {
+        return false;
+    }
+    m_accumulator -= m_fixed_delta_time;
+    return true;
+}
+
+const double core::time::interpolation_alpha() const
+{
+    return m_accumulator / m_fixed_delta_time;
 }

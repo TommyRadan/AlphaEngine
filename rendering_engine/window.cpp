@@ -197,10 +197,6 @@ namespace rendering_engine
         auto& eng = runtime::current_engine();
         auto& bus = *eng.events;
 
-        core::frame frame;
-        frame.m_delta_time = static_cast<float>(eng.time->delta_time());
-        bus.emit<core::frame>(frame);
-
         SDL_PumpEvents();
         while (SDL_PollEvent(&events))
         {

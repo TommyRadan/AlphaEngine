@@ -169,14 +169,34 @@ namespace runtime
 
     void engine::tick()
     {
+        // Pump OS input once per rendered frame (variable rate). Input
+        // state set here is read by the fixed-step updates below.
         window->tick();
+
+        // Fixed-step update, decoupled from the render rate. Feed the time
+        // elapsed since the previous frame into the accumulator, then drain
+        // it one fixed step at a time — running game logic zero, one, or
+        // several times this frame so simulation behaviour is independent of
+        // frame rate. The accumulator's clamp bounds the step count, so this
+        // loop always terminates (the spiral-of-death guard lives in time).
+        time->accumulate(time->delta_time());
+        core::frame frame;
+        frame.m_delta_time = static_cast<float>(time->fixed_delta_time());
+        while (time->next_fixed_step())
+        {
+            events->emit<core::frame>(frame);
+        }
+
         // Build the ImGui debug overlay before the passes run; its draw
         // data is recorded inside the swapchain-targeted debug pass (via
         // the render_debug event) so it composites on top of the frame on
         // both the OpenGL and Vulkan backends. No-op in release builds.
         rendering_engine::debug_ui::begin_frame();
         // Propagate scene-graph component updates (light/camera poses tracking
-        // their nodes) after on_frame moved nodes and before the draw walk.
+        // their nodes) after the fixed updates moved nodes and before the draw
+        // walk. Runs once per rendered frame; render_* events fire per render
+        // inside renderer->render(). The interpolation alpha for smoothing
+        // between fixed states is available via time->interpolation_alpha().
         scenes->update();
         renderer->render();
         window->swap_buffers();

@@ -28,6 +28,7 @@ set(ALPHAENGINE_TEST_SOURCES_UNDER_TEST
     ${CMAKE_SOURCE_DIR}/core/event_engine.cpp
     ${CMAKE_SOURCE_DIR}/core/jobs.cpp
     ${CMAKE_SOURCE_DIR}/core/log.cpp
+    ${CMAKE_SOURCE_DIR}/core/time.cpp
     ${CMAKE_SOURCE_DIR}/core/version.cpp
     # runtime::node — scene-graph hierarchy (depends only on math + the
     # component store; no renderer or device).
@@ -54,6 +55,7 @@ set(ALPHAENGINE_TEST_SOURCES
     core/pool_test.cpp
     core/event_bus_test.cpp
     core/jobs_test.cpp
+    core/time_test.cpp
     runtime/node_test.cpp
     rendering_engine/assets/asset_cache_test.cpp
 )
