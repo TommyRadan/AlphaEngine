@@ -22,8 +22,6 @@
 
 #include <rendering_engine/rendering_engine.hpp>
 
-#include <SDL3/SDL_stdinc.h>
-
 #include <core/jobs.hpp>
 #include <core/log.hpp>
 #include <core/settings.hpp>
@@ -254,13 +252,12 @@ void rendering_engine::context::init()
     }
     m_frame_graph.compile();
 
-    // Opt-in parallel pass recording. Enabled only when the env var is set,
-    // the backend supports recording a frame across several command buffers,
-    // and the job pool actually has workers.
-    const char* parallel_env = SDL_getenv("ALPHAENGINE_PARALLEL_RECORDING");
-    const bool parallel_requested = parallel_env != nullptr && parallel_env[0] != '0' && parallel_env[0] != '\0';
-    m_parallel_recording = parallel_requested && eng.gpu->supports_parallel_recording() && eng.jobs != nullptr &&
-                           eng.jobs->worker_count() > 0;
+    // Parallel pass recording, on whenever the backend can record a frame
+    // across several command buffers (Vulkan) and the job pool has workers.
+    // Passes that broadcast main-thread-only events stay on the main thread
+    // (see pass::main_thread_only); the rest fan out across the pool.
+    m_parallel_recording =
+        eng.gpu->supports_parallel_recording() && eng.jobs != nullptr && eng.jobs->worker_count() > 0;
     if (m_parallel_recording)
     {
         LOG_INF("Rendering Engine: parallel pass recording enabled (%u worker threads)", eng.jobs->worker_count());
