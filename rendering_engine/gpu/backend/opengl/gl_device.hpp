@@ -97,7 +97,9 @@ namespace rendering_engine::gpu::backend::opengl
         texture render_target_color_texture(render_target handle) override;
         texture render_target_depth_texture(render_target handle) override;
 
-        std::unique_ptr<command_encoder> create_command_encoder() override;
+        // recording_context is ignored: OpenGL records immediately on the
+        // calling (main) thread, so there is only one logical context.
+        std::unique_ptr<command_encoder> create_command_encoder(uint32_t recording_context = 0) override;
         void submit(std::unique_ptr<command_encoder> encoder) override;
 
         // Internal accessors used by the encoder to map a

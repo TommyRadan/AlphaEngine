@@ -465,16 +465,25 @@ namespace rendering_engine::gpu::backend::vulkan
         }
         m_staging_capacity = 0;
 
-        if (m_command_pool != VK_NULL_HANDLE)
+        // Per-recording-context pools. Destroying each pool implicitly frees the
+        // command buffers allocated from it, so just drop our handle lists.
+        for (auto& ctx : m_recording_contexts)
         {
-            // Destroying the pool implicitly frees every command buffer
-            // allocated from it (the free/in-flight lists and the reusable
-            // upload buffer), so just drop our handles to them.
             for (uint32_t i = 0; i < k_max_frames_in_flight; ++i)
             {
-                m_command_buffer_free[i].clear();
-                m_command_buffer_in_flight[i].clear();
+                ctx.free[i].clear();
+                ctx.in_flight[i].clear();
             }
+            if (ctx.pool != VK_NULL_HANDLE)
+            {
+                vkDestroyCommandPool(m_device, ctx.pool, nullptr);
+                ctx.pool = VK_NULL_HANDLE;
+            }
+        }
+
+        if (m_command_pool != VK_NULL_HANDLE)
+        {
+            // Destroying the pool implicitly frees the reusable upload buffer.
             m_upload_cmd = VK_NULL_HANDLE;
             vkDestroyCommandPool(m_device, m_command_pool, nullptr);
             m_command_pool = VK_NULL_HANDLE;
@@ -1361,62 +1370,95 @@ namespace rendering_engine::gpu::backend::vulkan
 
     // -- Command recording ---------------------------------------------
 
-    std::unique_ptr<command_encoder> vk_device::create_command_encoder()
+    std::unique_ptr<command_encoder> vk_device::create_command_encoder(uint32_t recording_context)
     {
-        return std::make_unique<vk_command_encoder>(*this);
+        return std::make_unique<vk_command_encoder>(*this, recording_context);
     }
 
     void vk_device::submit(std::unique_ptr<command_encoder> encoder)
     {
-        auto* vk_enc = static_cast<vk_command_encoder*>(encoder.get());
-        if (vk_enc == nullptr)
+        // A single encoder is just a one-element frame; share the batch path.
+        std::vector<std::unique_ptr<command_encoder>> one;
+        one.push_back(std::move(encoder));
+        submit_frame(std::move(one));
+    }
+
+    void vk_device::submit_frame(std::vector<std::unique_ptr<command_encoder>> encoders)
+    {
+        // End every recorded command buffer and collect it together with the
+        // recording context it came from, so it returns to the right pool on
+        // recycle. encoders are kept in order — encoders.front() executes first.
+        std::vector<VkCommandBuffer> cmds;
+        std::vector<uint32_t> contexts;
+        cmds.reserve(encoders.size());
+        contexts.reserve(encoders.size());
+        for (auto& encoder : encoders)
         {
-            encoder.reset();
-            return;
+            auto* vk_enc = static_cast<vk_command_encoder*>(encoder.get());
+            if (vk_enc == nullptr)
+            {
+                continue;
+            }
+            const uint32_t context = vk_enc->recording_context();
+            VkCommandBuffer cmd = vk_enc->release_command_buffer();
+            if (cmd == VK_NULL_HANDLE)
+            {
+                continue;
+            }
+            const VkResult end_result = vkEndCommandBuffer(cmd);
+            if (end_result != VK_SUCCESS)
+            {
+                LOG_ERR("vkEndCommandBuffer failed: %s", vk_result_to_string(end_result));
+                vkResetCommandBuffer(cmd, 0);
+                m_recording_contexts[context].free[m_frame_in_flight].push_back(cmd);
+                continue;
+            }
+            cmds.push_back(cmd);
+            contexts.push_back(context);
         }
-        VkCommandBuffer cmd = vk_enc->release_command_buffer();
-        if (cmd == VK_NULL_HANDLE)
+        encoders.clear();
+
+        if (cmds.empty())
         {
-            encoder.reset();
-            return;
-        }
-        const VkResult end_result = vkEndCommandBuffer(cmd);
-        if (end_result != VK_SUCCESS)
-        {
-            LOG_ERR("vkEndCommandBuffer failed: %s", vk_result_to_string(end_result));
-            encoder.reset();
             return;
         }
 
         if (!m_have_current_image)
         {
+            // Off-screen-only work (e.g. the IBL prefilter at load): no
+            // swapchain semaphores, just submit, drain, and recycle the
+            // one-off buffers immediately.
             VkSubmitInfo si{};
             si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-            si.commandBufferCount = 1;
-            si.pCommandBuffers = &cmd;
+            si.commandBufferCount = static_cast<uint32_t>(cmds.size());
+            si.pCommandBuffers = cmds.data();
             const VkResult submit_result = vkQueueSubmit(m_graphics_queue, 1, &si, VK_NULL_HANDLE);
             if (submit_result != VK_SUCCESS)
             {
                 LOG_ERR("vkQueueSubmit (no-image) failed: %s", vk_result_to_string(submit_result));
             }
             vkQueueWaitIdle(m_graphics_queue);
-            // The queue is idle, so this one-off (off-screen-only) command
-            // buffer is finished; reset it and return it to the current slot's
-            // free list for reuse instead of freeing it.
-            vkResetCommandBuffer(cmd, 0);
-            m_command_buffer_free[m_frame_in_flight].push_back(cmd);
-            encoder.reset();
+            for (size_t i = 0; i < cmds.size(); ++i)
+            {
+                vkResetCommandBuffer(cmds[i], 0);
+                m_recording_contexts[contexts[i]].free[m_frame_in_flight].push_back(cmds[i]);
+            }
             return;
         }
 
+        // Submit every command buffer as one ordered batch. Within a single
+        // queue submission they execute in array order (cmds.front() first), so
+        // splitting the frame's passes across several buffers preserves the pass
+        // order and the cross-pass render-pass dependencies, while the frame
+        // waits once on image-available and signals render-finished once.
         const VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
         VkSubmitInfo si{};
         si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
         si.waitSemaphoreCount = 1;
         si.pWaitSemaphores = &m_image_available[m_frame_in_flight];
         si.pWaitDstStageMask = &wait_stage;
-        si.commandBufferCount = 1;
-        si.pCommandBuffers = &cmd;
+        si.commandBufferCount = static_cast<uint32_t>(cmds.size());
+        si.pCommandBuffers = cmds.data();
         si.signalSemaphoreCount = 1;
         si.pSignalSemaphores = &m_render_finished[m_current_image_index];
         const VkResult submit_result = vkQueueSubmit(m_graphics_queue, 1, &si, m_in_flight_fences[m_frame_in_flight]);
@@ -1442,15 +1484,15 @@ namespace rendering_engine::gpu::backend::vulkan
             LOG_ERR("vkQueuePresentKHR failed: %s", vk_result_to_string(r));
         }
         m_have_current_image = false;
-        encoder.reset();
 
-        // The command buffer is in flight until this frame's fence signals.
-        // Park it on this slot's in-flight list; begin_frame recycles it (reset
-        // + back to the free list) after waiting on the slot fence, so the same
-        // buffers are reused when this slot comes around again instead of being
-        // allocated and freed every frame. This indexes the current slot, so it
-        // must run before m_frame_in_flight advances below.
-        m_command_buffer_in_flight[m_frame_in_flight].push_back(cmd);
+        // Each command buffer is in flight until this frame's fence signals.
+        // Park it on its context's in-flight list; begin_frame recycles it once
+        // the slot fence signals. Indexes the current slot, so it must run
+        // before m_frame_in_flight advances below.
+        for (size_t i = 0; i < cmds.size(); ++i)
+        {
+            m_recording_contexts[contexts[i]].in_flight[m_frame_in_flight].push_back(cmds[i]);
+        }
 
         if (m_frame_index < k_diagnostic_frames)
         {
@@ -1493,9 +1535,26 @@ namespace rendering_engine::gpu::backend::vulkan
         }
     }
 
-    VkCommandBuffer vk_device::acquire_command_buffer()
+    VkCommandBuffer vk_device::acquire_command_buffer(uint32_t recording_context)
     {
-        auto& free_list = m_command_buffer_free[m_frame_in_flight];
+        auto& ctx = m_recording_contexts[recording_context];
+        if (ctx.pool == VK_NULL_HANDLE)
+        {
+            // First use of this context: give it its own pool so it can be
+            // recorded on a worker thread without contending the others.
+            // vkCreateCommandPool is thread-safe, so the lazy create is fine on
+            // whichever thread processes this context first.
+            VkCommandPoolCreateInfo info{};
+            info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+            info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+            info.queueFamilyIndex = m_graphics_queue_family;
+            if (vkCreateCommandPool(m_device, &info, nullptr, &ctx.pool) != VK_SUCCESS)
+            {
+                LOG_ERR("vkCreateCommandPool (recording context %u) failed", recording_context);
+                return VK_NULL_HANDLE;
+            }
+        }
+        auto& free_list = ctx.free[m_frame_in_flight];
         if (!free_list.empty())
         {
             // Recycled buffers were reset when returned, so they are back in
@@ -1506,7 +1565,7 @@ namespace rendering_engine::gpu::backend::vulkan
         }
         VkCommandBufferAllocateInfo ai{};
         ai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-        ai.commandPool = m_command_pool;
+        ai.commandPool = ctx.pool;
         ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
         ai.commandBufferCount = 1;
         VkCommandBuffer cmd = VK_NULL_HANDLE;
@@ -1517,29 +1576,32 @@ namespace rendering_engine::gpu::backend::vulkan
         return cmd;
     }
 
-    void vk_device::discard_command_buffer(VkCommandBuffer cmd)
+    void vk_device::discard_command_buffer(uint32_t recording_context, VkCommandBuffer cmd)
     {
         if (cmd == VK_NULL_HANDLE)
         {
             return;
         }
         // The buffer was never submitted (an encoder error/early-out), so the
-        // GPU never referenced it — reset and return it to the current slot's
-        // free list for immediate reuse.
+        // GPU never referenced it — reset and return it to its context's
+        // current-slot free list for immediate reuse.
         vkResetCommandBuffer(cmd, 0);
-        m_command_buffer_free[m_frame_in_flight].push_back(cmd);
+        m_recording_contexts[recording_context].free[m_frame_in_flight].push_back(cmd);
     }
 
     void vk_device::recycle_in_flight_command_buffers(uint32_t frame_in_flight)
     {
-        auto& in_flight = m_command_buffer_in_flight[frame_in_flight];
-        auto& free_list = m_command_buffer_free[frame_in_flight];
-        for (VkCommandBuffer cmd : in_flight)
+        for (auto& ctx : m_recording_contexts)
         {
-            vkResetCommandBuffer(cmd, 0);
-            free_list.push_back(cmd);
+            auto& in_flight = ctx.in_flight[frame_in_flight];
+            auto& free_list = ctx.free[frame_in_flight];
+            for (VkCommandBuffer cmd : in_flight)
+            {
+                vkResetCommandBuffer(cmd, 0);
+                free_list.push_back(cmd);
+            }
+            in_flight.clear();
         }
-        in_flight.clear();
     }
 
     void vk_device::begin_frame()
