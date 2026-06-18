@@ -106,8 +106,12 @@ namespace rendering_engine::render_graph
         /**
          * @brief Register a pass in execution order with its declared I/O and
          *        the callback that records it.
+         *
+         * @param main_thread_only When true the engine never records this pass
+         *        on a worker thread (it broadcasts a main-thread-only event
+         *        during recording); see @ref range_main_thread_only.
          */
-        void add_pass(std::string name, pass_io_builder io, execute_fn execute);
+        void add_pass(std::string name, pass_io_builder io, execute_fn execute, bool main_thread_only = false);
 
         /**
          * @brief Validate declared dependencies.
@@ -124,6 +128,22 @@ namespace rendering_engine::render_graph
          */
         void execute(gpu::command_encoder& encoder, const frame_context& ctx) const;
 
+        /**
+         * @brief Record passes in the half-open range [begin, end) into
+         *        @p encoder, in registration order.
+         *
+         * Used by the parallel path, which slices the frame into contiguous
+         * ranges and records each into its own encoder. @p end is clamped to
+         * the pass count.
+         */
+        void execute_range(gpu::command_encoder& encoder, const frame_context& ctx, size_t begin, size_t end) const;
+
+        /**
+         * @brief Whether any pass in [begin, end) must record on the main
+         *        thread (see @ref add_pass).
+         */
+        bool range_main_thread_only(size_t begin, size_t end) const;
+
         /// Drop all passes and imported resources.
         void clear();
 
@@ -139,6 +159,7 @@ namespace rendering_engine::render_graph
             std::string name;
             pass_io_builder io;
             execute_fn execute;
+            bool main_thread_only{false};
         };
 
         std::vector<node> m_nodes;

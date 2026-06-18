@@ -22,6 +22,9 @@
 
 #include <rendering_engine/rendering_engine.hpp>
 
+#include <SDL3/SDL_stdinc.h>
+
+#include <core/jobs.hpp>
 #include <core/log.hpp>
 #include <core/settings.hpp>
 #include <rendering_engine/camera/camera.hpp>
@@ -243,12 +246,25 @@ void rendering_engine::context::init()
     {
         render_graph::pass_io_builder io;
         p->declare_io(io);
-        m_frame_graph.add_pass(p->name(),
-                               std::move(io),
-                               [raw = p.get()](gpu::command_encoder& encoder, const frame_context& frame)
-                               { raw->record(encoder, frame); });
+        m_frame_graph.add_pass(
+            p->name(),
+            std::move(io),
+            [raw = p.get()](gpu::command_encoder& encoder, const frame_context& frame) { raw->record(encoder, frame); },
+            p->main_thread_only());
     }
     m_frame_graph.compile();
+
+    // Opt-in parallel pass recording. Enabled only when the env var is set,
+    // the backend supports recording a frame across several command buffers,
+    // and the job pool actually has workers.
+    const char* parallel_env = SDL_getenv("ALPHAENGINE_PARALLEL_RECORDING");
+    const bool parallel_requested = parallel_env != nullptr && parallel_env[0] != '0' && parallel_env[0] != '\0';
+    m_parallel_recording = parallel_requested && eng.gpu->supports_parallel_recording() && eng.jobs != nullptr &&
+                           eng.jobs->worker_count() > 0;
+    if (m_parallel_recording)
+    {
+        LOG_INF("Rendering Engine: parallel pass recording enabled (%u worker threads)", eng.jobs->worker_count());
+    }
 
     // Bring the ImGui debug overlay up now that the window, GL context
     // and passes are live. No-op in release builds.
@@ -343,9 +359,56 @@ void rendering_engine::context::render()
                       m_ldr_color_texture};
     ctx.fog = m_fog;
 
-    auto encoder = gpu.create_command_encoder();
-    m_frame_graph.execute(*encoder, ctx);
-    gpu.submit(std::move(encoder));
+    const size_t pass_count = m_frame_graph.pass_count();
+    if (!m_parallel_recording || pass_count <= 1)
+    {
+        // Serial path: one encoder records the whole frame in order.
+        auto encoder = gpu.create_command_encoder();
+        m_frame_graph.execute(*encoder, ctx);
+        gpu.submit(std::move(encoder));
+        return;
+    }
+
+    // Parallel path: split the frame into contiguous groups, record each into
+    // its own command buffer, then submit them as one ordered batch. Groups are
+    // capped by the backend's recording contexts, the worker count, and the
+    // pass count. A group containing a pass that broadcasts a main-thread-only
+    // event is recorded on the main thread; the rest fan out to the job pool.
+    const auto worker_slots = static_cast<size_t>(eng.jobs->worker_count()) + 1;
+    const size_t group_count = std::min({static_cast<size_t>(gpu.recording_context_count()), worker_slots, pass_count});
+
+    // Acquire the swapchain image up front (begin_frame is not thread-safe and
+    // a swapchain pass may record on a worker), then let the passes record.
+    gpu.begin_frame();
+
+    std::vector<std::unique_ptr<gpu::command_encoder>> encoders(group_count);
+    const auto record_group = [&](size_t group)
+    {
+        const size_t begin = (group * pass_count) / group_count;
+        const size_t end = ((group + 1) * pass_count) / group_count;
+        auto encoder = gpu.create_command_encoder(static_cast<uint32_t>(group));
+        m_frame_graph.execute_range(*encoder, ctx, begin, end);
+        encoders[group] = std::move(encoder);
+    };
+
+    // Dispatch worker-eligible groups, record main-thread-only groups inline,
+    // then wait for the workers before submitting.
+    for (size_t group = 0; group < group_count; ++group)
+    {
+        const size_t begin = (group * pass_count) / group_count;
+        const size_t end = ((group + 1) * pass_count) / group_count;
+        if (m_frame_graph.range_main_thread_only(begin, end))
+        {
+            record_group(group);
+        }
+        else
+        {
+            eng.jobs->dispatch([&record_group, group] { record_group(group); });
+        }
+    }
+    eng.jobs->wait_idle();
+
+    gpu.submit_frame(std::move(encoders));
 }
 
 void rendering_engine::context::register_scene_renderable(renderable* r)

@@ -199,7 +199,7 @@ namespace rendering_engine::gpu::backend::vulkan
 
         // Acquire the next swapchain image. Idempotent within a
         // frame.
-        void begin_frame();
+        void begin_frame() override;
         void end_frame();
 
         // One-shot command buffer for resource uploads. begin_one_shot reuses
