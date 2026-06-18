@@ -340,13 +340,22 @@ namespace rendering_engine::gpu::backend::vulkan
         texture_format m_swapchain_depth_format{texture_format::depth32_float};
         render_target m_swapchain_target{};
 
-        // Number of frames the CPU may record ahead of the GPU. With a
-        // single frame in flight the CPU stalled on the in-flight fence
-        // every frame; a small ring of per-frame sync resources lets the
-        // CPU record frame N+1 while the GPU is still draining frame N.
-        // Two is the usual sweet spot — enough to hide the submit/acquire
-        // latency without adding more than one frame of input lag.
-        static constexpr uint32_t k_max_frames_in_flight = 2;
+        // Number of frames the CPU may record ahead of the GPU. The sync ring,
+        // command-buffer pools and deferred-destroy buckets below are all sized
+        // to this, so the machinery supports >1.
+        //
+        // It is pinned to 1 for now because recording frame N+1 ahead of the
+        // GPU is only safe once every per-frame GPU input is multi-buffered.
+        // The engine's per-frame UBOs (camera, lights, shadow matrices, per-draw
+        // model matrices) are single host-visible buffers rewritten in place
+        // each frame; with >1 frame in flight the CPU's memcpy for frame N+1
+        // overwrites data the GPU is still reading for frame N, which shows up
+        // as flickering/jitter (worst on hard shadow edges). One frame in flight
+        // re-serialises CPU and GPU (begin_frame waits the previous frame's
+        // fence before recording), so the writes never race. Raise this back to
+        // 2 once dynamic buffers are multi-buffered per frame in flight (a
+        // per-slot UBO ring bound with a dynamic offset).
+        static constexpr uint32_t k_max_frames_in_flight = 1;
 
         // Per-frame-in-flight sync resources, indexed by m_frame_in_flight.
         // The image-available semaphore must be per-frame: vkAcquireNextImageKHR
