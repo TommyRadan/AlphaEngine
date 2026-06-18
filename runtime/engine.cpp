@@ -187,6 +187,14 @@ namespace runtime
             events->emit<core::frame>(frame);
         }
 
+        // Per-render-frame update for visual / input-driven game logic, carrying
+        // the variable render delta so it stays smooth at the render rate rather
+        // than stepping at the fixed rate above. Emitted before the scene-graph
+        // update so any node poses it moves are picked up this frame.
+        core::render_update render_tick;
+        render_tick.m_delta_time = static_cast<float>(time->delta_time());
+        events->emit<core::render_update>(render_tick);
+
         // Build the ImGui debug overlay before the passes run; its draw
         // data is recorded inside the swapchain-targeted debug pass (via
         // the render_debug event) so it composites on top of the frame on

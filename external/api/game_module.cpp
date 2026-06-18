@@ -55,6 +55,10 @@ namespace
         {
             bus.subscribe<core::frame>(info.on_frame);
         }
+        if (info.on_render_update)
+        {
+            bus.subscribe<core::render_update>(info.on_render_update);
+        }
         if (info.on_render_scene)
         {
             bus.subscribe<core::render_scene>(info.on_render_scene);

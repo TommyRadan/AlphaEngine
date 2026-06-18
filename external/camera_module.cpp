@@ -76,7 +76,7 @@ static void on_mouse_key_up(const core::mouse_key_up& event)
     mouse_keys[event.m_key_code] = false;
 }
 
-static void on_frame(const core::frame& event)
+static void on_render_update(const core::render_update& event)
 {
     if (g_camera_id == 0)
     {
@@ -188,7 +188,7 @@ GAME_MODULE()
 {
     LOG_INF("Registering external module: camera_module");
     struct game_module_info info = {};
-    info.on_frame = on_frame;
+    info.on_render_update = on_render_update;
     info.on_engine_start = on_engine_start;
     info.on_engine_stop = on_engine_stop;
     info.on_key_down = on_key_down;
