@@ -29,9 +29,10 @@
  * resource family (vk_device.cpp for lifecycle / swapchain /
  * encoders / lookup_*, vk_device_buffer.cpp for buffers, etc.).
  *
- * The backend ships with a single frame in flight, runtime SPIR-V
- * via @ref gpu::compile_glsl_to_spirv (already used by the GL
- * backend), no multi-threaded recording, no real GPU allocator.
+ * The backend records up to @c k_max_frames_in_flight frames ahead
+ * of the GPU, runtime SPIR-V via @ref gpu::compile_glsl_to_spirv
+ * (already used by the GL backend), no multi-threaded recording,
+ * no real GPU allocator.
  * Compute pipelines and storage-image bind groups are implemented
  * (the IBL convolution runs on the GPU just like OpenGL); indirect
  * and barrier methods remain focused stubs that the engine's
@@ -40,6 +41,7 @@
 
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -199,20 +201,20 @@ namespace rendering_engine::gpu::backend::vulkan
         // requested @p properties.
         uint32_t find_memory_type(uint32_t type_filter, VkMemoryPropertyFlags properties) const;
 
-        // Destroy callbacks queued from @c destroy() overloads. With
-        // a single frame in flight, freeing a buffer or descriptor
-        // set during the frame that submitted it would land the
-        // free while the GPU is still reading from it; the engine's
+        // Destroy callbacks queued from @c destroy() overloads. Freeing a
+        // buffer or descriptor set during the frame that submitted it would
+        // land the free while the GPU is still reading from it; the engine's
         // per-draw UBO / bind-group churn used to trigger streams of
         // VUID-vkDestroyBuffer-buffer-00922 / VUID-vkFreeDescriptor
-        // Sets-pDescriptorSets-00309. Each @c destroy() pushes a
-        // closure here; @c drain_pending_destroys is called after
-        // @c vkWaitForFences in @c begin_frame and again under
-        // vkDeviceWaitIdle on shutdown, so the actual vkDestroy*
-        // call only fires once the GPU has finished referencing the
-        // resource.
+        // Sets-pDescriptorSets-00309. Each @c destroy() pushes a closure into
+        // the bucket of the frame-in-flight currently being recorded; that
+        // bucket is drained in @c begin_frame after its slot's fence signals
+        // (so the work that referenced the resource is done) and all buckets
+        // are drained under vkDeviceWaitIdle on shutdown. The bucket must be
+        // per-slot, not global: with N frames in flight, waiting on one slot's
+        // fence says nothing about whether the other slots' GPU work is done.
         void enqueue_destroy(std::function<void()> fn);
-        void drain_pending_destroys();
+        void drain_pending_destroys(uint32_t frame_in_flight);
 
         // 1x1 placeholder textures (one 2D, one cube) bound in place of
         // an unset sampler slot. Vulkan requires every statically-used
@@ -271,7 +273,24 @@ namespace rendering_engine::gpu::backend::vulkan
         texture_format m_swapchain_depth_format{texture_format::depth32_float};
         render_target m_swapchain_target{};
 
-        VkSemaphore m_image_available{VK_NULL_HANDLE};
+        // Number of frames the CPU may record ahead of the GPU. With a
+        // single frame in flight the CPU stalled on the in-flight fence
+        // every frame; a small ring of per-frame sync resources lets the
+        // CPU record frame N+1 while the GPU is still draining frame N.
+        // Two is the usual sweet spot — enough to hide the submit/acquire
+        // latency without adding more than one frame of input lag.
+        static constexpr uint32_t k_max_frames_in_flight = 2;
+
+        // Per-frame-in-flight sync resources, indexed by m_frame_in_flight.
+        // The image-available semaphore must be per-frame: vkAcquireNextImageKHR
+        // signals it, and the previous frame's acquire may still be pending
+        // when we record the next, so reusing one semaphore would race
+        // (VUID-vkAcquireNextImageKHR-semaphore-01779). The fence gates reuse
+        // of the slot's resources.
+        std::array<VkSemaphore, k_max_frames_in_flight> m_image_available{};
+        std::array<VkFence, k_max_frames_in_flight> m_in_flight_fences{};
+        uint32_t m_frame_in_flight{0};
+
         // One render-finished semaphore per swapchain image, indexed by the
         // acquired image index. A semaphore tied to a specific image is not
         // re-signaled until that image is re-acquired, which the acquire/fence
@@ -280,7 +299,14 @@ namespace rendering_engine::gpu::backend::vulkan
         // and destroyed alongside the swapchain so it tracks image-count
         // changes on resize.
         std::vector<VkSemaphore> m_render_finished;
-        VkFence m_in_flight_fence{VK_NULL_HANDLE};
+
+        // Tracks which frame-in-flight fence last rendered to each swapchain
+        // image (no ownership — the fences live in m_in_flight_fences). When
+        // there are fewer images than frames in flight, acquire can hand back
+        // an image a previous frame is still drawing to; begin_frame waits on
+        // this fence before reusing the image. Sized to the image count and
+        // reset on resize.
+        std::vector<VkFence> m_images_in_flight;
         uint32_t m_current_image_index{0};
         bool m_have_current_image{false};
 
@@ -292,7 +318,7 @@ namespace rendering_engine::gpu::backend::vulkan
         texture m_default_texture_2d{};
         texture m_default_texture_cube{};
 
-        std::vector<std::function<void()>> m_pending_destroys;
+        std::array<std::vector<std::function<void()>>, k_max_frames_in_flight> m_pending_destroys;
 
         // Frame-level diagnostic counters. Logged at submit() for
         // @c k_diagnostic_frames frames after init so the user can

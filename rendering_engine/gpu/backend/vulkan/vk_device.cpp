@@ -308,8 +308,12 @@ namespace rendering_engine::gpu::backend::vulkan
 
         // GPU is idle: anything queued by destroy() during the run
         // is now safe to actually free, and the active handle pools
-        // below need to release whatever is still resident.
-        drain_pending_destroys();
+        // below need to release whatever is still resident. Drain every
+        // frame-in-flight slot, not just the current one.
+        for (uint32_t i = 0; i < k_max_frames_in_flight; ++i)
+        {
+            drain_pending_destroys(i);
+        }
 
         m_pipelines.for_each(
             [&](vk_pipeline& p)
@@ -1002,6 +1006,10 @@ namespace rendering_engine::gpu::backend::vulkan
             }
         }
 
+        // No frame owns any image yet; begin_frame fills this in as it
+        // acquires. Sized to the actual image count so it tracks resize.
+        m_images_in_flight.assign(actual, VK_NULL_HANDLE);
+
         LOG_INF("Vulkan swapchain: %ux%u images=%u", extent.width, extent.height, actual);
     }
 
@@ -1043,6 +1051,7 @@ namespace rendering_engine::gpu::backend::vulkan
             }
         }
         m_render_finished.clear();
+        m_images_in_flight.clear();
         if (m_swapchain != VK_NULL_HANDLE)
         {
             vkDestroySwapchainKHR(m_device, m_swapchain, nullptr);
@@ -1056,15 +1065,22 @@ namespace rendering_engine::gpu::backend::vulkan
         si.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
         VkFenceCreateInfo fi{};
         fi.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+        // Created signalled so the very first begin_frame can wait on each
+        // slot's fence without blocking before anything has been submitted.
         fi.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-        // The render-finished semaphores live with the swapchain (one per
-        // image); only the image-available semaphore and the in-flight fence
-        // are owned here.
-        if (vkCreateSemaphore(m_device, &si, nullptr, &m_image_available) != VK_SUCCESS ||
-            vkCreateFence(m_device, &fi, nullptr, &m_in_flight_fence) != VK_SUCCESS)
+        // One image-available semaphore and one in-flight fence per frame in
+        // flight. The render-finished semaphores live with the swapchain (one
+        // per image) since they are indexed by the acquired image, not the
+        // frame-in-flight slot.
+        for (uint32_t i = 0; i < k_max_frames_in_flight; ++i)
         {
-            throw std::runtime_error{"vk sync objects"};
+            if (vkCreateSemaphore(m_device, &si, nullptr, &m_image_available[i]) != VK_SUCCESS ||
+                vkCreateFence(m_device, &fi, nullptr, &m_in_flight_fences[i]) != VK_SUCCESS)
+            {
+                throw std::runtime_error{"vk sync objects"};
+            }
         }
+        m_frame_in_flight = 0;
     }
 
     void vk_device::destroy_sync_objects()
@@ -1073,15 +1089,18 @@ namespace rendering_engine::gpu::backend::vulkan
         {
             return;
         }
-        if (m_image_available != VK_NULL_HANDLE)
+        for (uint32_t i = 0; i < k_max_frames_in_flight; ++i)
         {
-            vkDestroySemaphore(m_device, m_image_available, nullptr);
-            m_image_available = VK_NULL_HANDLE;
-        }
-        if (m_in_flight_fence != VK_NULL_HANDLE)
-        {
-            vkDestroyFence(m_device, m_in_flight_fence, nullptr);
-            m_in_flight_fence = VK_NULL_HANDLE;
+            if (m_image_available[i] != VK_NULL_HANDLE)
+            {
+                vkDestroySemaphore(m_device, m_image_available[i], nullptr);
+                m_image_available[i] = VK_NULL_HANDLE;
+            }
+            if (m_in_flight_fences[i] != VK_NULL_HANDLE)
+            {
+                vkDestroyFence(m_device, m_in_flight_fences[i], nullptr);
+                m_in_flight_fences[i] = VK_NULL_HANDLE;
+            }
         }
     }
 
@@ -1348,13 +1367,13 @@ namespace rendering_engine::gpu::backend::vulkan
         VkSubmitInfo si{};
         si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
         si.waitSemaphoreCount = 1;
-        si.pWaitSemaphores = &m_image_available;
+        si.pWaitSemaphores = &m_image_available[m_frame_in_flight];
         si.pWaitDstStageMask = &wait_stage;
         si.commandBufferCount = 1;
         si.pCommandBuffers = &cmd;
         si.signalSemaphoreCount = 1;
         si.pSignalSemaphores = &m_render_finished[m_current_image_index];
-        const VkResult submit_result = vkQueueSubmit(m_graphics_queue, 1, &si, m_in_flight_fence);
+        const VkResult submit_result = vkQueueSubmit(m_graphics_queue, 1, &si, m_in_flight_fences[m_frame_in_flight]);
         if (submit_result != VK_SUCCESS)
         {
             LOG_ERR("vkQueueSubmit failed: %s", vk_result_to_string(submit_result));
@@ -1379,14 +1398,15 @@ namespace rendering_engine::gpu::backend::vulkan
         m_have_current_image = false;
         encoder.reset();
 
-        // The command buffer is in flight until this frame's fence
-        // signals. Hand it back to the pool through the deferred queue,
-        // which begin_frame drains only after vkWaitForFences — so it is
-        // freed once the GPU is done, not leaked for the lifetime of the
-        // run. (Previously release_command_buffer detached it from the
-        // encoder but nothing ever freed it, so the pool grew by one
-        // command buffer per frame and teardown of the whole pile stalled
-        // shutdown for tens of seconds.)
+        // The command buffer is in flight until this frame's fence signals.
+        // Hand it back to the pool through this slot's deferred queue, which
+        // begin_frame drains only after waiting on the slot fence — so it is
+        // freed once the GPU is done, not leaked for the lifetime of the run.
+        // enqueue_destroy targets the current frame-in-flight slot, so this
+        // must run before m_frame_in_flight advances below. (Previously
+        // release_command_buffer detached it from the encoder but nothing ever
+        // freed it, so the pool grew by one command buffer per frame and
+        // teardown of the whole pile stalled shutdown for tens of seconds.)
         const VkDevice device = m_device;
         const VkCommandPool pool = m_command_pool;
         enqueue_destroy([device, pool, cmd] { vkFreeCommandBuffers(device, pool, 1, &cmd); });
@@ -1404,22 +1424,28 @@ namespace rendering_engine::gpu::backend::vulkan
         }
         m_frame_stats = {};
         ++m_frame_index;
+
+        // Advance to the next slot so the next frame records against its own
+        // sync resources while this one drains on the GPU.
+        m_frame_in_flight = (m_frame_in_flight + 1) % k_max_frames_in_flight;
     }
 
     void vk_device::enqueue_destroy(std::function<void()> fn)
     {
         if (fn)
         {
-            m_pending_destroys.push_back(std::move(fn));
+            // Tag the destroy with the frame-in-flight currently being
+            // recorded; it is freed once that slot's fence next signals.
+            m_pending_destroys[m_frame_in_flight].push_back(std::move(fn));
         }
     }
 
-    void vk_device::drain_pending_destroys()
+    void vk_device::drain_pending_destroys(uint32_t frame_in_flight)
     {
         // Move out first so a destroy callback that itself enqueues
         // is captured into the next drain rather than running here.
         std::vector<std::function<void()>> drain;
-        drain.swap(m_pending_destroys);
+        drain.swap(m_pending_destroys[frame_in_flight]);
         for (auto& fn : drain)
         {
             fn();
@@ -1432,15 +1458,18 @@ namespace rendering_engine::gpu::backend::vulkan
         {
             return;
         }
-        vkWaitForFences(m_device, 1, &m_in_flight_fence, VK_TRUE, UINT64_MAX);
-        // Fence has been signalled by the previous frame's submit, so
-        // any resource enqueued for destruction during that frame is
-        // no longer referenced by the GPU. Free them here before the
-        // app records the next frame.
-        drain_pending_destroys();
-        vkResetFences(m_device, 1, &m_in_flight_fence);
-        const VkResult r = vkAcquireNextImageKHR(
-            m_device, m_swapchain, UINT64_MAX, m_image_available, VK_NULL_HANDLE, &m_current_image_index);
+        // Wait for the GPU to finish the frame that last used this slot
+        // (k_max_frames_in_flight frames ago), then free anything it had
+        // enqueued for destruction — that work is now done, so the resources
+        // are no longer referenced by the GPU.
+        vkWaitForFences(m_device, 1, &m_in_flight_fences[m_frame_in_flight], VK_TRUE, UINT64_MAX);
+        drain_pending_destroys(m_frame_in_flight);
+        const VkResult r = vkAcquireNextImageKHR(m_device,
+                                                 m_swapchain,
+                                                 UINT64_MAX,
+                                                 m_image_available[m_frame_in_flight],
+                                                 VK_NULL_HANDLE,
+                                                 &m_current_image_index);
         if (r == VK_ERROR_OUT_OF_DATE_KHR)
         {
             resize_swapchain(m_window_width, m_window_height);
@@ -1453,6 +1482,22 @@ namespace rendering_engine::gpu::backend::vulkan
             m_have_current_image = false;
             return;
         }
+        // If a still-in-flight frame is using this image (possible when there
+        // are fewer images than frames in flight), wait on its fence before
+        // we render to the image again.
+        if (m_current_image_index < m_images_in_flight.size() &&
+            m_images_in_flight[m_current_image_index] != VK_NULL_HANDLE)
+        {
+            vkWaitForFences(m_device, 1, &m_images_in_flight[m_current_image_index], VK_TRUE, UINT64_MAX);
+        }
+        if (m_current_image_index < m_images_in_flight.size())
+        {
+            m_images_in_flight[m_current_image_index] = m_in_flight_fences[m_frame_in_flight];
+        }
+        // Reset only now that an image is acquired and this slot will submit;
+        // resetting before the acquire would leave the fence unsignalled if
+        // the swapchain came back out-of-date, deadlocking the next wait.
+        vkResetFences(m_device, 1, &m_in_flight_fences[m_frame_in_flight]);
         m_have_current_image = true;
     }
 
