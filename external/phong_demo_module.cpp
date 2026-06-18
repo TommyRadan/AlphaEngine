@@ -100,7 +100,7 @@ static void on_engine_stop(const core::engine_stop& event)
     g_ambient.reset();
 }
 
-static void on_frame(const core::frame& event)
+static void on_render_update(const core::render_update& event)
 {
     g_rotation += g_rotation_speed * (event.m_delta_time / 1000.0f);
     g_sphere->transform.set_rotation(core::math::vec3{0.f, 0.f, g_rotation});
@@ -112,7 +112,7 @@ GAME_MODULE()
     struct game_module_info info = {};
     info.on_engine_start = on_engine_start;
     info.on_engine_stop = on_engine_stop;
-    info.on_frame = on_frame;
+    info.on_render_update = on_render_update;
     register_game_module(info);
     return true;
 }
