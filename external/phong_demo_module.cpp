@@ -102,7 +102,7 @@ static void on_engine_stop(const core::engine_stop& event)
 
 static void on_frame(const core::frame& event)
 {
-    g_rotation += g_rotation_speed * (static_cast<float>(get_delta_time()) / 1000);
+    g_rotation += g_rotation_speed * (event.m_delta_time / 1000.0f);
     g_sphere->transform.set_rotation(core::math::vec3{0.f, 0.f, g_rotation});
 }
 

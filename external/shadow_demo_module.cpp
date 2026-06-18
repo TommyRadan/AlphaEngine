@@ -207,7 +207,7 @@ static void on_engine_stop(const core::engine_stop& event)
 
 static void on_frame(const core::frame& event)
 {
-    g_sun_angle += sun_orbit_speed * (static_cast<float>(get_delta_time()) / 1000.0f);
+    g_sun_angle += sun_orbit_speed * (event.m_delta_time / 1000.0f);
     update_sun_direction();
 }
 

@@ -166,7 +166,7 @@ namespace
             return;
         }
 
-        g_time += static_cast<float>(get_delta_time()) / 1000.0f;
+        g_time += event.m_delta_time / 1000.0f;
 
         const core::math::vec3 spin_axis{0.0f, 1.0f, 0.0f};
         const core::math::vec3 unit_scale{cube_scale, cube_scale, cube_scale};

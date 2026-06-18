@@ -264,9 +264,7 @@ static void on_engine_stop(const core::engine_stop& event)
 
 static void on_frame(const core::frame& event)
 {
-    (void)event;
-
-    g_time += static_cast<float>(get_delta_time()) / 1000.0f;
+    g_time += event.m_delta_time / 1000.0f;
 
     // Drive each orbit/moon pivot from absolute time about the world up axis
     // (+Z), so the system lies flat in the XY plane — the natural orientation
