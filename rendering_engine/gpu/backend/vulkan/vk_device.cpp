@@ -1333,6 +1333,7 @@ namespace rendering_engine::gpu::backend::vulkan
 
     void vk_device::note_render_pass_opened(bool is_swapchain, bool use_depth)
     {
+        const std::lock_guard<std::mutex> lock(m_stats_mutex);
         if (is_swapchain)
         {
             ++m_frame_stats.passes_swapchain;
@@ -1346,12 +1347,14 @@ namespace rendering_engine::gpu::backend::vulkan
 
     void vk_device::note_draw(uint32_t vertex_count)
     {
+        const std::lock_guard<std::mutex> lock(m_stats_mutex);
         ++m_frame_stats.draws;
         m_frame_stats.vertices += vertex_count;
     }
 
     void vk_device::note_draw_indexed(uint32_t index_count)
     {
+        const std::lock_guard<std::mutex> lock(m_stats_mutex);
         ++m_frame_stats.draws_indexed;
         m_frame_stats.indices += index_count;
     }
@@ -1921,6 +1924,43 @@ namespace rendering_engine::gpu::backend::vulkan
         }
 
         return new_render_pass;
+    }
+
+    vk_device::render_pass_begin_info vk_device::begin_info_for(vk_render_target& target,
+                                                                VkAttachmentLoadOp color_load,
+                                                                VkAttachmentLoadOp depth_load,
+                                                                bool use_depth,
+                                                                uint32_t swapchain_image)
+    {
+        // Hold the cache lock across the lazy build and the framebuffer pick so
+        // a concurrent recorder cannot reallocate target.variants out from
+        // under the search below.
+        const std::lock_guard<std::mutex> lock(m_cache_mutex);
+        render_pass_begin_info out{};
+        out.render_pass = acquire_render_pass(target, color_load, depth_load, use_depth);
+        if (out.render_pass == VK_NULL_HANDLE)
+        {
+            return out;
+        }
+        for (const auto& v : target.variants)
+        {
+            if (v.render_pass == out.render_pass)
+            {
+                if (target.is_swapchain)
+                {
+                    if (swapchain_image < v.framebuffers.size())
+                    {
+                        out.framebuffer = v.framebuffers[swapchain_image];
+                    }
+                }
+                else if (!v.framebuffers.empty())
+                {
+                    out.framebuffer = v.framebuffers.front();
+                }
+                break;
+            }
+        }
+        return out;
     }
 
     // -- Internal accessors --------------------------------------------

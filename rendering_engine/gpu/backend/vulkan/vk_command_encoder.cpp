@@ -80,58 +80,36 @@ namespace rendering_engine::gpu::backend::vulkan
         const VkAttachmentLoadOp color_load = to_vk_load_op(descriptor.color.load);
         const VkAttachmentLoadOp depth_load = to_vk_load_op(descriptor.depth.load);
         const bool use_depth = descriptor.use_depth && target->has_depth;
-        VkRenderPass render_pass = device.acquire_render_pass(*target, color_load, depth_load, use_depth);
-        if (render_pass == VK_NULL_HANDLE)
-        {
-            LOG_ERR("vk_render_pass_encoder: acquire_render_pass returned null");
-            return;
-        }
 
-        // Find the variant we just acquired so we can pick the
-        // matching framebuffer. Each variant carries its own
-        // framebuffer set since variants with different use_depth
-        // are not render-pass compatible.
-        const vk_render_target::variant* variant = nullptr;
-        for (const auto& v : target->variants)
-        {
-            if (v.render_pass == render_pass)
-            {
-                variant = &v;
-                break;
-            }
-        }
-        if (variant == nullptr)
-        {
-            LOG_ERR("vk_render_pass_encoder: no matching variant for acquired render pass");
-            return;
-        }
-
-        VkFramebuffer framebuffer = VK_NULL_HANDLE;
+        // The swapchain image must be acquired before its framebuffer can be
+        // resolved. begin_frame is idempotent: on the parallel path the engine
+        // acquires up front on the main thread, so this is a no-op there; on
+        // the serial path it acquires here.
+        uint32_t swapchain_image = 0;
         if (target->is_swapchain)
         {
             device.begin_frame();
-            if (!device.have_current_swapchain_image() || variant->framebuffers.empty())
+            if (!device.have_current_swapchain_image())
             {
-                LOG_ERR("vk_render_pass_encoder: no swapchain image acquired (have_image=%i framebuffers=%u)",
-                        static_cast<int>(device.have_current_swapchain_image()),
-                        static_cast<unsigned>(variant->framebuffers.size()));
+                LOG_ERR("vk_render_pass_encoder: no swapchain image acquired");
                 return;
             }
-            const uint32_t idx = device.current_swapchain_image_index();
-            if (idx < variant->framebuffers.size())
-            {
-                framebuffer = variant->framebuffers[idx];
-            }
+            swapchain_image = device.current_swapchain_image_index();
         }
-        else
+
+        // Resolve the render pass + framebuffer in one locked step so a pass
+        // recorded on a worker thread cannot race the shared variant cache.
+        const vk_device::render_pass_begin_info binding =
+            device.begin_info_for(*target, color_load, depth_load, use_depth, swapchain_image);
+        if (binding.render_pass == VK_NULL_HANDLE || binding.framebuffer == VK_NULL_HANDLE)
         {
-            framebuffer = !variant->framebuffers.empty() ? variant->framebuffers.front() : VK_NULL_HANDLE;
-        }
-        if (framebuffer == VK_NULL_HANDLE)
-        {
-            LOG_ERR("vk_render_pass_encoder: framebuffer is null");
+            LOG_ERR("vk_render_pass_encoder: failed to acquire render pass/framebuffer (rp=%p fb=%p)",
+                    static_cast<const void*>(binding.render_pass),
+                    static_cast<const void*>(binding.framebuffer));
             return;
         }
+        const VkRenderPass render_pass = binding.render_pass;
+        const VkFramebuffer framebuffer = binding.framebuffer;
 
         m_render_pass = render_pass;
         m_target_width = target->width;
