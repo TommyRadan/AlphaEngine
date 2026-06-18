@@ -24,6 +24,7 @@
 
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/passes/pass.hpp>
+#include <rendering_engine/render_graph/frame_graph.hpp>
 
 namespace rendering_engine
 {
@@ -85,6 +86,20 @@ namespace rendering_engine
         taa_pass& operator=(const taa_pass&) = delete;
 
         void record(gpu::command_encoder& encoder, const frame_context& ctx) override;
+
+        const char* name() const override
+        {
+            return "taa";
+        }
+
+        void declare_io(render_graph::pass_io_builder& io) const override
+        {
+            io.read("ldr_color");
+            io.read("velocity");
+            io.read("taa_history");
+            io.write("taa_resolve");
+            io.write("taa_history");
+        }
 
         // The resolved LDR texture the next pass (FXAA) samples. Stable
         // across frames. Invalid when the pass is disabled (degenerate

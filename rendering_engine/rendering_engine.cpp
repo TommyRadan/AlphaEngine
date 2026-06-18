@@ -231,6 +231,25 @@ void rendering_engine::context::init()
     m_passes.push_back(std::move(debug));
 #endif
 
+    // Build the frame graph over the now-final pass list. The swapchain image
+    // and the TAA history are valid at frame start without an in-frame
+    // producer, so import them as external; every other resource is produced
+    // by a pass. Each pass declares its reads/writes (those that override
+    // declare_io) and the graph validates the ordering. Execution order is the
+    // m_passes order, so this does not change what is rendered.
+    m_frame_graph.import_external("swapchain");
+    m_frame_graph.import_external("taa_history");
+    for (auto& p : m_passes)
+    {
+        render_graph::pass_io_builder io;
+        p->declare_io(io);
+        m_frame_graph.add_pass(p->name(),
+                               std::move(io),
+                               [raw = p.get()](gpu::command_encoder& encoder, const frame_context& frame)
+                               { raw->record(encoder, frame); });
+    }
+    m_frame_graph.compile();
+
     // Bring the ImGui debug overlay up now that the window, GL context
     // and passes are live. No-op in release builds.
     debug_ui::init();
@@ -263,6 +282,10 @@ void rendering_engine::context::quit()
     // debug-renderable registry and free their line buffers. Empty in
     // release. Game-owned helpers must likewise be released before quit.
     m_debug_helpers.clear();
+
+    // Drop the frame graph before the passes: its execute callbacks hold
+    // raw pointers into m_passes.
+    m_frame_graph.clear();
 
     // Drop the passes first; their record() bodies reach for the
     // event bus we're about to release, and the passes own per-frame
@@ -321,10 +344,7 @@ void rendering_engine::context::render()
     ctx.fog = m_fog;
 
     auto encoder = gpu.create_command_encoder();
-    for (auto& p : m_passes)
-    {
-        p->record(*encoder, ctx);
-    }
+    m_frame_graph.execute(*encoder, ctx);
     gpu.submit(std::move(encoder));
 }
 

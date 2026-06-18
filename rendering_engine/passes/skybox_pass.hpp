@@ -24,6 +24,7 @@
 
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/passes/pass.hpp>
+#include <rendering_engine/render_graph/frame_graph.hpp>
 
 namespace rendering_engine
 {
@@ -55,6 +56,17 @@ namespace rendering_engine
         skybox_pass& operator=(const skybox_pass&) = delete;
 
         void record(gpu::command_encoder& encoder, const frame_context& ctx) override;
+
+        const char* name() const override
+        {
+            return "skybox";
+        }
+
+        void declare_io(render_graph::pass_io_builder& io) const override
+        {
+            io.read("scene_color");
+            io.write("scene_color");
+        }
 
         // Set (or clear, with an invalid handle) the cube map sampled as
         // the background. Rebuilds the input bind group; an invalid handle
