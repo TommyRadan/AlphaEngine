@@ -352,11 +352,30 @@ namespace rendering_engine::gpu::backend::vulkan
                            const void* data,
                            size_t size)
         {
-            const VkBuffer staging = device.stage_upload(data, size);
-            if (staging == VK_NULL_HANDLE)
-            {
-                return;
-            }
+            const VkDevice dev = device.vk_handle();
+
+            VkBufferCreateInfo bi{};
+            bi.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+            bi.size = size;
+            bi.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+            bi.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+            VkBuffer staging = VK_NULL_HANDLE;
+            vkCreateBuffer(dev, &bi, nullptr, &staging);
+            VkMemoryRequirements mr{};
+            vkGetBufferMemoryRequirements(dev, staging, &mr);
+            VkMemoryAllocateInfo ai{};
+            ai.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+            ai.allocationSize = mr.size;
+            ai.memoryTypeIndex = device.find_memory_type(
+                mr.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+            VkDeviceMemory mem = VK_NULL_HANDLE;
+            vkAllocateMemory(dev, &ai, nullptr, &mem);
+            vkBindBufferMemory(dev, staging, mem, 0);
+
+            void* mapped = nullptr;
+            vkMapMemory(dev, mem, 0, size, 0, &mapped);
+            std::memcpy(mapped, data, size);
+            vkUnmapMemory(dev, mem);
 
             VkCommandBuffer cmd = device.begin_one_shot();
             transition_image(cmd,
@@ -383,6 +402,9 @@ namespace rendering_engine::gpu::backend::vulkan
                              record.array_layers);
             device.end_one_shot(cmd);
             record.layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+            vkDestroyBuffer(dev, staging, nullptr);
+            vkFreeMemory(dev, mem, nullptr);
         }
     } // namespace
 

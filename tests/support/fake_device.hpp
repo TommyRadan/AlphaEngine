@@ -141,7 +141,7 @@ namespace test_support
         }
 
         // -- Command recording ---------------------------------------------
-        std::unique_ptr<rendering_engine::gpu::command_encoder> create_command_encoder(std::uint32_t = 0) override
+        std::unique_ptr<rendering_engine::gpu::command_encoder> create_command_encoder() override
         {
             return nullptr;
         }

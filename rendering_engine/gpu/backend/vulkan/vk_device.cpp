@@ -308,12 +308,8 @@ namespace rendering_engine::gpu::backend::vulkan
 
         // GPU is idle: anything queued by destroy() during the run
         // is now safe to actually free, and the active handle pools
-        // below need to release whatever is still resident. Drain every
-        // frame-in-flight slot, not just the current one.
-        for (uint32_t i = 0; i < k_max_frames_in_flight; ++i)
-        {
-            drain_pending_destroys(i);
-        }
+        // below need to release whatever is still resident.
+        drain_pending_destroys();
 
         m_pipelines.for_each(
             [&](vk_pipeline& p)
@@ -447,44 +443,8 @@ namespace rendering_engine::gpu::backend::vulkan
             vkDestroyDescriptorPool(m_device, m_descriptor_pool, nullptr);
             m_descriptor_pool = VK_NULL_HANDLE;
         }
-        // The shared staging buffer is owned here, not by the handle pools.
-        if (m_staging_mapped != nullptr)
-        {
-            vkUnmapMemory(m_device, m_staging_memory);
-            m_staging_mapped = nullptr;
-        }
-        if (m_staging_buffer != VK_NULL_HANDLE)
-        {
-            vkDestroyBuffer(m_device, m_staging_buffer, nullptr);
-            m_staging_buffer = VK_NULL_HANDLE;
-        }
-        if (m_staging_memory != VK_NULL_HANDLE)
-        {
-            vkFreeMemory(m_device, m_staging_memory, nullptr);
-            m_staging_memory = VK_NULL_HANDLE;
-        }
-        m_staging_capacity = 0;
-
-        // Per-recording-context pools. Destroying each pool implicitly frees the
-        // command buffers allocated from it, so just drop our handle lists.
-        for (auto& ctx : m_recording_contexts)
-        {
-            for (uint32_t i = 0; i < k_max_frames_in_flight; ++i)
-            {
-                ctx.free[i].clear();
-                ctx.in_flight[i].clear();
-            }
-            if (ctx.pool != VK_NULL_HANDLE)
-            {
-                vkDestroyCommandPool(m_device, ctx.pool, nullptr);
-                ctx.pool = VK_NULL_HANDLE;
-            }
-        }
-
         if (m_command_pool != VK_NULL_HANDLE)
         {
-            // Destroying the pool implicitly frees the reusable upload buffer.
-            m_upload_cmd = VK_NULL_HANDLE;
             vkDestroyCommandPool(m_device, m_command_pool, nullptr);
             m_command_pool = VK_NULL_HANDLE;
         }
@@ -1042,10 +1002,6 @@ namespace rendering_engine::gpu::backend::vulkan
             }
         }
 
-        // No frame owns any image yet; begin_frame fills this in as it
-        // acquires. Sized to the actual image count so it tracks resize.
-        m_images_in_flight.assign(actual, VK_NULL_HANDLE);
-
         LOG_INF("Vulkan swapchain: %ux%u images=%u", extent.width, extent.height, actual);
     }
 
@@ -1087,7 +1043,6 @@ namespace rendering_engine::gpu::backend::vulkan
             }
         }
         m_render_finished.clear();
-        m_images_in_flight.clear();
         if (m_swapchain != VK_NULL_HANDLE)
         {
             vkDestroySwapchainKHR(m_device, m_swapchain, nullptr);
@@ -1101,30 +1056,14 @@ namespace rendering_engine::gpu::backend::vulkan
         si.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
         VkFenceCreateInfo fi{};
         fi.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-        // Created signalled so the very first begin_frame can wait on each
-        // slot's fence without blocking before anything has been submitted.
         fi.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-        // One image-available semaphore and one in-flight fence per frame in
-        // flight. The render-finished semaphores live with the swapchain (one
-        // per image) since they are indexed by the acquired image, not the
-        // frame-in-flight slot.
-        for (uint32_t i = 0; i < k_max_frames_in_flight; ++i)
+        // The render-finished semaphores live with the swapchain (one per
+        // image); only the image-available semaphore and the in-flight fence
+        // are owned here.
+        if (vkCreateSemaphore(m_device, &si, nullptr, &m_image_available) != VK_SUCCESS ||
+            vkCreateFence(m_device, &fi, nullptr, &m_in_flight_fence) != VK_SUCCESS)
         {
-            if (vkCreateSemaphore(m_device, &si, nullptr, &m_image_available[i]) != VK_SUCCESS ||
-                vkCreateFence(m_device, &fi, nullptr, &m_in_flight_fences[i]) != VK_SUCCESS)
-            {
-                throw std::runtime_error{"vk sync objects"};
-            }
-        }
-        m_frame_in_flight = 0;
-
-        // Dedicated fence for the synchronous upload path (begin/end_one_shot).
-        // Created unsignalled; end_one_shot resets and waits on it per upload.
-        VkFenceCreateInfo ufi{};
-        ufi.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-        if (vkCreateFence(m_device, &ufi, nullptr, &m_upload_fence) != VK_SUCCESS)
-        {
-            throw std::runtime_error{"vk upload fence"};
+            throw std::runtime_error{"vk sync objects"};
         }
     }
 
@@ -1134,23 +1073,15 @@ namespace rendering_engine::gpu::backend::vulkan
         {
             return;
         }
-        for (uint32_t i = 0; i < k_max_frames_in_flight; ++i)
+        if (m_image_available != VK_NULL_HANDLE)
         {
-            if (m_image_available[i] != VK_NULL_HANDLE)
-            {
-                vkDestroySemaphore(m_device, m_image_available[i], nullptr);
-                m_image_available[i] = VK_NULL_HANDLE;
-            }
-            if (m_in_flight_fences[i] != VK_NULL_HANDLE)
-            {
-                vkDestroyFence(m_device, m_in_flight_fences[i], nullptr);
-                m_in_flight_fences[i] = VK_NULL_HANDLE;
-            }
+            vkDestroySemaphore(m_device, m_image_available, nullptr);
+            m_image_available = VK_NULL_HANDLE;
         }
-        if (m_upload_fence != VK_NULL_HANDLE)
+        if (m_in_flight_fence != VK_NULL_HANDLE)
         {
-            vkDestroyFence(m_device, m_upload_fence, nullptr);
-            m_upload_fence = VK_NULL_HANDLE;
+            vkDestroyFence(m_device, m_in_flight_fence, nullptr);
+            m_in_flight_fence = VK_NULL_HANDLE;
         }
     }
 
@@ -1342,7 +1273,6 @@ namespace rendering_engine::gpu::backend::vulkan
 
     void vk_device::note_render_pass_opened(bool is_swapchain, bool use_depth)
     {
-        const std::lock_guard<std::mutex> lock(m_stats_mutex);
         if (is_swapchain)
         {
             ++m_frame_stats.passes_swapchain;
@@ -1356,112 +1286,75 @@ namespace rendering_engine::gpu::backend::vulkan
 
     void vk_device::note_draw(uint32_t vertex_count)
     {
-        const std::lock_guard<std::mutex> lock(m_stats_mutex);
         ++m_frame_stats.draws;
         m_frame_stats.vertices += vertex_count;
     }
 
     void vk_device::note_draw_indexed(uint32_t index_count)
     {
-        const std::lock_guard<std::mutex> lock(m_stats_mutex);
         ++m_frame_stats.draws_indexed;
         m_frame_stats.indices += index_count;
     }
 
     // -- Command recording ---------------------------------------------
 
-    std::unique_ptr<command_encoder> vk_device::create_command_encoder(uint32_t recording_context)
+    std::unique_ptr<command_encoder> vk_device::create_command_encoder()
     {
-        return std::make_unique<vk_command_encoder>(*this, recording_context);
+        return std::make_unique<vk_command_encoder>(*this);
     }
 
     void vk_device::submit(std::unique_ptr<command_encoder> encoder)
     {
-        // A single encoder is just a one-element frame; share the batch path.
-        std::vector<std::unique_ptr<command_encoder>> one;
-        one.push_back(std::move(encoder));
-        submit_frame(std::move(one));
-    }
-
-    void vk_device::submit_frame(std::vector<std::unique_ptr<command_encoder>> encoders)
-    {
-        // End every recorded command buffer and collect it together with the
-        // recording context it came from, so it returns to the right pool on
-        // recycle. encoders are kept in order — encoders.front() executes first.
-        std::vector<VkCommandBuffer> cmds;
-        std::vector<uint32_t> contexts;
-        cmds.reserve(encoders.size());
-        contexts.reserve(encoders.size());
-        for (auto& encoder : encoders)
+        auto* vk_enc = static_cast<vk_command_encoder*>(encoder.get());
+        if (vk_enc == nullptr)
         {
-            auto* vk_enc = static_cast<vk_command_encoder*>(encoder.get());
-            if (vk_enc == nullptr)
-            {
-                continue;
-            }
-            const uint32_t context = vk_enc->recording_context();
-            VkCommandBuffer cmd = vk_enc->release_command_buffer();
-            if (cmd == VK_NULL_HANDLE)
-            {
-                continue;
-            }
-            const VkResult end_result = vkEndCommandBuffer(cmd);
-            if (end_result != VK_SUCCESS)
-            {
-                LOG_ERR("vkEndCommandBuffer failed: %s", vk_result_to_string(end_result));
-                vkResetCommandBuffer(cmd, 0);
-                m_recording_contexts[context].free[m_frame_in_flight].push_back(cmd);
-                continue;
-            }
-            cmds.push_back(cmd);
-            contexts.push_back(context);
+            encoder.reset();
+            return;
         }
-        encoders.clear();
-
-        if (cmds.empty())
+        VkCommandBuffer cmd = vk_enc->release_command_buffer();
+        if (cmd == VK_NULL_HANDLE)
         {
+            encoder.reset();
+            return;
+        }
+        const VkResult end_result = vkEndCommandBuffer(cmd);
+        if (end_result != VK_SUCCESS)
+        {
+            LOG_ERR("vkEndCommandBuffer failed: %s", vk_result_to_string(end_result));
+            encoder.reset();
             return;
         }
 
         if (!m_have_current_image)
         {
-            // Off-screen-only work (e.g. the IBL prefilter at load): no
-            // swapchain semaphores, just submit, drain, and recycle the
-            // one-off buffers immediately.
             VkSubmitInfo si{};
             si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-            si.commandBufferCount = static_cast<uint32_t>(cmds.size());
-            si.pCommandBuffers = cmds.data();
+            si.commandBufferCount = 1;
+            si.pCommandBuffers = &cmd;
             const VkResult submit_result = vkQueueSubmit(m_graphics_queue, 1, &si, VK_NULL_HANDLE);
             if (submit_result != VK_SUCCESS)
             {
                 LOG_ERR("vkQueueSubmit (no-image) failed: %s", vk_result_to_string(submit_result));
             }
             vkQueueWaitIdle(m_graphics_queue);
-            for (size_t i = 0; i < cmds.size(); ++i)
-            {
-                vkResetCommandBuffer(cmds[i], 0);
-                m_recording_contexts[contexts[i]].free[m_frame_in_flight].push_back(cmds[i]);
-            }
+            // The queue is idle, so this one-off (off-screen-only) command
+            // buffer is finished and can be returned to the pool now.
+            vkFreeCommandBuffers(m_device, m_command_pool, 1, &cmd);
+            encoder.reset();
             return;
         }
 
-        // Submit every command buffer as one ordered batch. Within a single
-        // queue submission they execute in array order (cmds.front() first), so
-        // splitting the frame's passes across several buffers preserves the pass
-        // order and the cross-pass render-pass dependencies, while the frame
-        // waits once on image-available and signals render-finished once.
         const VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
         VkSubmitInfo si{};
         si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
         si.waitSemaphoreCount = 1;
-        si.pWaitSemaphores = &m_image_available[m_frame_in_flight];
+        si.pWaitSemaphores = &m_image_available;
         si.pWaitDstStageMask = &wait_stage;
-        si.commandBufferCount = static_cast<uint32_t>(cmds.size());
-        si.pCommandBuffers = cmds.data();
+        si.commandBufferCount = 1;
+        si.pCommandBuffers = &cmd;
         si.signalSemaphoreCount = 1;
         si.pSignalSemaphores = &m_render_finished[m_current_image_index];
-        const VkResult submit_result = vkQueueSubmit(m_graphics_queue, 1, &si, m_in_flight_fences[m_frame_in_flight]);
+        const VkResult submit_result = vkQueueSubmit(m_graphics_queue, 1, &si, m_in_flight_fence);
         if (submit_result != VK_SUCCESS)
         {
             LOG_ERR("vkQueueSubmit failed: %s", vk_result_to_string(submit_result));
@@ -1484,15 +1377,19 @@ namespace rendering_engine::gpu::backend::vulkan
             LOG_ERR("vkQueuePresentKHR failed: %s", vk_result_to_string(r));
         }
         m_have_current_image = false;
+        encoder.reset();
 
-        // Each command buffer is in flight until this frame's fence signals.
-        // Park it on its context's in-flight list; begin_frame recycles it once
-        // the slot fence signals. Indexes the current slot, so it must run
-        // before m_frame_in_flight advances below.
-        for (size_t i = 0; i < cmds.size(); ++i)
-        {
-            m_recording_contexts[contexts[i]].in_flight[m_frame_in_flight].push_back(cmds[i]);
-        }
+        // The command buffer is in flight until this frame's fence
+        // signals. Hand it back to the pool through the deferred queue,
+        // which begin_frame drains only after vkWaitForFences — so it is
+        // freed once the GPU is done, not leaked for the lifetime of the
+        // run. (Previously release_command_buffer detached it from the
+        // encoder but nothing ever freed it, so the pool grew by one
+        // command buffer per frame and teardown of the whole pile stalled
+        // shutdown for tens of seconds.)
+        const VkDevice device = m_device;
+        const VkCommandPool pool = m_command_pool;
+        enqueue_destroy([device, pool, cmd] { vkFreeCommandBuffers(device, pool, 1, &cmd); });
 
         if (m_frame_index < k_diagnostic_frames)
         {
@@ -1507,100 +1404,25 @@ namespace rendering_engine::gpu::backend::vulkan
         }
         m_frame_stats = {};
         ++m_frame_index;
-
-        // Advance to the next slot so the next frame records against its own
-        // sync resources while this one drains on the GPU.
-        m_frame_in_flight = (m_frame_in_flight + 1) % k_max_frames_in_flight;
     }
 
     void vk_device::enqueue_destroy(std::function<void()> fn)
     {
         if (fn)
         {
-            // Tag the destroy with the frame-in-flight currently being
-            // recorded; it is freed once that slot's fence next signals.
-            m_pending_destroys[m_frame_in_flight].push_back(std::move(fn));
+            m_pending_destroys.push_back(std::move(fn));
         }
     }
 
-    void vk_device::drain_pending_destroys(uint32_t frame_in_flight)
+    void vk_device::drain_pending_destroys()
     {
         // Move out first so a destroy callback that itself enqueues
         // is captured into the next drain rather than running here.
         std::vector<std::function<void()>> drain;
-        drain.swap(m_pending_destroys[frame_in_flight]);
+        drain.swap(m_pending_destroys);
         for (auto& fn : drain)
         {
             fn();
-        }
-    }
-
-    VkCommandBuffer vk_device::acquire_command_buffer(uint32_t recording_context)
-    {
-        auto& ctx = m_recording_contexts[recording_context];
-        if (ctx.pool == VK_NULL_HANDLE)
-        {
-            // First use of this context: give it its own pool so it can be
-            // recorded on a worker thread without contending the others.
-            // vkCreateCommandPool is thread-safe, so the lazy create is fine on
-            // whichever thread processes this context first.
-            VkCommandPoolCreateInfo info{};
-            info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-            info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-            info.queueFamilyIndex = m_graphics_queue_family;
-            if (vkCreateCommandPool(m_device, &info, nullptr, &ctx.pool) != VK_SUCCESS)
-            {
-                LOG_ERR("vkCreateCommandPool (recording context %u) failed", recording_context);
-                return VK_NULL_HANDLE;
-            }
-        }
-        auto& free_list = ctx.free[m_frame_in_flight];
-        if (!free_list.empty())
-        {
-            // Recycled buffers were reset when returned, so they are back in
-            // the initial state and ready for vkBeginCommandBuffer.
-            VkCommandBuffer cmd = free_list.back();
-            free_list.pop_back();
-            return cmd;
-        }
-        VkCommandBufferAllocateInfo ai{};
-        ai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-        ai.commandPool = ctx.pool;
-        ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-        ai.commandBufferCount = 1;
-        VkCommandBuffer cmd = VK_NULL_HANDLE;
-        if (vkAllocateCommandBuffers(m_device, &ai, &cmd) != VK_SUCCESS)
-        {
-            return VK_NULL_HANDLE;
-        }
-        return cmd;
-    }
-
-    void vk_device::discard_command_buffer(uint32_t recording_context, VkCommandBuffer cmd)
-    {
-        if (cmd == VK_NULL_HANDLE)
-        {
-            return;
-        }
-        // The buffer was never submitted (an encoder error/early-out), so the
-        // GPU never referenced it — reset and return it to its context's
-        // current-slot free list for immediate reuse.
-        vkResetCommandBuffer(cmd, 0);
-        m_recording_contexts[recording_context].free[m_frame_in_flight].push_back(cmd);
-    }
-
-    void vk_device::recycle_in_flight_command_buffers(uint32_t frame_in_flight)
-    {
-        for (auto& ctx : m_recording_contexts)
-        {
-            auto& in_flight = ctx.in_flight[frame_in_flight];
-            auto& free_list = ctx.free[frame_in_flight];
-            for (VkCommandBuffer cmd : in_flight)
-            {
-                vkResetCommandBuffer(cmd, 0);
-                free_list.push_back(cmd);
-            }
-            in_flight.clear();
         }
     }
 
@@ -1610,19 +1432,15 @@ namespace rendering_engine::gpu::backend::vulkan
         {
             return;
         }
-        // Wait for the GPU to finish the frame that last used this slot
-        // (k_max_frames_in_flight frames ago), then free anything it had
-        // enqueued for destruction — that work is now done, so the resources
-        // are no longer referenced by the GPU.
-        vkWaitForFences(m_device, 1, &m_in_flight_fences[m_frame_in_flight], VK_TRUE, UINT64_MAX);
-        recycle_in_flight_command_buffers(m_frame_in_flight);
-        drain_pending_destroys(m_frame_in_flight);
-        const VkResult r = vkAcquireNextImageKHR(m_device,
-                                                 m_swapchain,
-                                                 UINT64_MAX,
-                                                 m_image_available[m_frame_in_flight],
-                                                 VK_NULL_HANDLE,
-                                                 &m_current_image_index);
+        vkWaitForFences(m_device, 1, &m_in_flight_fence, VK_TRUE, UINT64_MAX);
+        // Fence has been signalled by the previous frame's submit, so
+        // any resource enqueued for destruction during that frame is
+        // no longer referenced by the GPU. Free them here before the
+        // app records the next frame.
+        drain_pending_destroys();
+        vkResetFences(m_device, 1, &m_in_flight_fence);
+        const VkResult r = vkAcquireNextImageKHR(
+            m_device, m_swapchain, UINT64_MAX, m_image_available, VK_NULL_HANDLE, &m_current_image_index);
         if (r == VK_ERROR_OUT_OF_DATE_KHR)
         {
             resize_swapchain(m_window_width, m_window_height);
@@ -1635,22 +1453,6 @@ namespace rendering_engine::gpu::backend::vulkan
             m_have_current_image = false;
             return;
         }
-        // If a still-in-flight frame is using this image (possible when there
-        // are fewer images than frames in flight), wait on its fence before
-        // we render to the image again.
-        if (m_current_image_index < m_images_in_flight.size() &&
-            m_images_in_flight[m_current_image_index] != VK_NULL_HANDLE)
-        {
-            vkWaitForFences(m_device, 1, &m_images_in_flight[m_current_image_index], VK_TRUE, UINT64_MAX);
-        }
-        if (m_current_image_index < m_images_in_flight.size())
-        {
-            m_images_in_flight[m_current_image_index] = m_in_flight_fences[m_frame_in_flight];
-        }
-        // Reset only now that an image is acquired and this slot will submit;
-        // resetting before the acquire would leave the fence unsignalled if
-        // the swapchain came back out-of-date, deadlocking the next wait.
-        vkResetFences(m_device, 1, &m_in_flight_fences[m_frame_in_flight]);
         m_have_current_image = true;
     }
 
@@ -1658,30 +1460,21 @@ namespace rendering_engine::gpu::backend::vulkan
 
     VkCommandBuffer vk_device::begin_one_shot()
     {
-        if (m_upload_cmd == VK_NULL_HANDLE)
+        VkCommandBufferAllocateInfo ai{};
+        ai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        ai.commandPool = m_command_pool;
+        ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        ai.commandBufferCount = 1;
+        VkCommandBuffer cmd = VK_NULL_HANDLE;
+        if (vkAllocateCommandBuffers(m_device, &ai, &cmd) != VK_SUCCESS)
         {
-            VkCommandBufferAllocateInfo ai{};
-            ai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-            ai.commandPool = m_command_pool;
-            ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-            ai.commandBufferCount = 1;
-            if (vkAllocateCommandBuffers(m_device, &ai, &m_upload_cmd) != VK_SUCCESS)
-            {
-                m_upload_cmd = VK_NULL_HANDLE;
-                return VK_NULL_HANDLE;
-            }
-        }
-        else
-        {
-            // Previous upload finished (end_one_shot waited on the fence), so
-            // the buffer is safe to reset and re-record.
-            vkResetCommandBuffer(m_upload_cmd, 0);
+            return VK_NULL_HANDLE;
         }
         VkCommandBufferBeginInfo bi{};
         bi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
         bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-        vkBeginCommandBuffer(m_upload_cmd, &bi);
-        return m_upload_cmd;
+        vkBeginCommandBuffer(cmd, &bi);
+        return cmd;
     }
 
     void vk_device::end_one_shot(VkCommandBuffer cmd)
@@ -1695,72 +1488,9 @@ namespace rendering_engine::gpu::backend::vulkan
         si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
         si.commandBufferCount = 1;
         si.pCommandBuffers = &cmd;
-        // Wait on the upload's own fence rather than vkQueueWaitIdle so the
-        // upload does not force a full drain of the graphics queue. The buffer
-        // is kept allocated for the next begin_one_shot to reuse.
-        vkResetFences(m_device, 1, &m_upload_fence);
-        vkQueueSubmit(m_graphics_queue, 1, &si, m_upload_fence);
-        vkWaitForFences(m_device, 1, &m_upload_fence, VK_TRUE, UINT64_MAX);
-    }
-
-    VkBuffer vk_device::stage_upload(const void* data, VkDeviceSize size)
-    {
-        if (data == nullptr || size == 0)
-        {
-            return VK_NULL_HANDLE;
-        }
-        if (size > m_staging_capacity)
-        {
-            // Grow to fit the largest upload seen. The previous upload has
-            // completed (uploads are synchronous), so tearing the old buffer
-            // down here cannot race the GPU.
-            if (m_staging_mapped != nullptr)
-            {
-                vkUnmapMemory(m_device, m_staging_memory);
-                m_staging_mapped = nullptr;
-            }
-            if (m_staging_buffer != VK_NULL_HANDLE)
-            {
-                vkDestroyBuffer(m_device, m_staging_buffer, nullptr);
-                m_staging_buffer = VK_NULL_HANDLE;
-            }
-            if (m_staging_memory != VK_NULL_HANDLE)
-            {
-                vkFreeMemory(m_device, m_staging_memory, nullptr);
-                m_staging_memory = VK_NULL_HANDLE;
-            }
-            m_staging_capacity = 0;
-
-            VkBufferCreateInfo bi{};
-            bi.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-            bi.size = size;
-            bi.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-            bi.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-            if (vkCreateBuffer(m_device, &bi, nullptr, &m_staging_buffer) != VK_SUCCESS)
-            {
-                m_staging_buffer = VK_NULL_HANDLE;
-                return VK_NULL_HANDLE;
-            }
-            VkMemoryRequirements mr{};
-            vkGetBufferMemoryRequirements(m_device, m_staging_buffer, &mr);
-            VkMemoryAllocateInfo ai{};
-            ai.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-            ai.allocationSize = mr.size;
-            ai.memoryTypeIndex = find_memory_type(
-                mr.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-            if (vkAllocateMemory(m_device, &ai, nullptr, &m_staging_memory) != VK_SUCCESS)
-            {
-                vkDestroyBuffer(m_device, m_staging_buffer, nullptr);
-                m_staging_buffer = VK_NULL_HANDLE;
-                m_staging_memory = VK_NULL_HANDLE;
-                return VK_NULL_HANDLE;
-            }
-            vkBindBufferMemory(m_device, m_staging_buffer, m_staging_memory, 0);
-            vkMapMemory(m_device, m_staging_memory, 0, VK_WHOLE_SIZE, 0, &m_staging_mapped);
-            m_staging_capacity = size;
-        }
-        std::memcpy(m_staging_mapped, data, static_cast<size_t>(size));
-        return m_staging_buffer;
+        vkQueueSubmit(m_graphics_queue, 1, &si, VK_NULL_HANDLE);
+        vkQueueWaitIdle(m_graphics_queue);
+        vkFreeCommandBuffers(m_device, m_command_pool, 1, &cmd);
     }
 
     uint32_t vk_device::find_memory_type(uint32_t type_filter, VkMemoryPropertyFlags properties) const
@@ -1986,43 +1716,6 @@ namespace rendering_engine::gpu::backend::vulkan
         }
 
         return new_render_pass;
-    }
-
-    vk_device::render_pass_begin_info vk_device::begin_info_for(vk_render_target& target,
-                                                                VkAttachmentLoadOp color_load,
-                                                                VkAttachmentLoadOp depth_load,
-                                                                bool use_depth,
-                                                                uint32_t swapchain_image)
-    {
-        // Hold the cache lock across the lazy build and the framebuffer pick so
-        // a concurrent recorder cannot reallocate target.variants out from
-        // under the search below.
-        const std::lock_guard<std::mutex> lock(m_cache_mutex);
-        render_pass_begin_info out{};
-        out.render_pass = acquire_render_pass(target, color_load, depth_load, use_depth);
-        if (out.render_pass == VK_NULL_HANDLE)
-        {
-            return out;
-        }
-        for (const auto& v : target.variants)
-        {
-            if (v.render_pass == out.render_pass)
-            {
-                if (target.is_swapchain)
-                {
-                    if (swapchain_image < v.framebuffers.size())
-                    {
-                        out.framebuffer = v.framebuffers[swapchain_image];
-                    }
-                }
-                else if (!v.framebuffers.empty())
-                {
-                    out.framebuffer = v.framebuffers.front();
-                }
-                break;
-            }
-        }
-        return out;
     }
 
     // -- Internal accessors --------------------------------------------
