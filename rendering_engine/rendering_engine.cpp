@@ -22,6 +22,8 @@
 
 #include <rendering_engine/rendering_engine.hpp>
 
+#include <SDL3/SDL_stdinc.h>
+
 #include <core/jobs.hpp>
 #include <core/log.hpp>
 #include <core/settings.hpp>
@@ -252,15 +254,28 @@ void rendering_engine::context::init()
     }
     m_frame_graph.compile();
 
-    // Parallel pass recording, on whenever the backend can record a frame
-    // across several command buffers (Vulkan) and the job pool has workers.
-    // Passes that broadcast main-thread-only events stay on the main thread
-    // (see pass::main_thread_only); the rest fan out across the pool.
-    m_parallel_recording =
-        eng.gpu->supports_parallel_recording() && eng.jobs != nullptr && eng.jobs->worker_count() > 0;
+    // Parallel pass recording is OFF by default because it is unsafe with the
+    // current pass design: passes are not CPU-independent. scene_pass::record
+    // reads shadow_pass / point_shadow_pass per-frame output computed in their
+    // own record() — the directional light-view-projection, shadow-map handle
+    // and bias (see scene_pass.cpp, m_shadow->light_view_projection() etc.).
+    // The frame graph keeps event-broadcasting passes (scene/ui/debug) on the
+    // main thread but lets shadow_pass run on a worker, so scene_pass reads the
+    // light matrix while the worker is still writing it → a torn matrix → the
+    // shadow transform is garbage for that frame and the shadow flickers. It
+    // also buys nothing at this engine's draw counts. The machinery remains and
+    // can be opted into for experimentation via ALPHAENGINE_PARALLEL_RECORDING,
+    // but a correct default needs the frame graph to model these cross-pass CPU
+    // dependencies (record producers before their consumers, not concurrently).
+    const char* parallel_env = SDL_getenv("ALPHAENGINE_PARALLEL_RECORDING");
+    const bool parallel_requested = parallel_env != nullptr && parallel_env[0] != '0' && parallel_env[0] != '\0';
+    m_parallel_recording = parallel_requested && eng.gpu->supports_parallel_recording() && eng.jobs != nullptr &&
+                           eng.jobs->worker_count() > 0;
     if (m_parallel_recording)
     {
-        LOG_INF("Rendering Engine: parallel pass recording enabled (%u worker threads)", eng.jobs->worker_count());
+        LOG_WRN("Rendering Engine: parallel pass recording enabled (%u workers) — experimental, races on "
+                "cross-pass state (e.g. shadows); expect flicker",
+                eng.jobs->worker_count());
     }
 
     // Bring the ImGui debug overlay up now that the window, GL context
