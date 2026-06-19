@@ -249,14 +249,6 @@ namespace rendering_engine
         // the @ref m_passes order, so the graph does not change rendering.
         render_graph::frame_graph m_frame_graph;
 
-        // When true, @ref render fans the frame's passes out across the job
-        // pool (each contiguous group recorded into its own command buffer on a
-        // worker, then submitted as one ordered batch), keeping the passes that
-        // broadcast main-thread-only events on the main thread. Enabled
-        // automatically whenever the backend supports parallel recording
-        // (Vulkan) and the job pool has workers.
-        bool m_parallel_recording{false};
-
         // Non-owning back-pointer to the skybox pass owned by
         // @ref m_passes. Kept so @ref set_environment can swap its cube
         // map after construction. Null until @ref init runs.

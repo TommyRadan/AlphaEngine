@@ -22,9 +22,6 @@
 
 #include <rendering_engine/rendering_engine.hpp>
 
-#include <SDL3/SDL_stdinc.h>
-
-#include <core/jobs.hpp>
 #include <core/log.hpp>
 #include <core/settings.hpp>
 #include <rendering_engine/camera/camera.hpp>
@@ -246,37 +243,12 @@ void rendering_engine::context::init()
     {
         render_graph::pass_io_builder io;
         p->declare_io(io);
-        m_frame_graph.add_pass(
-            p->name(),
-            std::move(io),
-            [raw = p.get()](gpu::command_encoder& encoder, const frame_context& frame) { raw->record(encoder, frame); },
-            p->main_thread_only());
+        m_frame_graph.add_pass(p->name(),
+                               std::move(io),
+                               [raw = p.get()](gpu::command_encoder& encoder, const frame_context& frame)
+                               { raw->record(encoder, frame); });
     }
     m_frame_graph.compile();
-
-    // Parallel pass recording is OFF by default because it is unsafe with the
-    // current pass design: passes are not CPU-independent. scene_pass::record
-    // reads shadow_pass / point_shadow_pass per-frame output computed in their
-    // own record() — the directional light-view-projection, shadow-map handle
-    // and bias (see scene_pass.cpp, m_shadow->light_view_projection() etc.).
-    // The frame graph keeps event-broadcasting passes (scene/ui/debug) on the
-    // main thread but lets shadow_pass run on a worker, so scene_pass reads the
-    // light matrix while the worker is still writing it → a torn matrix → the
-    // shadow transform is garbage for that frame and the shadow flickers. It
-    // also buys nothing at this engine's draw counts. The machinery remains and
-    // can be opted into for experimentation via ALPHAENGINE_PARALLEL_RECORDING,
-    // but a correct default needs the frame graph to model these cross-pass CPU
-    // dependencies (record producers before their consumers, not concurrently).
-    const char* parallel_env = SDL_getenv("ALPHAENGINE_PARALLEL_RECORDING");
-    const bool parallel_requested = parallel_env != nullptr && parallel_env[0] != '0' && parallel_env[0] != '\0';
-    m_parallel_recording = parallel_requested && eng.gpu->supports_parallel_recording() && eng.jobs != nullptr &&
-                           eng.jobs->worker_count() > 0;
-    if (m_parallel_recording)
-    {
-        LOG_WRN("Rendering Engine: parallel pass recording enabled (%u workers) — experimental, races on "
-                "cross-pass state (e.g. shadows); expect flicker",
-                eng.jobs->worker_count());
-    }
 
     // Bring the ImGui debug overlay up now that the window, GL context
     // and passes are live. No-op in release builds.
@@ -371,56 +343,10 @@ void rendering_engine::context::render()
                       m_ldr_color_texture};
     ctx.fog = m_fog;
 
-    const size_t pass_count = m_frame_graph.pass_count();
-    if (!m_parallel_recording || pass_count <= 1)
-    {
-        // Serial path: one encoder records the whole frame in order.
-        auto encoder = gpu.create_command_encoder();
-        m_frame_graph.execute(*encoder, ctx);
-        gpu.submit(std::move(encoder));
-        return;
-    }
-
-    // Parallel path: split the frame into contiguous groups, record each into
-    // its own command buffer, then submit them as one ordered batch. Groups are
-    // capped by the backend's recording contexts, the worker count, and the
-    // pass count. A group containing a pass that broadcasts a main-thread-only
-    // event is recorded on the main thread; the rest fan out to the job pool.
-    const auto worker_slots = static_cast<size_t>(eng.jobs->worker_count()) + 1;
-    const size_t group_count = std::min({static_cast<size_t>(gpu.recording_context_count()), worker_slots, pass_count});
-
-    // Acquire the swapchain image up front (begin_frame is not thread-safe and
-    // a swapchain pass may record on a worker), then let the passes record.
-    gpu.begin_frame();
-
-    std::vector<std::unique_ptr<gpu::command_encoder>> encoders(group_count);
-    const auto record_group = [&](size_t group)
-    {
-        const size_t begin = (group * pass_count) / group_count;
-        const size_t end = ((group + 1) * pass_count) / group_count;
-        auto encoder = gpu.create_command_encoder(static_cast<uint32_t>(group));
-        m_frame_graph.execute_range(*encoder, ctx, begin, end);
-        encoders[group] = std::move(encoder);
-    };
-
-    // Dispatch worker-eligible groups, record main-thread-only groups inline,
-    // then wait for the workers before submitting.
-    for (size_t group = 0; group < group_count; ++group)
-    {
-        const size_t begin = (group * pass_count) / group_count;
-        const size_t end = ((group + 1) * pass_count) / group_count;
-        if (m_frame_graph.range_main_thread_only(begin, end))
-        {
-            record_group(group);
-        }
-        else
-        {
-            eng.jobs->dispatch([&record_group, group] { record_group(group); });
-        }
-    }
-    eng.jobs->wait_idle();
-
-    gpu.submit_frame(std::move(encoders));
+    // One encoder records the frame graph's passes in order, then submits.
+    auto encoder = gpu.create_command_encoder();
+    m_frame_graph.execute(*encoder, ctx);
+    gpu.submit(std::move(encoder));
 }
 
 void rendering_engine::context::register_scene_renderable(renderable* r)

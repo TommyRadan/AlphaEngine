@@ -132,20 +132,5 @@ namespace rendering_engine
         {
             (void)io;
         }
-
-        /**
-         * @brief Whether this pass must record on the main thread.
-         *
-         * The frame graph may record passes on worker threads. A pass that
-         * broadcasts an event during record() (the @c render_scene /
-         * @c render_ui / @c render_debug escape hatches) runs arbitrary
-         * game-module listeners synchronously, and those — like the rest of the
-         * engine — are main-thread-only, so such a pass returns true and the
-         * graph keeps it on the main thread. Defaults to false.
-         */
-        virtual bool main_thread_only() const
-        {
-            return false;
-        }
     };
 } // namespace rendering_engine

@@ -81,13 +81,6 @@ namespace rendering_engine
             io.write("swapchain");
         }
 
-        // Broadcasts core::render_debug during record(); stays on the main
-        // thread under parallel recording.
-        bool main_thread_only() const override
-        {
-            return true;
-        }
-
     private:
         // Non-owning back-pointer to the engine context's
         // debug-renderable registry. Same lifetime guarantee as

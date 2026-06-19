@@ -34,7 +34,6 @@
 
 #include <cstdint>
 #include <memory>
-#include <vector>
 
 #include <rendering_engine/gpu/bind_group.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
@@ -172,54 +171,16 @@ namespace rendering_engine::gpu
 
         // -- Command recording --------------------------------------------
 
-        // Acquire the resources a frame needs before any pass records (the
-        // swapchain image on Vulkan). Idempotent within a frame. The engine
-        // calls this up front on the parallel path so the swapchain image is
-        // ready before passes record on worker threads; the serial path lets
-        // the backend acquire lazily, so the default is a no-op and OpenGL
-        // (which has no explicit acquire) never overrides it.
-        virtual void begin_frame() {}
-
-        // Allocate a new command encoder bound to @p recording_context. A
-        // backend that records passes in parallel (Vulkan) gives each context
-        // its own command pool so encoders on distinct contexts record on
-        // different threads without contention; single-context backends
-        // (OpenGL records immediately as it is encoded) ignore the argument.
-        virtual std::unique_ptr<command_encoder> create_command_encoder(uint32_t recording_context = 0) = 0;
+        // Allocate a new command encoder. Each encoder records one
+        // or more render passes; submission is implicit on the
+        // OpenGL backend (drawing happens immediately as it's
+        // recorded), but a future Vulkan backend would defer
+        // execution until @ref submit.
+        virtual std::unique_ptr<command_encoder> create_command_encoder() = 0;
 
         // Submit the encoder's recorded work for execution. After
         // this call the encoder is consumed.
         virtual void submit(std::unique_ptr<command_encoder> encoder) = 0;
-
-        // True when the engine may record several encoders (each on its own
-        // recording context) on different threads and present them together
-        // via @ref submit_frame. OpenGL's immediate-mode recording is
-        // single-threaded, so it returns false and the engine records serially.
-        virtual bool supports_parallel_recording() const
-        {
-            return false;
-        }
-
-        // Upper bound on encoders that may record concurrently — the number of
-        // recording contexts the backend provides. 1 when parallel recording
-        // is unsupported.
-        virtual uint32_t recording_context_count() const
-        {
-            return 1;
-        }
-
-        // Submit several encoders, each recorded into a contiguous slice of the
-        // frame, as one ordered unit: @c encoders.front() executes first. The
-        // default fallback submits them in order; the Vulkan backend batches
-        // them into a single queue submit carrying the frame's acquire/present
-        // synchronisation. Consumes the encoders.
-        virtual void submit_frame(std::vector<std::unique_ptr<command_encoder>> encoders)
-        {
-            for (auto& encoder : encoders)
-            {
-                submit(std::move(encoder));
-            }
-        }
     };
 
     // Construct a concrete device for the requested backend. The

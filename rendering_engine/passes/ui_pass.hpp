@@ -67,13 +67,6 @@ namespace rendering_engine
             io.write("swapchain");
         }
 
-        // Broadcasts core::render_ui during record(); stays on the main thread
-        // under parallel recording.
-        bool main_thread_only() const override
-        {
-            return true;
-        }
-
     private:
         // Non-owning back-pointer to the engine context's
         // ui-renderable registry. Same lifetime guarantee as

@@ -372,10 +372,6 @@ namespace rendering_engine::gpu::backend::vulkan
 
     VkPipeline vk_device::graphics_pipeline_for(pipeline handle, VkRenderPass render_pass, bool y_flipped)
     {
-        // Guarded by the cache lock: the per-pipeline variant list is built
-        // lazily on a cache miss and read by every set_pipeline, so parallel
-        // pass recording would otherwise race the lookup against the push_back.
-        const std::lock_guard<std::mutex> lock(m_cache_mutex);
         auto* record = m_pipelines.lookup(handle.id);
         if (record == nullptr || record->is_compute || render_pass == VK_NULL_HANDLE)
         {
