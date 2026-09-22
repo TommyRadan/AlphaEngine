@@ -1,7 +1,6 @@
 target_sources(AlphaEngine PRIVATE
     camera_module.cpp
     exit_module.cpp
-    frame_module.cpp
     shadow_demo_module.cpp
 )
 

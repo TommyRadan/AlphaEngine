@@ -48,9 +48,15 @@ struct game_module_info
     }
 };
 
-void register_game_module(struct game_module_info& info);
+void register_game_module(const game_module_info& info);
 
-#ifndef INTERNAL_GAMEMODULE_IMPLEMENTATION
+#ifdef INTERNAL_GAMEMODULE_IMPLEMENTATION
+// Engine-side hook, deliberately kept out of the module-facing surface (a
+// module translation unit gets the GAME_MODULE() block below instead).
+// runtime::engine::init calls it once the event bus is live to wire every
+// registration queued at static-init time onto the bus.
+void install_pending_game_modules();
+#else
 #define GAME_MODULE() static bool module_init()
 static bool module_init();
 static bool init_status = module_init();
