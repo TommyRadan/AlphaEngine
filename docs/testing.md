@@ -64,7 +64,8 @@ library to link a test binary against. Instead, `tests/CMakeLists.txt` defines a
 standalone `AlphaEngineTests` executable that compiles the specific subsystem
 translation units under test directly, alongside the test sources, and links
 `GTest::gtest_main` plus only the libraries those sources need (GLM for
-`core/math`, SDL3 for `core/log`, Threads for `core/jobs`, and — for the
+`core/math`, SDL3 for `core/log`, Threads for `core/jobs`, nlohmann/json for
+`core/settings_parse`, and — for the
 shader tests — the embedded `shader_registry` library generated from
 `shaders/` and the static glslang front end). Nothing from the renderer,
 window, or GPU backend layers is pulled in (`mesh/tangent.cpp` is pure
@@ -122,6 +123,17 @@ All device-free:
   apart by defines, off when disabled, recompiling a truncated blob), and
   **every embedded material, pass and compute shader compiles** — the check
   that catches an include or binding mistake before a GPU sees it.
+- `core::settings` — the value parsers (`parse_bool`, `parse_unsigned`,
+  `parse_float`, the window-mode and backend names), the compiled defaults,
+  and the three pure layers: `apply_json` (every documented key, partial
+  documents, malformed text, and wrong types / ranges / unknown keys skipped
+  with a warning), `apply_environment` over a map-backed getter, and
+  `parse_command_line` / `apply_command_line` (`--key value` and
+  `--key=value`, the mode flags, `--settings`, `--log-level`, `--help`,
+  unknown options and missing or invalid values tolerated) — plus the
+  layering order defaults < file < environment < command line. Bad input is
+  checked to surface as warnings, never errors. `load_settings` itself (the
+  pref path and the real environment) is not exercised.
 - `runtime::node` — parent/child links and re-parenting, cached world matrices,
   `world_position` / `set_world_position`, `find`, active / effective-active
   flags, and the component-store attach/get/remove path.

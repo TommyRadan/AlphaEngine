@@ -43,7 +43,10 @@
 // Forward declarations keep this header lightweight. Subsystem headers
 // are included only in engine.cpp where the unique_ptrs are constructed
 // and destroyed.
-struct settings;
+namespace core
+{
+    struct settings;
+}
 namespace core
 {
     struct event_bus;
@@ -88,7 +91,13 @@ namespace runtime
      */
     struct engine
     {
-        engine();
+        /**
+         * @brief Wires every subsystem up around the resolved @p values
+         *        (see @ref core::load_settings) and installs itself as
+         *        @ref current_engine. A test that needs an engine passes
+         *        @c core::settings{} for the compiled defaults.
+         */
+        explicit engine(core::settings values);
         ~engine();
 
         engine(const engine&) = delete;
@@ -119,7 +128,7 @@ namespace runtime
 
         // Subsystems. Owned as unique_ptr so lifetime mirrors the
         // engine's own lifetime, in the order they are declared here.
-        std::unique_ptr<::settings> settings;
+        std::unique_ptr<core::settings> settings;
         std::unique_ptr<core::time> time;
         std::unique_ptr<core::jobs> jobs;
         std::unique_ptr<core::event_bus> events;

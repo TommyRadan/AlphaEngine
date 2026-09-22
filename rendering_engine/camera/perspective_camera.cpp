@@ -29,7 +29,7 @@
 rendering_engine::perspective_camera::perspective_camera()
 {
     const runtime::engine& eng = runtime::current_engine();
-    const ::settings& s = *eng.settings;
+    const core::settings& s = *eng.settings;
 
     // The projection follows the drawable the swapchain and render targets
     // are sized to, measured in pixels; the settings' logical size only

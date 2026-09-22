@@ -20,9 +20,14 @@
  * SOFTWARE.
  */
 
+#include <cstdio>
+#include <cstdlib>
 #include <stdexcept>
+#include <utility>
 
 #include <core/log.hpp>
+#include <core/settings.hpp>
+#include <core/settings_parse.hpp>
 #include <rendering_engine/window.hpp>
 #include <runtime/engine.hpp>
 
@@ -73,13 +78,25 @@ int main(int argc, char* argv[])
 {
     LOG_INIT(argc, argv);
 
+    // Resolve the configuration before anything else exists: compiled
+    // defaults, the settings file, the environment, then the command line
+    // (see core::load_settings). --help is answered here, before the engine
+    // and its window are ever constructed.
+    core::settings_load_result startup = core::load_settings(argc, argv);
+    if (startup.help_requested)
+    {
+        std::fputs(core::command_line_usage(), stdout);
+        return EXIT_SUCCESS;
+    }
+
     LOG_INF("Engine starting: initializing subsystems");
 
-    // Construct the owning engine on the stack. Its constructor
-    // installs itself as runtime::current_engine() for the duration
-    // of this scope, so every subsystem that used to pull its
-    // dependency out of a singleton can resolve it from the engine.
-    runtime::engine engine;
+    // Construct the owning engine on the stack around the resolved
+    // settings. Its constructor installs itself as
+    // runtime::current_engine() for the duration of this scope, so every
+    // subsystem that used to pull its dependency out of a singleton can
+    // resolve it from the engine.
+    runtime::engine engine{std::move(startup.values)};
 
     try
     {

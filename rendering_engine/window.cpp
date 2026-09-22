@@ -114,36 +114,75 @@ namespace rendering_engine
             LOG_WRN("Could not initialize gamepad subsystem: %s", SDL_GetError());
         }
 
-        ::settings& s{*runtime::current_engine().settings};
-        m_is_vulkan = s.graphics.backend == graphics_backend::vulkan;
+        core::settings& s{*runtime::current_engine().settings};
+        m_is_vulkan = s.graphics.backend == core::graphics_backend::vulkan;
+
+        // A zero width or height means "match the primary display" (the
+        // release default). The display can only be queried now that the
+        // video subsystem is up; the concrete size is written back to the
+        // settings so the swapchain, the projection and the debug inspector
+        // all read it.
+        if (s.window.uses_native_resolution())
+        {
+            const SDL_DisplayMode* display_mode = SDL_GetCurrentDisplayMode(SDL_GetPrimaryDisplay());
+            if (display_mode != nullptr && display_mode->w > 0 && display_mode->h > 0)
+            {
+                if (s.window.width == 0)
+                {
+                    s.window.width = to_extent(display_mode->w);
+                }
+                if (s.window.height == 0)
+                {
+                    s.window.height = to_extent(display_mode->h);
+                }
+                LOG_INF("Display mode %dx%d; window size resolved to %ux%u",
+                        display_mode->w,
+                        display_mode->h,
+                        s.window.width,
+                        s.window.height);
+            }
+            else
+            {
+                if (s.window.width == 0)
+                {
+                    s.window.width = 1280;
+                }
+                if (s.window.height == 0)
+                {
+                    s.window.height = 720;
+                }
+                s.window.mode = core::window_mode::windowed;
+                LOG_WRN("SDL_GetCurrentDisplayMode failed (%s); falling back to %ux%u windowed",
+                        SDL_GetError(),
+                        s.window.width,
+                        s.window.height);
+            }
+        }
         SDL_WindowFlags window_flags{m_is_vulkan ? SDL_WINDOW_VULKAN : SDL_WINDOW_OPENGL};
         // Resizable so the user (and the window manager) can change the size,
         // reported through window_resized; high-pixel-density so the drawable
         // matches the display's native pixel grid instead of a scaled logical
         // size — pixel_size() is what the swapchain follows.
         window_flags |= SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY;
-        auto type{s.window.type};
+        const core::window_mode mode{s.window.mode};
 
-        const char* type_name = "windowed";
         bool fullscreen = false;
-        if (type == win_type::win_type_borderless)
+        if (mode == core::window_mode::borderless)
         {
             window_flags |= SDL_WINDOW_BORDERLESS;
-            type_name = "borderless";
         }
 
-        if (type == win_type::win_type_fullscreen)
+        if (mode == core::window_mode::fullscreen)
         {
             window_flags |= SDL_WINDOW_FULLSCREEN;
-            type_name = "fullscreen";
             fullscreen = true;
         }
 
-        LOG_INF("Creating window: name='%s' size=%ux%u mode=%s double_buffered=%s",
-                s.window.name.c_str(),
+        LOG_INF("Creating window: title='%s' size=%ux%u mode=%s double_buffered=%s",
+                s.window.title.c_str(),
                 s.window.width,
                 s.window.height,
-                type_name,
+                core::window_mode_name(mode),
                 s.window.double_buffered ? "true" : "false");
 
         if (!m_is_vulkan)
@@ -173,7 +212,7 @@ namespace rendering_engine
 #endif
         }
 
-        m_window.reset(SDL_CreateWindow(s.window.name.c_str(), s.window.width, s.window.height, window_flags));
+        m_window.reset(SDL_CreateWindow(s.window.title.c_str(), s.window.width, s.window.height, window_flags));
 
         if (m_window == nullptr)
         {
