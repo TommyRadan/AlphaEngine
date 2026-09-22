@@ -47,12 +47,20 @@ All device-free:
 
 - `core/math` — `vec2/3/4`, `mat3/4`, `quat`, `aabb`, `sphere`, `frustum`, and
   the scalar `lerp`.
-- `core::pool` — insert/get/erase, generation-based handle invalidation, slot
-  recycling.
+- `core::pool` — insert/get/erase, generation-based handle invalidation
+  (including the wrap past generation 0), slot recycling, in-place
+  construction/destruction of move-only and non-default-constructible values,
+  and live-slot iteration (`for_each`, `begin`/`end`).
 - `core::event_bus` — synchronous `emit`, type keying, buffered
   `enqueue`/`flush` ordering, deferral of events enqueued during a flush.
 - `core::jobs` — `parallel_for` coverage and correctness, `dispatch` +
-  `wait_idle` completion.
+  `wait_idle` completion, the exception boundary (a throwing job neither
+  escapes nor wedges `wait_idle`), low-priority work not delaying a
+  `parallel_for`, and the destructor draining queued jobs.
+- `core::time` — the fixed-step accumulator (drain, remainder, clamp),
+  constructor validation, and the wall-clock side: `perform_tick` /
+  `delta_time` / `frame_count`, per-instance timestamps, and the FPS readings
+  (bounds only — exact frame times are not reproducible).
 - `runtime::node` — parent/child links and re-parenting, cached world matrices,
   `world_position` / `set_world_position`, `find`, active / effective-active
   flags, and the component-store attach/get/remove path.

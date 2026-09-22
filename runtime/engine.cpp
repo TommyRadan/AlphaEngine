@@ -169,6 +169,13 @@ namespace runtime
 
     void engine::tick()
     {
+        // Advance the clock first so delta_time() describes the frame about
+        // to be processed — the time since the previous tick — rather than
+        // the one before it. The first tick reports a zero delta (see
+        // core::time), so frame one runs no fixed step and carries a zero
+        // render delta; frame two carries frame one's real duration.
+        time->perform_tick();
+
         // Pump OS input once per rendered frame (variable rate). Input
         // state set here is read by the fixed-step updates below.
         window->tick();
@@ -208,7 +215,6 @@ namespace runtime
         scenes->update();
         renderer->render();
         window->swap_buffers();
-        time->perform_tick();
     }
 
     void engine::broadcast_engine_start()

@@ -22,9 +22,45 @@
 
 #include <core/jobs.hpp>
 
+#include <exception>
 #include <utility>
 
 #include <core/log.hpp>
+
+namespace
+{
+    // Runs @p fn, turning any exception it lets escape into a LOG_ERR. Jobs run
+    // on worker threads with no caller to rethrow to, and a throw that skipped
+    // the pool's completion accounting would leave wait_idle / parallel_for
+    // blocked forever — so the "must not throw" contract is enforced at the job
+    // boundary rather than trusted.
+    template<typename Fn>
+    void invoke_logged(Fn&& fn) noexcept
+    {
+        try
+        {
+            fn();
+        }
+        catch (const std::exception& e)
+        {
+            LOG_ERR("jobs: job threw an exception: %s", e.what());
+        }
+        catch (...)
+        {
+            LOG_ERR("jobs: job threw a non-standard exception");
+        }
+    }
+
+    // Completion tracking for one parallel_for batch. Lives on the forking
+    // caller's stack for the duration of the call: chunks retire themselves
+    // under the mutex and the caller sleeps on @c done until none remain.
+    struct batch_state
+    {
+        std::mutex mutex;
+        std::condition_variable done;
+        std::size_t remaining{0};
+    };
+} // namespace
 
 core::jobs::jobs()
 {
@@ -45,6 +81,11 @@ core::jobs::jobs()
 
 core::jobs::~jobs()
 {
+    // Drain first: a job still queued or running here may reference engine
+    // state that is torn down right after this pool, and joining a worker
+    // mid-job would not stop the job, only wait for it — so wait for all of
+    // them explicitly, helping from this thread.
+    wait_idle();
     {
         std::lock_guard<std::mutex> lock(m_mutex);
         m_stop = true;
@@ -64,19 +105,39 @@ unsigned int core::jobs::worker_count() const noexcept
     return static_cast<unsigned int>(m_workers.size());
 }
 
-void core::jobs::enqueue(job_fn body)
+void core::jobs::enqueue(job_fn body, priority level)
 {
     {
         std::lock_guard<std::mutex> lock(m_mutex);
-        m_queue.push_back(std::move(body));
+        (level == priority::high ? m_high : m_low).push_back(std::move(body));
         m_in_flight.fetch_add(1, std::memory_order_relaxed);
     }
     m_wake.notify_one();
 }
 
+bool core::jobs::try_pop_locked(priority floor, job_fn& out)
+{
+    std::deque<job_fn>* queue = nullptr;
+    if (!m_high.empty())
+    {
+        queue = &m_high;
+    }
+    else if (floor == priority::low && !m_low.empty())
+    {
+        queue = &m_low;
+    }
+    if (queue == nullptr)
+    {
+        return false;
+    }
+    out = std::move(queue->front());
+    queue->pop_front();
+    return true;
+}
+
 void core::jobs::execute(job_fn& body)
 {
-    body();
+    invoke_logged(body);
     // The decrement carries the release so wait_idle's acquire load sees every
     // write the job made. The last one to reach zero wakes any idle waiter.
     if (m_in_flight.fetch_sub(1, std::memory_order_acq_rel) == 1)
@@ -86,17 +147,15 @@ void core::jobs::execute(job_fn& body)
     }
 }
 
-bool core::jobs::run_one_pending()
+bool core::jobs::run_one_pending(priority floor)
 {
     job_fn body;
     {
         std::lock_guard<std::mutex> lock(m_mutex);
-        if (m_queue.empty())
+        if (!try_pop_locked(floor, body))
         {
             return false;
         }
-        body = std::move(m_queue.front());
-        m_queue.pop_front();
     }
     execute(body);
     return true;
@@ -109,13 +168,12 @@ void core::jobs::worker_main()
         job_fn body;
         {
             std::unique_lock<std::mutex> lock(m_mutex);
-            m_wake.wait(lock, [this] { return m_stop || !m_queue.empty(); });
-            if (m_stop && m_queue.empty())
+            m_wake.wait(lock, [this] { return m_stop || !m_high.empty() || !m_low.empty(); });
+            if (!try_pop_locked(priority::low, body))
             {
+                // Both queues empty, so the wake was the stop signal.
                 return;
             }
-            body = std::move(m_queue.front());
-            m_queue.pop_front();
         }
         execute(body);
     }
@@ -134,58 +192,77 @@ void core::jobs::parallel_for(std::size_t count, const std::function<void(std::s
     // workers, or the whole range fits in a single chunk.
     if (m_workers.empty() || count <= chunk)
     {
-        for (std::size_t i = 0; i < count; ++i)
-        {
-            body(i);
-        }
+        invoke_logged(
+            [&]
+            {
+                for (std::size_t i = 0; i < count; ++i)
+                {
+                    body(i);
+                }
+            });
         return;
     }
 
     const std::size_t chunks = (count + chunk - 1) / chunk;
 
     // The batch lives entirely within this call: we block below until every
-    // chunk has run, so capturing @p body and @c remaining by reference is safe.
-    std::atomic<std::size_t> remaining{chunks};
+    // chunk has run, so capturing @p body and @c state by reference is safe.
+    // Each chunk retires itself under the batch mutex and the last one signals
+    // while still holding it, so no chunk touches @c state after the waiter
+    // has observed zero and returned.
+    batch_state state;
+    state.remaining = chunks;
     for (std::size_t c = 0; c < chunks; ++c)
     {
         const std::size_t begin = c * chunk;
         const std::size_t end = begin + chunk < count ? begin + chunk : count;
         enqueue(
-            [&body, &remaining, begin, end]
+            [&body, &state, begin, end]
             {
-                for (std::size_t i = begin; i < end; ++i)
+                invoke_logged(
+                    [&]
+                    {
+                        for (std::size_t i = begin; i < end; ++i)
+                        {
+                            body(i);
+                        }
+                    });
+                std::lock_guard<std::mutex> lock(state.mutex);
+                if (--state.remaining == 0)
                 {
-                    body(i);
+                    state.done.notify_all();
                 }
-                remaining.fetch_sub(1, std::memory_order_acq_rel);
-            });
+            },
+            priority::high);
     }
 
-    // Participate until our own batch is done, helping run whatever is queued.
-    while (remaining.load(std::memory_order_acquire) != 0)
+    // Help with the frame-critical queue until it is empty — every chunk of
+    // this batch is on it — then sleep until the chunks other threads picked
+    // up retire. Low-priority work is never taken here: a long background job
+    // would hold this frame hostage.
+    while (run_one_pending(priority::high))
     {
-        if (!run_one_pending())
-        {
-            std::this_thread::yield();
-        }
     }
+    std::unique_lock<std::mutex> lock(state.mutex);
+    state.done.wait(lock, [&state] { return state.remaining == 0; });
 }
 
-void core::jobs::dispatch(job_fn body)
+void core::jobs::dispatch(job_fn body, priority level)
 {
     // With no workers the job would never be drained, so run it inline.
     if (m_workers.empty())
     {
-        body();
+        invoke_logged(body);
         return;
     }
-    enqueue(std::move(body));
+    enqueue(std::move(body), level);
 }
 
 void core::jobs::wait_idle()
 {
-    // Pitch in first, then sleep until the workers retire the last job.
-    while (run_one_pending())
+    // Pitch in first, at either priority, then sleep until the workers retire
+    // the last job.
+    while (run_one_pending(priority::low))
     {
     }
     std::unique_lock<std::mutex> lock(m_mutex);
