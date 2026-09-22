@@ -38,10 +38,12 @@
 #include <rendering_engine/window.hpp>
 #include <runtime/scene_graph.hpp>
 
-// Defined in external/api/game_module.cpp. Flushes GAME_MODULE()
-// registrations that were queued at static-init time onto the live
-// event bus.
-extern void install_pending_game_modules();
+// Engine-side view of the game-module API: declares
+// install_pending_game_modules() without the GAME_MODULE()
+// self-registration block a module translation unit gets.
+#define INTERNAL_GAMEMODULE_IMPLEMENTATION
+#include <external/api/game_module.hpp>
+#undef INTERNAL_GAMEMODULE_IMPLEMENTATION
 
 namespace runtime
 {

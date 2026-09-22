@@ -68,6 +68,7 @@ set(ALPHAENGINE_TEST_SOURCES
     rendering_engine/mesh/vertex_format_test.cpp
     rendering_engine/util/font_test.cpp
     rendering_engine/util/image_test.cpp
+    external/camera_id_test.cpp
 )
 
 add_executable(AlphaEngineTests

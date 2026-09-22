@@ -89,6 +89,11 @@ All device-free:
   the u gradient, mirrored UVs flip the handedness sign, degenerate triangles
   contribute nothing, and shared vertices weight their triangles by corner
   angle.
+- `camera_id` (the `external/api/camera.hpp` facade) — the slot-index /
+  generation packing of the generational id and, over a `core::pool` like the
+  one the facade allocates from, that a destroyed camera's id never resolves
+  again once its slot is recycled. Only the header is exercised: the facade's
+  translation unit links the renderer.
 
 ### Testing the asset layer headless
 

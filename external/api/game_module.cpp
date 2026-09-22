@@ -90,7 +90,7 @@ namespace
     }
 } // namespace
 
-void register_game_module(struct game_module_info& info)
+void register_game_module(const game_module_info& info)
 {
     // Defer: runtime::engine isn't built yet during static init.
     pending_modules().push_back(info);

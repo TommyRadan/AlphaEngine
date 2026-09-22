@@ -39,7 +39,7 @@ The subsystems:
 
 ### Game modules (the `external/` layer)
 
-Gameplay-style code lives in `external/` as **game modules** registered through a self-installing pattern. Each module is a single translation unit that uses the `GAME_MODULE()` macro from `external/api/game_module.hpp`; the macro declares a static `init_status` initializer that calls `module_init()` at static-init time, which fills a `game_module_info` struct of lifecycle callbacks (`on_engine_start`, `on_frame`, `on_render_scene`, `on_render_ui`, input handlers…) and calls `register_game_module(info)`. The registrar wires each callback up as an event listener on the appropriate `event_type`. Existing examples: `cube_module`, `camera_module`, `frame_module`, `exit_module`.
+Gameplay-style code lives in `external/` as **game modules** registered through a self-installing pattern. Each module is a single translation unit that uses the `GAME_MODULE()` macro from `external/api/game_module.hpp`; the macro declares a static `init_status` initializer that calls `module_init()` at static-init time, which fills a `game_module_info` struct of lifecycle callbacks (`on_engine_start`, `on_frame`, `on_render_scene`, `on_render_ui`, input handlers…) and calls `register_game_module(info)`. The registrar wires each callback up as an event listener on the appropriate `event_type`. Existing examples: `camera_module`, `exit_module`, `shadow_demo_module`.
 
 Game modules must include the **public API headers** under `external/api/` — `api/game_module.hpp`, `api/log.hpp`, `api/time.hpp`, `api/camera.hpp` — not the corresponding internal headers. Engine/subsystem code does the opposite and includes `<core/log.hpp>` etc. directly. Mixing these up is a common mistake; see `docs/logging.md`.
 
