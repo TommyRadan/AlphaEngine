@@ -29,6 +29,15 @@
 
 runtime::light_component::light_component(std::unique_ptr<rendering_engine::light> light) : m_light{std::move(light)} {}
 
+void runtime::light_component::on_active_changed(node& owner, bool active)
+{
+    (void)owner;
+    if (m_light)
+    {
+        m_light->set_enabled(active);
+    }
+}
+
 void runtime::light_component::on_update(node& owner)
 {
     if (!m_light)

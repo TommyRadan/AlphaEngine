@@ -22,7 +22,6 @@
 
 #include <runtime/engine.hpp>
 
-#include <cassert>
 #include <stdexcept>
 
 #include <core/event_engine.hpp>
@@ -69,7 +68,15 @@ namespace runtime
 
     engine& current_engine()
     {
-        assert(g_current_engine != nullptr && "current_engine() called with no live engine");
+        if (g_current_engine == nullptr)
+        {
+            // Loud in every configuration: an assert would vanish in Release
+            // and let the caller dereference null. A caller in a destructor
+            // (a module static unwinding after the engine) terminates here,
+            // which is still a clear stack rather than a silent corruption.
+            LOG_FTL("current_engine() called with no live engine");
+            throw std::logic_error{"current_engine() called with no live engine"};
+        }
         return *g_current_engine;
     }
 

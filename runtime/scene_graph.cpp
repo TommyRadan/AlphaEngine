@@ -23,14 +23,82 @@
 #include <runtime/scene_graph.hpp>
 
 #include <string>
+#include <utility>
 
 #include <core/log.hpp>
+
+namespace
+{
+    // Frees the components of @p target and every node below it. The links
+    // are left intact so the subtree stays a coherent unit for its owner to
+    // release (or reuse).
+    void release_subtree_components(runtime::node& target)
+    {
+        target.remove_all_components();
+        for (runtime::node* child : target.children())
+        {
+            release_subtree_components(*child);
+        }
+    }
+
+    // Commands may queue further commands; the drain repeats until quiet. A
+    // command that keeps re-queueing itself would never let a frame end, so
+    // the drain gives up after this many rounds and leaves the remainder for
+    // the next update.
+    constexpr int k_max_drain_rounds = 32;
+} // namespace
+
+runtime::context::traversal_scope::traversal_scope(context* scene) noexcept : m_scene{scene}
+{
+    if (m_scene != nullptr)
+    {
+        ++m_scene->m_traversal_depth;
+    }
+}
+
+runtime::context::traversal_scope::~traversal_scope()
+{
+    if (m_scene != nullptr)
+    {
+        --m_scene->m_traversal_depth;
+    }
+}
 
 runtime::context::context()
 {
     // Wire the root to the scene's component store so every node added under it
-    // inherits the store (via node::add) and can carry components.
+    // inherits the store (via node::add) and can carry components, and point
+    // the store back here so nodes can reach the deferred command queue.
+    components.m_scene = this;
     root.set_store(&components);
+}
+
+runtime::context::~context()
+{
+    if (!m_pending.empty())
+    {
+        // Applying them now would touch nodes whose owners may already be
+        // tearing down; dropping is the safe choice, but it is worth a note.
+        LOG_WRN("runtime::context: destroyed with %zu deferred command(s) never applied", m_pending.size());
+    }
+
+    // Nodes are caller-owned and may outlive the scene. Anything still
+    // attached is cut loose now, while the store is alive: its components are
+    // freed (with on_destroy) and the subtree is unscoped, so a node destroyed
+    // later never reaches into this store. Normally the owners have already
+    // released their nodes (the demos do so on engine_stop) and this is a
+    // no-op.
+    if (!root.children().empty())
+    {
+        LOG_WRN("runtime::context: %zu subtree(s) still attached at teardown; freeing their components",
+                root.children().size());
+    }
+    std::vector<node*> attached = root.children();
+    for (node* child : attached)
+    {
+        root.remove(*child);
+        child->set_store(nullptr);
+    }
 }
 
 void runtime::context::init()
@@ -68,4 +136,109 @@ void runtime::context::update()
     // list, per-draw GPU buffers), none of which are thread-safe, so the walk
     // itself must stay on the main thread regardless.
     root.update_subtree();
+
+    // The walk is over, so the tree may change again: apply what the hooks
+    // asked for (node destruction, re-parenting, component removal, active
+    // toggles) in the order they asked.
+    apply_deferred();
+}
+
+void runtime::context::defer(std::function<void()> command)
+{
+    if (!command)
+    {
+        return;
+    }
+    m_pending.push_back(std::move(command));
+}
+
+void runtime::context::defer_destroy(node& target, std::function<void()> release)
+{
+    if (target.m_destroy_pending)
+    {
+        LOG_WRN("runtime::context::defer_destroy: '%s' is already pending destruction; ignoring", target.name.c_str());
+        return;
+    }
+    target.m_destroy_pending = true;
+
+    defer(
+        [&target, release = std::move(release)]
+        {
+            // Unlink first so nothing walks into the subtree once it is gone
+            // from the scene, then unwind the components (renderer
+            // registrations, lights, cameras) of the whole subtree.
+            if (node* parent = target.parent())
+            {
+                parent->remove(target);
+            }
+            release_subtree_components(target);
+            target.m_destroy_pending = false;
+
+            // Hand the memory back to the owner last. The node must not be
+            // touched after this: the owner is free to delete it here.
+            if (release)
+            {
+                release();
+            }
+        });
+}
+
+void runtime::context::defer_reparent(node& target, node* new_parent)
+{
+    defer(
+        [&target, new_parent]
+        {
+            if (new_parent != nullptr)
+            {
+                new_parent->add(target);
+            }
+            else if (node* parent = target.parent())
+            {
+                parent->remove(target);
+            }
+        });
+}
+
+void runtime::context::defer_set_active(node& target, bool active)
+{
+    defer([&target, active] { target.set_active(active); });
+}
+
+void runtime::context::apply_deferred()
+{
+    if (is_traversing())
+    {
+        LOG_ERR("runtime::context::apply_deferred: called during a traversal; commands stay queued");
+        return;
+    }
+
+    for (int round = 0; round < k_max_drain_rounds && !m_pending.empty(); ++round)
+    {
+        // Swap the batch out so commands queued while it runs land in a fresh
+        // queue for the next round rather than invalidating this walk.
+        std::vector<std::function<void()>> batch;
+        batch.swap(m_pending);
+        for (std::function<void()>& command : batch)
+        {
+            command();
+        }
+    }
+
+    if (!m_pending.empty())
+    {
+        LOG_ERR(
+            "runtime::context::apply_deferred: commands kept re-queueing for %d rounds; %zu left for the next update",
+            k_max_drain_rounds,
+            m_pending.size());
+    }
+}
+
+std::size_t runtime::context::pending_command_count() const noexcept
+{
+    return m_pending.size();
+}
+
+bool runtime::context::is_traversing() const noexcept
+{
+    return m_traversal_depth > 0;
 }

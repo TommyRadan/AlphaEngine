@@ -56,6 +56,12 @@ void runtime::mesh_component::on_attach(node& owner)
 void runtime::mesh_component::on_destroy()
 {
     unregister_model();
+    // The owning node may outlive this component (remove_component, store
+    // teardown); do not leave the model's transform pointing at it.
+    if (m_model)
+    {
+        m_model->transform.set_parent(nullptr);
+    }
 }
 
 void runtime::mesh_component::on_active_changed(node& owner, bool active)
