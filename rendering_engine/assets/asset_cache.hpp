@@ -38,6 +38,7 @@
 #include <rendering_engine/assets/mesh_asset.hpp>
 #include <rendering_engine/assets/texture_asset.hpp>
 #include <rendering_engine/gpu/types.hpp>
+#include <rendering_engine/util/image.hpp>
 
 namespace rendering_engine
 {
@@ -54,10 +55,11 @@ namespace rendering_engine
      * once — while the underlying GPU resource is released by the asset's own
      * destructor as soon as the last handle drops.
      *
-     * Path-based mesh loading is intentionally absent: the engine has no mesh
-     * importer yet, so meshes are cached by structural key via
-     * @ref get_or_create_mesh. A file loader can slot in behind the same
-     * @c shared_ptr / @c weak_ptr machinery once an importer lands.
+     * Meshes are cached by structural key via @ref get_or_create_mesh rather
+     * than by path: procedural builders key on their parameters, and the glTF
+     * importer (@ref load_gltf) keys each primitive on the file's canonical
+     * path plus its mesh / primitive index, so a model loaded twice shares
+     * its uploads through the same @c shared_ptr / @c weak_ptr machinery.
      *
      * Depends on the gpu device being live, so it is initialised after the
      * renderer (which brings the device up) and torn down before it. Like the
@@ -102,6 +104,25 @@ namespace rendering_engine
          */
         std::shared_ptr<texture_asset> load_texture(const std::filesystem::path& path,
                                                     gpu::color_space space = gpu::color_space::srgb);
+
+        /**
+         * @brief Returns the texture for an already-decoded @p image under
+         *        @p key, uploading it on a miss.
+         *
+         * For images that have no file of their own — a PNG embedded in a
+         * GLB chunk or a data URI — where @ref load_texture cannot key on a
+         * path. @p key is a caller-chosen identity that uniquely names the
+         * pixels (the glTF importer uses the model's canonical path plus the
+         * image index); it lives in the same index as the path keys, so pick
+         * one a path can never spell. @p image is read only on a miss and
+         * never retained: the upload copies the pixels, so the caller may
+         * drop the decoded image as soon as this returns. @p space selects
+         * the texel format and is part of the key exactly as in
+         * @ref load_texture.
+         */
+        std::shared_ptr<texture_asset> load_texture_from_image(const std::string& key,
+                                                               const util::image& image,
+                                                               gpu::color_space space = gpu::color_space::srgb);
 
         /**
          * @brief Returns the font for @p path at @p size, loading it on a miss.

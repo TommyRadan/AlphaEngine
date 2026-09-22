@@ -7,9 +7,12 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/gpu/texture.hpp>
@@ -28,6 +31,9 @@ namespace test_support
         // The descriptor of the most recent create_texture call, so a test
         // can check what format / footprint a loader asked the device for.
         rendering_engine::gpu::texture_descriptor last_texture_descriptor{};
+        // The initial data of every buffer created with some, keyed by
+        // handle id, so a test can read back the records a loader uploaded.
+        std::unordered_map<std::uint64_t, std::vector<std::byte>> buffer_contents;
 
         std::size_t live_buffer_count() const
         {
@@ -43,11 +49,16 @@ namespace test_support
         void quit() override {}
 
         // -- Resource creation ---------------------------------------------
-        rendering_engine::gpu::buffer create_buffer(const rendering_engine::gpu::buffer_descriptor&) override
+        rendering_engine::gpu::buffer create_buffer(const rendering_engine::gpu::buffer_descriptor& descriptor) override
         {
             const std::uint64_t id = ++m_next_id;
             live_buffers.insert(id);
             ++created_buffers;
+            if (descriptor.initial_data != nullptr && descriptor.size > 0)
+            {
+                const auto* bytes = static_cast<const std::byte*>(descriptor.initial_data);
+                buffer_contents[id].assign(bytes, bytes + descriptor.size);
+            }
             return rendering_engine::gpu::buffer{id};
         }
 
