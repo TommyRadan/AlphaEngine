@@ -62,7 +62,7 @@ void rendering_engine::label::rebuild_panes()
     m_panes.clear();
     float cursor = 0.0f;
 
-    for (auto& c : m_text)
+    for (const char c : m_text)
     {
         if (c == ' ')
         {
@@ -70,12 +70,33 @@ void rendering_engine::label::rebuild_panes()
             continue;
         }
 
+        // Go through unsigned char so a byte >= 128 (e.g. part of a UTF-8
+        // sequence) becomes its own codepoint rather than a negative value.
+        const auto codepoint = static_cast<char32_t>(static_cast<unsigned char>(c));
         int x0 = 0;
         int y0 = 0;
         int x1 = 0;
         int y1 = 0;
-        const rendering_engine::util::image* image = m_font->get_image(c, &x0, &y0, &x1, &y1);
-        const float width = (static_cast<float>(image->get_width()) / image->get_height()) * m_size;
+        const rendering_engine::util::image* image = m_font->get_image(codepoint, &x0, &y0, &x1, &y1);
+        if (image == nullptr)
+        {
+            if (!m_warned_missing_glyph)
+            {
+                LOG_WRN("label: font has no glyph for byte 0x%02X in \"%s\"; skipping it",
+                        static_cast<unsigned>(codepoint),
+                        m_text.c_str());
+                m_warned_missing_glyph = true;
+            }
+            continue;
+        }
+        if (image->get_width() == 0 || image->get_height() == 0)
+        {
+            // An empty bitmap (a whitespace-like glyph) has nothing to draw and
+            // no aspect ratio to size a pane from.
+            continue;
+        }
+
+        const float width = (static_cast<float>(image->get_width()) / static_cast<float>(image->get_height())) * m_size;
         auto pane = std::make_unique<rendering_engine::pane>(m_material, core::math::vec2{width, m_size});
         pane->set_image(*image);
         pane->transform.set_position(core::math::vec3{m_position.x + cursor, m_position.y, m_position.z});

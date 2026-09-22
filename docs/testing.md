@@ -59,6 +59,16 @@ All device-free:
 - `asset_cache` — dedup by structural key, builder-runs-only-on-miss,
   `collect_unused()` / weak-ref semantics, and that a `mesh_asset` releases its
   GPU buffers when the last handle drops.
+- `util::image` / `util::color` — the packed 4-byte RGBA8 texel layout the
+  upload sites rely on; deep copies, copy-and-swap assignment (larger over
+  smaller, over an empty image, self-assignment), moves that leave the source
+  empty, and that loading a missing file throws. Images are built in memory, so
+  no decoder runs.
+- `util::font` — a missing, empty, or non-font file throws instead of reading
+  garbage (the success path needs a real TTF and the rasterizer, so it is not
+  covered).
+- `mesh` — an empty mesh reports zero vertices and its `vertices()` accessor is
+  safe to call; `upload_obj` stores a copy.
 
 ### Testing the asset layer headless
 

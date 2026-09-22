@@ -58,6 +58,12 @@ void rendering_engine::model::upload_mesh(const rendering_engine::mesh& mesh)
     m_vertex_count = mesh.vertex_count();
     m_vertex_stride = sizeof(vertex_position_uv_normal);
 
+    if (m_vertex_count == 0)
+    {
+        LOG_WRN("model::upload_mesh: mesh has no vertices; nothing uploaded");
+        return;
+    }
+
     auto& gpu = *runtime::current_engine().gpu;
 
     gpu::buffer_descriptor vertex_descriptor{};

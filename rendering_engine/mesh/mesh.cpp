@@ -29,7 +29,8 @@ void rendering_engine::mesh::upload_obj(const std::vector<vertex_position_uv_nor
 
 const rendering_engine::vertex_position_uv_normal* rendering_engine::mesh::vertices() const
 {
-    return &m_vertices[0];
+    // data() is well-defined on an empty vector (indexing element 0 is not).
+    return m_vertices.data();
 }
 
 std::size_t rendering_engine::mesh::vertex_count() const

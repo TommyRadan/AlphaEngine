@@ -51,9 +51,11 @@ namespace rendering_engine
     /**
      * @brief The device the asset layer uses for resource creation/destruction.
      *
-     * Undefined behaviour if called before a device has been installed via
-     * @ref set_asset_device. In a normal run the engine installs it during
-     * initialisation, before any asset is loaded.
+     * Aborts the process (through a fatal log) in every build configuration if
+     * called with no device installed — before @ref set_asset_device or after
+     * it was cleared — so a lifetime bug surfaces loudly instead of
+     * dereferencing null in Release. In a normal run the engine installs it
+     * during initialisation, before any asset is loaded.
      */
     gpu::device& asset_device();
 

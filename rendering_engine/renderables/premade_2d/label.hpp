@@ -58,6 +58,10 @@ namespace rendering_engine
         core::math::vec3 m_position{0.0f};
         float m_width{0.0f};
         std::vector<std::unique_ptr<rendering_engine::pane>> m_panes;
+        // The font rasterizes printable ASCII only; a byte it has no glyph for
+        // is skipped, and the first such byte per label is logged once rather
+        // than on every rebuild.
+        bool m_warned_missing_glyph{false};
 
         void rebuild_panes();
     };

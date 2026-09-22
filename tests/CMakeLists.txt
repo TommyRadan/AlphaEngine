@@ -45,6 +45,8 @@ set(ALPHAENGINE_TEST_SOURCES_UNDER_TEST
     ${CMAKE_SOURCE_DIR}/rendering_engine/gpu/device.cpp
     ${CMAKE_SOURCE_DIR}/rendering_engine/util/image.cpp
     ${CMAKE_SOURCE_DIR}/rendering_engine/util/font.cpp
+    # mesh — the CPU-side vertex store behind model::upload_mesh (math only).
+    ${CMAKE_SOURCE_DIR}/rendering_engine/mesh/mesh.cpp
 )
 
 set(ALPHAENGINE_TEST_SOURCES
@@ -58,6 +60,9 @@ set(ALPHAENGINE_TEST_SOURCES
     core/time_test.cpp
     runtime/node_test.cpp
     rendering_engine/assets/asset_cache_test.cpp
+    rendering_engine/mesh/mesh_test.cpp
+    rendering_engine/util/font_test.cpp
+    rendering_engine/util/image_test.cpp
 )
 
 add_executable(AlphaEngineTests

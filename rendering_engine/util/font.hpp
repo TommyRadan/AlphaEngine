@@ -32,16 +32,33 @@
 
 namespace rendering_engine::util
 {
+    /**
+     * @brief A TrueType face rasterized at a fixed pixel height.
+     *
+     * Reads the whole file into memory, parses it with stb_truetype and
+     * pre-rasterizes the printable ASCII range (codepoints 32..127) into RGBA
+     * @ref image bitmaps. The constructor throws @c std::runtime_error (after
+     * logging) when the file cannot be read or is not a font stb_truetype
+     * accepts. Non-copyable: it owns the glyph bitmaps.
+     */
     struct font
     {
         font(const std::string& filename, float font_size);
 
-        const rendering_engine::util::image* get_image(char letter, int* x0, int* y0, int* x1, int* y1);
+        /**
+         * @brief Looks up the pre-rasterized bitmap for @p codepoint.
+         *
+         * Writes the glyph's bitmap box (pixels, relative to the baseline
+         * origin) to @p x0 .. @p y1 and returns the bitmap. For a codepoint no
+         * bitmap was rasterized for (anything outside 32..127) it writes an
+         * empty box and returns @c nullptr; the lookup never inserts.
+         */
+        const image* get_image(char32_t codepoint, int* x0, int* y0, int* x1, int* y1) const;
 
     private:
-        std::map<char, std::unique_ptr<rendering_engine::util::image>> m_images;
+        std::map<char32_t, std::unique_ptr<image>> m_images;
         std::vector<unsigned char> m_buffer;
-        stbtt_fontinfo m_font;
-        float m_scale;
+        stbtt_fontinfo m_font{};
+        float m_scale{0.0f};
     };
 } // namespace rendering_engine::util
