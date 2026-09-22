@@ -13,12 +13,39 @@ concurrency:
 env:
   SOURCE_DIRS: "runtime core rendering_engine external"
   CLANG_VERSION: "18"
+  # Dev packages every Linux job that configures the tree installs. SDL3 is
+  # built from source via FetchContent and on Linux its CMake refuses to
+  # configure without the X11 (or Wayland) development libraries, even for a
+  # build that never opens a window; the root CMakeLists calls
+  # find_package(OpenGL / Vulkan REQUIRED) unconditionally, so the GL and
+  # Vulkan loader headers are needed even by a test-only build.
+  LINUX_DEV_PACKAGES: >-
+    cmake
+    ninja-build
+    libgl1-mesa-dev
+    libvulkan-dev
+    libx11-dev
+    libxext-dev
+    libxrandr-dev
+    libxcursor-dev
+    libxi-dev
+    libxfixes-dev
+    libxss-dev
+
+# The Linux jobs share one actions/cache of the FetchContent checkouts
+# (SDL3, GLM, glslang, ImGui, GoogleTest) so only the first job after a
+# CMakeLists.txt change hits GitHub for the sources. Both the *-src trees
+# and the *-subbuild directories are cached: FetchContent skips the clone
+# only when the "<name>-populate-gitclone-lastrun.txt" stamp inside the
+# subbuild is present and up to date, and with the pinned tag already
+# checked out the update step is a no-op — a restored cache never touches
+# the network. The *-build trees are left out: they hold compiled objects
+# that differ per compiler and per sanitizer flag.
 
 jobs:
   # ---------------------------------------------------------------------------
   # clang-format: style gate. Runs on Ubuntu with a pinned LLVM version so the
-  # formatting output is deterministic. This job does not compile, so it stays
-  # on Linux even though the build matrix is Windows-only.
+  # formatting output is deterministic. This job does not compile.
   # ---------------------------------------------------------------------------
   format:
     name: clang-format
@@ -51,9 +78,9 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # clang-tidy: static analysis. Runs on Linux where clang-tidy + libc++ come
-  # from the distro with working include paths. GLM is fetched from source by
-  # CMake via FetchContent during configure, so no system GLM package is
-  # required.
+  # from the distro with working include paths. Every dependency is fetched
+  # from source by CMake via FetchContent during configure, so no system
+  # SDL / GLM package is required.
   # ---------------------------------------------------------------------------
   tidy:
     name: clang-tidy
@@ -69,16 +96,11 @@ jobs:
           # CMakeLists.txt passes -stdlib=libc++ when the compiler is Clang, so
           # clang-tidy needs libc++ headers (not libstdc++) to resolve <cstdint>,
           # <functional>, <string>, etc. during analysis.
-          sudo apt-get install -y --no-install-recommends \
+          sudo apt-get install -y --no-install-recommends ${LINUX_DEV_PACKAGES} \
             clang-${CLANG_VERSION} \
             clang-tidy-${CLANG_VERSION} \
             libc++-${CLANG_VERSION}-dev \
-            libc++abi-${CLANG_VERSION}-dev \
-            cmake \
-            ninja-build \
-            libsdl2-dev \
-            libgl1-mesa-dev \
-            libvulkan-dev
+            libc++abi-${CLANG_VERSION}-dev
           sudo update-alternatives --install /usr/bin/clang-tidy clang-tidy /usr/bin/clang-tidy-${CLANG_VERSION} 100
           sudo update-alternatives --install /usr/bin/run-clang-tidy run-clang-tidy /usr/bin/run-clang-tidy-${CLANG_VERSION} 100
           sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-${CLANG_VERSION} 100
@@ -87,6 +109,15 @@ jobs:
 
       - name: Verify .clang-tidy is committed
         run: test -f .clang-tidy
+
+      - name: Cache FetchContent sources
+        uses: actions/cache@v4
+        with:
+          path: |
+            build/_deps/*-src
+            build/_deps/*-subbuild
+          key: fetchcontent-${{ runner.os }}-${{ hashFiles('CMakeLists.txt') }}
+          restore-keys: fetchcontent-${{ runner.os }}-
 
       - name: Configure (export compile_commands.json)
         run: |
@@ -111,17 +142,35 @@ jobs:
           run-clang-tidy -p build -quiet "${pattern}"
 
   # ---------------------------------------------------------------------------
-  # test: build and run the device-free unit-test suite on Linux. The suite
-  # (tests/, GoogleTest) compiles only the pure-logic subsystem sources, so it
-  # needs no GPU or window — it builds and runs headless. The root CMakeLists
-  # still calls find_package(Vulkan/OpenGL REQUIRED) during configure, so the
-  # dev headers are installed even though the test binary links neither. Uses
-  # the default GCC toolchain (libstdc++); the -stdlib=libc++ flag is scoped to
-  # the AlphaEngine target only, so the tests are unaffected.
+  # build-linux: compile the full AlphaEngine target (both GPU backends, both
+  # windowing paths, glslang, ImGui) with GCC and with Clang + libc++ on
+  # Linux, then build and run the device-free unit-test suite (tests/,
+  # GoogleTest) through ctest. The engine binary itself cannot run here —
+  # there is no display and no headless mode yet — so the job proves that the
+  # tree compiles and links on both Linux toolchains and that the tests pass
+  # on each; with only the MSVC matrix a Linux-only breakage outside the test
+  # TUs would keep CI green.
   # ---------------------------------------------------------------------------
-  test:
-    name: unit-tests (linux)
+  build-linux:
+    name: build (linux-${{ matrix.compiler }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - compiler: gcc
+            cc: gcc
+            cxx: g++
+            cmake_args: ""
+          - compiler: clang
+            cc: clang
+            cxx: clang++
+            # CMakeLists.txt puts the AlphaEngine target on libc++ but leaves
+            # the fetched C++ dependencies (glslang, ImGui, GoogleTest) on the
+            # default libstdc++, and a libc++ TU cannot link a libstdc++
+            # glslang (std::__1::vector vs std::vector in the mangled names).
+            # Build the whole tree against libc++ so the engine links.
+            cmake_args: -DCMAKE_CXX_FLAGS=-stdlib=libc++
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -130,35 +179,142 @@ jobs:
         run: |
           set -euxo pipefail
           sudo apt-get update
-          # SDL3 is built from source via FetchContent; on Linux its CMake
-          # requires X11 (or Wayland) development libraries or it fails to
-          # configure, even though the device-free tests never open a window.
-          sudo apt-get install -y --no-install-recommends \
-            cmake \
-            ninja-build \
-            g++ \
-            libgl1-mesa-dev \
-            libvulkan-dev \
-            libx11-dev \
-            libxext-dev \
-            libxrandr-dev \
-            libxcursor-dev \
-            libxi-dev \
-            libxfixes-dev \
-            libxss-dev
+          case "${{ matrix.compiler }}" in
+            gcc)
+              sudo apt-get install -y --no-install-recommends ${LINUX_DEV_PACKAGES} g++
+              ;;
+            clang)
+              # CMakeLists.txt passes -stdlib=libc++ to the AlphaEngine target
+              # when the compiler is Clang, so the libc++ headers and runtime
+              # are needed to compile and link the engine.
+              sudo apt-get install -y --no-install-recommends ${LINUX_DEV_PACKAGES} \
+                clang-${CLANG_VERSION} \
+                libc++-${CLANG_VERSION}-dev \
+                libc++abi-${CLANG_VERSION}-dev
+              sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-${CLANG_VERSION} 100
+              sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-${CLANG_VERSION} 100
+              ;;
+          esac
+          ${{ matrix.cxx }} --version
+
+      - name: Cache FetchContent sources
+        uses: actions/cache@v4
+        with:
+          path: |
+            build/_deps/*-src
+            build/_deps/*-subbuild
+          key: fetchcontent-${{ runner.os }}-${{ hashFiles('CMakeLists.txt') }}
+          restore-keys: fetchcontent-${{ runner.os }}-
 
       - name: Configure
         run: |
           cmake -S . -B build \
             -G Ninja \
             -DCMAKE_BUILD_TYPE=Debug \
-            -DALPHAENGINE_BUILD_TESTS=ON
+            -DCMAKE_C_COMPILER=${{ matrix.cc }} \
+            -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} \
+            -DALPHAENGINE_BUILD_TESTS=ON \
+            ${{ matrix.cmake_args }}
+
+      - name: Build engine and tests
+        run: cmake --build build --target AlphaEngine AlphaEngineTests
+
+      - name: Verify output
+        run: |
+          set -euo pipefail
+          exe=Binaries/AlphaEngine
+          if [ ! -x "${exe}" ]; then
+            echo "Missing ${exe}" >&2
+            exit 1
+          fi
+          echo "Built ${exe} ($(stat -c %s "${exe}") bytes)"
+
+      - name: Run tests
+        run: ctest --test-dir build --output-on-failure
+
+  # ---------------------------------------------------------------------------
+  # sanitizers: the unit-test suite under AddressSanitizer + UndefinedBehavior
+  # Sanitizer, and the threaded suites under ThreadSanitizer. Both are GCC
+  # Debug builds configured with ALPHAENGINE_SANITIZE (root CMakeLists.txt),
+  # which instruments every target — the fetched SDL3 and GoogleTest too — so
+  # a report inside dependency code carries a usable stack.
+  #
+  # ASan and TSan cannot share a binary, so TSan is a second matrix entry with
+  # its own build. It runs only the suites that exercise threads (core::jobs,
+  # core::time, core::event_bus, core::pool) and repeats them 20 times in one
+  # process so a race that needs an unlucky interleaving has a chance to show
+  # up; the whole suite would mostly be single-threaded noise at TSan's cost.
+  #
+  # The gtest binary is run directly for the TSan entry because ctest cannot
+  # forward --gtest_repeat; the ASan entry goes through ctest like the build
+  # jobs do. UBSan keeps running after a report by default (exit 0), so
+  # halt_on_error=1 is what turns a finding into a failed step; ASan aborts on
+  # its first error and LeakSanitizer exits non-zero at process end; TSan
+  # reports every race and exits 66 at the end of the run.
+  # ---------------------------------------------------------------------------
+  sanitizers:
+    name: sanitizers (linux ${{ matrix.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: asan+ubsan
+            sanitize: address,undefined
+          - name: tsan
+            sanitize: thread
+    env:
+      ASAN_OPTIONS: detect_leaks=1
+      UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install toolchain and dev headers
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ${LINUX_DEV_PACKAGES} g++
+          g++ --version
+
+      # GCC 13's libasan / libtsan abort at startup ("unexpected memory
+      # mapping") when the kernel randomises mmap with more than 28 bits of
+      # entropy. The runner images set vm.mmap_rnd_bits=28 for exactly this
+      # reason, but the kernel default is 32, so pin it rather than depend on
+      # the image (actions/runner-images#9491).
+      - name: Limit mmap randomisation for the sanitizer runtimes
+        run: sudo sysctl -w vm.mmap_rnd_bits=28
+
+      - name: Cache FetchContent sources
+        uses: actions/cache@v4
+        with:
+          path: |
+            build/_deps/*-src
+            build/_deps/*-subbuild
+          key: fetchcontent-${{ runner.os }}-${{ hashFiles('CMakeLists.txt') }}
+          restore-keys: fetchcontent-${{ runner.os }}-
+
+      - name: Configure (-fsanitize=${{ matrix.sanitize }})
+        run: |
+          cmake -S . -B build \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DALPHAENGINE_BUILD_TESTS=ON \
+            -DALPHAENGINE_SANITIZE=${{ matrix.sanitize }}
 
       - name: Build tests
         run: cmake --build build --target AlphaEngineTests
 
-      - name: Run tests
+      - name: Run tests (ctest)
+        if: matrix.name == 'asan+ubsan'
         run: ctest --test-dir build --output-on-failure
+
+      - name: Run threaded suites 20x
+        if: matrix.name == 'tsan'
+        run: |
+          Binaries/AlphaEngineTests \
+            --gtest_filter='jobs.*:time.*:event_bus.*:pool.*' \
+            --gtest_repeat=20
 
   # ---------------------------------------------------------------------------
   # build: Windows MSVC build matrix (Debug + Release). Both the OpenGL and
