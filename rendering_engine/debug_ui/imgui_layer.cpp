@@ -260,10 +260,18 @@ namespace rendering_engine::debug_ui
             {
                 ImGui::SeparatorText("Geometry");
                 ImGui::Text("Models in scene: %u", stats.scene_renderables);
-                ImGui::Text("Models rendered: %u", stats.draw_calls);
+                ImGui::Text("Models rendered: %u", stats.submitted);
                 if (ImGui::IsItemHovered())
                 {
-                    ImGui::SetTooltip("No frustum culling yet — every registered model is drawn.");
+                    ImGui::SetTooltip("Renderables whose bounds touch the camera frustum, plus any that report\n"
+                                      "no bounds (fullscreen effects, gizmos) and are always drawn.");
+                }
+                ImGui::Text("Frustum culled: %u", stats.culled);
+                ImGui::Text("Shadow culled: %u (omni %u)", stats.shadow_culled, stats.point_shadow_culled);
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Casters skipped by the directional shadow pass, and caster/face pairs\n"
+                                      "skipped across the six omni shadow faces.");
                 }
                 ImGui::Text("Draw calls: %u", stats.draw_calls);
                 ImGui::Text("Instances: %u", stats.instances);

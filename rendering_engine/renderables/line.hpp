@@ -90,10 +90,18 @@ namespace rendering_engine
 
         void collect_draw_items(std::vector<draw_item>& out) final;
 
+        // Box over the uploaded vertices under @ref transform; false until
+        // @ref upload has pushed at least one vertex.
+        bool world_bounds(core::math::aabb& out) const final;
+
     private:
         material* m_material{nullptr};
         line_mode m_mode{line_mode::strip};
         std::vector<vertex_position_color> m_vertices;
+
+        // Object-space box over the vertices at the last @ref upload.
+        core::math::aabb m_local_bounds{};
+        bool m_has_local_bounds{false};
 
         gpu::buffer m_vertex_buffer{};
         gpu::buffer m_index_buffer{};

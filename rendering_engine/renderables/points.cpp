@@ -24,6 +24,7 @@
 
 #include <core/log.hpp>
 #include <core/math/math.hpp>
+#include <rendering_engine/assets/mesh_asset.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/materials/material.hpp>
@@ -85,6 +86,13 @@ void rendering_engine::points::upload()
     m_vertex_count = m_vertices.size();
     m_vertex_stride = sizeof(vertex_position_color);
 
+    // Box the staged points once per upload so world_bounds is a matrix
+    // transform per frame; an empty upload leaves the cloud unbounded.
+    const auto bounds =
+        compute_position_bounds(m_vertices.data(), m_vertices.size() * sizeof(vertex_position_color), m_vertex_stride);
+    m_has_local_bounds = bounds.has_value();
+    m_local_bounds = bounds.value_or(core::math::aabb{});
+
     auto& gpu = *runtime::current_engine().gpu;
 
     // Re-uploading replaces the previous buffer, so drop it first.
@@ -105,6 +113,16 @@ void rendering_engine::points::upload()
     vertex_descriptor.hint = gpu::buffer_usage_hint::static_data;
     vertex_descriptor.initial_data = m_vertices.data();
     m_vertex_buffer = gpu.create_buffer(vertex_descriptor);
+}
+
+bool rendering_engine::points::world_bounds(core::math::aabb& out) const
+{
+    if (!m_has_local_bounds)
+    {
+        return false;
+    }
+    out = core::math::transform(m_local_bounds, transform.get_world_matrix());
+    return true;
 }
 
 void rendering_engine::points::collect_draw_items(std::vector<draw_item>& out)

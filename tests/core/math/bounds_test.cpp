@@ -127,3 +127,115 @@ TEST(frustum, large_box_straddling_camera_intersects)
     // A box big enough to enclose part of the visible volume.
     EXPECT_TRUE(f.intersects(aabb(vec3(-10.0f, -10.0f, -10.0f), vec3(10.0f, 10.0f, 10.0f))));
 }
+
+// -- aabb transform -----------------------------------------------------------
+
+TEST(aabb, transform_by_translation_moves_the_box)
+{
+    aabb box(vec3(-1.0f, -2.0f, -3.0f), vec3(1.0f, 2.0f, 3.0f));
+    aabb t = transform(box, translate(vec3(10.0f, 20.0f, 30.0f)));
+    EXPECT_NEAR(t.min.x, 9.0f, k_eps);
+    EXPECT_NEAR(t.max.x, 11.0f, k_eps);
+    EXPECT_NEAR(t.min.y, 18.0f, k_eps);
+    EXPECT_NEAR(t.max.y, 22.0f, k_eps);
+    EXPECT_NEAR(t.min.z, 27.0f, k_eps);
+    EXPECT_NEAR(t.max.z, 33.0f, k_eps);
+}
+
+TEST(aabb, transform_by_scale_scales_the_extents)
+{
+    aabb box(vec3(-1.0f, -1.0f, -1.0f), vec3(1.0f, 1.0f, 1.0f));
+    aabb t = transform(box, scale(vec3(2.0f, 3.0f, 0.5f)));
+    EXPECT_NEAR(t.min.x, -2.0f, k_eps);
+    EXPECT_NEAR(t.max.x, 2.0f, k_eps);
+    EXPECT_NEAR(t.min.y, -3.0f, k_eps);
+    EXPECT_NEAR(t.max.y, 3.0f, k_eps);
+    EXPECT_NEAR(t.min.z, -0.5f, k_eps);
+    EXPECT_NEAR(t.max.z, 0.5f, k_eps);
+}
+
+TEST(aabb, transform_by_rotation_reboxes_the_rotated_corners)
+{
+    // A unit cube turned 45 degrees about Z spans sqrt(2) along X and Y;
+    // Z is untouched.
+    aabb box(vec3(-1.0f, -1.0f, -1.0f), vec3(1.0f, 1.0f, 1.0f));
+    aabb t = transform(box, rotate(k_pi * 0.25f, vec3(0.0f, 0.0f, 1.0f)));
+    const float s = std::sqrt(2.0f);
+    EXPECT_NEAR(t.min.x, -s, 1e-4f);
+    EXPECT_NEAR(t.max.x, s, 1e-4f);
+    EXPECT_NEAR(t.min.y, -s, 1e-4f);
+    EXPECT_NEAR(t.max.y, s, 1e-4f);
+    EXPECT_NEAR(t.min.z, -1.0f, 1e-4f);
+    EXPECT_NEAR(t.max.z, 1.0f, 1e-4f);
+}
+
+TEST(aabb, transform_matches_the_eight_transformed_corners)
+{
+    // Off-centre box under translation * rotation * non-uniform scale: the
+    // closed form must equal the brute-force re-box of the corners.
+    aabb box(vec3(-0.5f, 1.0f, -2.0f), vec3(1.5f, 3.0f, 0.5f));
+    mat4 m = translate(vec3(3.0f, -1.0f, 2.0f)) * rotate(0.7f, normalize(vec3(1.0f, 2.0f, 3.0f))) *
+             scale(vec3(2.0f, 0.5f, 1.5f));
+    aabb t = transform(box, m);
+
+    aabb expected;
+    for (int i = 0; i < 8; ++i)
+    {
+        const vec3 corner((i & 1) != 0 ? box.max.x : box.min.x,
+                          (i & 2) != 0 ? box.max.y : box.min.y,
+                          (i & 4) != 0 ? box.max.z : box.min.z);
+        const vec4 p = m * vec4(corner, 1.0f);
+        const vec3 q(p.x, p.y, p.z);
+        expected = i == 0 ? aabb(q, q) : merge(expected, q);
+    }
+
+    EXPECT_NEAR(t.min.x, expected.min.x, 1e-4f);
+    EXPECT_NEAR(t.min.y, expected.min.y, 1e-4f);
+    EXPECT_NEAR(t.min.z, expected.min.z, 1e-4f);
+    EXPECT_NEAR(t.max.x, expected.max.x, 1e-4f);
+    EXPECT_NEAR(t.max.y, expected.max.y, 1e-4f);
+    EXPECT_NEAR(t.max.z, expected.max.z, 1e-4f);
+}
+
+// -- frustum culling ------------------------------------------------------------
+
+TEST(frustum, culls_unit_boxes_around_a_perspective_camera)
+{
+    // Camera at the origin looking down -Z, 90 degree FOV, square aspect,
+    // near 0.1, far 100: the side planes are x = -z and y = -z.
+    frustum f = frustum::from_view_projection(make_view_projection());
+    const aabb unit(vec3(-0.5f, -0.5f, -0.5f), vec3(0.5f, 0.5f, 0.5f));
+    const auto at = [&](float x, float y, float z) { return transform(unit, translate(vec3(x, y, z))); };
+
+    EXPECT_TRUE(f.intersects(at(0.0f, 0.0f, -10.0f)));  // dead ahead
+    EXPECT_TRUE(f.intersects(at(8.0f, 0.0f, -10.0f)));  // inside the right edge
+    EXPECT_TRUE(f.intersects(at(10.4f, 0.0f, -10.0f))); // straddling the right plane
+    EXPECT_TRUE(f.intersects(at(0.0f, 0.0f, -99.8f)));  // straddling the far plane
+
+    EXPECT_FALSE(f.intersects(at(0.0f, 0.0f, 10.0f)));   // behind the camera
+    EXPECT_FALSE(f.intersects(at(0.0f, 0.0f, -150.0f))); // beyond the far plane
+    EXPECT_FALSE(f.intersects(at(30.0f, 0.0f, -10.0f))); // right of the right plane
+    EXPECT_FALSE(f.intersects(at(-30.0f, 0.0f, -10.0f)));
+    EXPECT_FALSE(f.intersects(at(0.0f, 30.0f, -10.0f))); // above the top plane
+    EXPECT_FALSE(f.intersects(at(0.0f, -30.0f, -10.0f)));
+}
+
+TEST(frustum, culls_unit_boxes_against_an_orthographic_light_box)
+{
+    // A directional-light style box: eye at z = 20 looking down -Z, 5 units
+    // either side, depth 0..40 (so the world spans z in [-20, 20]).
+    mat4 view = look_at(vec3(0.0f, 0.0f, 20.0f), vec3(0.0f, 0.0f, 0.0f), vec3(0.0f, 1.0f, 0.0f));
+    mat4 proj = ortho(-5.0f, 5.0f, -5.0f, 5.0f, 0.0f, 40.0f);
+    frustum f = frustum::from_view_projection(proj * view);
+    const aabb unit(vec3(-0.5f, -0.5f, -0.5f), vec3(0.5f, 0.5f, 0.5f));
+    const auto at = [&](float x, float y, float z) { return transform(unit, translate(vec3(x, y, z))); };
+
+    EXPECT_TRUE(f.intersects(unit));                   // at the origin, mid depth
+    EXPECT_TRUE(f.intersects(at(4.8f, 0.0f, 0.0f)));   // straddling the +X wall
+    EXPECT_TRUE(f.intersects(at(0.0f, 0.0f, -19.8f))); // straddling the far plane
+
+    EXPECT_FALSE(f.intersects(at(6.0f, 0.0f, 0.0f)));   // outside the +X wall
+    EXPECT_FALSE(f.intersects(at(0.0f, -6.0f, 0.0f)));  // outside the -Y wall
+    EXPECT_FALSE(f.intersects(at(0.0f, 0.0f, 21.0f)));  // behind the eye
+    EXPECT_FALSE(f.intersects(at(0.0f, 0.0f, -25.0f))); // beyond the far plane
+}

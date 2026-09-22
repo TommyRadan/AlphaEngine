@@ -22,6 +22,7 @@
 
 #pragma once
 
+#include <core/math/mat4.hpp>
 #include <core/math/vec3.hpp>
 
 namespace core::math
@@ -42,4 +43,16 @@ namespace core::math
 
     aabb merge(const aabb& a, const aabb& b) noexcept;
     aabb merge(const aabb& a, const vec3& point) noexcept;
+
+    /**
+     * @brief Axis-aligned box enclosing @p box after the affine transform
+     *        @p m (translation, rotation, non-uniform scale, shear).
+     *
+     * Equivalent to transforming the eight corners of @p box and re-boxing
+     * them, computed without enumerating the corners: the centre maps
+     * through @p m and each output half-extent is the absolute 3x3 part of
+     * @p m applied to the input half-extents. The bottom row of @p m is
+     * ignored, so a projective matrix is not supported.
+     */
+    aabb transform(const aabb& box, const mat4& m) noexcept;
 } // namespace core::math

@@ -23,6 +23,7 @@
 #include <core/math/aabb.hpp>
 
 #include <algorithm>
+#include <cmath>
 
 namespace core::math
 {
@@ -52,5 +53,29 @@ namespace core::math
     {
         return aabb{vec3{std::min(a.min.x, point.x), std::min(a.min.y, point.y), std::min(a.min.z, point.z)},
                     vec3{std::max(a.max.x, point.x), std::max(a.max.y, point.y), std::max(a.max.z, point.z)}};
+    }
+
+    aabb transform(const aabb& box, const mat4& m) noexcept
+    {
+        // Column-major storage: m.m[col * 4 + row]. The centre goes through
+        // the full affine transform; each half-extent is the sum of the
+        // input half-extents weighted by the magnitude of the matching row
+        // of the linear part, which is exactly the extent the eight
+        // transformed corners span.
+        const vec3 center = box.center();
+        const vec3 extents = box.extents();
+
+        vec3 out_center;
+        vec3 out_extents;
+        for (int row = 0; row < 3; ++row)
+        {
+            const float mx = m.m[0 * 4 + row];
+            const float my = m.m[1 * 4 + row];
+            const float mz = m.m[2 * 4 + row];
+            const float mw = m.m[3 * 4 + row];
+            out_center.data()[row] = mx * center.x + my * center.y + mz * center.z + mw;
+            out_extents.data()[row] = std::abs(mx) * extents.x + std::abs(my) * extents.y + std::abs(mz) * extents.z;
+        }
+        return aabb{out_center - out_extents, out_center + out_extents};
     }
 } // namespace core::math

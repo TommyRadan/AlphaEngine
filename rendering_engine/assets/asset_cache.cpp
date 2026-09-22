@@ -206,6 +206,19 @@ namespace rendering_engine
         asset->vertex_count =
             data.vertex_stride != 0 ? static_cast<uint32_t>(data.vertex_bytes.size() / data.vertex_stride) : 0;
 
+        // Object-space bounds for frustum culling: trust the builder's box
+        // when it supplied one (an importer's record may not lead with the
+        // position), otherwise derive it from the positions once here so
+        // every renderable sharing this upload shares the box too.
+        if (data.bounds.has_value())
+        {
+            asset->bounds = *data.bounds;
+        }
+        else if (const auto computed = data.compute_bounds(); computed.has_value())
+        {
+            asset->bounds = *computed;
+        }
+
         if (!data.indices.empty())
         {
             gpu::buffer_descriptor index_descriptor{};

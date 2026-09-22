@@ -68,9 +68,17 @@ namespace rendering_engine
 
         void collect_draw_items(std::vector<draw_item>& out) final;
 
+        // Box over the uploaded points under @ref transform; false until
+        // @ref upload has pushed at least one point.
+        bool world_bounds(core::math::aabb& out) const final;
+
     private:
         material* m_material{nullptr};
         std::vector<vertex_position_color> m_vertices;
+
+        // Object-space box over the points at the last @ref upload.
+        core::math::aabb m_local_bounds{};
+        bool m_has_local_bounds{false};
 
         gpu::buffer m_vertex_buffer{};
         gpu::buffer m_draw_ubo{};

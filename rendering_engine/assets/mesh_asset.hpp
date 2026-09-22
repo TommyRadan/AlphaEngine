@@ -31,14 +31,29 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <optional>
 #include <type_traits>
 #include <vector>
 
+#include <core/math/aabb.hpp>
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/mesh/vertex.hpp>
 
 namespace rendering_engine
 {
+    /**
+     * @brief Object-space box enclosing the positions of an interleaved
+     *        vertex array, reading a @c vec3 at offset 0 of every
+     *        @p vertex_stride-byte record.
+     *
+     * Every named @ref vertex_format leads with its position, so this is
+     * the bounds of any engine vertex struct. Returns @c std::nullopt when
+     * @p byte_count holds no complete record or @p vertex_stride is too
+     * short to carry a @c vec3, so a caller never boxes garbage.
+     */
+    std::optional<core::math::aabb>
+    compute_position_bounds(const void* vertices, std::size_t byte_count, uint32_t vertex_stride);
+
     /**
      * @brief CPU-side geometry handed to @ref asset_cache::get_or_create_mesh.
      *
@@ -72,6 +87,24 @@ namespace rendering_engine
         // when the layout is not one the engine names. For a named format
         // @ref vertex_stride must equal @ref vertex_format_stride.
         vertex_format format{vertex_format::custom};
+
+        // Optional object-space bounds supplied by the builder. When unset
+        // the cache derives them via @ref compute_bounds, which assumes a
+        // @c vec3 position at offset 0 of every record — true of every
+        // named format. A @c custom record that does not lead with its
+        // position must fill this in (an importer already knows its
+        // extents) or the cached box, and any culling based on it, is
+        // wrong.
+        std::optional<core::math::aabb> bounds;
+
+        /**
+         * @brief Bounds of the positions in @ref vertex_bytes, reading a
+         *        @c vec3 at offset 0 of every @ref vertex_stride record.
+         *
+         * @c std::nullopt for empty geometry or a stride shorter than a
+         * @c vec3; see @ref compute_position_bounds.
+         */
+        std::optional<core::math::aabb> compute_bounds() const;
 
         /**
          * @brief Builds @ref vertex_bytes from a typed, trivially-copyable
@@ -139,5 +172,13 @@ namespace rendering_engine
         // material's @c required_vertex_format before emitting a draw so a
         // pipeline never fetches attributes the record does not carry.
         vertex_format format{vertex_format::custom};
+
+        // Object-space bounds of @ref vertex_buffer: the builder-supplied
+        // @ref mesh_data::bounds when present, otherwise derived from the
+        // positions at upload. Renderables transform it by their world
+        // matrix to answer @ref renderable::world_bounds, so the passes can
+        // frustum-cull them. A zero box for empty geometry (which draws
+        // nothing anyway).
+        core::math::aabb bounds{};
     };
 } // namespace rendering_engine

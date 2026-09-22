@@ -24,6 +24,7 @@
 
 #include <memory>
 
+#include <core/math/aabb.hpp>
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/mesh/mesh.hpp>
 #include <rendering_engine/mesh/vertex.hpp>
@@ -63,6 +64,11 @@ namespace rendering_engine
 
         void collect_draw_items(std::vector<draw_item>& out) final;
 
+        // The drawn mesh's object-space box under @ref transform: the cached
+        // asset's bounds, or the box computed over the vertices at
+        // @ref upload_mesh. False until either has supplied geometry.
+        bool world_bounds(core::math::aabb& out) const final;
+
     private:
         material* m_material{nullptr};
 
@@ -77,6 +83,12 @@ namespace rendering_engine
 
         size_t m_vertex_count{0};
         uint32_t m_vertex_stride{0};
+
+        // Object-space bounds of the private @ref m_vertex_buffer, computed
+        // at @ref upload_mesh; the cached-mesh path reads the asset's box
+        // instead.
+        core::math::aabb m_local_bounds{};
+        bool m_has_local_bounds{false};
 
         // Record layout of whichever vertex buffer is drawn, checked against
         // the material before every draw (see @ref validate_vertex_format).

@@ -27,6 +27,7 @@
 
 #include <core/log.hpp>
 #include <core/math/math.hpp>
+#include <rendering_engine/assets/mesh_asset.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/materials/material.hpp>
@@ -99,6 +100,13 @@ void rendering_engine::line::upload()
     m_vertex_stride = sizeof(vertex_position_color);
     m_index_count = 0;
 
+    // Box the staged vertices once per upload so world_bounds is a matrix
+    // transform per frame; an empty upload leaves the line unbounded.
+    const auto bounds =
+        compute_position_bounds(m_vertices.data(), m_vertices.size() * sizeof(vertex_position_color), m_vertex_stride);
+    m_has_local_bounds = bounds.has_value();
+    m_local_bounds = bounds.value_or(core::math::aabb{});
+
     auto& gpu = *runtime::current_engine().gpu;
 
     // Re-uploading replaces the previous buffers, so drop them first.
@@ -157,6 +165,16 @@ void rendering_engine::line::upload()
     index_descriptor.hint = gpu::buffer_usage_hint::static_data;
     index_descriptor.initial_data = indices.data();
     m_index_buffer = gpu.create_buffer(index_descriptor);
+}
+
+bool rendering_engine::line::world_bounds(core::math::aabb& out) const
+{
+    if (!m_has_local_bounds)
+    {
+        return false;
+    }
+    out = core::math::transform(m_local_bounds, transform.get_world_matrix());
+    return true;
 }
 
 void rendering_engine::line::collect_draw_items(std::vector<draw_item>& out)

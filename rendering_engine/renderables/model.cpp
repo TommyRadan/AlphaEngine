@@ -29,6 +29,7 @@
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/materials/material.hpp>
 #include <rendering_engine/mesh/vertex.hpp>
+#include <rendering_engine/renderables/mesh_bounds.hpp>
 #include <rendering_engine/renderables/vertex_format_check.hpp>
 #include <runtime/engine.hpp>
 
@@ -59,11 +60,22 @@ void rendering_engine::model::upload_mesh(const rendering_engine::mesh& mesh)
     m_vertex_count = mesh.vertex_count();
     m_vertex_stride = sizeof(vertex_position_uv_normal);
     m_vertex_format = vertex_format::position_uv_normal;
+    m_has_local_bounds = false;
 
     if (m_vertex_count == 0)
     {
         LOG_WRN("model::upload_mesh: mesh has no vertices; nothing uploaded");
         return;
+    }
+
+    // Box the vertices once at upload so world_bounds is a matrix
+    // transform per frame, not a pass over the vertex array.
+    if (const auto bounds = compute_position_bounds(
+            mesh.vertices(), m_vertex_count * sizeof(vertex_position_uv_normal), m_vertex_stride);
+        bounds.has_value())
+    {
+        m_local_bounds = *bounds;
+        m_has_local_bounds = true;
     }
 
     auto& gpu = *runtime::current_engine().gpu;
@@ -82,6 +94,20 @@ void rendering_engine::model::set_mesh(std::shared_ptr<mesh_asset> mesh)
     m_vertex_stride = m_mesh ? m_mesh->vertex_stride : 0;
     m_vertex_format = m_mesh ? m_mesh->format : vertex_format::custom;
     m_vertex_format_reported = false;
+}
+
+bool rendering_engine::model::world_bounds(core::math::aabb& out) const
+{
+    if (m_mesh)
+    {
+        return mesh_world_bounds(m_mesh.get(), transform, out);
+    }
+    if (!m_has_local_bounds)
+    {
+        return false;
+    }
+    out = core::math::transform(m_local_bounds, transform.get_world_matrix());
+    return true;
 }
 
 void rendering_engine::model::collect_draw_items(std::vector<draw_item>& out)

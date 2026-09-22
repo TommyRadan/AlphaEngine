@@ -24,6 +24,7 @@
 
 #include <vector>
 
+#include <core/math/aabb.hpp>
 #include <rendering_engine/renderables/draw_item.hpp>
 
 namespace rendering_engine
@@ -53,6 +54,21 @@ namespace rendering_engine
         virtual bool casts_shadow() const
         {
             return true;
+        }
+
+        // World-space axis-aligned bounds of everything this renderable
+        // would draw this frame, for frustum culling. Returns true and
+        // fills @p out when the geometry has a finite extent (a mesh under
+        // its world transform, an instanced batch, a line strip); returns
+        // false — leaving @p out untouched — when it does not (clip-space
+        // fullscreen effects, debug gizmos, UI), and such renderables are
+        // never culled. The passes call this before @ref collect_draw_items
+        // and skip the collect for a culled renderable, so the answer must
+        // not depend on the collect having run.
+        virtual bool world_bounds(core::math::aabb& out) const
+        {
+            (void)out;
+            return false;
         }
     };
 } // namespace rendering_engine

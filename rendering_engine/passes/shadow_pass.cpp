@@ -370,9 +370,15 @@ namespace rendering_engine
         return shadow_bias;
     }
 
+    uint32_t shadow_pass::culled_count() const
+    {
+        return m_culled;
+    }
+
     void shadow_pass::record(gpu::command_encoder& encoder, const frame_context& /*ctx*/)
     {
         auto& gpu = *runtime::current_engine().gpu;
+        m_culled = 0;
 
         // Locate the first shadow-casting directional light, tracking
         // its index within the packed directional array so the lit
@@ -457,12 +463,22 @@ namespace rendering_engine
         // Every scene renderable casts. Reuse the per-draw model-matrix
         // bind group each renderable already built; the depth-only
         // pipeline reads only position so the differing vertex strides
-        // are absorbed by the per-draw stride override.
+        // are absorbed by the per-draw stride override. Casters whose
+        // bounds lie outside the light's orthographic box could never
+        // rasterize into the map, so they are skipped before their items
+        // are even built; a renderable without bounds always casts.
+        const math::frustum light_frustum = math::frustum::from_view_projection(m_light_view_projection);
         m_items.clear();
         for (auto* r : *m_registry)
         {
             if (!r->casts_shadow())
             {
+                continue;
+            }
+            math::aabb bounds;
+            if (r->world_bounds(bounds) && !light_frustum.intersects(bounds))
+            {
+                ++m_culled;
                 continue;
             }
             r->collect_draw_items(m_items);

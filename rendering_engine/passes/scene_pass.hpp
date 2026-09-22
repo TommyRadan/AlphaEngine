@@ -38,10 +38,17 @@ namespace rendering_engine
 
     /**
      * @brief 3D scene pass. Clears the swapchain colour and depth,
-     *        collects draw items from the scene-renderable registry,
-     *        sorts them by pipeline, and dispatches them; broadcasts
+     *        frustum-culls the scene-renderable registry against the
+     *        camera, collects draw items from the survivors, sorts them
+     *        by pipeline, and dispatches them; broadcasts
      *        @ref core::render_scene as the documented escape
      *        hatch for debug / gizmo callers.
+     *
+     * Culling asks each renderable for its @ref renderable::world_bounds
+     * before @ref renderable::collect_draw_items and skips those that
+     * lie wholly outside the camera frustum, so they never build an item;
+     * a renderable that reports no bounds is always collected. The tallies
+     * land in @ref render_stats::submitted / @ref render_stats::culled.
      *
      * Owns the per-frame bind-group layout (camera @c viewMatrix /
      * @c projectionMatrix at binding 0 and the packed lights block at

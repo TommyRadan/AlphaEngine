@@ -104,6 +104,10 @@ namespace rendering_engine
         // suppress shadow acne.
         float depth_bias() const;
 
+        // Casters skipped by the last @ref record because their world
+        // bounds fell outside the light frustum. Zero on no-caster frames.
+        uint32_t culled_count() const;
+
     private:
         // Non-owning back-pointer to the engine context's
         // scene-renderable registry — the same one the scene pass
@@ -133,5 +137,6 @@ namespace rendering_engine
         core::math::mat4 m_light_view_projection{};
         bool m_has_shadow{false};
         int m_shadow_light_index{-1};
+        uint32_t m_culled{0};
     };
 } // namespace rendering_engine
