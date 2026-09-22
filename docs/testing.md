@@ -52,7 +52,10 @@ All device-free:
   (including the wrap past generation 0), slot recycling, in-place
   construction/destruction of move-only and non-default-constructible values,
   and live-slot iteration (`for_each`, `begin`/`end`).
-- `core::event_bus` — synchronous `emit`, type keying, buffered
+- `core::event_bus` — synchronous `emit`, type keying, listener order,
+  subscription tokens (RAII unsubscribe, `reset` / `release`, move, manual
+  `unsubscribe(id)`, a token outliving its bus), reentrancy (subscribe /
+  unsubscribe / emit from inside a dispatch, nested dispatch), buffered
   `enqueue`/`flush` ordering, deferral of events enqueued during a flush.
 - `core::jobs` — `parallel_for` coverage and correctness, `dispatch` +
   `wait_idle` completion, the exception boundary (a throwing job neither

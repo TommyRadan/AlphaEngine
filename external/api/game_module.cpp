@@ -24,6 +24,7 @@
 #include "game_module.hpp"
 #undef INTERNAL_GAMEMODULE_IMPLEMENTATION
 
+#include <functional>
 #include <vector>
 
 #include <core/event_engine.hpp>
@@ -41,52 +42,32 @@ namespace
         return storage;
     }
 
+    // Game modules have no teardown hook: they register at static-init time
+    // and their listeners live until event_bus::quit() drops the registry.
+    // Detach each token explicitly so that permanence is spelled out rather
+    // than implied by a discarded return value.
+    template<typename E>
+    void install(core::event_bus& bus, const std::function<void(const E&)>& callback)
+    {
+        if (callback)
+        {
+            bus.subscribe<E>(callback).release();
+        }
+    }
+
     void install_callbacks(core::event_bus& bus, const game_module_info& info)
     {
-        if (info.on_engine_start)
-        {
-            bus.subscribe<core::engine_start>(info.on_engine_start);
-        }
-        if (info.on_engine_stop)
-        {
-            bus.subscribe<core::engine_stop>(info.on_engine_stop);
-        }
-        if (info.on_frame)
-        {
-            bus.subscribe<core::frame>(info.on_frame);
-        }
-        if (info.on_render_update)
-        {
-            bus.subscribe<core::render_update>(info.on_render_update);
-        }
-        if (info.on_render_scene)
-        {
-            bus.subscribe<core::render_scene>(info.on_render_scene);
-        }
-        if (info.on_render_ui)
-        {
-            bus.subscribe<core::render_ui>(info.on_render_ui);
-        }
-        if (info.on_mouse_key_down)
-        {
-            bus.subscribe<core::mouse_key_down>(info.on_mouse_key_down);
-        }
-        if (info.on_mouse_key_up)
-        {
-            bus.subscribe<core::mouse_key_up>(info.on_mouse_key_up);
-        }
-        if (info.on_key_down)
-        {
-            bus.subscribe<core::key_down>(info.on_key_down);
-        }
-        if (info.on_key_up)
-        {
-            bus.subscribe<core::key_up>(info.on_key_up);
-        }
-        if (info.on_mouse_move)
-        {
-            bus.subscribe<core::mouse_move>(info.on_mouse_move);
-        }
+        install(bus, info.on_engine_start);
+        install(bus, info.on_engine_stop);
+        install(bus, info.on_frame);
+        install(bus, info.on_render_update);
+        install(bus, info.on_render_scene);
+        install(bus, info.on_render_ui);
+        install(bus, info.on_mouse_key_down);
+        install(bus, info.on_mouse_key_up);
+        install(bus, info.on_key_down);
+        install(bus, info.on_key_up);
+        install(bus, info.on_mouse_move);
     }
 } // namespace
 

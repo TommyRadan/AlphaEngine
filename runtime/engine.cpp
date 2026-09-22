@@ -121,6 +121,7 @@ namespace runtime
         rendering_engine::set_asset_device(nullptr);
         gpu.reset();
         window.reset();
+        m_quit_subscription.reset();
         events.reset();
         // Joins the worker threads. Every per-frame job is forked and joined
         // within tick(), so nothing is in flight by the time we get here.
@@ -156,7 +157,8 @@ namespace runtime
 
         // Register our own quit_requested listener now that the event
         // bus is initialised.
-        events->subscribe<core::quit_requested>([this](const core::quit_requested&) { m_quit_requested = true; });
+        m_quit_subscription =
+            events->subscribe<core::quit_requested>([this](const core::quit_requested&) { m_quit_requested = true; });
     }
 
     void engine::quit()
@@ -164,6 +166,7 @@ namespace runtime
         scenes->quit();
         assets->quit();
         renderer->quit();
+        m_quit_subscription.reset();
         events->quit();
     }
 
@@ -179,6 +182,11 @@ namespace runtime
         // Pump OS input once per rendered frame (variable rate). Input
         // state set here is read by the fixed-step updates below.
         window->tick();
+
+        // Deliver the events buffered through event_bus::enqueue since the
+        // last tick, now that this frame's input has been pumped and before
+        // the fixed-step updates consume it.
+        events->flush();
 
         // Fixed-step update, decoupled from the render rate. Feed the time
         // elapsed since the previous frame into the accumulator, then drain
