@@ -26,11 +26,16 @@
 
 namespace rendering_engine::util
 {
-    struct alignas(1) color
+    struct color
     {
         uint8_t r;
         uint8_t g;
         uint8_t b;
         uint8_t a;
     };
+
+    // Pixel buffers are handed to the GPU as tightly packed RGBA8 texels
+    // (width * height * sizeof(color) bytes), so the struct must be exactly
+    // four bytes with no padding.
+    static_assert(sizeof(color) == 4, "util::color must be a packed 4-byte RGBA8 texel");
 } // namespace rendering_engine::util

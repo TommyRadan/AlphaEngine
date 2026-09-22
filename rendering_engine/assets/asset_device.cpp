@@ -22,7 +22,9 @@
 
 #include <rendering_engine/assets/asset_device.hpp>
 
-#include <cassert>
+#include <core/log.hpp>
+
+#include <cstdlib>
 
 namespace rendering_engine
 {
@@ -36,7 +38,17 @@ namespace rendering_engine
 
     gpu::device& asset_device()
     {
-        assert(g_asset_device != nullptr && "asset_device() called before a device was installed");
+        if (g_asset_device == nullptr)
+        {
+            // An asset created or destroyed with no device installed — before
+            // engine init or after shutdown — is a lifetime bug. It must fail
+            // loudly in every configuration rather than become a silent null
+            // dereference in Release, so this is not a compiled-out assert.
+            // LOG_FTL aborts the process; the explicit abort() only keeps the
+            // control flow obvious to readers and static analysis.
+            LOG_FTL("asset_device() called with no gpu device installed (before init or after shutdown)");
+            std::abort();
+        }
         return *g_asset_device;
     }
 
