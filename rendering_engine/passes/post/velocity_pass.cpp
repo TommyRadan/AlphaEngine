@@ -33,6 +33,7 @@
 #include <rendering_engine/gpu/render_target.hpp>
 #include <rendering_engine/gpu/shader.hpp>
 #include <rendering_engine/gpu/shader_compiler.hpp>
+#include <rendering_engine/passes/post/depth_utils.hpp>
 #include <rendering_engine/passes/post/fullscreen_triangle.hpp>
 #include <runtime/engine.hpp>
 
@@ -50,7 +51,11 @@ namespace
     // Background pixels (depth at the far plane) reproject through the same
     // matrix, so a panning or rotating camera still produces correct motion
     // for the skybox.
-    const std::string fragment_shader = R"fs(
+    //
+    // The shared depth helpers (depth_utils.hpp) are spliced in between the
+    // declarations and main: depth_to_ndc undoes the [0, 1] window mapping
+    // documented on frame_context::scene_depth_texture.
+    const std::string fragment_shader = std::string{R"fs(
         #version 450
 
         layout(location = 0) in vec2 texCoord;
@@ -62,14 +67,15 @@ namespace
         {
             mat4 reprojection; // prevViewProj * inverse(curViewProj), unjittered
         } u_reproj;
-
+)fs"} + std::string{rendering_engine::depth_utils_glsl} +
+                                        R"fs(
         void main()
         {
             float depth = texture(sceneDepth, texCoord).r;
 
             // Current pixel in NDC (clip space before the divide is the same
             // point scaled by w, which cancels in the divide below).
-            vec3 ndc = vec3(texCoord * 2.0 - 1.0, depth * 2.0 - 1.0);
+            vec3 ndc = vec3(texCoord * 2.0 - 1.0, depth_to_ndc(depth));
 
             vec4 prev_clip = u_reproj.reprojection * vec4(ndc, 1.0);
             vec2 prev_ndc = prev_clip.xy / prev_clip.w;
@@ -85,7 +91,7 @@ namespace
 
 namespace rendering_engine
 {
-    velocity_pass::velocity_pass(gpu::texture scene_depth, uint32_t width, uint32_t height)
+    velocity_pass::velocity_pass(uint32_t width, uint32_t height)
     {
         auto& gpu = *runtime::current_engine().gpu;
 
@@ -163,23 +169,9 @@ namespace rendering_engine
         pipeline_descriptor.bind_group_layouts.push_back(m_layout);
         m_pipeline = gpu.create_pipeline(pipeline_descriptor);
 
-        gpu::bind_group_descriptor bind_group_descriptor{};
-        bind_group_descriptor.layout = m_layout;
-
-        gpu::binding_value depth_slot{};
-        depth_slot.binding = 0;
-        depth_slot.kind = gpu::binding_kind::texture;
-        depth_slot.texture_value = scene_depth;
-        bind_group_descriptor.entries.push_back(depth_slot);
-
-        gpu::binding_value reproj_slot{};
-        reproj_slot.binding = 1;
-        reproj_slot.kind = gpu::binding_kind::uniform_buffer;
-        reproj_slot.buffer_value = m_reproj_ubo;
-        bind_group_descriptor.entries.push_back(reproj_slot);
-
-        m_bind_group = gpu.create_bind_group(bind_group_descriptor);
-
+        // The input bind group is built lazily by record(): the scene depth
+        // it samples arrives through frame_context::scene_depth_texture and
+        // is rebound whenever that handle changes.
         m_enabled = true;
     }
 
@@ -235,6 +227,37 @@ namespace rendering_engine
         return m_velocity_texture;
     }
 
+    void velocity_pass::rebuild_bind_group(gpu::texture scene_depth)
+    {
+        auto& gpu = *runtime::current_engine().gpu;
+
+        // Safe mid-frame: the device defers the destroy until the command
+        // buffer that may still reference the old group has retired.
+        if (m_bind_group.valid())
+        {
+            gpu.destroy(m_bind_group);
+            m_bind_group = {};
+        }
+
+        gpu::bind_group_descriptor bind_group_descriptor{};
+        bind_group_descriptor.layout = m_layout;
+
+        gpu::binding_value depth_slot{};
+        depth_slot.binding = 0;
+        depth_slot.kind = gpu::binding_kind::texture;
+        depth_slot.texture_value = scene_depth;
+        bind_group_descriptor.entries.push_back(depth_slot);
+
+        gpu::binding_value reproj_slot{};
+        reproj_slot.binding = 1;
+        reproj_slot.kind = gpu::binding_kind::uniform_buffer;
+        reproj_slot.buffer_value = m_reproj_ubo;
+        bind_group_descriptor.entries.push_back(reproj_slot);
+
+        m_bind_group = gpu.create_bind_group(bind_group_descriptor);
+        m_bound_depth = scene_depth;
+    }
+
     void velocity_pass::record(gpu::command_encoder& encoder, const frame_context& ctx)
     {
         if (!m_enabled)
@@ -244,11 +267,11 @@ namespace rendering_engine
 
         auto& gpu = *runtime::current_engine().gpu;
 
-        // No camera: clear the motion to zero so the TAA resolve falls back
-        // to same-pixel history, and forget the previous matrix so the next
-        // camera frame starts fresh (zero motion) rather than reprojecting
-        // across the gap.
-        if (ctx.active_camera == nullptr)
+        // No camera, or no scene depth to reconstruct positions from: clear
+        // the motion to zero so the TAA resolve falls back to same-pixel
+        // history, and forget the previous matrix so the next camera frame
+        // starts fresh (zero motion) rather than reprojecting across the gap.
+        if (ctx.active_camera == nullptr || !ctx.scene_depth_texture.valid())
         {
             gpu::render_pass_descriptor descriptor{};
             descriptor.target = m_velocity_target;
@@ -272,6 +295,15 @@ namespace rendering_engine
         const core::math::mat4& prev_view_proj = m_has_prev ? m_prev_view_proj : view_proj;
         const core::math::mat4 reprojection = prev_view_proj * core::math::inverse(view_proj);
         gpu.write_buffer(m_reproj_ubo, reprojection.data(), reproj_ubo_size, 0);
+
+        // Bind this frame's scene depth. The handle is stable today, but a
+        // resized scene target swaps its attachment, so compare against the
+        // one the bind group was built with and rebuild on change (the first
+        // camera frame included).
+        if (ctx.scene_depth_texture != m_bound_depth)
+        {
+            rebuild_bind_group(ctx.scene_depth_texture);
+        }
 
         gpu::render_pass_descriptor descriptor{};
         descriptor.target = m_velocity_target;

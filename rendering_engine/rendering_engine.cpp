@@ -157,10 +157,10 @@ void rendering_engine::context::init()
     if (taa_enabled)
     {
         // Per-pixel motion vectors are reconstructed from the scene depth
-        // buffer, so the velocity pass samples the HDR target's depth
-        // attachment. They drive the TAA history reprojection.
-        const gpu::texture scene_depth = eng.gpu->render_target_depth_texture(m_scene_color_target);
-        velocity = std::make_unique<velocity_pass>(scene_depth, width, height);
+        // buffer: the velocity pass samples the HDR target's depth attachment
+        // through frame_context::scene_depth_texture each frame. They drive
+        // the TAA history reprojection.
+        velocity = std::make_unique<velocity_pass>(width, height);
         taa = std::make_unique<taa_pass>(m_ldr_color_texture, velocity->velocity_texture(), width, height);
         fxaa_input = taa->output_texture();
     }
@@ -356,12 +356,17 @@ void rendering_engine::context::render()
     // Capture per-frame state once so passes cannot disagree about
     // which camera or backbuffer is active mid-frame, and so they
     // do not have to re-query the camera singleton on every entry.
-    frame_context ctx{gpu.swapchain_target(),
-                      camera::get_current_camera(),
-                      m_scene_color_target,
-                      m_scene_color_texture,
-                      m_ldr_color_target,
-                      m_ldr_color_texture};
+    frame_context ctx{};
+    ctx.swapchain_target = gpu.swapchain_target();
+    ctx.active_camera = camera::get_current_camera();
+    ctx.scene_color_target = m_scene_color_target;
+    ctx.scene_color_texture = m_scene_color_texture;
+    // The depth attachment is looked up from the target every frame rather
+    // than cached at init, so a resize that recreates the target hands the
+    // new attachment to every depth consumer on the next frame.
+    ctx.scene_depth_texture = gpu.render_target_depth_texture(m_scene_color_target);
+    ctx.ldr_color_target = m_ldr_color_target;
+    ctx.ldr_color_texture = m_ldr_color_texture;
     ctx.fog = m_fog;
 
     // One encoder records the frame graph's passes in order, then submits.

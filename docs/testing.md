@@ -111,6 +111,12 @@ All device-free:
   an unnamed mouse button yields no code (so the window drops the event), and
   raw axis readings normalise to the unit range at both extremes. Only SDL's
   header constants are used; no video subsystem is initialised.
+- `render_graph::frame_graph` — `pass_io_builder` bookkeeping, `compile()`'s
+  produced-before-read check (imported resources, in-order writes, same-pass
+  read+write, reads ahead of their producer), execution in registration order
+  with `execute_range` clamping, `clear()`, and a hand-kept mirror of the
+  engine's built-in pass declarations (including `scene_depth`) that must
+  compile hazard-free. The encoder the graph forwards is driven by a stub.
 
 ### Testing the asset layer headless
 
