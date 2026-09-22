@@ -28,6 +28,10 @@ set(ALPHAENGINE_TEST_SOURCES_UNDER_TEST
     ${CMAKE_SOURCE_DIR}/core/event_engine.cpp
     ${CMAKE_SOURCE_DIR}/core/jobs.cpp
     ${CMAKE_SOURCE_DIR}/core/log.cpp
+    # settings — the parsers and layers are pure; settings.cpp only reaches
+    # SDL for the pref path inside load_settings, which the tests do not call.
+    ${CMAKE_SOURCE_DIR}/core/settings.cpp
+    ${CMAKE_SOURCE_DIR}/core/settings_parse.cpp
     ${CMAKE_SOURCE_DIR}/core/subscription.cpp
     ${CMAKE_SOURCE_DIR}/core/time.cpp
     ${CMAKE_SOURCE_DIR}/core/version.cpp
@@ -94,6 +98,7 @@ set(ALPHAENGINE_TEST_SOURCES
     core/jobs_test.cpp
     core/log_test.cpp
     core/hash_test.cpp
+    core/settings_test.cpp
     core/time_test.cpp
     runtime/node_test.cpp
     runtime/scene_graph_test.cpp
@@ -132,11 +137,11 @@ target_include_directories(AlphaEngineTests PRIVATE
 )
 
 # glm backs core/math + transforms, SDL3 backs core/log (and the shader
-# cache's SDL_GetPrefPath), Threads backs core/jobs. The asset layer links
-# no gpu backend — the fake device stands in. shader_registry is the
-# embedded shaders/ tree the shader-library tests read, and glslang is the
-# front end the shader-compiler tests drive; both are static and need no
-# GPU or window.
+# cache's SDL_GetPrefPath) and core/settings, Threads backs core/jobs,
+# nlohmann_json backs core/settings_parse. The asset layer links no gpu
+# backend — the fake device stands in. shader_registry is the embedded
+# shaders/ tree the shader-library tests read, and glslang is the front end
+# the shader-compiler tests drive; both are static and need no GPU or window.
 target_link_libraries(AlphaEngineTests PRIVATE
     GTest::gtest_main
     glm::glm
@@ -146,6 +151,7 @@ target_link_libraries(AlphaEngineTests PRIVATE
     glslang::glslang
     glslang::SPIRV
     glslang::glslang-default-resource-limits
+    nlohmann_json::nlohmann_json
 )
 
 # Same printf-format checking as the AlphaEngine target (see the root
