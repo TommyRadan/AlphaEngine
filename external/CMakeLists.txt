@@ -21,8 +21,10 @@ target_sources(AlphaEngine PRIVATE
 # (parent/child node hierarchy with orbiting cube mesh_components and a
 # point light), line_demo_module.cpp (coloured helix line strip),
 # points_demo_module.cpp (coloured Fibonacci-sphere point cloud),
-# skybox_demo_module.cpp (procedural sky + IBL sphere grid) and
-# phong_demo_module.cpp (Blinn-Phong lit sphere) are the other showcases;
-# swap any one filename in for shadow_demo_module.cpp to bring it back.
+# skybox_demo_module.cpp (procedural sky + IBL sphere grid),
+# phong_demo_module.cpp (Blinn-Phong lit sphere) and gltf_demo_module.cpp
+# (loads the .gltf / .glb named by the ALPHAENGINE_GLTF environment variable
+# through the glTF importer and frames it) are the other showcases; swap any
+# one filename in for shadow_demo_module.cpp to bring it back.
 
 add_subdirectory(api)

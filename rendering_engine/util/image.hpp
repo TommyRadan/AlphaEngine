@@ -24,6 +24,7 @@
 
 #include <rendering_engine/util/color.hpp>
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -47,6 +48,19 @@ namespace rendering_engine::util
 
         /** @brief Decodes @p filename as RGBA8; throws @c std::runtime_error (after logging) on failure. */
         explicit image(const std::string& filename);
+
+        /**
+         * @brief Decodes the encoded image file held in memory at @p bytes
+         *        (@p size bytes: PNG, JPEG, ... — anything stb_image reads)
+         *        as RGBA8; throws @c std::runtime_error (after logging) on
+         *        failure.
+         *
+         * Same ownership as the file constructor: the pixels are copied into
+         * the image's own allocation, so @p bytes may be freed on return. This
+         * is how images embedded in a container (a GLB chunk, a data URI) are
+         * decoded without a temporary file.
+         */
+        image(const uint8_t* bytes, std::size_t size);
 
         image(const image& other);
         image(image&& other) noexcept;
