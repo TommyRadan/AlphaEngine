@@ -50,9 +50,11 @@ The level is resolved once by `LOG_INIT` (in `runtime/main_loop.cpp`):
 The same knobs are available programmatically — `set_level`,
 `set_category_level`, `clear_category_levels`, `configure_levels`,
 `level_for`, `is_enabled` in `core::logging` — which is what the tests
-and a future in-engine console use. A `--log-level` command-line flag
-is not parsed yet; `LOG_INIT` stashes `argc`/`argv` in
-`core::logging::arguments()` for the command-line parser to consume.
+and a future in-engine console use. The `--log-level <spec>` command-line
+flag takes the same specification; `core::load_settings` applies it right
+after `LOG_INIT`, so it overrides the environment variable (see
+[settings.md](./settings.md)). `LOG_INIT` also stashes `argc`/`argv` in
+`core::logging::arguments()`.
 
 SDL's own messages (category `sdl`) follow the global level, or a
 `sdl=<level>` override.

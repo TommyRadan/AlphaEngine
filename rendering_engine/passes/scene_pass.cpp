@@ -128,7 +128,7 @@ namespace rendering_engine
         // offset down to a sub-pixel NDC amount. Read up front so the
         // bind-group setup below knows whether to build the unjittered
         // overlay twin the debug pass binds.
-        const ::settings* config = runtime::current_engine().settings.get();
+        const core::settings* config = runtime::current_engine().settings.get();
         if (config != nullptr && config->graphics.temporal_aa && config->window.width != 0 &&
             config->window.height != 0)
         {

@@ -27,7 +27,7 @@
 
 rendering_engine::perspective_camera::perspective_camera()
 {
-    const ::settings& s = *runtime::current_engine().settings;
+    const core::settings& s = *runtime::current_engine().settings;
 
     field_of_view = s.camera.field_of_view;
     aspect_ratio = s.window.aspect_ratio();

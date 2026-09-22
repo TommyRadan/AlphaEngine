@@ -109,32 +109,6 @@ namespace rendering_engine::debug_ui
             }
         }
 
-        const char* window_type_name(win_type type)
-        {
-            switch (type)
-            {
-            case win_type::win_type_windowed:
-                return "windowed";
-            case win_type::win_type_borderless:
-                return "borderless";
-            case win_type::win_type_fullscreen:
-                return "fullscreen";
-            }
-            return "unknown";
-        }
-
-        const char* graphics_backend_name(graphics_backend backend)
-        {
-            switch (backend)
-            {
-            case graphics_backend::opengl:
-                return "opengl";
-            case graphics_backend::vulkan:
-                return "vulkan";
-            }
-            return "unknown";
-        }
-
         // Small always-on overlay pinned to the top-right corner showing
         // the frame rate and frame time. Right-clicking it toggles the
         // heavier inspector panels.
@@ -304,7 +278,7 @@ namespace rendering_engine::debug_ui
                 ImGui::SeparatorText("Window");
                 ImGui::Text("Size: %u x %u", settings.window.width, settings.window.height);
                 ImGui::Text("Aspect: %.3f", static_cast<double>(settings.window.aspect_ratio()));
-                ImGui::Text("Mode: %s", window_type_name(settings.window.type));
+                ImGui::Text("Mode: %s", core::window_mode_name(settings.window.mode));
                 ImGui::Text("Double buffered: %s", settings.window.double_buffered ? "yes" : "no");
                 ImGui::Text("Vsync: %s", settings.window.vsync ? "on" : "off");
 
@@ -314,7 +288,7 @@ namespace rendering_engine::debug_ui
                 ImGui::Text("Mouse reversed: %s", settings.input.mouse_reversed ? "yes" : "no");
 
                 ImGui::SeparatorText("GPU");
-                ImGui::Text("Backend: %s", graphics_backend_name(settings.graphics.backend));
+                ImGui::Text("Backend: %s", core::graphics_backend_name(settings.graphics.backend));
             }
             ImGui::End();
         }
@@ -564,7 +538,7 @@ namespace rendering_engine::debug_ui
         }
 
         auto& eng = runtime::current_engine();
-        const graphics_backend backend = eng.settings->graphics.backend;
+        const core::graphics_backend backend = eng.settings->graphics.backend;
 
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
@@ -574,7 +548,7 @@ namespace rendering_engine::debug_ui
         ImGui::StyleColorsDark();
 
         bool ok = false;
-        if (backend == graphics_backend::vulkan)
+        if (backend == core::graphics_backend::vulkan)
         {
             ok = init_vulkan(eng);
         }
@@ -595,7 +569,7 @@ namespace rendering_engine::debug_ui
         // both backends land their draws on top of the composited frame.
         g_render_debug_subscription = eng.events->subscribe<core::render_debug>(on_render_debug);
 
-        LOG_INF("debug_ui: ImGui overlay initialised (SDL3 + %s)", graphics_backend_name(backend));
+        LOG_INF("debug_ui: ImGui overlay initialised (SDL3 + %s)", core::graphics_backend_name(backend));
     }
 
     void shutdown()
