@@ -129,9 +129,20 @@ namespace rendering_engine::gpu::backend::vulkan
         // has to materialise as one VkPipeline per render pass it
         // ends up drawing against. We lazy-build them in
         // @c vk_device::graphics_pipeline_for and cache them here.
+        //
+        // A variant is keyed by the render pass's generation (see
+        // @c vk_render_target::variant) as well as its handle: the
+        // swapchain's render passes are retired on every rebuild
+        // and a driver is free to hand a new pass the same handle
+        // value, so a handle-only match could return a pipeline
+        // built against a freed pass. When a render pass is retired
+        // the device purges every variant carrying its generation
+        // (@c vk_device::retire_render_pass_variants), so nothing
+        // here ever outlives the pass it was built for.
         struct variant
         {
             VkRenderPass render_pass{VK_NULL_HANDLE};
+            uint64_t render_pass_generation{0};
             VkPipeline object{VK_NULL_HANDLE};
             // Off-screen targets render in Vulkan-natural Y-down so
             // that subsequent samplers see image row 0 == world-Z-down,
@@ -165,18 +176,28 @@ namespace rendering_engine::gpu::backend::vulkan
         // LOAD_OP_CLEAR followed by ui with LOAD_OP_LOAD); each
         // unique tuple gets its own VkRenderPass and its own set
         // of framebuffers, and none are destroyed on a load-op
-        // switch — that would dangle the pipeline cache, which
-        // keys VkPipeline by the VkRenderPass it was built against.
-        // Variants with different use_depth are not render-pass
-        // compatible (different attachment counts), so the
-        // framebuffers live on the variant rather than being
+        // switch. Variants with different use_depth are not
+        // render-pass compatible (different attachment counts), so
+        // the framebuffers live on the variant rather than being
         // shared across variants.
+        //
+        // Variants are only ever retired wholesale — when the
+        // swapchain is rebuilt (its framebuffers point at the old
+        // images) or the target is destroyed — and retirement goes
+        // through @c vk_device::retire_render_pass_variants, which
+        // also purges every pipeline variant built against the
+        // retired passes. The pipeline cache keys on the generation
+        // stamped here, not on the VkRenderPass handle alone, so a
+        // recycled handle value can never resurrect a stale entry.
         struct variant
         {
             VkAttachmentLoadOp color_load{VK_ATTACHMENT_LOAD_OP_DONT_CARE};
             VkAttachmentLoadOp depth_load{VK_ATTACHMENT_LOAD_OP_DONT_CARE};
             bool use_depth{false};
             VkRenderPass render_pass{VK_NULL_HANDLE};
+            // Device-wide, monotonically increasing; assigned when
+            // the render pass is created and never reused.
+            uint64_t render_pass_generation{0};
             // Per-swapchain-image for swapchain targets; one entry
             // for off-screen targets.
             std::vector<VkFramebuffer> framebuffers;

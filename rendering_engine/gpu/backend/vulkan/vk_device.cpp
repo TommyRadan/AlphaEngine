@@ -206,6 +206,26 @@ namespace rendering_engine::gpu::backend::vulkan
             }
             return VK_PRESENT_MODE_FIFO_KHR;
         }
+
+        // The extent the next swapchain has to be built with. The
+        // surface dictates it through currentExtent; only when the
+        // surface leaves the choice to the application (UINT32_MAX —
+        // some Wayland compositors) does the last window size the
+        // engine reported count, clamped to what the surface allows.
+        // A 0x0 result means the window is minimised: Vulkan rejects
+        // a zero-sized swapchain, so the caller must not build one.
+        VkExtent2D
+        choose_swapchain_extent(const VkSurfaceCapabilitiesKHR& caps, uint32_t window_width, uint32_t window_height)
+        {
+            if (caps.currentExtent.width != UINT32_MAX)
+            {
+                return caps.currentExtent;
+            }
+            VkExtent2D extent{};
+            extent.width = std::clamp(window_width, caps.minImageExtent.width, caps.maxImageExtent.width);
+            extent.height = std::clamp(window_height, caps.minImageExtent.height, caps.maxImageExtent.height);
+            return extent;
+        }
     } // namespace
 
     vk_device::vk_device() = default;
@@ -223,7 +243,18 @@ namespace rendering_engine::gpu::backend::vulkan
         LOG_INF("Init gpu::backend::vulkan::vk_device");
 
         auto& eng = runtime::current_engine();
-        if (eng.settings != nullptr)
+        // Fallback extent for a surface that leaves the size to the
+        // application (see choose_swapchain_extent): the drawable's
+        // pixel size, which is what the swapchain follows on a scaled
+        // display; the logical settings size only when the window
+        // cannot report one.
+        if (eng.window != nullptr)
+        {
+            const window_extent drawable = eng.window->pixel_size();
+            m_window_width = drawable.width;
+            m_window_height = drawable.height;
+        }
+        if ((m_window_width == 0 || m_window_height == 0) && eng.settings != nullptr)
         {
             m_window_width = eng.settings->window.width;
             m_window_height = eng.settings->window.height;
@@ -236,7 +267,25 @@ namespace rendering_engine::gpu::backend::vulkan
         create_logical_device();
         create_command_pool();
         create_descriptor_pool();
-        create_swapchain();
+
+        // Bring-up builds the swapchain strictly: a surface that has no
+        // usable extent yet (a window created minimised) or a failed
+        // build is fatal here, unlike in the render loop, where the same
+        // conditions suspend presentation until a rebuild succeeds. The
+        // suspended path relies on a live swapchain target and surface
+        // format having been established once.
+        VkSurfaceCapabilitiesKHR caps{};
+        const VkResult caps_result = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(m_physical_device, m_surface, &caps);
+        if (caps_result != VK_SUCCESS)
+        {
+            LOG_ERR("vkGetPhysicalDeviceSurfaceCapabilitiesKHR failed: %s", vk_result_to_string(caps_result));
+            throw std::runtime_error{"vkGetPhysicalDeviceSurfaceCapabilitiesKHR failed"};
+        }
+        const VkExtent2D extent = choose_swapchain_extent(caps, m_window_width, m_window_height);
+        if (extent.width == 0 || extent.height == 0 || !create_swapchain(caps, extent))
+        {
+            throw std::runtime_error{"vk_device::init: swapchain creation failed"};
+        }
         create_sync_objects();
 
         vk_render_target swap{};
@@ -465,6 +514,10 @@ namespace rendering_engine::gpu::backend::vulkan
             m_instance = VK_NULL_HANDLE;
         }
 
+        m_have_current_image = false;
+        m_acquire_attempted = false;
+        m_present_pending = false;
+        m_swapchain_suspended = false;
         m_initialised = false;
         LOG_INF("Quit gpu::backend::vulkan::vk_device");
     }
@@ -881,22 +934,11 @@ namespace rendering_engine::gpu::backend::vulkan
 
     // -- Swapchain ------------------------------------------------------
 
-    void vk_device::create_swapchain()
+    bool vk_device::create_swapchain(const VkSurfaceCapabilitiesKHR& caps, VkExtent2D extent)
     {
-        VkSurfaceCapabilitiesKHR caps{};
-        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(m_physical_device, m_surface, &caps);
-
         m_surface_format = pick_surface_format(m_physical_device, m_surface);
         const bool vsync_enabled = runtime::current_engine().settings->window.vsync;
         m_present_mode = pick_present_mode(m_physical_device, m_surface, vsync_enabled);
-
-        VkExtent2D extent = caps.currentExtent;
-        if (extent.width == UINT32_MAX)
-        {
-            extent.width = std::clamp(m_window_width, caps.minImageExtent.width, caps.maxImageExtent.width);
-            extent.height = std::clamp(m_window_height, caps.minImageExtent.height, caps.maxImageExtent.height);
-        }
-        m_swapchain_extent = extent;
 
         uint32_t image_count = caps.minImageCount + 1;
         if (caps.maxImageCount > 0 && image_count > caps.maxImageCount)
@@ -928,17 +970,36 @@ namespace rendering_engine::gpu::backend::vulkan
         info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
         info.presentMode = m_present_mode;
         info.clipped = VK_TRUE;
-        if (vkCreateSwapchainKHR(m_device, &info, nullptr, &m_swapchain) != VK_SUCCESS)
+        // Hand the previous swapchain over instead of destroying it
+        // first: the presentation engine can carry its resources across
+        // (no teardown-then-setup hitch, and no window-in-use failure on
+        // platforms that refuse a second swapchain on a surface that
+        // still has one). The call retires it whether or not it
+        // succeeds, so it is released unconditionally right after.
+        info.oldSwapchain = m_swapchain;
+        VkSwapchainKHR new_swapchain = VK_NULL_HANDLE;
+        const VkResult create_result = vkCreateSwapchainKHR(m_device, &info, nullptr, &new_swapchain);
+        destroy_swapchain();
+        if (create_result != VK_SUCCESS)
         {
-            throw std::runtime_error{"vkCreateSwapchainKHR failed"};
+            LOG_ERR("vkCreateSwapchainKHR failed: %s (%ux%u)",
+                    vk_result_to_string(create_result),
+                    extent.width,
+                    extent.height);
+            return false;
         }
+        m_swapchain = new_swapchain;
+        m_swapchain_extent = extent;
 
         uint32_t actual = 0;
         vkGetSwapchainImagesKHR(m_device, m_swapchain, &actual, nullptr);
         m_swapchain_images.resize(actual);
         vkGetSwapchainImagesKHR(m_device, m_swapchain, &actual, m_swapchain_images.data());
 
-        m_swapchain_image_views.resize(actual);
+        // Every failure below releases the partially built swapchain
+        // through destroy_swapchain, which skips null handles, so the
+        // vectors are sized with null placeholders up front.
+        m_swapchain_image_views.assign(actual, VK_NULL_HANDLE);
         for (uint32_t i = 0; i < actual; ++i)
         {
             VkImageViewCreateInfo vi{};
@@ -949,9 +1010,12 @@ namespace rendering_engine::gpu::backend::vulkan
             vi.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
             vi.subresourceRange.levelCount = 1;
             vi.subresourceRange.layerCount = 1;
-            if (vkCreateImageView(m_device, &vi, nullptr, &m_swapchain_image_views[i]) != VK_SUCCESS)
+            const VkResult view_result = vkCreateImageView(m_device, &vi, nullptr, &m_swapchain_image_views[i]);
+            if (view_result != VK_SUCCESS)
             {
-                throw std::runtime_error{"swapchain image view"};
+                LOG_ERR("vkCreateImageView (swapchain image %u) failed: %s", i, vk_result_to_string(view_result));
+                destroy_swapchain();
+                return false;
             }
         }
 
@@ -967,9 +1031,12 @@ namespace rendering_engine::gpu::backend::vulkan
         di.tiling = VK_IMAGE_TILING_OPTIMAL;
         di.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
         di.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        if (vkCreateImage(m_device, &di, nullptr, &m_swapchain_depth_image) != VK_SUCCESS)
+        const VkResult depth_result = vkCreateImage(m_device, &di, nullptr, &m_swapchain_depth_image);
+        if (depth_result != VK_SUCCESS)
         {
-            throw std::runtime_error{"swapchain depth image"};
+            LOG_ERR("vkCreateImage (swapchain depth) failed: %s", vk_result_to_string(depth_result));
+            destroy_swapchain();
+            return false;
         }
         VkMemoryRequirements mr{};
         vkGetImageMemoryRequirements(m_device, m_swapchain_depth_image, &mr);
@@ -977,7 +1044,13 @@ namespace rendering_engine::gpu::backend::vulkan
         mai.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
         mai.allocationSize = mr.size;
         mai.memoryTypeIndex = find_memory_type(mr.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-        vkAllocateMemory(m_device, &mai, nullptr, &m_swapchain_depth_memory);
+        const VkResult alloc_result = vkAllocateMemory(m_device, &mai, nullptr, &m_swapchain_depth_memory);
+        if (alloc_result != VK_SUCCESS)
+        {
+            LOG_ERR("vkAllocateMemory (swapchain depth) failed: %s", vk_result_to_string(alloc_result));
+            destroy_swapchain();
+            return false;
+        }
         vkBindImageMemory(m_device, m_swapchain_depth_image, m_swapchain_depth_memory, 0);
         VkImageViewCreateInfo dvi{};
         dvi.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -987,22 +1060,37 @@ namespace rendering_engine::gpu::backend::vulkan
         dvi.subresourceRange.aspectMask = aspect_for_format(m_swapchain_depth_format);
         dvi.subresourceRange.levelCount = 1;
         dvi.subresourceRange.layerCount = 1;
-        vkCreateImageView(m_device, &dvi, nullptr, &m_swapchain_depth_view);
+        const VkResult depth_view_result = vkCreateImageView(m_device, &dvi, nullptr, &m_swapchain_depth_view);
+        if (depth_view_result != VK_SUCCESS)
+        {
+            LOG_ERR("vkCreateImageView (swapchain depth) failed: %s", vk_result_to_string(depth_view_result));
+            destroy_swapchain();
+            return false;
+        }
 
         // One render-finished semaphore per swapchain image (see the field
         // declaration). Sized to the actual image count so it tracks resize.
         VkSemaphoreCreateInfo rfi{};
         rfi.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-        m_render_finished.resize(actual);
+        m_render_finished.assign(actual, VK_NULL_HANDLE);
         for (uint32_t i = 0; i < actual; ++i)
         {
-            if (vkCreateSemaphore(m_device, &rfi, nullptr, &m_render_finished[i]) != VK_SUCCESS)
+            const VkResult semaphore_result = vkCreateSemaphore(m_device, &rfi, nullptr, &m_render_finished[i]);
+            if (semaphore_result != VK_SUCCESS)
             {
-                throw std::runtime_error{"swapchain render-finished semaphore"};
+                LOG_ERR("vkCreateSemaphore (render-finished %u) failed: %s", i, vk_result_to_string(semaphore_result));
+                destroy_swapchain();
+                return false;
             }
         }
 
-        LOG_INF("Vulkan swapchain: %ux%u images=%u", extent.width, extent.height, actual);
+        ++m_swapchain_generation;
+        LOG_INF("Vulkan swapchain: %ux%u images=%u generation=%llu",
+                extent.width,
+                extent.height,
+                actual,
+                static_cast<unsigned long long>(m_swapchain_generation));
+        return true;
     }
 
     void vk_device::destroy_swapchain()
@@ -1094,59 +1182,214 @@ namespace rendering_engine::gpu::backend::vulkan
 
     void vk_device::resize_swapchain(uint32_t width, uint32_t height)
     {
-        if (width == 0 || height == 0)
-        {
-            return;
-        }
-        if (width == m_swapchain_extent.width && height == m_swapchain_extent.height && m_swapchain != VK_NULL_HANDLE)
-        {
-            m_window_width = width;
-            m_window_height = height;
-            return;
-        }
         m_window_width = width;
         m_window_height = height;
-        if (m_device != VK_NULL_HANDLE)
+        if (!m_initialised || m_device == VK_NULL_HANDLE)
         {
-            vkDeviceWaitIdle(m_device);
-            // The swapchain target's framebuffers point at the
-            // swapchain image views we're about to recreate, and
-            // its render-pass variants reference the format / sample
-            // count of the old swapchain. Tear them down so the next
-            // acquire_render_pass call rebuilds against the new
-            // images. (The pipeline cache also keys VkPipeline by
-            // VkRenderPass so any pipelines pointing at the swapchain
-            // target's old variants would dangle — but the engine
-            // only uses graphics pipelines that get rebuilt against
-            // the new variants on the next set_pipeline.)
-            if (auto* swap = m_render_targets.lookup(m_swapchain_target.id))
+            return;
+        }
+        if (width == 0 || height == 0)
+        {
+            // Minimised. Nothing is torn down: the existing swapchain
+            // stays (possibly out of date) as the oldSwapchain for the
+            // rebuild that resumes presentation, once a later hint or
+            // the per-frame surface poll reports a real extent.
+            suspend_swapchain("the window reports a 0x0 backbuffer (minimised)", false);
+            return;
+        }
+        // The renderer's window_resized listener is the one caller
+        // (plus context::init, once, with the drawable's pixel size). A
+        // hint that matches the live swapchain is a no-op — which is
+        // how a resize the acquire or present already recovered from
+        // avoids a second rebuild. Anything else — a different size,
+        // or a size arriving while suspended — rebuilds against the
+        // surface's current capabilities; the hint itself only matters
+        // when the surface leaves the extent to us.
+        if (!m_swapchain_suspended && m_swapchain != VK_NULL_HANDLE && width == m_swapchain_extent.width &&
+            height == m_swapchain_extent.height)
+        {
+            return;
+        }
+        recreate_swapchain();
+    }
+
+    bool vk_device::swapchain_suspended() const noexcept
+    {
+        return m_swapchain_suspended;
+    }
+
+    void vk_device::suspend_swapchain(const char* reason, bool is_error)
+    {
+        if (m_swapchain_suspended)
+        {
+            return;
+        }
+        m_swapchain_suspended = true;
+        if (is_error)
+        {
+            LOG_ERR("Vulkan swapchain suspended: %s; presentation resumes once a rebuild succeeds", reason);
+        }
+        else
+        {
+            LOG_INF("Vulkan swapchain suspended: %s; presentation resumes once the surface has an extent", reason);
+        }
+    }
+
+    bool vk_device::recreate_swapchain()
+    {
+        if (m_device == VK_NULL_HANDLE || m_surface == VK_NULL_HANDLE)
+        {
+            return false;
+        }
+        // The surface, not the cached window size, is the authority on
+        // the extent. An OS-driven out-of-date (display change, a
+        // compositor decision) arrives without any resize hint, and
+        // rebuilding at the cached size used to be a no-op that left
+        // the swapchain out of date for every following acquire.
+        VkSurfaceCapabilitiesKHR caps{};
+        const VkResult caps_result = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(m_physical_device, m_surface, &caps);
+        if (caps_result != VK_SUCCESS)
+        {
+            suspend_swapchain(vk_result_to_string(caps_result), true);
+            return false;
+        }
+        const VkExtent2D extent = choose_swapchain_extent(caps, m_window_width, m_window_height);
+        if (extent.width == 0 || extent.height == 0)
+        {
+            // Minimised: vkCreateSwapchainKHR rejects a zero extent, so
+            // keep whatever swapchain exists (it becomes oldSwapchain
+            // on resume) and stop acquiring. begin_frame polls the
+            // surface until this branch stops being taken.
+            suspend_swapchain("the surface extent is 0x0 (window minimised)", false);
+            return false;
+        }
+
+        // Everything that references the old images has to be idle:
+        // the previous frame's command buffer, and the present that may
+        // still be reading the image it was handed. One frame in
+        // flight makes this cheap, and a rebuild is rare.
+        vkDeviceWaitIdle(m_device);
+
+        // The swapchain target's framebuffers point at image views that
+        // are about to go, and its render passes at a format / sample
+        // count the new swapchain need not share; retire them (and the
+        // pipelines built against them) so the next acquire_render_pass
+        // rebuilds against the new images.
+        auto* swap = m_render_targets.lookup(m_swapchain_target.id);
+        if (swap != nullptr)
+        {
+            retire_render_pass_variants(*swap, /*device_idle=*/true);
+        }
+
+        if (!create_swapchain(caps, extent))
+        {
+            // create_swapchain released the old swapchain (passing it
+            // as oldSwapchain retired it whether or not the call
+            // succeeded), so there is nothing to present into until a
+            // later poll succeeds; the next one starts from scratch.
+            suspend_swapchain("the swapchain could not be rebuilt", true);
+            return false;
+        }
+        if (swap != nullptr)
+        {
+            swap->width = m_swapchain_extent.width;
+            swap->height = m_swapchain_extent.height;
+        }
+        if (m_swapchain_suspended)
+        {
+            m_swapchain_suspended = false;
+            LOG_INF("Vulkan swapchain resumed at %ux%u", m_swapchain_extent.width, m_swapchain_extent.height);
+        }
+        return true;
+    }
+
+    void vk_device::retire_render_pass_variants(vk_render_target& target, bool device_idle)
+    {
+        if (target.variants.empty())
+        {
+            return;
+        }
+        std::vector<uint64_t> generations;
+        std::vector<VkRenderPass> render_passes;
+        std::vector<VkFramebuffer> framebuffers;
+        generations.reserve(target.variants.size());
+        render_passes.reserve(target.variants.size());
+        for (auto& v : target.variants)
+        {
+            generations.push_back(v.render_pass_generation);
+            if (v.render_pass != VK_NULL_HANDLE)
             {
-                for (auto& v : swap->variants)
-                {
-                    for (auto fb : v.framebuffers)
-                    {
-                        if (fb != VK_NULL_HANDLE)
-                        {
-                            vkDestroyFramebuffer(m_device, fb, nullptr);
-                        }
-                    }
-                    v.framebuffers.clear();
-                    if (v.render_pass != VK_NULL_HANDLE)
-                    {
-                        vkDestroyRenderPass(m_device, v.render_pass, nullptr);
-                        v.render_pass = VK_NULL_HANDLE;
-                    }
-                }
-                swap->variants.clear();
+                render_passes.push_back(v.render_pass);
             }
-            destroy_swapchain();
-            create_swapchain();
-            if (auto* swap = m_render_targets.lookup(m_swapchain_target.id))
+            for (VkFramebuffer fb : v.framebuffers)
             {
-                swap->width = m_swapchain_extent.width;
-                swap->height = m_swapchain_extent.height;
+                if (fb != VK_NULL_HANDLE)
+                {
+                    framebuffers.push_back(fb);
+                }
             }
         }
+        target.variants.clear();
+
+        // Every graphics pipeline that was bound inside one of these
+        // passes cached a VkPipeline built against it. Purge those
+        // entries now, matched by generation rather than by handle: a
+        // driver may hand a later render pass the same handle value,
+        // and a stale entry matched by handle would bind a pipeline
+        // built for a pass that no longer exists.
+        const auto is_retired = [&generations](const vk_pipeline::variant& pv)
+        { return std::find(generations.begin(), generations.end(), pv.render_pass_generation) != generations.end(); };
+        std::vector<VkPipeline> pipelines;
+        m_pipelines.for_each(
+            [&](vk_pipeline& p)
+            {
+                for (const auto& pv : p.graphics_variants)
+                {
+                    if (is_retired(pv) && pv.object != VK_NULL_HANDLE)
+                    {
+                        pipelines.push_back(pv.object);
+                    }
+                }
+                p.graphics_variants.erase(
+                    std::remove_if(p.graphics_variants.begin(), p.graphics_variants.end(), is_retired),
+                    p.graphics_variants.end());
+            });
+
+        const VkDevice dev = m_device;
+        if (device_idle)
+        {
+            // Nothing is in flight and the caller is about to destroy
+            // the image views these framebuffers were built on; free
+            // them first so no framebuffer ever outlives its attachments.
+            for (VkFramebuffer fb : framebuffers)
+            {
+                vkDestroyFramebuffer(dev, fb, nullptr);
+            }
+            framebuffers.clear();
+        }
+        // The render passes and pipelines may still be bound by the
+        // previous frame's command buffer when a target is destroyed
+        // mid-run (VUID-vkDestroyFramebuffer-framebuffer-00892 and
+        // friends), so they always wait for the next fence wait.
+        enqueue_destroy(
+            [dev,
+             framebuffers = std::move(framebuffers),
+             render_passes = std::move(render_passes),
+             pipelines = std::move(pipelines)]
+            {
+                for (VkPipeline p : pipelines)
+                {
+                    vkDestroyPipeline(dev, p, nullptr);
+                }
+                for (VkFramebuffer fb : framebuffers)
+                {
+                    vkDestroyFramebuffer(dev, fb, nullptr);
+                }
+                for (VkRenderPass rp : render_passes)
+                {
+                    vkDestroyRenderPass(dev, rp, nullptr);
+                }
+            });
     }
 
     render_target vk_device::create_render_target(const render_target_descriptor& descriptor)
@@ -1204,41 +1447,11 @@ namespace rendering_engine::gpu::backend::vulkan
         }
         if (auto* record = m_render_targets.lookup(handle.id))
         {
-            VkDevice dev = m_device;
             // The variants own framebuffers and render-pass objects
             // that may still be referenced by the previous frame's
-            // command buffer. Defer the actual vkDestroy* via the
-            // pending-destroy queue (drained after vkWaitForFences /
-            // vkDeviceWaitIdle) to avoid VUID-vkDestroyFramebuffer-
-            // framebuffer-00892 on shutdown.
-            for (auto& v : record->variants)
-            {
-                std::vector<VkFramebuffer> framebuffers;
-                framebuffers.reserve(v.framebuffers.size());
-                for (auto fb : v.framebuffers)
-                {
-                    if (fb != VK_NULL_HANDLE)
-                    {
-                        framebuffers.push_back(fb);
-                    }
-                }
-                v.framebuffers.clear();
-                VkRenderPass rp = v.render_pass;
-                v.render_pass = VK_NULL_HANDLE;
-                enqueue_destroy(
-                    [dev, framebuffers = std::move(framebuffers), rp]
-                    {
-                        for (VkFramebuffer fb : framebuffers)
-                        {
-                            vkDestroyFramebuffer(dev, fb, nullptr);
-                        }
-                        if (rp != VK_NULL_HANDLE)
-                        {
-                            vkDestroyRenderPass(dev, rp, nullptr);
-                        }
-                    });
-            }
-            record->variants.clear();
+            // command buffer, and pipelines were built against those
+            // passes; retire them together through the deferred queue.
+            retire_render_pass_variants(*record, /*device_idle=*/false);
             if (record->color_attachment.valid())
             {
                 destroy(record->color_attachment);
@@ -1436,6 +1649,19 @@ namespace rendering_engine::gpu::backend::vulkan
         // a material rebuilds this frame. This is the one in-frame
         // point where freeing is safe.
         drain_pending_destroys();
+
+        if (m_swapchain_suspended)
+        {
+            // The surface reported no extent, or the last rebuild
+            // failed: poll the surface once per frame and resume as
+            // soon as it has a usable extent. The main loop already
+            // skips whole frames while the window says it is
+            // minimised, so this is reached when the surface lags the
+            // window (a restore whose first frame still measures 0x0)
+            // or after a failed rebuild. recreate_swapchain stays
+            // suspended, silently, while the extent is still 0x0.
+            recreate_swapchain();
+        }
     }
 
     void vk_device::end_frame()
@@ -1456,7 +1682,13 @@ namespace rendering_engine::gpu::backend::vulkan
             const VkResult r = vkQueuePresentKHR(m_present_queue, &pi);
             if (r == VK_ERROR_OUT_OF_DATE_KHR || r == VK_SUBOPTIMAL_KHR)
             {
-                resize_swapchain(m_window_width, m_window_height);
+                // The semaphore wait was consumed either way (a rejected
+                // present still executes it), so rebuild now against the
+                // surface's current extent and the next frame acquires
+                // from a swapchain that matches it. recreate_swapchain
+                // waits the device idle first, which covers the command
+                // buffer submitted a moment ago.
+                recreate_swapchain();
             }
             else if (r != VK_SUCCESS)
             {
@@ -1467,6 +1699,7 @@ namespace rendering_engine::gpu::backend::vulkan
         // record) is dropped rather than presented: its render-finished
         // semaphore was never signaled, so a present would wait forever.
         m_have_current_image = false;
+        m_acquire_attempted = false;
         m_present_pending = false;
 
         if (m_frame_index < k_diagnostic_frames)
@@ -1486,25 +1719,44 @@ namespace rendering_engine::gpu::backend::vulkan
 
     void vk_device::acquire_swapchain_image()
     {
-        if (m_have_current_image)
+        if (m_have_current_image || m_acquire_attempted)
         {
             return;
         }
-        const VkResult r = vkAcquireNextImageKHR(
-            m_device, m_swapchain, UINT64_MAX, m_image_available, VK_NULL_HANDLE, &m_current_image_index);
-        if (r == VK_ERROR_OUT_OF_DATE_KHR)
+        m_acquire_attempted = true;
+        if (m_swapchain_suspended || m_swapchain == VK_NULL_HANDLE)
         {
-            resize_swapchain(m_window_width, m_window_height);
-            m_have_current_image = false;
             return;
         }
-        if (r != VK_SUCCESS && r != VK_SUBOPTIMAL_KHR)
+        for (int attempt = 0; attempt < 2; ++attempt)
         {
+            const VkResult r = vkAcquireNextImageKHR(
+                m_device, m_swapchain, UINT64_MAX, m_image_available, VK_NULL_HANDLE, &m_current_image_index);
+            if (r == VK_SUCCESS || r == VK_SUBOPTIMAL_KHR)
+            {
+                // A suboptimal acquire still hands out an image and
+                // signals the semaphore, so the frame has to use it;
+                // the present's own result triggers the rebuild.
+                m_have_current_image = true;
+                return;
+            }
+            if (r == VK_ERROR_OUT_OF_DATE_KHR)
+            {
+                // No image was acquired and the semaphore stays
+                // unsignaled, so it can be reused. Rebuild against the
+                // surface's current extent and retry once so the frame
+                // lands in the new swapchain instead of being dropped;
+                // if the rebuild suspended (minimised) or the retry is
+                // out of date again, the frame skips the swapchain.
+                if (attempt == 0 && recreate_swapchain())
+                {
+                    continue;
+                }
+                return;
+            }
             LOG_ERR("vkAcquireNextImageKHR failed: %s", vk_result_to_string(r));
-            m_have_current_image = false;
             return;
         }
-        m_have_current_image = true;
     }
 
     VkCommandBuffer vk_device::begin_one_shot()
@@ -1701,7 +1953,15 @@ namespace rendering_engine::gpu::backend::vulkan
                     static_cast<int>(use_depth));
             return VK_NULL_HANDLE;
         }
-        target.variants.push_back({color_load, depth_load, use_depth, new_render_pass, {}});
+        vk_render_target::variant new_variant{};
+        new_variant.color_load = color_load;
+        new_variant.depth_load = depth_load;
+        new_variant.use_depth = use_depth;
+        new_variant.render_pass = new_render_pass;
+        // The generation is what the pipeline cache keys on; it is
+        // never reused, unlike the handle value the driver hands out.
+        new_variant.render_pass_generation = m_next_render_pass_generation++;
+        target.variants.push_back(std::move(new_variant));
         auto& v = target.variants.back();
 
         // Build per-variant framebuffers. Variants with different
@@ -1828,6 +2088,10 @@ namespace rendering_engine::gpu::backend::vulkan
     VkDescriptorPool vk_device::descriptor_pool() const noexcept
     {
         return m_descriptor_pool;
+    }
+    uint64_t vk_device::swapchain_generation() const noexcept
+    {
+        return m_swapchain_generation;
     }
     uint32_t vk_device::swapchain_image_count() const noexcept
     {

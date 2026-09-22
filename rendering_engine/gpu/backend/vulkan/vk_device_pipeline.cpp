@@ -371,16 +371,24 @@ namespace rendering_engine::gpu::backend::vulkan
         return h;
     }
 
-    VkPipeline vk_device::graphics_pipeline_for(pipeline handle, VkRenderPass render_pass, bool y_flipped)
+    VkPipeline vk_device::graphics_pipeline_for(pipeline handle,
+                                                VkRenderPass render_pass,
+                                                uint64_t render_pass_generation,
+                                                bool y_flipped)
     {
         auto* record = m_pipelines.lookup(handle.id);
         if (record == nullptr || record->is_compute || render_pass == VK_NULL_HANDLE)
         {
             return VK_NULL_HANDLE;
         }
+        // The generation is part of the key: a retired render pass's
+        // variants are purged with it (retire_render_pass_variants),
+        // and a new pass that happens to reuse the handle value carries
+        // a new generation, so it can never match a stale entry.
         for (const auto& v : record->graphics_variants)
         {
-            if (v.render_pass == render_pass && v.y_flipped == y_flipped && v.object != VK_NULL_HANDLE)
+            if (v.render_pass == render_pass && v.render_pass_generation == render_pass_generation &&
+                v.y_flipped == y_flipped && v.object != VK_NULL_HANDLE)
             {
                 return v.object;
             }
@@ -391,7 +399,7 @@ namespace rendering_engine::gpu::backend::vulkan
             LOG_ERR("vk_device::graphics_pipeline_for: vkCreateGraphicsPipelines failed");
             return VK_NULL_HANDLE;
         }
-        record->graphics_variants.push_back({render_pass, pipe, y_flipped});
+        record->graphics_variants.push_back({render_pass, render_pass_generation, pipe, y_flipped});
         return pipe;
     }
 

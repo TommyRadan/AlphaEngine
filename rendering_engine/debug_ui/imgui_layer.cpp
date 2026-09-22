@@ -79,6 +79,14 @@ namespace rendering_engine::debug_ui
         // event as soon as its backend is torn down.
         core::subscription g_render_debug_subscription;
 
+        // The vk_device::swapchain_generation() the ImGui Vulkan
+        // pipeline was last built for. The device rebuilds the
+        // swapchain on resize, minimise / restore and any out-of-date
+        // surface, retiring the render pass ImGui baked into its
+        // pipeline; on_render_debug compares this before recording and
+        // rebuilds the pipeline when the generation moved.
+        uint64_t g_vulkan_swapchain_generation = 0;
+
         // Visibility toggles for the optional panels, driven from the
         // FPS overlay's right-click context menu.
         bool g_show_settings = true;
@@ -375,6 +383,63 @@ namespace rendering_engine::debug_ui
             }
         }
 
+        // The render pass the debug pass draws into: swapchain target,
+        // colour loaded (the UI/scene already composited), no depth.
+        // ImGui builds its pipeline against this pass, so it must match
+        // what the debug pass begins. The debug pass leaves depth.load
+        // at its default (clear) and acquire_render_pass keys on it even
+        // when depth is unused, so the same value is passed here and
+        // the cache hands back the very VkRenderPass the pass records
+        // into. Null when the device has no swapchain target.
+        VkRenderPass acquire_ui_render_pass(gpu::backend::vulkan::vk_device& device)
+        {
+            const gpu::render_target swapchain = device.swapchain_target();
+            auto* target = device.lookup_render_target(swapchain);
+            if (target == nullptr)
+            {
+                LOG_ERR("debug_ui: no swapchain render target for the ImGui Vulkan pipeline");
+                return VK_NULL_HANDLE;
+            }
+            return device.acquire_render_pass(
+                *target, VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_LOAD_OP_CLEAR, /*use_depth=*/false);
+        }
+
+        // Rebuild ImGui's main pipeline against the current swapchain
+        // render pass if the swapchain was rebuilt since the pipeline
+        // was last built. Called right before recording, inside the
+        // debug pass: the frame-top fence wait has already retired the
+        // command buffer that last bound the old pipeline, and this
+        // frame has not bound it yet, so ImGui may destroy it here.
+        // Only the pipeline is rebuilt — the font texture, vertex /
+        // index buffers and descriptor pool survive — and it happens
+        // in the same frame as an acquire-time rebuild, so the overlay
+        // never records against a pass it was not built for. Returns
+        // false when no pipeline could be built; the caller then skips
+        // this frame's overlay.
+        bool refresh_vulkan_pipeline()
+        {
+            auto* device = static_cast<gpu::backend::vulkan::vk_device*>(runtime::current_engine().gpu.get());
+            const uint64_t generation = device->swapchain_generation();
+            if (generation == g_vulkan_swapchain_generation)
+            {
+                return true;
+            }
+            VkRenderPass ui_render_pass = acquire_ui_render_pass(*device);
+            if (ui_render_pass == VK_NULL_HANDLE)
+            {
+                return false;
+            }
+            ImGui_ImplVulkan_PipelineInfo pipeline_info{};
+            pipeline_info.RenderPass = ui_render_pass;
+            pipeline_info.Subpass = 0;
+            pipeline_info.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+            ImGui_ImplVulkan_CreateMainPipeline(&pipeline_info);
+            g_vulkan_swapchain_generation = generation;
+            LOG_INF("debug_ui: ImGui Vulkan pipeline rebuilt for swapchain generation %llu",
+                    static_cast<unsigned long long>(generation));
+            return true;
+        }
+
         // Record the built draw data into the swapchain-targeted debug
         // pass. Fired from the @ref core::render_debug listener
         // while the render pass is still open.
@@ -398,8 +463,11 @@ namespace rendering_engine::debug_ui
             }
             else if (g_backend == backend_mode::vulkan && event.encoder != nullptr)
             {
+                // Null while the debug pass is not open — no swapchain
+                // image this frame (minimised) — so nothing is recorded
+                // outside a render pass.
                 auto* cmd = static_cast<VkCommandBuffer>(event.encoder->native_command_buffer());
-                if (cmd != VK_NULL_HANDLE)
+                if (cmd != VK_NULL_HANDLE && refresh_vulkan_pipeline())
                 {
                     ImGui_ImplVulkan_RenderDrawData(draw_data, cmd);
                 }
@@ -411,29 +479,17 @@ namespace rendering_engine::debug_ui
         {
             auto* device = static_cast<gpu::backend::vulkan::vk_device*>(eng.gpu.get());
 
-            // Acquire the same render pass the debug pass draws into:
-            // swapchain target, colour loaded (the UI/scene already
-            // composited), no depth. ImGui builds its pipeline against
-            // this pass, so it must match what the debug pass begins.
-            const gpu::render_target swapchain = device->swapchain_target();
-            auto* target = device->lookup_render_target(swapchain);
-            if (target == nullptr)
-            {
-                LOG_ERR("debug_ui: no swapchain render target for ImGui Vulkan init");
-                return false;
-            }
-            // Match the debug pass's descriptor exactly so the cache hands
-            // back the same VkRenderPass it begins with: colour loaded, no
-            // depth. The debug pass leaves depth.load at its default
-            // (clear), and acquire_render_pass keys on it even when depth
-            // is unused, so pass the same value here.
-            VkRenderPass ui_render_pass = device->acquire_render_pass(
-                *target, VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_LOAD_OP_CLEAR, /*use_depth=*/false);
+            // Acquire the same render pass the debug pass draws into
+            // (see acquire_ui_render_pass) and remember which swapchain
+            // it belongs to, so a later rebuild is noticed before the
+            // first record against the new one.
+            VkRenderPass ui_render_pass = acquire_ui_render_pass(*device);
             if (ui_render_pass == VK_NULL_HANDLE)
             {
                 LOG_ERR("debug_ui: acquire_render_pass returned null for ImGui Vulkan init");
                 return false;
             }
+            g_vulkan_swapchain_generation = device->swapchain_generation();
 
             if (!ImGui_ImplSDL3_InitForVulkan(eng.window->sdl_window()))
             {
