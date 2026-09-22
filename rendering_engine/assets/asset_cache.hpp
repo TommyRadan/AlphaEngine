@@ -37,6 +37,7 @@
 #include <rendering_engine/assets/font_asset.hpp>
 #include <rendering_engine/assets/mesh_asset.hpp>
 #include <rendering_engine/assets/texture_asset.hpp>
+#include <rendering_engine/gpu/types.hpp>
 
 namespace rendering_engine
 {
@@ -86,11 +87,21 @@ namespace rendering_engine
          * @brief Returns the texture decoded from @p path, loading it on a miss.
          *
          * On a cache miss the image is decoded (via @ref util::image), a 2D
-         * @c rgba8_unorm texture with a full mip chain is uploaded, and the
-         * result is cached. Throws @c std::runtime_error if the file cannot be
-         * decoded (propagated from @ref util::image).
+         * RGBA8 texture with a full mip chain is uploaded, and the result is
+         * cached. @p space names the colour space the file was authored in
+         * and selects the texel format through @ref gpu::rgba8_format:
+         * @c srgb (the default, right for albedo / base-colour / emissive
+         * images and anything else meant for the eye) uploads @c rgba8_srgb
+         * so the GPU decodes to linear on sample; @c linear uploads
+         * @c rgba8_unorm for data maps (normals, metalness, roughness, AO)
+         * whose bytes are already linear. The colour space is part of the
+         * cache key — like a font's size — so the same file requested in
+         * both spaces is two assets, never one mis-decoded one. Throws
+         * @c std::runtime_error if the file cannot be decoded (propagated
+         * from @ref util::image).
          */
-        std::shared_ptr<texture_asset> load_texture(const std::filesystem::path& path);
+        std::shared_ptr<texture_asset> load_texture(const std::filesystem::path& path,
+                                                    gpu::color_space space = gpu::color_space::srgb);
 
         /**
          * @brief Returns the font for @p path at @p size, loading it on a miss.

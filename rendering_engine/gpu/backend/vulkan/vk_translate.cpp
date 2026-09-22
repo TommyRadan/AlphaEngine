@@ -258,6 +258,8 @@ namespace rendering_engine::gpu::backend::vulkan
         {
         case texture_format::rgba8_unorm:
             return VK_FORMAT_R8G8B8A8_UNORM;
+        case texture_format::rgba8_srgb:
+            return VK_FORMAT_R8G8B8A8_SRGB;
         case texture_format::rgb8_unorm:
             // R8G8B8 isn't broadly supported as a sampled format on
             // Vulkan; widen to rgba8 and let the upload path pad.

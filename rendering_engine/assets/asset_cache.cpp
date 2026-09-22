@@ -40,6 +40,14 @@ namespace rendering_engine
             return path.lexically_normal().generic_string();
         }
 
+        // The colour-space suffix of a texture key. An sRGB and a linear
+        // upload of one file are different GPU resources (the sampler
+        // decodes one and not the other), so they must not alias.
+        const char* color_space_key(gpu::color_space space)
+        {
+            return space == gpu::color_space::srgb ? "srgb" : "linear";
+        }
+
         // Erase every entry in @p map whose asset has been freed, returning the
         // number removed. Shared by all three asset maps.
         template<typename Map>
@@ -92,9 +100,9 @@ namespace rendering_engine
         m_meshes.clear();
     }
 
-    std::shared_ptr<texture_asset> asset_cache::load_texture(const std::filesystem::path& path)
+    std::shared_ptr<texture_asset> asset_cache::load_texture(const std::filesystem::path& path, gpu::color_space space)
     {
-        const std::string key = path_key(path);
+        const std::string key = path_key(path) + '|' + color_space_key(space);
         if (auto it = m_textures.find(key); it != m_textures.end())
         {
             if (auto existing = it->second.lock())
@@ -109,7 +117,7 @@ namespace rendering_engine
         auto& gpu = asset_device();
         gpu::texture_descriptor descriptor{};
         descriptor.dimension = gpu::texture_dimension::d2;
-        descriptor.format = gpu::texture_format::rgba8_unorm;
+        descriptor.format = gpu::rgba8_format(space);
         descriptor.width = image.get_width();
         descriptor.height = image.get_height();
         descriptor.mipmaps = true;
@@ -121,6 +129,7 @@ namespace rendering_engine
         descriptor.address_w = gpu::address_mode::repeat;
 
         auto asset = std::make_shared<texture_asset>();
+        asset->format = descriptor.format;
         asset->width = image.get_width();
         asset->height = image.get_height();
         asset->texture = gpu.create_texture(descriptor);

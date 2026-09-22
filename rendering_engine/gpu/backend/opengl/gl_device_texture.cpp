@@ -217,6 +217,10 @@ namespace rendering_engine::gpu::backend::opengl
         {
             return;
         }
+        // Format-agnostic: an rgba8_srgb texture carries its encoding in
+        // its GL_SRGB8_ALPHA8 storage, so the driver derives the chain
+        // from that storage (desktop drivers filter the decoded values)
+        // and no CPU pre-pass is needed for a gamma-correct chain.
         glBindTexture(record->target, record->object_id);
         glGenerateMipmap(record->target);
         glBindTexture(record->target, 0);

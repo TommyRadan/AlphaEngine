@@ -363,7 +363,7 @@ namespace rendering_engine
         upload_params();
     }
 
-    void phong_material::set_diffuse_map(const util::image& image)
+    void phong_material::set_diffuse_map(const util::image& image, gpu::color_space space)
     {
         auto& gpu = *runtime::current_engine().gpu;
         if (m_diffuse_map.valid())
@@ -374,7 +374,7 @@ namespace rendering_engine
 
         gpu::texture_descriptor descriptor{};
         descriptor.dimension = gpu::texture_dimension::d2;
-        descriptor.format = gpu::texture_format::rgba8_unorm;
+        descriptor.format = gpu::rgba8_format(space);
         descriptor.width = image.get_width();
         descriptor.height = image.get_height();
         descriptor.mipmaps = true;

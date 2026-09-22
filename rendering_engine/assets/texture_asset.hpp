@@ -30,6 +30,7 @@
 #include <cstdint>
 
 #include <rendering_engine/gpu/handle.hpp>
+#include <rendering_engine/gpu/types.hpp>
 
 namespace rendering_engine
 {
@@ -58,6 +59,12 @@ namespace rendering_engine
 
         // The owned GPU texture. Valid once the cache has uploaded the image.
         gpu::texture texture{};
+
+        // The texel format the image was uploaded as: @c rgba8_srgb when
+        // it was loaded as @ref gpu::color_space::srgb (the sampler decodes
+        // to linear), @c rgba8_unorm for linear data. Consumers that need
+        // to know whether a sample is already linear read it from here.
+        gpu::texture_format format{gpu::texture_format::rgba8_unorm};
 
         // Dimensions of the source image, in texels.
         uint32_t width{0};

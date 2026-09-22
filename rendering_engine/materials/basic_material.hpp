@@ -23,6 +23,7 @@
 #pragma once
 
 #include <rendering_engine/gpu/handle.hpp>
+#include <rendering_engine/gpu/types.hpp>
 #include <rendering_engine/materials/material.hpp>
 #include <rendering_engine/util/color.hpp>
 #include <rendering_engine/util/image.hpp>
@@ -54,8 +55,12 @@ namespace rendering_engine
 
         // Bind an albedo texture; the fragment shader switches to
         // sampling it (modulated by the tint). Replaces any previous
-        // texture and rebuilds the per-material bind group.
-        void set_albedo(const util::image& image);
+        // texture and rebuilds the per-material bind group. @p space is
+        // the colour space the image was authored in: albedo art is sRGB
+        // (the default), uploaded as @c rgba8_srgb so the sampler hands
+        // the shader linear values; pass @c linear only for an image
+        // whose bytes are already linear.
+        void set_albedo(const util::image& image, gpu::color_space space = gpu::color_space::srgb);
 
         // Drop the albedo texture; the material falls back to the flat
         // tint. No-op when no texture is set.

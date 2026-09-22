@@ -77,9 +77,12 @@ namespace rendering_engine::gpu::backend::vulkan
         // primitive @ref vk_device::generate_mipmaps relies on — is only
         // valid when the format advertises blit-src, blit-dst and linear
         // sample filtering with optimal tiling. The engine's mipmapped
-        // textures are rgba8_unorm / rgba16_float, which support this on
-        // every desktop GPU, but a format that doesn't gets a single
-        // level rather than an undefined chain.
+        // textures are rgba8_unorm / rgba8_srgb / rgba16_float, which
+        // support this on every desktop GPU (all three are mandatory
+        // blit + linear-filter formats), but a format that doesn't gets
+        // a single level rather than an undefined chain. A blit from an
+        // sRGB image decodes to linear before filtering and re-encodes
+        // on write, so the sRGB chain is gamma-correct.
         bool format_supports_linear_blit(VkPhysicalDevice physical_device, VkFormat format)
         {
             VkFormatProperties props{};

@@ -651,10 +651,10 @@ namespace rendering_engine
         upload_params();
     }
 
-    void standard_material::set_albedo_map(const util::image& image)
+    void standard_material::set_albedo_map(const util::image& image, gpu::color_space space)
     {
         release_map(m_albedo_map);
-        m_albedo_map = upload_map(image);
+        m_albedo_map = upload_map(image, space);
         rebuild_bind_group();
     }
 
@@ -668,10 +668,10 @@ namespace rendering_engine
         rebuild_bind_group();
     }
 
-    void standard_material::set_normal_map(const util::image& image)
+    void standard_material::set_normal_map(const util::image& image, gpu::color_space space)
     {
         release_map(m_normal_map);
-        m_normal_map = upload_map(image);
+        m_normal_map = upload_map(image, space);
         rebuild_bind_group();
     }
 
@@ -685,10 +685,10 @@ namespace rendering_engine
         rebuild_bind_group();
     }
 
-    void standard_material::set_metalness_map(const util::image& image)
+    void standard_material::set_metalness_map(const util::image& image, gpu::color_space space)
     {
         release_map(m_metalness_map);
-        m_metalness_map = upload_map(image);
+        m_metalness_map = upload_map(image, space);
         rebuild_bind_group();
     }
 
@@ -702,10 +702,10 @@ namespace rendering_engine
         rebuild_bind_group();
     }
 
-    void standard_material::set_roughness_map(const util::image& image)
+    void standard_material::set_roughness_map(const util::image& image, gpu::color_space space)
     {
         release_map(m_roughness_map);
-        m_roughness_map = upload_map(image);
+        m_roughness_map = upload_map(image, space);
         rebuild_bind_group();
     }
 
@@ -719,10 +719,10 @@ namespace rendering_engine
         rebuild_bind_group();
     }
 
-    void standard_material::set_emissive_map(const util::image& image)
+    void standard_material::set_emissive_map(const util::image& image, gpu::color_space space)
     {
         release_map(m_emissive_map);
-        m_emissive_map = upload_map(image);
+        m_emissive_map = upload_map(image, space);
         rebuild_bind_group();
     }
 
@@ -752,13 +752,13 @@ namespace rendering_engine
         rebuild_bind_group();
     }
 
-    gpu::texture standard_material::upload_map(const util::image& image)
+    gpu::texture standard_material::upload_map(const util::image& image, gpu::color_space space)
     {
         auto& gpu = *runtime::current_engine().gpu;
 
         gpu::texture_descriptor descriptor{};
         descriptor.dimension = gpu::texture_dimension::d2;
-        descriptor.format = gpu::texture_format::rgba8_unorm;
+        descriptor.format = gpu::rgba8_format(space);
         descriptor.width = image.get_width();
         descriptor.height = image.get_height();
         descriptor.mipmaps = true;
