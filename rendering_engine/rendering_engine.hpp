@@ -30,6 +30,7 @@
 #include <memory>
 #include <vector>
 
+#include <core/subscription.hpp>
 #include <rendering_engine/fog.hpp>
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/render_graph/frame_graph.hpp>
@@ -266,6 +267,11 @@ namespace rendering_engine
         // This frame's draw statistics, filled by the scene pass (which
         // holds a pointer to it) and surfaced via @ref get_render_stats.
         render_stats m_render_stats{};
+
+        // The window_resized listener that keeps the swapchain extent in
+        // step with the drawable. Held from @ref init to @ref quit so it
+        // is dropped before the device it resizes is torn down.
+        core::subscription m_window_resized_subscription;
 
         // The active scene environment, or null. Stored so newly created
         // materials inherit the image-based lighting. Non-owning.

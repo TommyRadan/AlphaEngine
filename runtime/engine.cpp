@@ -212,19 +212,25 @@ namespace runtime
         render_tick.m_delta_time = static_cast<float>(time->delta_time());
         events->emit<core::render_update>(render_tick);
 
-        // Build the ImGui debug overlay before the passes run; its draw
-        // data is recorded inside the swapchain-targeted debug pass (via
-        // the render_debug event) so it composites on top of the frame on
-        // both the OpenGL and Vulkan backends. No-op in release builds.
-        rendering_engine::debug_ui::begin_frame();
         // Propagate scene-graph component updates (light/camera poses tracking
         // their nodes) after the fixed updates moved nodes and before the draw
         // walk. Runs once per rendered frame; render_* events fire per render
         // inside renderer->render(). The interpolation alpha for smoothing
         // between fixed states is available via time->interpolation_alpha().
         scenes->update();
-        renderer->render();
-        window->swap_buffers();
+        // A minimized window has no drawable (the Vulkan surface reports a
+        // zero extent), so the frame is neither built nor presented until
+        // the window is restored; the updates above keep running.
+        if (!window->is_minimized())
+        {
+            // Build the ImGui debug overlay before the passes run; its draw
+            // data is recorded inside the swapchain-targeted debug pass (via
+            // the render_debug event) so it composites on top of the frame on
+            // both the OpenGL and Vulkan backends. No-op in release builds.
+            rendering_engine::debug_ui::begin_frame();
+            renderer->render();
+            window->swap_buffers();
+        }
     }
 
     void engine::broadcast_engine_start()

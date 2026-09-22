@@ -22,6 +22,7 @@
 
 #include <rendering_engine/rendering_engine.hpp>
 
+#include <core/event_engine.hpp>
 #include <core/log.hpp>
 #include <core/settings.hpp>
 #include <rendering_engine/camera/camera.hpp>
@@ -70,15 +71,22 @@ void rendering_engine::context::init()
     eng.gpu->init();
 
     // Tell the device about the initial backbuffer dimensions so that
-    // begin_render_pass can default the viewport to the full window.
-    uint32_t width = 0;
-    uint32_t height = 0;
-    if (eng.settings != nullptr)
-    {
-        width = eng.settings->window.width;
-        height = eng.settings->window.height;
-        eng.gpu->resize_swapchain(width, height);
-    }
+    // begin_render_pass can default the viewport to the full window. The
+    // drawable is measured in pixels rather than taken from the settings'
+    // logical size: on a high-density display the two differ by the
+    // display scale, and the swapchain and render targets follow pixels.
+    const window_extent drawable = eng.window->pixel_size();
+    const uint32_t width = drawable.width;
+    const uint32_t height = drawable.height;
+    eng.gpu->resize_swapchain(width, height);
+
+    // Keep the swapchain extent in step with the drawable as the window is
+    // resized or moved across displays. The off-screen targets and the
+    // passes sized below stay at their initial size (recreating them on
+    // resize is a follow-up), so a resized window presents the initial-size
+    // image scaled to the new swapchain.
+    m_window_resized_subscription = eng.events->subscribe<core::window_resized>(
+        [&eng](const core::window_resized& e) { eng.gpu->resize_swapchain(e.m_pixel_width, e.m_pixel_height); });
 
     // Allocate the off-screen HDR scene-colour target. The scene pass
     // renders into rgba16f instead of straight to the swapchain so
@@ -272,6 +280,10 @@ void rendering_engine::context::init()
 void rendering_engine::context::quit()
 {
     auto& eng = runtime::current_engine();
+
+    // Stop tracking window resizes before the device the listener
+    // resizes goes away.
+    m_window_resized_subscription.reset();
 
     // Tear the ImGui overlay down first, while the window and GL context
     // it bound to are still alive. No-op in release builds.

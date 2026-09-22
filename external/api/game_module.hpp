@@ -39,11 +39,23 @@ struct game_module_info
     std::function<void(const core::mouse_key_down&)> on_mouse_key_down;
     std::function<void(const core::mouse_key_up&)> on_mouse_key_up;
     std::function<void(const core::mouse_move&)> on_mouse_move;
+    std::function<void(const core::mouse_wheel&)> on_mouse_wheel;
+    std::function<void(const core::text_input&)> on_text_input;
+    std::function<void(const core::window_resized&)> on_window_resized;
+    std::function<void(const core::window_focus&)> on_window_focus;
+    std::function<void(const core::window_minimized&)> on_window_minimized;
+    std::function<void(const core::gamepad_connected&)> on_gamepad_connected;
+    std::function<void(const core::gamepad_disconnected&)> on_gamepad_disconnected;
+    std::function<void(const core::gamepad_button&)> on_gamepad_button;
+    std::function<void(const core::gamepad_axis&)> on_gamepad_axis;
 
     game_module_info()
         : on_engine_start{nullptr}, on_engine_stop{nullptr}, on_frame{nullptr}, on_render_update{nullptr},
           on_render_scene{nullptr}, on_render_ui{nullptr}, on_key_down{nullptr}, on_key_up{nullptr},
-          on_mouse_key_down{nullptr}, on_mouse_key_up{nullptr}, on_mouse_move{nullptr}
+          on_mouse_key_down{nullptr}, on_mouse_key_up{nullptr}, on_mouse_move{nullptr}, on_mouse_wheel{nullptr},
+          on_text_input{nullptr}, on_window_resized{nullptr}, on_window_focus{nullptr}, on_window_minimized{nullptr},
+          on_gamepad_connected{nullptr}, on_gamepad_disconnected{nullptr}, on_gamepad_button{nullptr},
+          on_gamepad_axis{nullptr}
     {
     }
 };
