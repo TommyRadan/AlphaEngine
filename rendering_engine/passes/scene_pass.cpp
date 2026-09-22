@@ -34,6 +34,7 @@
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/gpu/render_target.hpp>
+#include <rendering_engine/gpu/shader_bindings.hpp>
 #include <rendering_engine/lighting/light.hpp>
 #include <rendering_engine/lighting/lights_ubo.hpp>
 #include <rendering_engine/materials/material.hpp>
@@ -54,35 +55,25 @@ namespace rendering_engine
         // 160 bytes total.
         constexpr size_t per_frame_ubo_size = 2 * sizeof(core::math::mat4) + 2 * sizeof(core::math::vec4);
 
-        // Binding numbers within the per-frame bind group (slot 0). The
-        // numbers must stay unique across both descriptor sets in a lit
-        // pipeline because OpenGL flattens UBO bindings into a single
-        // namespace through ARB_gl_spirv: binding 0 = the PerFrame view
-        // block (camera matrices + fog), binding 1 = the per-draw model
-        // matrix (set 1), so the lights block takes binding 2.
-        constexpr uint32_t camera_binding = 0;
-        constexpr uint32_t lights_binding = 2;
+        // Binding numbers within the per-frame bind group (slot 0), from
+        // the global table in gpu/shader_bindings.hpp (which explains why
+        // they stay unique across both descriptor sets of a lit pipeline).
+        constexpr uint32_t camera_binding = gpu::shader_bindings::per_frame;
+        constexpr uint32_t lights_binding = gpu::shader_bindings::lights;
 
-        // Directional shadow data shares the per-frame group. The lit
-        // pipelines already spend UBO bindings 0..3 (camera, model,
-        // lights, material params) and sampler bindings 4..8; following
-        // the materials' convention of never reusing a number across the
-        // two namespaces, the shadow map takes the next free sampler
-        // binding 9 and the shadow UBO sits at 10.
-        constexpr uint32_t shadow_map_binding = 9;
-        constexpr uint32_t shadow_binding = 10;
+        // Directional shadow data shares the per-frame group.
+        constexpr uint32_t shadow_map_binding = gpu::shader_bindings::shadow_map;
+        constexpr uint32_t shadow_binding = gpu::shader_bindings::shadow;
 
         // std140 layout of the per-frame Shadow block: mat4
         // lightViewProj at offset 0, vec4 params at offset 64
         // (x enabled, y bias, z caster index). 80 bytes total.
         constexpr size_t shadow_ubo_size = sizeof(core::math::mat4) + 4 * sizeof(float);
 
-        // Omni (point-light) shadow data also shares the per-frame group. The
-        // next free binding number across both the UBO and sampler namespaces
-        // (the directional set ends at 10, IBL spends 11..13) is 14 for the UBO
-        // and 15..20 for the six face depth maps.
-        constexpr uint32_t point_shadow_binding = 14;
-        constexpr uint32_t point_shadow_map_binding_0 = 15;
+        // Omni (point-light) shadow data also shares the per-frame group:
+        // the UBO plus six face depth maps at consecutive bindings.
+        constexpr uint32_t point_shadow_binding = gpu::shader_bindings::point_shadow;
+        constexpr uint32_t point_shadow_map_binding_0 = gpu::shader_bindings::point_shadow_map_0;
 
         // std140 layout of the PointShadow block: mat4 faceViewProj[6] at
         // offset 0 (384 bytes), vec4 lightPos at 384, vec4 params at 400

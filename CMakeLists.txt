@@ -106,6 +106,17 @@ add_subdirectory(core)
 add_subdirectory(rendering_engine)
 add_subdirectory(external)
 
+# Shaders — the GLSL sources under shaders/ are embedded into the
+# shader_registry library at build time (see shaders/CMakeLists.txt) and
+# looked up through rendering_engine/gpu/shader_library. Debug builds
+# also know where the source tree's shaders/ directory is so a shader
+# can be edited on disk and picked up at the next launch without a C++
+# rebuild (ALPHAENGINE_SHADER_DIR overrides the location).
+add_subdirectory(shaders)
+target_link_libraries(AlphaEngine shader_registry)
+target_compile_definitions(AlphaEngine PRIVATE
+    $<$<CONFIG:Debug>:ALPHAENGINE_SHADER_SOURCE_DIR="${CMAKE_SOURCE_DIR}/shaders">)
+
 # Threads — the core worker pool (core/jobs) uses std::thread. MSVC links its
 # threading support implicitly; on Linux this pulls in pthread.
 set(THREADS_PREFER_PTHREAD_FLAG ON)
@@ -155,14 +166,23 @@ FetchContent_MakeAvailable(glm)
 target_link_libraries(AlphaEngine glm::glm)
 
 # glslang — fetched and built statically. Compiles GLSL to SPIR-V at
-# runtime so both the OpenGL backend (via ARB_gl_spirv) and a future
-# Vulkan backend can consume the same byte blobs. ENABLE_OPT=OFF
-# drops the SPIRV-Tools optimizer dependency; the engine ships
-# unoptimised SPIR-V for now.
+# runtime so both the OpenGL and the Vulkan backend consume the same
+# byte blobs (cached on disk by rendering_engine/gpu/shader_compiler).
+# ENABLE_OPT=OFF drops the SPIRV-Tools optimizer dependency: glslang's
+# CMake hard-errors with ENABLE_OPT=ON unless SPIRV-Tools and
+# SPIRV-Headers sit in its External/ directory, which a shallow tag
+# fetch does not provide. Turning the optimizer on means fetching those
+# two repositories as well; the engine ships unoptimised SPIR-V for now.
+# ENABLE_RTTI stays ON: the shader compiler derives its #include
+# resolver from glslang's polymorphic TShader::Includer and drives
+# TShader / TProgram from RTTI-enabled engine code, and UBSan's vptr
+# check (part of -fsanitize=undefined) references those classes'
+# typeinfo, which a -fno-rtti glslang would never emit — the sanitizer
+# build then fails to link.
 set(GLSLANG_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
 set(ENABLE_OPT OFF CACHE BOOL "" FORCE)
 set(ENABLE_HLSL OFF CACHE BOOL "" FORCE)
-set(ENABLE_RTTI OFF CACHE BOOL "" FORCE)
+set(ENABLE_RTTI ON CACHE BOOL "" FORCE)
 set(ENABLE_CTEST OFF CACHE BOOL "" FORCE)
 set(BUILD_EXTERNAL OFF CACHE BOOL "" FORCE)
 set(BUILD_TESTING OFF CACHE BOOL "" FORCE)

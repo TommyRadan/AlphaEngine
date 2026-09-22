@@ -64,9 +64,12 @@ library to link a test binary against. Instead, `tests/CMakeLists.txt` defines a
 standalone `AlphaEngineTests` executable that compiles the specific subsystem
 translation units under test directly, alongside the test sources, and links
 `GTest::gtest_main` plus only the libraries those sources need (GLM for
-`core/math`, SDL3 for `core/log`, Threads for `core/jobs`). Nothing from the
-renderer, window, or GPU layers is pulled in (`mesh/tangent.cpp` is pure
-geometry; the `gpu` header it includes declares types only).
+`core/math`, SDL3 for `core/log`, Threads for `core/jobs`, and — for the
+shader tests — the embedded `shader_registry` library generated from
+`shaders/` and the static glslang front end). Nothing from the renderer,
+window, or GPU backend layers is pulled in (`mesh/tangent.cpp` is pure
+geometry; the `gpu` header it includes declares types only; glslang compiles
+GLSL to SPIR-V words in memory and needs no device).
 
 Tests are registered with ctest via `gtest_discover_tests`, so each `TEST()`
 shows up as an individual ctest case.
@@ -98,6 +101,23 @@ All device-free:
   `ALPHAENGINE_LOG_LEVEL` specification parser, the bounded recent-message
   ring, the command-line stash, and the contract that `LOG_FTL` returns so
   the caller can throw.
+- `core::fnv1a_64` (`core/hash.hpp`) — the published FNV-1a reference vectors,
+  `constexpr` evaluation, seeded chaining, and the incremental hasher agreeing
+  with the one-shot digest over the concatenated input.
+- `gpu::shader_library` — the embedded registry generated from `shaders/`
+  serves every listed file by its `shaders/`-relative path, the generated
+  `include/bindings.glsl` mirrors `gpu/shader_bindings.hpp`, an unknown path
+  throws, the `PerFrame` / `Lights` blocks and the shadow lookups are declared
+  in exactly one file, and (debug builds) an on-disk override root wins over
+  the embedded copy and can be cleared again.
+- `gpu::compile_glsl_to_spirv` — through the real glslang, headless: a shader
+  that `#include`s from the library compiles (nested and repeated includes
+  included), `#define`s are injected, a parse failure or unknown include
+  throws with the shader name and glslang's log, `GRID_FADE_DISTANCE` works
+  as a define variant, the on-disk SPIR-V cache misses once then hits (keyed
+  apart by defines, off when disabled, recompiling a truncated blob), and
+  **every embedded material, pass and compute shader compiles** — the check
+  that catches an include or binding mistake before a GPU sees it.
 - `runtime::node` — parent/child links and re-parenting, cached world matrices,
   `world_position` / `set_world_position`, `find`, active / effective-active
   flags, and the component-store attach/get/remove path.

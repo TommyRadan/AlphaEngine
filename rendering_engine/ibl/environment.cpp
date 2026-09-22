@@ -258,219 +258,11 @@ namespace
 
     // ---- GPU compute path -------------------------------------------------
     //
-    // Three compute shaders convolve the derived tables directly into
-    // storage images. dir_for_face mirrors the CPU @ref dir_for_face_uv so
-    // the hardware samplerCube and the written cube agree on orientation.
-
-    // Shared GLSL helpers: the cube-face direction mapping, Hammersley
-    // sequence and GGX importance sampling. Prepended to each shader.
-    const std::string compute_prelude = R"glsl(
-        #version 450
-        const float PI = 3.14159265359;
-
-        vec3 dir_for_face(int face, vec2 uv)
-        {
-            float sc = 2.0 * uv.x - 1.0;
-            float tc = 2.0 * uv.y - 1.0;
-            if (face == 0) return normalize(vec3(1.0, -tc, -sc));
-            if (face == 1) return normalize(vec3(-1.0, -tc, sc));
-            if (face == 2) return normalize(vec3(sc, 1.0, tc));
-            if (face == 3) return normalize(vec3(sc, -1.0, -tc));
-            if (face == 4) return normalize(vec3(sc, -tc, 1.0));
-            return normalize(vec3(-sc, -tc, -1.0));
-        }
-
-        float radical_inverse_vdc(uint bits)
-        {
-            bits = (bits << 16u) | (bits >> 16u);
-            bits = ((bits & 0x55555555u) << 1u) | ((bits & 0xAAAAAAAAu) >> 1u);
-            bits = ((bits & 0x33333333u) << 2u) | ((bits & 0xCCCCCCCCu) >> 2u);
-            bits = ((bits & 0x0F0F0F0Fu) << 4u) | ((bits & 0xF0F0F0F0u) >> 4u);
-            bits = ((bits & 0x00FF00FFu) << 8u) | ((bits & 0xFF00FF00u) >> 8u);
-            return float(bits) * 2.3283064365386963e-10;
-        }
-
-        vec2 hammersley(uint i, uint n)
-        {
-            return vec2(float(i) / float(n), radical_inverse_vdc(i));
-        }
-
-        // GGX lobe sample around an arbitrary normal N.
-        vec3 importance_sample_ggx(vec2 xi, vec3 N, float roughness)
-        {
-            float a = roughness * roughness;
-            float phi = 2.0 * PI * xi.x;
-            float cosTheta = sqrt((1.0 - xi.y) / (1.0 + (a * a - 1.0) * xi.y));
-            float sinTheta = sqrt(max(0.0, 1.0 - cosTheta * cosTheta));
-            vec3 H = vec3(cos(phi) * sinTheta, sin(phi) * sinTheta, cosTheta);
-            vec3 up = abs(N.z) < 0.999 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
-            vec3 tangent = normalize(cross(up, N));
-            vec3 bitangent = cross(N, tangent);
-            return normalize(tangent * H.x + bitangent * H.y + N * H.z);
-        }
-    )glsl";
-
-    // Diffuse irradiance: cosine-weighted hemisphere convolution per output
-    // texel, written into an imageCube (z = face).
-    const std::string irradiance_body = R"glsl(
-        layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
-        layout(set = 0, binding = 0) uniform samplerCube envMap;
-        layout(rgba16f, set = 0, binding = 1) uniform writeonly imageCube outIrradiance;
-
-        void main()
-        {
-            ivec2 size = imageSize(outIrradiance);
-            ivec2 p = ivec2(gl_GlobalInvocationID.xy);
-            int face = int(gl_GlobalInvocationID.z);
-            if (p.x >= size.x || p.y >= size.y)
-            {
-                return;
-            }
-            vec2 uv = (vec2(p) + 0.5) / vec2(size);
-            vec3 N = dir_for_face(face, uv);
-
-            vec3 up = abs(N.z) < 0.999 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
-            vec3 right = normalize(cross(up, N));
-            up = cross(N, right);
-
-            vec3 irradiance = vec3(0.0);
-            float samples = 0.0;
-            const float sampleDelta = 0.025;
-            for (float phi = 0.0; phi < 2.0 * PI; phi += sampleDelta)
-            {
-                for (float theta = 0.0; theta < 0.5 * PI; theta += sampleDelta)
-                {
-                    vec3 tangent = vec3(sin(theta) * cos(phi), sin(theta) * sin(phi), cos(theta));
-                    vec3 dir = tangent.x * right + tangent.y * up + tangent.z * N;
-                    irradiance += texture(envMap, dir).rgb * cos(theta) * sin(theta);
-                    samples += 1.0;
-                }
-            }
-            irradiance = PI * irradiance / max(samples, 1.0);
-            imageStore(outIrradiance, ivec3(p, face), vec4(irradiance, 1.0));
-        }
-    )glsl";
-
-    // Prefiltered specular: GGX importance sampling per output texel, with
-    // a mip bias on the source lookup to suppress fireflies. One dispatch
-    // per mip level supplies the roughness via the Params UBO.
-    const std::string prefilter_body = R"glsl(
-        layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
-        layout(set = 0, binding = 0) uniform samplerCube envMap;
-        layout(rgba16f, set = 0, binding = 1) uniform writeonly imageCube outPrefiltered;
-        layout(set = 0, binding = 2, std140) uniform Params
-        {
-            vec4 data; // x roughness, y source resolution
-        } u;
-
-        float distribution_ggx(float nDotH, float roughness)
-        {
-            float a = roughness * roughness;
-            float a2 = a * a;
-            float d = (nDotH * nDotH * (a2 - 1.0) + 1.0);
-            return a2 / (PI * d * d);
-        }
-
-        void main()
-        {
-            ivec2 size = imageSize(outPrefiltered);
-            ivec2 p = ivec2(gl_GlobalInvocationID.xy);
-            int face = int(gl_GlobalInvocationID.z);
-            if (p.x >= size.x || p.y >= size.y)
-            {
-                return;
-            }
-            float roughness = u.data.x;
-            float resolution = u.data.y;
-            vec2 uv = (vec2(p) + 0.5) / vec2(size);
-            vec3 N = dir_for_face(face, uv);
-            vec3 V = N;
-
-            const uint SAMPLE_COUNT = 1024u;
-            vec3 prefiltered = vec3(0.0);
-            float totalWeight = 0.0;
-            for (uint i = 0u; i < SAMPLE_COUNT; ++i)
-            {
-                vec2 xi = hammersley(i, SAMPLE_COUNT);
-                vec3 H = importance_sample_ggx(xi, N, roughness);
-                vec3 L = normalize(2.0 * dot(V, H) * H - V);
-                float nDotL = max(dot(N, L), 0.0);
-                if (nDotL > 0.0)
-                {
-                    float nDotH = max(dot(N, H), 0.0);
-                    float hDotV = max(dot(H, V), 0.0);
-                    float d = distribution_ggx(nDotH, roughness);
-                    float pdf = (d * nDotH / (4.0 * hDotV)) + 0.0001;
-                    float saTexel = 4.0 * PI / (6.0 * resolution * resolution);
-                    float saSample = 1.0 / (float(SAMPLE_COUNT) * pdf + 0.0001);
-                    float mip = roughness == 0.0 ? 0.0 : 0.5 * log2(saSample / saTexel);
-                    prefiltered += textureLod(envMap, L, mip).rgb * nDotL;
-                    totalWeight += nDotL;
-                }
-            }
-            prefiltered = prefiltered / max(totalWeight, 0.001);
-            imageStore(outPrefiltered, ivec3(p, face), vec4(prefiltered, 1.0));
-        }
-    )glsl";
-
-    // Split-sum environment BRDF integration into a 2D rg table.
-    const std::string brdf_body = R"glsl(
-        layout(local_size_x = 8, local_size_y = 8) in;
-        layout(rgba16f, set = 0, binding = 0) uniform writeonly image2D outLut;
-
-        float geometry_schlick_ggx(float nDotX, float roughness)
-        {
-            float a = roughness;
-            float k = (a * a) / 2.0;
-            return nDotX / (nDotX * (1.0 - k) + k);
-        }
-
-        float geometry_smith(vec3 N, vec3 V, vec3 L, float roughness)
-        {
-            return geometry_schlick_ggx(max(dot(N, V), 0.0), roughness) *
-                   geometry_schlick_ggx(max(dot(N, L), 0.0), roughness);
-        }
-
-        vec2 integrate_brdf(float nDotV, float roughness)
-        {
-            vec3 V = vec3(sqrt(1.0 - nDotV * nDotV), 0.0, nDotV);
-            vec3 N = vec3(0.0, 0.0, 1.0);
-            float scale = 0.0;
-            float bias = 0.0;
-            const uint SAMPLE_COUNT = 1024u;
-            for (uint i = 0u; i < SAMPLE_COUNT; ++i)
-            {
-                vec2 xi = hammersley(i, SAMPLE_COUNT);
-                vec3 H = importance_sample_ggx(xi, N, roughness);
-                vec3 L = normalize(2.0 * dot(V, H) * H - V);
-                float nDotL = max(L.z, 0.0);
-                float nDotH = max(H.z, 0.0);
-                float vDotH = max(dot(V, H), 0.0);
-                if (nDotL > 0.0)
-                {
-                    float g = geometry_smith(N, V, L, roughness);
-                    float gVis = (g * vDotH) / (nDotH * nDotV);
-                    float fc = pow(1.0 - vDotH, 5.0);
-                    scale += (1.0 - fc) * gVis;
-                    bias += fc * gVis;
-                }
-            }
-            return vec2(scale, bias) / float(SAMPLE_COUNT);
-        }
-
-        void main()
-        {
-            ivec2 size = imageSize(outLut);
-            ivec2 p = ivec2(gl_GlobalInvocationID.xy);
-            if (p.x >= size.x || p.y >= size.y)
-            {
-                return;
-            }
-            vec2 uv = (vec2(p) + 0.5) / vec2(size);
-            vec2 result = integrate_brdf(uv.x, uv.y);
-            imageStore(outLut, p, vec4(result, 0.0, 1.0));
-        }
-    )glsl";
+    // Three compute kernels (shaders/passes/ibl_*.comp.glsl) convolve the
+    // derived tables directly into storage images. Their shared
+    // dir_for_face (shaders/include/ibl_common.glsl) mirrors the CPU
+    // @ref dir_for_face_uv so the hardware samplerCube and the written
+    // cube agree on orientation.
 } // namespace
 
 namespace rendering_engine
@@ -723,11 +515,11 @@ namespace rendering_engine
         std::vector<gpu::bind_group> groups;
         std::vector<gpu::buffer> buffers;
 
-        const auto make_compute = [&](const std::string& body, const gpu::bind_group_layout_descriptor& layout_desc)
+        const auto make_compute = [&](const char* path, const gpu::bind_group_layout_descriptor& layout_desc)
         {
             gpu::shader_module_descriptor sd{};
             sd.stage = gpu::shader_stage::compute;
-            sd.spirv = gpu::compile_glsl_to_spirv(compute_prelude + body, gpu::shader_stage::compute);
+            sd.spirv = gpu::compile_library_shader(path, gpu::shader_stage::compute);
             const gpu::shader_module shader = gpu.create_shader_module(sd);
             shaders.push_back(shader);
 
@@ -778,17 +570,17 @@ namespace rendering_engine
         gpu::bind_group_layout_descriptor irr_layout{};
         irr_layout.entries.push_back(sampler_entry(0));
         irr_layout.entries.push_back(image_entry(1));
-        const auto [irr_pipe, irr_bgl] = make_compute(irradiance_body, irr_layout);
+        const auto [irr_pipe, irr_bgl] = make_compute("passes/ibl_irradiance.comp.glsl", irr_layout);
 
         gpu::bind_group_layout_descriptor pre_layout{};
         pre_layout.entries.push_back(sampler_entry(0));
         pre_layout.entries.push_back(image_entry(1));
         pre_layout.entries.push_back(ubo_entry(2));
-        const auto [pre_pipe, pre_bgl] = make_compute(prefilter_body, pre_layout);
+        const auto [pre_pipe, pre_bgl] = make_compute("passes/ibl_prefilter.comp.glsl", pre_layout);
 
         gpu::bind_group_layout_descriptor brdf_layout{};
         brdf_layout.entries.push_back(image_entry(0));
-        const auto [brdf_pipe, brdf_bgl] = make_compute(brdf_body, brdf_layout);
+        const auto [brdf_pipe, brdf_bgl] = make_compute("passes/ibl_brdf_lut.comp.glsl", brdf_layout);
 
         // ---- output textures -------------------------------------------
         m_irradiance = storage_texture(gpu::texture_dimension::cube, irradiance_size, false);

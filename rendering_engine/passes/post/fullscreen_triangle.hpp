@@ -22,44 +22,26 @@
 
 /**
  * @file fullscreen_triangle.hpp
- * @brief Shared vertex shader source and vertex buffer for post-process passes.
+ * @brief The shared vertex data of the fullscreen-triangle passes.
  *
- * Emits a single oversized triangle that covers the entire screen
- * via three vertices fed through @c layout(location = 0) in vec2 pos.
- * The triangle's clipped extent inside the viewport is the full
- * [-1, 1] NDC quad, so the fragment shader sees every pixel exactly
- * once. UVs are emitted in [0, 1] with origin at the bottom left,
- * matching the convention the engine's textures sample with.
+ * A single oversized triangle covers the entire screen; its clipped
+ * extent inside the viewport is the full [-1, 1] NDC quad, so a fragment
+ * shader sees every pixel exactly once. The matching vertex stage is
+ * @c shaders/passes/fullscreen.vert.glsl, which reads these three
+ * vertices through @c layout(location = 0) in vec2 and emits UVs in
+ * [0, 1] with the origin at the bottom left.
  *
- * The vertex buffer is created and owned per-pass (tonemap, future
- * bloom, FXAA, ...) — six floats fits in the same draw_call window
- * as the existing per-instance UBOs. We use an explicit attribute
- * instead of @c gl_VertexIndex because some OpenGL @c ARB_gl_spirv
- * specializers (NVIDIA on this hardware) silently drop draws whose
- * vertex shader has no input variables. Going through a real
- * attribute keeps the SPIR-V portable and the OpenGL backend happy.
+ * The vertex buffer is created and owned per pass (tonemap, bloom,
+ * FXAA, TAA, velocity, skybox): six floats fits in the same draw_call
+ * window as the existing per-instance UBOs.
  */
 
 #pragma once
 
 #include <array>
-#include <string>
 
 namespace rendering_engine
 {
-    inline const std::string fullscreen_triangle_vertex_shader = R"vs(
-        #version 450
-
-        layout(location = 0) in vec2 in_pos;
-        layout(location = 0) out vec2 texCoord;
-
-        void main()
-        {
-            texCoord = (in_pos + 1.0) * 0.5;
-            gl_Position = vec4(in_pos, 0.0, 1.0);
-        }
-)vs";
-
     // Three vertices in clip space: (-1,-1), (3,-1), (-1,3). The
     // triangle's slice inside the [-1,1] viewport is the full quad,
     // so the fragment shader covers every pixel exactly once.

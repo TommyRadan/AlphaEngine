@@ -27,248 +27,21 @@
 
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
+#include <rendering_engine/gpu/shader_bindings.hpp>
 #include <rendering_engine/mesh/vertex.hpp>
 #include <runtime/engine.hpp>
 
 namespace
 {
-    // Binding numbers. UBOs share a single namespace across every
-    // descriptor set on the OpenGL backend (ARB_gl_spirv), so they must
-    // stay globally unique: the scene_pass owns camera = 0 and lights = 2
-    // in the per-frame set, the per-draw model matrix takes 1, leaving 3
-    // for the per-material params block. The sampler lives in its own
-    // namespace but must still differ from the UBO within the Vulkan
-    // per-material set, so it takes 4.
-    constexpr uint32_t draw_model_binding = 1;
-    constexpr uint32_t material_params_binding = 3;
-    constexpr uint32_t material_diffuse_map_binding = 4;
-
     // std140 layout for the per-material params UBO: vec4 diffuseColor
     // at offset 0, vec4 specular (rgb colour, a shininess) at offset 16,
     // vec4 misc (x useTexture) at offset 32. The struct is 48 bytes.
     constexpr size_t material_ubo_size = 48;
 
-    const std::string vertex_shader = R"vs(
-        #version 450
-
-        layout(location = 0) in vec3 position;
-        layout(location = 1) in vec2 uv;
-        layout(location = 2) in vec3 normal;
-
-        layout(location = 0) out vec3 worldPosition;
-        layout(location = 1) out vec3 worldNormal;
-        layout(location = 2) out vec2 texCoord;
-        layout(location = 3) out vec3 cameraPosition;
-
-        layout(set = 0, binding = 0, std140) uniform PerFrame
-        {
-            mat4 viewMatrix;
-            mat4 projectionMatrix;
-            vec4 fogColor;  // rgb colour, a = mode (0 none, 1 linear, 2 exp2)
-            vec4 fogParams; // x near, y far, z density
-        } u_frame;
-
-        layout(set = 1, binding = 1, std140) uniform PerDraw
-        {
-            mat4 modelMatrix;
-        } u_draw;
-
-        void main()
-        {
-            vec4 world = u_draw.modelMatrix * vec4(position, 1.0);
-            worldPosition = world.xyz;
-            // Inverse-transpose of the upper-left 3x3 so non-uniform
-            // scale does not skew the shading normal.
-            mat3 normalMatrix = transpose(inverse(mat3(u_draw.modelMatrix)));
-            worldNormal = normalMatrix * normal;
-            texCoord = uv;
-            // Camera world position is the translation column of the
-            // inverse view matrix; derived here so the shared per-frame
-            // UBO need not carry it.
-            cameraPosition = inverse(u_frame.viewMatrix)[3].xyz;
-            gl_Position = u_frame.projectionMatrix * u_frame.viewMatrix * world;
-        }
-)vs";
-
-    const std::string fragment_shader = R"fs(
-        #version 450
-
-        layout(location = 0) in vec3 worldPosition;
-        layout(location = 1) in vec3 worldNormal;
-        layout(location = 2) in vec2 texCoord;
-        layout(location = 3) in vec3 cameraPosition;
-
-        layout(location = 0) out vec4 fragColor;
-
-        // The per-view block (slot 0, binding 0). Only the fog members
-        // are read here; the matrices are consumed in the vertex stage.
-        layout(set = 0, binding = 0, std140) uniform PerFrame
-        {
-            mat4 viewMatrix;
-            mat4 projectionMatrix;
-            vec4 fogColor;  // rgb colour, a = mode (0 none, 1 linear, 2 exp2)
-            vec4 fogParams; // x near, y far, z density
-        } u_frame;
-
-        const int MAX_DIRECTIONAL = 4;
-        const int MAX_POINT = 16;
-
-        struct DirectionalLight
-        {
-            vec4 direction; // xyz normalized, w unused
-            vec4 color;     // rgb radiance * intensity, a unused
-        };
-
-        struct PointLight
-        {
-            vec4 position;    // xyz world, w unused
-            vec4 color;       // rgb radiance * intensity, a unused
-            vec4 attenuation; // x range, y constant, z linear, w quadratic
-        };
-
-        layout(set = 0, binding = 2, std140) uniform Lights
-        {
-            vec4 ambient;
-            ivec4 counts; // x directional, y point
-            DirectionalLight directional[MAX_DIRECTIONAL];
-            PointLight point[MAX_POINT];
-        } u_lights;
-
-        // Directional shadow data, owned by the scene pass alongside the
-        // lights block. params: x enabled, y bias, z caster light index.
-        layout(set = 0, binding = 10, std140) uniform Shadow
-        {
-            mat4 lightViewProj;
-            vec4 params;
-        } u_shadow;
-
-        layout(set = 0, binding = 9) uniform sampler2D shadowMap;
-
-        layout(set = 2, binding = 3, std140) uniform Material
-        {
-            vec4 diffuseColor;
-            vec4 specular; // rgb specular colour, a shininess
-            vec4 misc;     // x useTexture
-        } u_material;
-
-        layout(set = 2, binding = 4) uniform sampler2D diffuseMap;
-
-        // 1.0 = fully lit, 0.0 = fully shadowed. Only the caster light
-        // index is occluded; every other directional light returns 1.0.
-        // A 5x5 PCF kernel softens the shadow edge.
-        float directional_shadow(int lightIndex, vec3 N, vec3 L)
-        {
-            if (u_shadow.params.x == 0.0 || lightIndex != int(u_shadow.params.z))
-            {
-                return 1.0;
-            }
-            vec4 lightClip = u_shadow.lightViewProj * vec4(worldPosition, 1.0);
-            vec3 proj = lightClip.xyz / lightClip.w;
-            proj = proj * 0.5 + 0.5;
-            if (proj.z > 1.0 || proj.x < 0.0 || proj.x > 1.0 || proj.y < 0.0 || proj.y > 1.0)
-            {
-                return 1.0;
-            }
-            float bias = max(u_shadow.params.y * (1.0 - dot(N, L)), u_shadow.params.y * 0.1);
-            vec2 texelSize = 1.0 / vec2(textureSize(shadowMap, 0));
-            // 5x5 PCF to match standard_material; softens the penumbra
-            // where the light-space texel-to-world ratio is coarse.
-            float lit = 0.0;
-            for (int x = -2; x <= 2; ++x)
-            {
-                for (int y = -2; y <= 2; ++y)
-                {
-                    float closest = texture(shadowMap, proj.xy + vec2(x, y) * texelSize).r;
-                    lit += (proj.z - bias > closest) ? 0.0 : 1.0;
-                }
-            }
-            return lit / 25.0;
-        }
-
-        // Blend @p color toward the scene fog colour by camera distance.
-        // Mode 0 disables fog; 1 is a linear near/far ramp; 2 is
-        // exponential-squared (THREE.FogExp2). Applied in linear/HDR
-        // space before the tonemap pass.
-        vec3 apply_fog(vec3 color)
-        {
-            float mode = u_frame.fogColor.a;
-            if (mode < 0.5)
-            {
-                return color;
-            }
-            float dist = distance(cameraPosition, worldPosition);
-            float factor; // 1 = no fog, 0 = full fog
-            if (mode < 1.5)
-            {
-                factor = clamp((u_frame.fogParams.y - dist) / (u_frame.fogParams.y - u_frame.fogParams.x), 0.0, 1.0);
-            }
-            else
-            {
-                float d = u_frame.fogParams.z * dist;
-                factor = exp(-d * d);
-            }
-            return mix(u_frame.fogColor.rgb, color, factor);
-        }
-
-        void main()
-        {
-            vec3 N = normalize(worldNormal);
-            vec3 V = normalize(cameraPosition - worldPosition);
-
-            vec3 diffuseAlbedo = u_material.diffuseColor.rgb;
-            if (u_material.misc.x != 0.0)
-            {
-                diffuseAlbedo *= texture(diffuseMap, texCoord).rgb;
-            }
-            vec3 specularColor = u_material.specular.rgb;
-            float shininess = max(u_material.specular.a, 1.0);
-
-            vec3 result = u_lights.ambient.rgb * diffuseAlbedo;
-
-            for (int i = 0; i < u_lights.counts.x; ++i)
-            {
-                vec3 L = normalize(-u_lights.directional[i].direction.xyz);
-                float nDotL = max(dot(N, L), 0.0);
-                vec3 radiance = u_lights.directional[i].color.rgb;
-                float shadow = directional_shadow(i, N, L);
-                result += shadow * nDotL * radiance * diffuseAlbedo;
-                if (nDotL > 0.0)
-                {
-                    vec3 H = normalize(L + V);
-                    float nDotH = max(dot(N, H), 0.0);
-                    result += shadow * pow(nDotH, shininess) * radiance * specularColor;
-                }
-            }
-
-            for (int i = 0; i < u_lights.counts.y; ++i)
-            {
-                vec3 toLight = u_lights.point[i].position.xyz - worldPosition;
-                float dist = length(toLight);
-                float range = u_lights.point[i].attenuation.x;
-                if (range > 0.0 && dist > range)
-                {
-                    continue;
-                }
-                vec3 L = toLight / max(dist, 0.0001);
-                float constant = u_lights.point[i].attenuation.y;
-                float linear = u_lights.point[i].attenuation.z;
-                float quadratic = u_lights.point[i].attenuation.w;
-                float atten = 1.0 / (constant + linear * dist + quadratic * dist * dist);
-                vec3 radiance = u_lights.point[i].color.rgb * atten;
-                float nDotL = max(dot(N, L), 0.0);
-                result += nDotL * radiance * diffuseAlbedo;
-                if (nDotL > 0.0)
-                {
-                    vec3 H = normalize(L + V);
-                    float nDotH = max(dot(N, H), 0.0);
-                    result += pow(nDotH, shininess) * radiance * specularColor;
-                }
-            }
-
-            result = apply_fog(result);
-            fragColor = vec4(result, u_material.diffuseColor.a);
-        }
-)fs";
+    // This material's stages, by shader-library path (see shaders/materials/).
+    // The diffuse map takes the shared albedo-map binding.
+    const rendering_engine::gpu::shader_variant vertex_shader{"materials/phong.vert.glsl"};
+    const rendering_engine::gpu::shader_variant fragment_shader{"materials/phong.frag.glsl"};
 } // namespace
 
 namespace rendering_engine
@@ -290,13 +63,13 @@ namespace rendering_engine
         // Per-draw layout (slot 1): the model matrix UBO at binding 1,
         // matching every 3D renderable's bind group.
         gpu::bind_group_layout_descriptor draw_layout{};
-        draw_layout.entries.push_back({draw_model_binding, gpu::binding_kind::uniform_buffer});
+        draw_layout.entries.push_back({gpu::shader_bindings::per_draw_model, gpu::binding_kind::uniform_buffer});
 
         // Per-material layout (slot 2): the params UBO plus the diffuse
         // sampler, both owned by this material.
         gpu::bind_group_layout_descriptor material_layout{};
-        material_layout.entries.push_back({material_params_binding, gpu::binding_kind::uniform_buffer});
-        material_layout.entries.push_back({material_diffuse_map_binding, gpu::binding_kind::texture});
+        material_layout.entries.push_back({gpu::shader_bindings::material_params, gpu::binding_kind::uniform_buffer});
+        material_layout.entries.push_back({gpu::shader_bindings::material_albedo_map, gpu::binding_kind::texture});
 
         // Opaque lit surface: depth tested and written, no blending.
         material_params params{};
@@ -418,13 +191,13 @@ namespace rendering_engine
         bg_descriptor.layout = m_per_material_layout;
 
         gpu::binding_value ubo_slot{};
-        ubo_slot.binding = material_params_binding;
+        ubo_slot.binding = gpu::shader_bindings::material_params;
         ubo_slot.kind = gpu::binding_kind::uniform_buffer;
         ubo_slot.buffer_value = m_material_ubo;
         bg_descriptor.entries.push_back(ubo_slot);
 
         gpu::binding_value tex_slot{};
-        tex_slot.binding = material_diffuse_map_binding;
+        tex_slot.binding = gpu::shader_bindings::material_albedo_map;
         tex_slot.kind = gpu::binding_kind::texture;
         tex_slot.texture_value = m_diffuse_map;
         bg_descriptor.entries.push_back(tex_slot);

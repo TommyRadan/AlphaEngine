@@ -70,6 +70,13 @@ set(ALPHAENGINE_TEST_SOURCES_UNDER_TEST
     # the tests drive it with a stub, no backend is linked.
     ${CMAKE_SOURCE_DIR}/rendering_engine/render_graph/frame_graph.cpp
     ${CMAKE_SOURCE_DIR}/rendering_engine/gpu/command_encoder.cpp
+    # gpu/shader_library + gpu/shader_compiler — the embedded shader
+    # registry (linked below as the shader_registry library generated from
+    # shaders/) and the glslang front end behind every pipeline. Compiling
+    # every embedded shader here, headless, is what catches an #include or
+    # binding mistake before a GPU sees it; no backend is linked.
+    ${CMAKE_SOURCE_DIR}/rendering_engine/gpu/shader_compiler.cpp
+    ${CMAKE_SOURCE_DIR}/rendering_engine/gpu/shader_library.cpp
 )
 
 set(ALPHAENGINE_TEST_SOURCES
@@ -81,12 +88,15 @@ set(ALPHAENGINE_TEST_SOURCES
     core/event_bus_test.cpp
     core/jobs_test.cpp
     core/log_test.cpp
+    core/hash_test.cpp
     core/time_test.cpp
     runtime/node_test.cpp
     runtime/scene_graph_test.cpp
     runtime/light_component_test.cpp
     rendering_engine/assets/asset_cache_test.cpp
     rendering_engine/gpu/handle_pool_test.cpp
+    rendering_engine/gpu/shader_compiler_test.cpp
+    rendering_engine/gpu/shader_library_test.cpp
     rendering_engine/mesh/mesh_test.cpp
     rendering_engine/mesh/tangent_test.cpp
     rendering_engine/mesh/vertex_format_test.cpp
@@ -110,13 +120,21 @@ target_include_directories(AlphaEngineTests PRIVATE
     ${CMAKE_SOURCE_DIR}/vendor/stb
 )
 
-# glm backs core/math + transforms, SDL3 backs core/log, Threads backs
-# core/jobs. The asset layer links no gpu backend — the fake device stands in.
+# glm backs core/math + transforms, SDL3 backs core/log (and the shader
+# cache's SDL_GetPrefPath), Threads backs core/jobs. The asset layer links
+# no gpu backend — the fake device stands in. shader_registry is the
+# embedded shaders/ tree the shader-library tests read, and glslang is the
+# front end the shader-compiler tests drive; both are static and need no
+# GPU or window.
 target_link_libraries(AlphaEngineTests PRIVATE
     GTest::gtest_main
     glm::glm
     SDL3::SDL3-static
     Threads::Threads
+    shader_registry
+    glslang::glslang
+    glslang::SPIRV
+    glslang::glslang-default-resource-limits
 )
 
 # Same printf-format checking as the AlphaEngine target (see the root
