@@ -1327,6 +1327,12 @@ namespace rendering_engine::gpu::backend::vulkan
 
         if (!m_have_current_image)
         {
+            // No swapchain image this frame: either work submitted
+            // outside a frame bracket (the IBL prefilter at start-up)
+            // or a frame whose passes never reached the swapchain.
+            // Execute it synchronously. The fence and semaphores stay
+            // untouched, so the next begin_frame has nothing to wait
+            // for and end_frame nothing to present.
             VkSubmitInfo si{};
             si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
             si.commandBufferCount = 1;
@@ -1344,6 +1350,15 @@ namespace rendering_engine::gpu::backend::vulkan
             return;
         }
 
+        // begin_frame already waited this fence for the previous
+        // frame, so it is signaled and idle. Reset it here, right
+        // before the one submission that signals it again, rather
+        // than at acquire time: a reset at acquire left the fence
+        // unsignaled whenever the acquire failed (out-of-date
+        // swapchain), and the next begin_frame then blocked forever
+        // (issue #206).
+        vkResetFences(m_device, 1, &m_in_flight_fence);
+
         const VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
         VkSubmitInfo si{};
         si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -1359,51 +1374,22 @@ namespace rendering_engine::gpu::backend::vulkan
         {
             LOG_ERR("vkQueueSubmit failed: %s", vk_result_to_string(submit_result));
         }
-
-        VkPresentInfoKHR pi{};
-        pi.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-        pi.waitSemaphoreCount = 1;
-        pi.pWaitSemaphores = &m_render_finished[m_current_image_index];
-        pi.swapchainCount = 1;
-        pi.pSwapchains = &m_swapchain;
-        pi.pImageIndices = &m_current_image_index;
-        const VkResult r = vkQueuePresentKHR(m_present_queue, &pi);
-        if (r == VK_ERROR_OUT_OF_DATE_KHR || r == VK_SUBOPTIMAL_KHR)
-        {
-            resize_swapchain(m_window_width, m_window_height);
-        }
-        else if (r != VK_SUCCESS)
-        {
-            LOG_ERR("vkQueuePresentKHR failed: %s", vk_result_to_string(r));
-        }
-        m_have_current_image = false;
+        // The present itself belongs to the frame boundary; end_frame
+        // issues it once the renderer has closed the frame.
+        m_present_pending = true;
         encoder.reset();
 
         // The command buffer is in flight until this frame's fence
         // signals. Hand it back to the pool through the deferred queue,
-        // which begin_frame drains only after vkWaitForFences — so it is
-        // freed once the GPU is done, not leaked for the lifetime of the
-        // run. (Previously release_command_buffer detached it from the
-        // encoder but nothing ever freed it, so the pool grew by one
-        // command buffer per frame and teardown of the whole pile stalled
-        // shutdown for tens of seconds.)
+        // which the next begin_frame drains only after vkWaitForFences —
+        // so it is freed once the GPU is done, not leaked for the
+        // lifetime of the run. (Previously release_command_buffer
+        // detached it from the encoder but nothing ever freed it, so the
+        // pool grew by one command buffer per frame and teardown of the
+        // whole pile stalled shutdown for tens of seconds.)
         const VkDevice device = m_device;
         const VkCommandPool pool = m_command_pool;
         enqueue_destroy([device, pool, cmd] { vkFreeCommandBuffers(device, pool, 1, &cmd); });
-
-        if (m_frame_index < k_diagnostic_frames)
-        {
-            LOG_INF("Vulkan frame %u: passes(off=%u, swap=%u) draws(non_indexed=%u, indexed=%u) verts=%u idxs=%u",
-                    m_frame_index,
-                    m_frame_stats.passes_offscreen,
-                    m_frame_stats.passes_swapchain,
-                    m_frame_stats.draws,
-                    m_frame_stats.draws_indexed,
-                    m_frame_stats.vertices,
-                    m_frame_stats.indices);
-        }
-        m_frame_stats = {};
-        ++m_frame_index;
     }
 
     void vk_device::enqueue_destroy(std::function<void()> fn)
@@ -1426,19 +1412,84 @@ namespace rendering_engine::gpu::backend::vulkan
         }
     }
 
+    // -- Frame boundary ------------------------------------------------
+
     void vk_device::begin_frame()
+    {
+        if (!m_initialised)
+        {
+            return;
+        }
+        // Block until the previous frame's command buffer has finished
+        // executing. This runs before the renderer records anything for
+        // the new frame, so every host write that follows — the
+        // per-frame camera / light / shadow UBOs, the per-draw model
+        // matrices, instance re-uploads — lands in memory the GPU is no
+        // longer reading. (The wait used to run lazily at the first
+        // swapchain pass, after every off-screen pass had already
+        // written its UBOs: the host-write / device-read race of
+        // issue #169, still open at one frame in flight.)
+        vkWaitForFences(m_device, 1, &m_in_flight_fence, VK_TRUE, UINT64_MAX);
+        // The fence is signaled, so nothing enqueued for destruction
+        // during the previous frame is still referenced by the GPU —
+        // and no command buffer is open yet that could reference what
+        // a material rebuilds this frame. This is the one in-frame
+        // point where freeing is safe.
+        drain_pending_destroys();
+    }
+
+    void vk_device::end_frame()
+    {
+        if (!m_initialised)
+        {
+            return;
+        }
+        if (m_have_current_image && m_present_pending)
+        {
+            VkPresentInfoKHR pi{};
+            pi.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+            pi.waitSemaphoreCount = 1;
+            pi.pWaitSemaphores = &m_render_finished[m_current_image_index];
+            pi.swapchainCount = 1;
+            pi.pSwapchains = &m_swapchain;
+            pi.pImageIndices = &m_current_image_index;
+            const VkResult r = vkQueuePresentKHR(m_present_queue, &pi);
+            if (r == VK_ERROR_OUT_OF_DATE_KHR || r == VK_SUBOPTIMAL_KHR)
+            {
+                resize_swapchain(m_window_width, m_window_height);
+            }
+            else if (r != VK_SUCCESS)
+            {
+                LOG_ERR("vkQueuePresentKHR failed: %s", vk_result_to_string(r));
+            }
+        }
+        // An image acquired without a submission (the encoder failed to
+        // record) is dropped rather than presented: its render-finished
+        // semaphore was never signaled, so a present would wait forever.
+        m_have_current_image = false;
+        m_present_pending = false;
+
+        if (m_frame_index < k_diagnostic_frames)
+        {
+            LOG_INF("Vulkan frame %u: passes(off=%u, swap=%u) draws(non_indexed=%u, indexed=%u) verts=%u idxs=%u",
+                    m_frame_index,
+                    m_frame_stats.passes_offscreen,
+                    m_frame_stats.passes_swapchain,
+                    m_frame_stats.draws,
+                    m_frame_stats.draws_indexed,
+                    m_frame_stats.vertices,
+                    m_frame_stats.indices);
+        }
+        m_frame_stats = {};
+        ++m_frame_index;
+    }
+
+    void vk_device::acquire_swapchain_image()
     {
         if (m_have_current_image)
         {
             return;
         }
-        vkWaitForFences(m_device, 1, &m_in_flight_fence, VK_TRUE, UINT64_MAX);
-        // Fence has been signalled by the previous frame's submit, so
-        // any resource enqueued for destruction during that frame is
-        // no longer referenced by the GPU. Free them here before the
-        // app records the next frame.
-        drain_pending_destroys();
-        vkResetFences(m_device, 1, &m_in_flight_fence);
         const VkResult r = vkAcquireNextImageKHR(
             m_device, m_swapchain, UINT64_MAX, m_image_available, VK_NULL_HANDLE, &m_current_image_index);
         if (r == VK_ERROR_OUT_OF_DATE_KHR)
@@ -1455,8 +1506,6 @@ namespace rendering_engine::gpu::backend::vulkan
         }
         m_have_current_image = true;
     }
-
-    void vk_device::end_frame() {}
 
     VkCommandBuffer vk_device::begin_one_shot()
     {

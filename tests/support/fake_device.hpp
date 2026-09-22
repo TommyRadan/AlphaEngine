@@ -147,6 +147,10 @@ namespace test_support
         }
         void submit(std::unique_ptr<rendering_engine::gpu::command_encoder>) override {}
 
+        // -- Frame boundary -------------------------------------------------
+        void begin_frame() override {}
+        void end_frame() override {}
+
     private:
         std::uint64_t m_next_id = 0;
     };

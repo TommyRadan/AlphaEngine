@@ -93,8 +93,12 @@ namespace rendering_engine
          * each broadcast their matching event
          * (@ref core::render_scene / @ref core::render_ui)
          * after the registry walk so debug / gizmo callers can
-         * still subscribe. Does not swap buffers — callers are
-         * responsible for presenting.
+         * still subscribe. The walk is bracketed by
+         * @c gpu::device::begin_frame / @c end_frame: the Vulkan
+         * backend waits for the previous frame before any pass
+         * writes its per-frame buffers and presents inside
+         * @c end_frame, while OpenGL presents when the caller
+         * invokes @c window::swap_buffers.
          */
         void render();
 

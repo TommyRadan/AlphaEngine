@@ -105,7 +105,24 @@ namespace rendering_engine::gpu::backend::vulkan
         texture render_target_depth_texture(render_target handle) override;
 
         std::unique_ptr<command_encoder> create_command_encoder() override;
+        // Queue the encoder's command buffer. Inside a frame that has
+        // acquired a swapchain image the submission waits the
+        // image-available semaphore, signals that image's
+        // render-finished semaphore and the in-flight fence, and
+        // leaves the present to end_frame. Outside a frame (or in a
+        // frame whose passes never reached the swapchain) the work is
+        // submitted and waited for immediately.
         void submit(std::unique_ptr<command_encoder> encoder) override;
+
+        // Frame boundary. begin_frame waits the in-flight fence for
+        // the previous frame's command buffer and drains the
+        // deferred-destroy queue, so every host write the renderer
+        // makes afterwards lands in memory the GPU is done with; it
+        // does not touch the swapchain. end_frame presents the image
+        // acquired this frame (when submit queued work against it)
+        // and rolls the per-frame bookkeeping.
+        void begin_frame() override;
+        void end_frame() override;
 
         // Internal accessors used by the encoder to map handles
         // back to records. Definitions in vk_device.cpp.
@@ -163,10 +180,16 @@ namespace rendering_engine::gpu::backend::vulkan
         // → CW), off-screen passes don't (CCW stays CCW).
         VkPipeline graphics_pipeline_for(pipeline handle, VkRenderPass render_pass, bool y_flipped);
 
-        // Acquire the next swapchain image. Idempotent within a
-        // frame.
-        void begin_frame();
-        void end_frame();
+        // Acquire the next swapchain image for the current frame.
+        // Called lazily by the render-pass encoder when the first
+        // swapchain-targeted pass opens, so a frame that never reaches
+        // the swapchain does not acquire one; idempotent within a
+        // frame. Must run inside a begin_frame / end_frame bracket.
+        // The in-flight fence is not touched here — submit resets it
+        // right before the queue submission that signals it, so a
+        // failed acquire never leaves it unsignaled for the next
+        // begin_frame to block on.
+        void acquire_swapchain_image();
 
         // One-shot command buffer for resource uploads.
         VkCommandBuffer begin_one_shot();
@@ -190,7 +213,7 @@ namespace rendering_engine::gpu::backend::vulkan
 
         // Per-frame draw counters surfaced as a one-shot log for the
         // first few frames so a missing draw call is visible without
-        // attaching RenderDoc. Cleared at submit time.
+        // attaching RenderDoc. Cleared in end_frame.
         void note_render_pass_opened(bool is_swapchain, bool use_depth);
         void note_draw(uint32_t vertex_count);
         void note_draw_indexed(uint32_t index_count);
@@ -206,11 +229,15 @@ namespace rendering_engine::gpu::backend::vulkan
         // per-draw UBO / bind-group churn used to trigger streams of
         // VUID-vkDestroyBuffer-buffer-00922 / VUID-vkFreeDescriptor
         // Sets-pDescriptorSets-00309. Each @c destroy() pushes a
-        // closure here; @c drain_pending_destroys is called after
-        // @c vkWaitForFences in @c begin_frame and again under
-        // vkDeviceWaitIdle on shutdown, so the actual vkDestroy*
-        // call only fires once the GPU has finished referencing the
-        // resource.
+        // closure here; @c drain_pending_destroys runs only at two
+        // points where nothing can reference the resources: in
+        // @c begin_frame, after @c vkWaitForFences and before the
+        // renderer records anything for the new frame (so a bind
+        // group a material rebuilds mid-frame is never freed while
+        // the open command buffer already references it), and under
+        // vkDeviceWaitIdle in @c quit. Destroys enqueued outside a
+        // frame — the IBL prefilter scaffold, start-up uploads —
+        // simply wait for the next of those two points.
         void enqueue_destroy(std::function<void()> fn);
         void drain_pending_destroys();
 
@@ -280,9 +307,19 @@ namespace rendering_engine::gpu::backend::vulkan
         // and destroyed alongside the swapchain so it tracks image-count
         // changes on resize.
         std::vector<VkSemaphore> m_render_finished;
+        // Signaled by the frame submission in submit(); waited in
+        // begin_frame before the next frame records anything and reset
+        // right before the submission that signals it. Created
+        // signaled so frame 0 does not block.
         VkFence m_in_flight_fence{VK_NULL_HANDLE};
         uint32_t m_current_image_index{0};
         bool m_have_current_image{false};
+        // Set by submit once this frame's command buffer has been
+        // queued against the acquired image; end_frame presents only
+        // then, so a frame whose encoder failed to record does not
+        // present an image whose render-finished semaphore will never
+        // be signaled.
+        bool m_present_pending{false};
 
         bool m_validation_enabled{false};
         bool m_initialised{false};
@@ -294,7 +331,7 @@ namespace rendering_engine::gpu::backend::vulkan
 
         std::vector<std::function<void()>> m_pending_destroys;
 
-        // Frame-level diagnostic counters. Logged at submit() for
+        // Frame-level diagnostic counters. Logged at end_frame() for
         // @c k_diagnostic_frames frames after init so the user can
         // see whether scene_pass actually issued the cube draw.
         struct frame_stats
