@@ -281,9 +281,15 @@ namespace rendering_engine
         return shadow_bias;
     }
 
+    uint32_t point_shadow_pass::culled_count() const
+    {
+        return m_culled;
+    }
+
     void point_shadow_pass::record(gpu::command_encoder& encoder, const frame_context& /*ctx*/)
     {
         auto& gpu = *runtime::current_engine().gpu;
+        m_culled = 0;
 
         // Locate the first shadow-casting point light, tracking its index in
         // the packed point array so the lit shader can match it.
@@ -320,6 +326,34 @@ namespace rendering_engine
         constexpr float face_fov_y = 1.57079633f;
         const math::mat4 projection = math::perspective(face_fov_y, 1.0f, light_near, light_far);
 
+        // Walk the registry once per frame, not once per face: every caster
+        // builds its draw items (and writes its per-draw UBO) exactly once,
+        // and its world bounds are recorded beside its item range so each
+        // face below can cull against its own frustum without asking the
+        // renderable again. A caster that reports no bounds casts into
+        // every face.
+        m_items.clear();
+        m_casters.clear();
+        if (m_has_shadow)
+        {
+            for (auto* r : *m_registry)
+            {
+                if (!r->casts_shadow())
+                {
+                    continue;
+                }
+                caster_range range{};
+                range.first = m_items.size();
+                range.bounded = r->world_bounds(range.bounds);
+                r->collect_draw_items(m_items);
+                range.count = m_items.size() - range.first;
+                if (range.count != 0)
+                {
+                    m_casters.push_back(range);
+                }
+            }
+        }
+
         // Refresh and render each face. Faces are always cleared (even with no
         // caster) so the lit shader keys off has_shadow, not stale depth.
         for (int face = 0; face < point_shadow_face_count; ++face)
@@ -350,36 +384,41 @@ namespace rendering_engine
             pass_encoder->set_pipeline(m_pipeline);
             pass_encoder->set_bind_group(0, m_light_bind_groups[face]);
 
-            m_items.clear();
-            for (auto* r : *m_registry)
+            // Only casters whose bounds touch this face's 90-degree frustum
+            // can rasterize into its map; the rest are skipped here without
+            // touching their items.
+            const math::frustum face_frustum = math::frustum::from_view_projection(m_light_view_projections[face]);
+            for (const auto& caster : m_casters)
             {
-                if (!r->casts_shadow())
+                if (caster.bounded && !face_frustum.intersects(caster.bounds))
                 {
+                    ++m_culled;
                     continue;
                 }
-                r->collect_draw_items(m_items);
-            }
 
-            for (const auto& item : m_items)
-            {
-                // Instanced renderables keep their transforms in a per-draw
-                // storage buffer the depth-only pipeline can't read, so they
-                // don't cast omni shadows yet — skip them rather than emit a
-                // single garbage caster from the unbound model UBO.
-                if (item.indirect_buffer.valid())
+                for (std::size_t i = caster.first; i < caster.first + caster.count; ++i)
                 {
-                    continue;
-                }
-                pass_encoder->set_bind_group(1, item.per_draw_bind_group);
-                pass_encoder->set_vertex_buffer(0, item.vertex_buffer, 0, item.vertex_stride);
-                if (item.index_buffer.valid())
-                {
-                    pass_encoder->set_index_buffer(item.index_buffer, item.index_format);
-                    pass_encoder->draw_indexed(item.index_count, 0);
-                }
-                else
-                {
-                    pass_encoder->draw(item.vertex_count, 0);
+                    const draw_item& item = m_items[i];
+
+                    // Instanced renderables keep their transforms in a per-draw
+                    // storage buffer the depth-only pipeline can't read, so they
+                    // don't cast omni shadows yet — skip them rather than emit a
+                    // single garbage caster from the unbound model UBO.
+                    if (item.indirect_buffer.valid())
+                    {
+                        continue;
+                    }
+                    pass_encoder->set_bind_group(1, item.per_draw_bind_group);
+                    pass_encoder->set_vertex_buffer(0, item.vertex_buffer, 0, item.vertex_stride);
+                    if (item.index_buffer.valid())
+                    {
+                        pass_encoder->set_index_buffer(item.index_buffer, item.index_format);
+                        pass_encoder->draw_indexed(item.index_count, 0);
+                    }
+                    else
+                    {
+                        pass_encoder->draw(item.vertex_count, 0);
+                    }
                 }
             }
 

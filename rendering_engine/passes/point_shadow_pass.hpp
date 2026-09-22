@@ -23,6 +23,8 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
+#include <cstdint>
 #include <vector>
 
 #include <core/math/math.hpp>
@@ -99,7 +101,24 @@ namespace rendering_engine
         // Base depth-comparison bias the lit shader slope-scales.
         float depth_bias() const;
 
+        // Caster / face pairs skipped by the last @ref record because the
+        // caster's world bounds fell outside that face's frustum (a caster
+        // outside every face counts six times). Zero on no-caster frames.
+        uint32_t culled_count() const;
+
     private:
+        // One shadow caster's slice of @ref m_items plus the world bounds it
+        // reported, recorded once per frame so each face culls against its
+        // own frustum without re-walking the registry. @c bounded is false
+        // for a renderable that reports no bounds; it casts into every face.
+        struct caster_range
+        {
+            std::size_t first{0};
+            std::size_t count{0};
+            bool bounded{false};
+            core::math::aabb bounds{};
+        };
+
         // Non-owning back-pointer to the engine context's scene-renderable
         // registry — the same one the scene and directional shadow passes walk.
         std::vector<renderable*>* m_registry;
@@ -116,11 +135,15 @@ namespace rendering_engine
         std::array<gpu::buffer, point_shadow_face_count> m_light_ubos{};
         std::array<gpu::bind_group, point_shadow_face_count> m_light_bind_groups{};
 
+        // Reused across frames so the allocations persist. Collected once
+        // per frame ahead of the six faces.
         std::vector<draw_item> m_items;
+        std::vector<caster_range> m_casters;
 
         std::array<core::math::mat4, point_shadow_face_count> m_light_view_projections{};
         core::math::vec3 m_light_position{0.0f, 0.0f, 0.0f};
         bool m_has_shadow{false};
         int m_shadow_point_index{-1};
+        uint32_t m_culled{0};
     };
 } // namespace rendering_engine

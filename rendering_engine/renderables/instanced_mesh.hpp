@@ -81,6 +81,13 @@ namespace rendering_engine
 
         void collect_draw_items(std::vector<draw_item>& out) final;
 
+        // Union of the geometry's object-space box under every active
+        // instance transform. Cached and rebuilt only after an instance
+        // transform, the instance count or the geometry changes, so a
+        // static lattice costs nothing per frame. False until geometry is
+        // set or while the instance count is zero.
+        bool world_bounds(core::math::aabb& out) const final;
+
         // Fixed per-instance buffer capacity set at construction.
         uint32_t instance_capacity() const;
 
@@ -135,6 +142,16 @@ namespace rendering_engine
 
         uint32_t m_index_count{0};
         uint32_t m_vertex_stride{0};
+
+        // Object-space bounds of whichever geometry is drawn (the cached
+        // asset's box or the one computed at upload_geometry) and the cached
+        // world-space union over the active instances that
+        // @ref world_bounds serves. @c m_world_bounds_dirty is raised by
+        // every mutation the union depends on.
+        core::math::aabb m_local_bounds{};
+        bool m_has_local_bounds{false};
+        mutable core::math::aabb m_world_bounds{};
+        mutable bool m_world_bounds_dirty{true};
 
         // Record layout of whichever vertex buffer is drawn, checked against
         // the material before every draw (see @ref validate_vertex_format).

@@ -34,6 +34,7 @@
 #include <rendering_engine/materials/material.hpp>
 #include <rendering_engine/mesh/tangent.hpp>
 #include <rendering_engine/mesh/vertex.hpp>
+#include <rendering_engine/renderables/mesh_bounds.hpp>
 #include <rendering_engine/renderables/vertex_format_check.hpp>
 #include <runtime/engine.hpp>
 
@@ -134,6 +135,11 @@ void rendering_engine::sphere::upload()
 
     m_index_count = m_mesh->index_count;
     m_vertex_stride = m_mesh->vertex_stride;
+}
+
+bool rendering_engine::sphere::world_bounds(core::math::aabb& out) const
+{
+    return mesh_world_bounds(m_mesh.get(), transform, out);
 }
 
 void rendering_engine::sphere::collect_draw_items(std::vector<draw_item>& out)

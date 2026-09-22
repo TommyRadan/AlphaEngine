@@ -30,14 +30,35 @@ namespace rendering_engine
     // each frame and surfaced read-only through
     // @ref context::get_render_stats (consumed by the debug overlay).
     //
-    // There is no frustum culling yet, so @ref draw_calls equals one draw
-    // per submitted @ref draw_item — i.e. everything registered is drawn.
-    // The triangle / vertex counts are the geometry actually submitted to
-    // the pipeline this frame, multiplied through instancing.
+    // The scene pass frustum-culls every renderable that reports
+    // @ref renderable::world_bounds against the camera before collecting
+    // its draw items, so @ref submitted + @ref culled equals
+    // @ref scene_renderables and @ref draw_calls counts only what the
+    // survivors emitted. The triangle / vertex counts are the geometry
+    // actually submitted to the pipeline this frame, multiplied through
+    // instancing. The shadow-pass counters are copied from the shadow
+    // passes that ran ahead of the scene pass in the same frame.
     struct render_stats
     {
         // Renderables registered with the scene-renderable registry.
         uint32_t scene_renderables{0};
+
+        // Renderables asked for draw items this frame: those whose world
+        // bounds touch the camera frustum plus those with no bounds (always
+        // drawn).
+        uint32_t submitted{0};
+
+        // Renderables skipped this frame because their world bounds fell
+        // entirely outside the camera frustum.
+        uint32_t culled{0};
+
+        // Shadow casters skipped by the directional shadow pass because
+        // their bounds fell outside the fitted light frustum.
+        uint32_t shadow_culled{0};
+
+        // Caster / face pairs skipped by the point shadow pass across its
+        // six faces (a caster outside every face counts six times).
+        uint32_t point_shadow_culled{0};
 
         // Draw items submitted this frame (one GPU draw call each). A
         // single renderable may emit more than one.

@@ -4,6 +4,8 @@ target_sources(AlphaEngine PRIVATE
     instanced_mesh.hpp
     line.cpp
     line.hpp
+    mesh_bounds.cpp
+    mesh_bounds.hpp
     model.cpp
     model.hpp
     points.cpp

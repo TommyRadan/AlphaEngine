@@ -317,6 +317,10 @@ namespace rendering_engine
         {
             *m_stats = render_stats{};
             m_stats->scene_renderables = static_cast<uint32_t>(m_registry->size());
+            // The shadow passes ran ahead of this one this frame; carry their
+            // culling tallies over so the overlay reads one struct.
+            m_stats->shadow_culled = m_shadow != nullptr ? m_shadow->culled_count() : 0u;
+            m_stats->point_shadow_culled = m_point_shadow != nullptr ? m_point_shadow->culled_count() : 0u;
         }
 
         // Render into the HDR scene-colour target so the post chain
@@ -434,15 +438,31 @@ namespace rendering_engine
         }
         gpu.write_buffer(m_point_shadow_ubo, point_shadow_payload.data(), point_shadow_ubo_size, 0);
 
-        // Collect every renderable's draw items into a single per-frame
-        // list, then sort by pipeline id so the dispatch loop only
-        // calls @c set_pipeline when the active material changes. The
+        // Frustum-cull, then collect. A renderable that reports world
+        // bounds is tested against the camera frustum first and skipped
+        // outright when it lies wholly outside, so it never builds a draw
+        // item or writes its per-draw UBO; one with no bounds (fullscreen
+        // effects, gizmos) is always collected. The frustum is the camera's
+        // unjittered one — the TAA offset is a sub-pixel shift that no
+        // plane test could tell apart. The survivors' items go into a
+        // single per-frame list, sorted by pipeline id so the dispatch loop
+        // only calls @c set_pipeline when the active material changes. The
         // sort is stable so submission order is preserved within a
         // material — important for any future renderable that relies on
         // back-to-front draw order.
+        const core::math::frustum view_frustum = ctx.active_camera->get_frustum();
+        uint32_t submitted = 0;
+        uint32_t culled = 0;
         m_items.clear();
         for (auto* r : *m_registry)
         {
+            core::math::aabb bounds;
+            if (r->world_bounds(bounds) && !view_frustum.intersects(bounds))
+            {
+                ++culled;
+                continue;
+            }
+            ++submitted;
             r->collect_draw_items(m_items);
         }
         std::stable_sort(m_items.begin(),
@@ -456,6 +476,8 @@ namespace rendering_engine
         // (vertices fetched), non-indexed count vertex_count.
         if (m_stats != nullptr)
         {
+            m_stats->submitted = submitted;
+            m_stats->culled = culled;
             m_stats->draw_calls = static_cast<uint32_t>(m_items.size());
             for (const auto& item : m_items)
             {

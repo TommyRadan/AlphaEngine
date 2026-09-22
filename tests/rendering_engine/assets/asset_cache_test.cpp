@@ -16,6 +16,7 @@
 #include <system_error>
 #include <vector>
 
+#include <core/math/aabb.hpp>
 #include <rendering_engine/assets/asset_cache.hpp>
 #include <rendering_engine/assets/asset_device.hpp>
 #include <rendering_engine/assets/mesh_asset.hpp>
@@ -323,4 +324,125 @@ TEST_F(asset_cache_texture_test, dropping_the_last_handle_releases_the_gpu_textu
     EXPECT_EQ(device.live_texture_count(), 0u);
     EXPECT_EQ(device.destroyed_textures, 1u);
     EXPECT_EQ(cache.texture_count(), 0u);
+}
+
+// -- bounds ---------------------------------------------------------------------
+
+TEST_F(asset_cache_test, computes_object_space_bounds_from_the_positions)
+{
+    auto mesh = cache.get_or_create_mesh("quad", make_indexed_quad);
+    ASSERT_NE(mesh, nullptr);
+    EXPECT_FLOAT_EQ(mesh->bounds.min.x, 0.0f);
+    EXPECT_FLOAT_EQ(mesh->bounds.min.y, 0.0f);
+    EXPECT_FLOAT_EQ(mesh->bounds.min.z, 0.0f);
+    EXPECT_FLOAT_EQ(mesh->bounds.max.x, 1.0f);
+    EXPECT_FLOAT_EQ(mesh->bounds.max.y, 1.0f);
+    EXPECT_FLOAT_EQ(mesh->bounds.max.z, 0.0f);
+}
+
+TEST_F(asset_cache_test, bounds_read_the_leading_position_of_a_wide_record)
+{
+    // The 48-byte tangent record leads with its position like every named
+    // format; the uv / normal / tangent bytes that follow must not be boxed.
+    auto mesh = cache.get_or_create_mesh("tangent_tri",
+                                         []
+                                         {
+                                             std::vector<rendering_engine::vertex_position_uv_normal_tangent> verts(3);
+                                             verts[0].pos = core::math::vec3{-2.0f, 0.0f, 1.0f};
+                                             verts[0].normal = core::math::vec3{50.0f, 50.0f, 50.0f};
+                                             verts[1].pos = core::math::vec3{3.0f, -1.0f, 0.0f};
+                                             verts[1].tangent = core::math::vec4{-50.0f, -50.0f, -50.0f, 1.0f};
+                                             verts[2].pos = core::math::vec3{0.0f, 4.0f, -5.0f};
+                                             return rendering_engine::mesh_data::from_vertices(verts);
+                                         });
+    ASSERT_NE(mesh, nullptr);
+    EXPECT_FLOAT_EQ(mesh->bounds.min.x, -2.0f);
+    EXPECT_FLOAT_EQ(mesh->bounds.min.y, -1.0f);
+    EXPECT_FLOAT_EQ(mesh->bounds.min.z, -5.0f);
+    EXPECT_FLOAT_EQ(mesh->bounds.max.x, 3.0f);
+    EXPECT_FLOAT_EQ(mesh->bounds.max.y, 4.0f);
+    EXPECT_FLOAT_EQ(mesh->bounds.max.z, 1.0f);
+}
+
+TEST_F(asset_cache_test, a_builder_supplied_box_overrides_the_computed_bounds)
+{
+    // An importer whose record does not lead with the position hands the
+    // cache its own box; the positions-at-offset-0 scan must not replace it.
+    auto mesh = cache.get_or_create_mesh("custom_bounds",
+                                         []
+                                         {
+                                             rendering_engine::mesh_data data = make_triangle();
+                                             data.bounds = core::math::aabb{core::math::vec3{-9.0f, -8.0f, -7.0f},
+                                                                            core::math::vec3{7.0f, 8.0f, 9.0f}};
+                                             return data;
+                                         });
+    ASSERT_NE(mesh, nullptr);
+    EXPECT_FLOAT_EQ(mesh->bounds.min.x, -9.0f);
+    EXPECT_FLOAT_EQ(mesh->bounds.min.y, -8.0f);
+    EXPECT_FLOAT_EQ(mesh->bounds.min.z, -7.0f);
+    EXPECT_FLOAT_EQ(mesh->bounds.max.x, 7.0f);
+    EXPECT_FLOAT_EQ(mesh->bounds.max.y, 8.0f);
+    EXPECT_FLOAT_EQ(mesh->bounds.max.z, 9.0f);
+}
+
+TEST_F(asset_cache_test, empty_geometry_leaves_a_zero_box)
+{
+    auto mesh = cache.get_or_create_mesh("empty",
+                                         []
+                                         {
+                                             rendering_engine::mesh_data data;
+                                             data.vertex_stride = sizeof(vertex);
+                                             return data;
+                                         });
+    ASSERT_NE(mesh, nullptr);
+    EXPECT_EQ(mesh->vertex_count, 0u);
+    EXPECT_FLOAT_EQ(mesh->bounds.min.x, 0.0f);
+    EXPECT_FLOAT_EQ(mesh->bounds.max.x, 0.0f);
+}
+
+TEST(mesh_data_bounds, compute_bounds_walks_every_record_at_the_stride)
+{
+    // Position followed by a padding float: the padding must be stepped over,
+    // never read as the next position.
+    struct padded
+    {
+        float x;
+        float y;
+        float z;
+        float pad;
+    };
+    const std::vector<padded> verts{{1.0f, 2.0f, 3.0f, 99.0f}, {-1.0f, 5.0f, 0.0f, 99.0f}, {0.0f, 0.0f, -7.0f, 99.0f}};
+    const auto data = rendering_engine::mesh_data::from_vertices(verts);
+    const auto bounds = data.compute_bounds();
+    ASSERT_TRUE(bounds.has_value());
+    EXPECT_FLOAT_EQ(bounds->min.x, -1.0f);
+    EXPECT_FLOAT_EQ(bounds->min.y, 0.0f);
+    EXPECT_FLOAT_EQ(bounds->min.z, -7.0f);
+    EXPECT_FLOAT_EQ(bounds->max.x, 1.0f);
+    EXPECT_FLOAT_EQ(bounds->max.y, 5.0f);
+    EXPECT_FLOAT_EQ(bounds->max.z, 3.0f);
+
+    // The raw entry point used by the private-upload renderables agrees.
+    const auto raw = rendering_engine::compute_position_bounds(verts.data(), verts.size() * sizeof(padded), sizeof(padded));
+    ASSERT_TRUE(raw.has_value());
+    EXPECT_FLOAT_EQ(raw->min.z, -7.0f);
+    EXPECT_FLOAT_EQ(raw->max.y, 5.0f);
+}
+
+TEST(mesh_data_bounds, no_bounds_for_empty_geometry_or_a_record_narrower_than_a_position)
+{
+    rendering_engine::mesh_data empty;
+    empty.vertex_stride = sizeof(vertex);
+    EXPECT_FALSE(empty.compute_bounds().has_value());
+
+    rendering_engine::mesh_data narrow;
+    narrow.vertex_stride = 8;
+    narrow.vertex_bytes.resize(16);
+    EXPECT_FALSE(narrow.compute_bounds().has_value());
+
+    // A trailing partial record is ignored rather than read past the end.
+    rendering_engine::mesh_data partial;
+    partial.vertex_stride = sizeof(vertex);
+    partial.vertex_bytes.resize(sizeof(vertex) - 1);
+    EXPECT_FALSE(partial.compute_bounds().has_value());
 }

@@ -94,6 +94,12 @@ void rendering_engine::instanced_mesh::upload_geometry(const std::vector<vertex_
     m_vertex_format_reported = false;
     m_indirect_dirty = true;
 
+    const auto bounds =
+        compute_position_bounds(vertices.data(), vertices.size() * sizeof(vertex_position_uv_normal), m_vertex_stride);
+    m_has_local_bounds = bounds.has_value();
+    m_local_bounds = bounds.value_or(core::math::aabb{});
+    m_world_bounds_dirty = true;
+
     auto& gpu = *runtime::current_engine().gpu;
 
     gpu::buffer_descriptor vertex_descriptor{};
@@ -119,7 +125,10 @@ void rendering_engine::instanced_mesh::set_geometry(std::shared_ptr<mesh_asset> 
         m_index_count = m_mesh->index_count;
         m_vertex_stride = m_mesh->vertex_stride;
         m_vertex_format = m_mesh->format;
+        m_local_bounds = m_mesh->bounds;
     }
+    m_has_local_bounds = m_mesh != nullptr;
+    m_world_bounds_dirty = true;
     m_vertex_format_reported = false;
     // The command's index count changed with the geometry.
     m_indirect_dirty = true;
@@ -137,6 +146,7 @@ void rendering_engine::instanced_mesh::set_instance_count(uint32_t count)
     {
         m_instance_count = clamped;
         m_indirect_dirty = true;
+        m_world_bounds_dirty = true;
     }
 }
 
@@ -154,6 +164,7 @@ void rendering_engine::instanced_mesh::set_instance_transform(uint32_t index, co
     }
     m_instances[index].model = transform;
     m_instances_dirty = true;
+    m_world_bounds_dirty = true;
 }
 
 void rendering_engine::instanced_mesh::set_instance_color(uint32_t index, const util::color& color)
@@ -168,6 +179,30 @@ void rendering_engine::instanced_mesh::set_instance_color(uint32_t index, const 
                                                 static_cast<float>(color.b) / 255.0f,
                                                 static_cast<float>(color.a) / 255.0f};
     m_instances_dirty = true;
+}
+
+bool rendering_engine::instanced_mesh::world_bounds(core::math::aabb& out) const
+{
+    if (!m_has_local_bounds || m_instance_count == 0)
+    {
+        return false;
+    }
+    if (m_world_bounds_dirty)
+    {
+        // Union of the object-space box under every active instance
+        // transform: each instance's transformed box is exact (the same
+        // box the eight transformed corners span), so the union is the
+        // tightest axis-aligned fit of the batch as a whole.
+        m_world_bounds = core::math::transform(m_local_bounds, m_instances[0].model);
+        for (uint32_t i = 1; i < m_instance_count; ++i)
+        {
+            m_world_bounds =
+                core::math::merge(m_world_bounds, core::math::transform(m_local_bounds, m_instances[i].model));
+        }
+        m_world_bounds_dirty = false;
+    }
+    out = m_world_bounds;
+    return true;
 }
 
 void rendering_engine::instanced_mesh::collect_draw_items(std::vector<draw_item>& out)
