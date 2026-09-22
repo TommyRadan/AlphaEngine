@@ -215,7 +215,7 @@ namespace rendering_engine::gpu::backend::vulkan
                     VkVertexInputAttributeDescription ad{};
                     ad.binding = slot;
                     ad.location = attr.location;
-                    ad.format = to_vk_vertex_format(attr.type, attr.components);
+                    ad.format = to_vk_vertex_format(attr.type, attr.components, attr.normalized);
                     ad.offset = attr.offset;
                     vk_attributes.push_back(ad);
                 }

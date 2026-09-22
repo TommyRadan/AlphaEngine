@@ -29,6 +29,8 @@
 
 #pragma once
 
+#include <cstdint>
+
 #include <glad/gl.h>
 
 #include <rendering_engine/gpu/types.hpp>
@@ -43,11 +45,20 @@ namespace rendering_engine::gpu::backend::opengl
     GLenum to_gl_front_face(front_face face);
     GLenum to_gl_polygon_mode(polygon_mode mode);
     GLenum to_gl_address_mode(address_mode mode);
+    // @p mip is the chain filter actually applied — pass it through
+    // @ref effective_mipmap_filter first so a mipmapped texture samples
+    // its chain and a single-level one never asks for a mip filter.
     GLenum to_gl_min_filter(filter_mode min, mipmap_mode mip);
     GLenum to_gl_mag_filter(filter_mode mag);
     GLenum to_gl_shader_stage(shader_stage stage);
     GLenum to_gl_index_type(index_format format);
     GLenum to_gl_scalar(scalar_type type);
+    // Byte width of one @p type component, for deriving a record stride
+    // from a layout's attributes.
+    uint32_t to_gl_scalar_bytes(scalar_type type);
+    // True for the integer scalar types, which bake through
+    // @c glVertexArrayAttribIFormat unless the attribute is normalised.
+    bool is_gl_integer_scalar(scalar_type type);
     GLenum to_gl_buffer_usage_hint(buffer_usage_hint hint);
     GLenum to_gl_cube_face(cube_face face);
     GLenum to_gl_texture_target(texture_dimension dimension);
@@ -61,15 +72,30 @@ namespace rendering_engine::gpu::backend::opengl
     GLbitfield to_gl_memory_barrier_bits(access_flag dst_access);
 
     // For a texture create: returns the @c (internal_format,
-    // upload_format, upload_type) triple suitable for
-    // @c glTexImage2D. The internal format is what the GPU
+    // upload_format, upload_type) triple for @c glTextureStorage2D /
+    // @c glTextureSubImage2D. The internal format is what the GPU
     // stores; the upload format/type describe @c data.
     struct gl_texture_format
     {
-        GLint internal_format;
+        GLenum internal_format;
         GLenum upload_format;
         GLenum upload_type;
     };
 
     gl_texture_format to_gl_texture_format(texture_format format);
+
+    // Bytes per texel of the tightly packed client layout
+    // @ref to_gl_texture_format's upload format / type describe, for
+    // validating the byte count handed to a texture write.
+    uint32_t to_gl_texel_bytes(texture_format format);
+
+    // True for the packed depth-stencil format, which attaches to
+    // @c GL_DEPTH_STENCIL_ATTACHMENT rather than @c GL_DEPTH_ATTACHMENT.
+    bool is_gl_depth_stencil_format(texture_format format);
+
+    // Names for log output: @c glGetError codes and the KHR_debug
+    // source / type enums. Never null.
+    const char* gl_error_name(GLenum error);
+    const char* gl_debug_source_name(GLenum source);
+    const char* gl_debug_type_name(GLenum type);
 } // namespace rendering_engine::gpu::backend::opengl

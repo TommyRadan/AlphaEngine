@@ -45,7 +45,7 @@ namespace rendering_engine::gpu::backend::vulkan
     VkFilter to_vk_filter(filter_mode mode);
     VkSamplerMipmapMode to_vk_mipmap_mode(mipmap_mode mode);
     VkIndexType to_vk_index_type(index_format format);
-    VkFormat to_vk_vertex_format(scalar_type type, uint32_t components);
+    VkFormat to_vk_vertex_format(scalar_type type, uint32_t components, bool normalized);
     VkShaderStageFlagBits to_vk_shader_stage(shader_stage stage);
     VkAttachmentLoadOp to_vk_load_op(load_op op);
     VkAttachmentStoreOp to_vk_store_op(store_op op);

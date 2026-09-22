@@ -116,9 +116,26 @@ namespace rendering_engine::gpu
         virtual void write_buffer(buffer buffer_handle, const void* data, size_t size, size_t offset = 0) = 0;
 
         // Upload pixel data for a 2D texture. @p data is expected to
-        // match the @c format the texture was created with. Required
-        // before the texture is sampled.
+        // match the @c format the texture was created with: tightly
+        // packed rows of @c width texels covering the whole base level,
+        // so @p size must be at least @c width * @c height * texel
+        // bytes — a backend rejects (and logs) a short upload rather
+        // than reading past @p data. Required before the texture is
+        // sampled.
         virtual void write_texture(texture texture_handle, const void* data, size_t size) = 0;
+
+        // Upload @p size bytes of tightly packed texels into @p region
+        // of a 2D texture — one mip level, at an (x, y) offset, of the
+        // given extent — for sub-rect updates (atlas glyphs, streamed
+        // tiles) and hand-authored mip levels. @p data is laid out like
+        // @ref write_texture over @c region.width by @c region.height
+        // texels. Returns false and uploads nothing when the region
+        // does not fit the level, @p size is too small, or the backend
+        // does not implement region writes: the base implementation
+        // logs a warning and returns false, and the Vulkan backend
+        // inherits it for now.
+        virtual bool
+        write_texture_region(texture texture_handle, const texture_write_region& region, const void* data, size_t size);
 
         // Upload pixel data for a 3D texture. @p data lays out the
         // full volume in slice-major order: each z slice is a 2D

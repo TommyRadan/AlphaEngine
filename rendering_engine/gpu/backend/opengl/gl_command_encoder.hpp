@@ -28,7 +28,9 @@
  * GL has no real command buffer — the encoder issues GL calls directly
  * as the caller records them. The interface still mirrors WebGPU /
  * Vulkan-style scoped passes so a future explicit-API backend can plug
- * in without touching call sites.
+ * in without touching call sites. Every piece of context state the
+ * encoders set goes through the device's @c gl_state_cache, which is
+ * trusted only within a pass: @c begin and @c end both invalidate it.
  */
 
 #pragma once
@@ -62,6 +64,14 @@ namespace rendering_engine::gpu::backend::opengl
 
     private:
         gl_device& m_device;
+
+        // The target and the parts of the pass descriptor @ref end
+        // acts on: which attachments may be discarded, and whether the
+        // pass drives depth state at all.
+        render_target m_target{};
+        store_op m_color_store{store_op::store};
+        store_op m_depth_store{store_op::store};
+        bool m_use_depth{true};
 
         pipeline m_pipeline_handle{};
         GLuint m_program_id{0};

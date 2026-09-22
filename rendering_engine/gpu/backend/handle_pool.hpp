@@ -29,11 +29,23 @@
  * @c (generation << 32 | (slot_index + 1)) — the @c +1 reserves zero as
  * the "invalid" marker so a default-constructed handle never resolves
  * to a live slot.
+ *
+ * Two guarantees the backends lean on:
+ *
+ *   - A pointer returned by @ref lookup stays valid until that slot is
+ *     removed or the pool is cleared, however many inserts happen in
+ *     between. The slots live in a @c std::deque, whose @c push_back
+ *     never relocates existing elements (unlike @c std::vector).
+ *   - A slot's generation only ever increases. @ref clear bumps every
+ *     generation rather than resetting the table, so a handle minted
+ *     before a @c quit() / @c init() cycle can never resolve to a
+ *     resource the next lifetime happens to place in the same slot.
  */
 
 #pragma once
 
 #include <cstdint>
+#include <deque>
 #include <utility>
 #include <vector>
 
@@ -57,11 +69,16 @@ namespace rendering_engine::gpu::backend
             {
                 slot = static_cast<uint32_t>(m_slots.size());
                 m_slots.push_back(std::move(value));
-                m_generations.push_back(1);
                 m_alive.push_back(true);
+                // After clear() the generation table outlives the slots,
+                // so a slot index that was in use before keeps its bumped
+                // generation instead of starting over at 1.
+                if (slot >= m_generations.size())
+                {
+                    m_generations.push_back(1);
+                }
             }
-            const uint32_t gen = m_generations[slot];
-            return encode(slot, gen);
+            return encode(slot, m_generations[slot]);
         }
 
         T* lookup(uint64_t encoded)
@@ -105,10 +122,16 @@ namespace rendering_engine::gpu::backend
             }
         }
 
+        // Drop every slot but keep (and advance) the generation of each
+        // slot index that has ever been used, so no handle issued before
+        // the clear resolves against whatever the pool hands out next.
         void clear()
         {
+            for (auto& generation : m_generations)
+            {
+                ++generation;
+            }
             m_slots.clear();
-            m_generations.clear();
             m_alive.clear();
             m_free.clear();
         }
@@ -130,7 +153,9 @@ namespace rendering_engine::gpu::backend
             gen = static_cast<uint32_t>(encoded >> 32);
         }
 
-        std::vector<T> m_slots;
+        // deque, not vector: lookup() hands out pointers into this
+        // container and a growing vector would relocate them.
+        std::deque<T> m_slots;
         std::vector<uint32_t> m_generations;
         std::vector<bool> m_alive;
         std::vector<uint32_t> m_free;

@@ -26,8 +26,8 @@
  *
  * Each @c handle_pool<T> in @ref gl_device stores values of one of these
  * structs. They live in their own header so individual resource impl
- * files (gl_buffer.cpp, gl_texture.cpp, ...) can consume them without
- * pulling in the full @ref gl_device declaration.
+ * files (gl_device_buffer.cpp, gl_device_texture.cpp, ...) can consume
+ * them without pulling in the full @ref gl_device declaration.
  */
 
 #pragma once
@@ -48,11 +48,11 @@ namespace rendering_engine::gpu::backend::opengl
 {
     struct gl_buffer
     {
+        // Created, filled and updated through the named (DSA) entry
+        // points, so a buffer never has to be bound to a target to be
+        // written — in particular GL_ELEMENT_ARRAY_BUFFER, which is
+        // vertex-array state, is only ever touched by the encoder.
         GLuint object_id{0};
-        // Default bind target; one of @c GL_ARRAY_BUFFER,
-        // @c GL_ELEMENT_ARRAY_BUFFER, @c GL_UNIFORM_BUFFER,
-        // @c GL_SHADER_STORAGE_BUFFER, or @c GL_DRAW_INDIRECT_BUFFER.
-        GLenum default_target{0};
         size_t size{0};
         buffer_usage usage{0};
     };
@@ -68,15 +68,18 @@ namespace rendering_engine::gpu::backend::opengl
         uint32_t height{0};
         // Slice count for 3D textures; 1 for 2D / cube.
         uint32_t depth{1};
+        // Levels allocated by the immutable storage: the full chain
+        // when the descriptor asked for mipmaps, otherwise 1.
+        uint32_t mip_levels{1};
         bool mipmaps{false};
     };
 
     struct gl_sampler
     {
-        // Stored sampler parameters; applied to the bound
-        // texture at draw time. GL 3.3 doesn't require a
-        // sampler object, so the backend just remembers the
-        // settings here and reapplies via @c glTexParameteri.
+        // A real sampler object (glCreateSamplers). Bound to the texture
+        // unit named by its binding number, where it overrides the
+        // sampler state baked onto whichever texture sits on that unit.
+        GLuint object_id{0};
         sampler_descriptor descriptor;
     };
 
@@ -91,11 +94,23 @@ namespace rendering_engine::gpu::backend::opengl
         bind_group_layout_descriptor descriptor;
     };
 
+    // Shadow of one vertex-buffer binding point of a pipeline's VAO:
+    // what glVertexArrayVertexBuffer was last given for that slot.
+    struct gl_vertex_binding_shadow
+    {
+        GLuint buffer{0};
+        GLintptr offset{0};
+        GLsizei stride{0};
+        bool known{false};
+    };
+
     struct gl_pipeline
     {
         GLuint program_id{0};
-        // 0 for compute pipelines — compute dispatches don't need
-        // a vertex array.
+        // The vertex array with the pipeline's vertex format baked in
+        // (attribute formats, binding slots, divisors); the encoder only
+        // attaches buffers to its binding points. 0 for compute
+        // pipelines — compute dispatches don't need a vertex array.
         GLuint vao_id{0};
 
         // True for pipelines built via
@@ -115,6 +130,21 @@ namespace rendering_engine::gpu::backend::opengl
 
         std::vector<vertex_buffer_layout> vertex_buffers;
         std::vector<bind_group_layout> bind_group_layouts;
+
+        // Per slot, the narrowest record the layout can be bound over
+        // (the furthest attribute's end). Used as the binding stride
+        // when neither the layout nor the draw supplies one: a DSA
+        // binding stride of 0 means every vertex reads the same record,
+        // not "tightly packed" as it did for glVertexAttribPointer.
+        std::vector<uint32_t> min_strides;
+
+        // Binding shadows for @c set_vertex_buffer / @c set_index_buffer,
+        // valid while @c shadow_epoch matches the device's state-cache
+        // epoch (see @c gl_device::invalidate_state_cache).
+        std::vector<gl_vertex_binding_shadow> vertex_binding_shadows;
+        GLuint element_buffer_shadow{0};
+        bool element_buffer_known{false};
+        uint64_t shadow_epoch{0};
     };
 
     struct gl_bind_group
@@ -129,6 +159,10 @@ namespace rendering_engine::gpu::backend::opengl
         uint32_t width{0};
         uint32_t height{0};
         bool has_depth{true};
+        // True when the depth attachment is a packed depth-stencil
+        // format (or the window backbuffer carries stencil bits), so a
+        // depth clear / invalidate covers the stencil plane too.
+        bool has_stencil{false};
 
         // Texture handles for the attachments owned by this target.
         // Both invalid for the swapchain (FBO 0); for an off-screen

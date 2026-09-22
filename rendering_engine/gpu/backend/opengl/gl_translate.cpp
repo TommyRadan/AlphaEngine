@@ -231,6 +231,29 @@ namespace rendering_engine::gpu::backend::opengl
         return GL_FLOAT;
     }
 
+    uint32_t to_gl_scalar_bytes(scalar_type type)
+    {
+        switch (type)
+        {
+        case scalar_type::float32:
+        case scalar_type::int32:
+        case scalar_type::uint32:
+            return 4;
+        case scalar_type::int16:
+        case scalar_type::uint16:
+            return 2;
+        case scalar_type::int8:
+        case scalar_type::uint8:
+            return 1;
+        }
+        return 4;
+    }
+
+    bool is_gl_integer_scalar(scalar_type type)
+    {
+        return type != scalar_type::float32;
+    }
+
     GLenum to_gl_buffer_usage_hint(buffer_usage_hint hint)
     {
         switch (hint)
@@ -367,12 +390,119 @@ namespace rendering_engine::gpu::backend::opengl
         case texture_format::rgba32_float:
             return {GL_RGBA32F, GL_RGBA, GL_FLOAT};
         case texture_format::depth24:
-            return {GL_DEPTH_COMPONENT24, GL_DEPTH_COMPONENT, GL_UNSIGNED_BYTE};
+            // A 24-bit depth value uploads as one unsigned int per
+            // texel (the driver takes the top 24 bits), never as bytes.
+            return {GL_DEPTH_COMPONENT24, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT};
         case texture_format::depth32_float:
             return {GL_DEPTH_COMPONENT32F, GL_DEPTH_COMPONENT, GL_FLOAT};
         case texture_format::depth24_stencil8:
             return {GL_DEPTH24_STENCIL8, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8};
         }
         return {GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE};
+    }
+
+    uint32_t to_gl_texel_bytes(texture_format format)
+    {
+        switch (format)
+        {
+        case texture_format::rgba8_unorm:
+        case texture_format::rgba8_srgb:
+            return 4;
+        case texture_format::rgb8_unorm:
+            return 3;
+        case texture_format::r8_unorm:
+            return 1;
+        case texture_format::rgba16_float:
+            // Uploaded as four 32-bit floats per texel (the GL_FLOAT
+            // upload type above); the driver packs to half precision.
+            return 16;
+        case texture_format::rgba32_float:
+            return 16;
+        case texture_format::depth24:
+        case texture_format::depth32_float:
+        case texture_format::depth24_stencil8:
+            return 4;
+        }
+        return 4;
+    }
+
+    bool is_gl_depth_stencil_format(texture_format format)
+    {
+        return format == texture_format::depth24_stencil8;
+    }
+
+    const char* gl_error_name(GLenum error)
+    {
+        switch (error)
+        {
+        case GL_NO_ERROR:
+            return "GL_NO_ERROR";
+        case GL_INVALID_ENUM:
+            return "GL_INVALID_ENUM";
+        case GL_INVALID_VALUE:
+            return "GL_INVALID_VALUE";
+        case GL_INVALID_OPERATION:
+            return "GL_INVALID_OPERATION";
+        case GL_INVALID_FRAMEBUFFER_OPERATION:
+            return "GL_INVALID_FRAMEBUFFER_OPERATION";
+        case GL_OUT_OF_MEMORY:
+            return "GL_OUT_OF_MEMORY";
+        case GL_STACK_UNDERFLOW:
+            return "GL_STACK_UNDERFLOW";
+        case GL_STACK_OVERFLOW:
+            return "GL_STACK_OVERFLOW";
+        case GL_CONTEXT_LOST:
+            return "GL_CONTEXT_LOST";
+        default:
+            return "unknown";
+        }
+    }
+
+    const char* gl_debug_source_name(GLenum source)
+    {
+        switch (source)
+        {
+        case GL_DEBUG_SOURCE_API:
+            return "api";
+        case GL_DEBUG_SOURCE_WINDOW_SYSTEM:
+            return "window-system";
+        case GL_DEBUG_SOURCE_SHADER_COMPILER:
+            return "shader-compiler";
+        case GL_DEBUG_SOURCE_THIRD_PARTY:
+            return "third-party";
+        case GL_DEBUG_SOURCE_APPLICATION:
+            return "application";
+        case GL_DEBUG_SOURCE_OTHER:
+            return "other";
+        default:
+            return "unknown";
+        }
+    }
+
+    const char* gl_debug_type_name(GLenum type)
+    {
+        switch (type)
+        {
+        case GL_DEBUG_TYPE_ERROR:
+            return "error";
+        case GL_DEBUG_TYPE_DEPRECATED_BEHAVIOR:
+            return "deprecated";
+        case GL_DEBUG_TYPE_UNDEFINED_BEHAVIOR:
+            return "undefined-behaviour";
+        case GL_DEBUG_TYPE_PORTABILITY:
+            return "portability";
+        case GL_DEBUG_TYPE_PERFORMANCE:
+            return "performance";
+        case GL_DEBUG_TYPE_MARKER:
+            return "marker";
+        case GL_DEBUG_TYPE_PUSH_GROUP:
+            return "push-group";
+        case GL_DEBUG_TYPE_POP_GROUP:
+            return "pop-group";
+        case GL_DEBUG_TYPE_OTHER:
+            return "other";
+        default:
+            return "unknown";
+        }
     }
 } // namespace rendering_engine::gpu::backend::opengl

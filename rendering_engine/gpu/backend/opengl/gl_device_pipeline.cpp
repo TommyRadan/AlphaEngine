@@ -28,12 +28,15 @@
 
 #include <rendering_engine/gpu/backend/opengl/gl_device.hpp>
 
+#include <algorithm>
 #include <stdexcept>
 #include <string>
 
 #include <glad/gl.h>
 
 #include <core/log.hpp>
+#include <rendering_engine/gpu/backend/opengl/gl_check.hpp>
+#include <rendering_engine/gpu/backend/opengl/gl_translate.hpp>
 
 namespace rendering_engine::gpu::backend::opengl
 {
@@ -71,6 +74,71 @@ namespace rendering_engine::gpu::backend::opengl
             LOG_ERR("Program link failed: %s", info_log.c_str());
             glDeleteProgram(program_id);
             throw std::runtime_error{info_log};
+        }
+
+        // The narrowest vertex record @p layout reads: the end of its
+        // furthest attribute.
+        uint32_t layout_min_stride(const vertex_buffer_layout& layout)
+        {
+            uint32_t extent = 0;
+            for (const auto& attribute : layout.attributes)
+            {
+                extent = std::max(extent, attribute.offset + attribute.components * to_gl_scalar_bytes(attribute.type));
+            }
+            return extent;
+        }
+
+        // Bake the pipeline's vertex format into its vertex array: one
+        // binding point per layout slot carrying that slot's step rate,
+        // and per attribute its component count / type / normalisation
+        // and offset within the record, tied to its slot. The encoder
+        // then only attaches buffers to the binding points
+        // (glVertexArrayVertexBuffer) and never re-specifies a format.
+        void bake_vertex_format(GLuint vao, const std::vector<vertex_buffer_layout>& layouts)
+        {
+            GLint max_relative_offset = 2047;
+            glGetIntegerv(GL_MAX_VERTEX_ATTRIB_RELATIVE_OFFSET, &max_relative_offset);
+
+            for (uint32_t slot = 0; slot < layouts.size(); ++slot)
+            {
+                const auto& layout = layouts[slot];
+                // Per-instance slots advance once per instance (divisor
+                // 1) instead of once per vertex, so a single record
+                // drives a whole instanced draw copy.
+                const GLuint divisor = layout.step_mode == vertex_step_mode::instance ? 1u : 0u;
+                glVertexArrayBindingDivisor(vao, slot, divisor);
+
+                for (const auto& attribute : layout.attributes)
+                {
+                    if (attribute.offset > static_cast<uint32_t>(max_relative_offset))
+                    {
+                        LOG_WRN("create_pipeline: attribute %u offset %u exceeds the relative-offset limit (%i)",
+                                attribute.location,
+                                attribute.offset,
+                                max_relative_offset);
+                    }
+                    glEnableVertexArrayAttrib(vao, attribute.location);
+                    const GLenum type = to_gl_scalar(attribute.type);
+                    const auto components = static_cast<GLint>(attribute.components);
+                    if (is_gl_integer_scalar(attribute.type) && !attribute.normalized)
+                    {
+                        // Integer data the shader reads as an ivec /
+                        // uvec: the float variant would convert it.
+                        GL_CHECK(
+                            glVertexArrayAttribIFormat(vao, attribute.location, components, type, attribute.offset));
+                    }
+                    else
+                    {
+                        GL_CHECK(glVertexArrayAttribFormat(vao,
+                                                           attribute.location,
+                                                           components,
+                                                           type,
+                                                           attribute.normalized ? GL_TRUE : GL_FALSE,
+                                                           attribute.offset));
+                    }
+                    glVertexArrayAttribBinding(vao, attribute.location, slot);
+                }
+            }
         }
     } // namespace
 
@@ -113,21 +181,17 @@ namespace rendering_engine::gpu::backend::opengl
         glLinkProgram(record.program_id);
         check_program_link(record.program_id);
 
-        // Build a VAO that owns the vertex format declared by
-        // the pipeline. Vertex buffers bound at draw time
-        // assume this VAO is bound; the encoder rebinds
-        // @c GL_ARRAY_BUFFER and re-issues
-        // @c glVertexAttribPointer for the slot's attributes.
-        glGenVertexArrays(1, &record.vao_id);
-        glBindVertexArray(record.vao_id);
+        // The VAO owns the vertex format declared by the pipeline;
+        // draws only attach buffers to its binding points.
+        glCreateVertexArrays(1, &record.vao_id);
+        bake_vertex_format(record.vao_id, descriptor.vertex_buffers);
+
+        record.min_strides.reserve(descriptor.vertex_buffers.size());
         for (const auto& layout : descriptor.vertex_buffers)
         {
-            for (const auto& attribute : layout.attributes)
-            {
-                glEnableVertexAttribArray(attribute.location);
-            }
+            record.min_strides.push_back(layout_min_stride(layout));
         }
-        glBindVertexArray(0);
+        record.vertex_binding_shadows.resize(descriptor.vertex_buffers.size());
 
         LOG_INF("Pipeline linked id=%u vao=%u", record.program_id, record.vao_id);
 
@@ -187,6 +251,8 @@ namespace rendering_engine::gpu::backend::opengl
                 glDeleteVertexArrays(1, &record->vao_id);
             }
             m_pipelines.remove(handle.id);
+            // Program and VAO names may be recycled by the next create.
+            invalidate_state_cache();
         }
     }
 

@@ -60,6 +60,18 @@ namespace rendering_engine::gpu
         uint32_t components{0};
         scalar_type type{scalar_type::float32};
         uint32_t offset{0};
+
+        // For the integer @ref type values only. When true the fetch
+        // converts each integer to a float in [0, 1] (unsigned) or
+        // [-1, 1] (signed) — packed colours, quantised normals — and
+        // the shader declares a float input. When false an integer
+        // attribute is fetched as an integer and the shader declares an
+        // @c ivec / @c uvec input. Ignored for @c float32. Selects
+        // @c glVertexArrayAttribFormat (normalized) versus
+        // @c glVertexArrayAttribIFormat on the OpenGL backend and the
+        // @c _UNORM / @c _SNORM versus @c _UINT / @c _SINT vertex
+        // formats on Vulkan.
+        bool normalized{false};
     };
 
     // How a vertex buffer slot advances through its attributes. @c vertex

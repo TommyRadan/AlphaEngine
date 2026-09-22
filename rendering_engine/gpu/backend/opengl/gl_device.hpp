@@ -22,7 +22,15 @@
 
 /**
  * @file gl_device.hpp
- * @brief OpenGL 3.3 implementation of @ref gpu::device.
+ * @brief OpenGL 4.6 core implementation of @ref gpu::device.
+ *
+ * The backend is written against 4.6 core throughout — direct state
+ * access for buffers, textures, framebuffers and vertex arrays,
+ * immutable texture storage, sampler objects, SPIR-V shader binaries,
+ * compute and indirect draws — which is the profile the glad loader in
+ * @c vendor/glad was generated for. @ref init refuses an older context
+ * with a message the launcher shows instead of crashing on the first
+ * missing entry point.
  *
  * The @c gl_device class is declared here in full; its member function
  * definitions are split across translation units by resource family.
@@ -37,6 +45,8 @@
  *
  * Each split file can reach the private @c m_buffers, @c m_textures,
  * ... pools because they are defining members of the same class.
+ * @c gl_state_cache.cpp holds the redundant-state filter the encoders
+ * drive and @c gl_check.cpp the debug-build @c glGetError drain.
  */
 
 #pragma once
@@ -47,6 +57,7 @@
 
 #include <rendering_engine/gpu/backend/handle_pool.hpp>
 #include <rendering_engine/gpu/backend/opengl/gl_resources.hpp>
+#include <rendering_engine/gpu/backend/opengl/gl_state_cache.hpp>
 #include <rendering_engine/gpu/device.hpp>
 
 namespace rendering_engine::gpu::backend::opengl
@@ -86,6 +97,10 @@ namespace rendering_engine::gpu::backend::opengl
 
         void write_buffer(buffer buffer_handle, const void* data, size_t size, size_t offset) override;
         void write_texture(texture texture_handle, const void* data, size_t size) override;
+        bool write_texture_region(texture texture_handle,
+                                  const texture_write_region& region,
+                                  const void* data,
+                                  size_t size) override;
         void write_texture_3d(texture texture_handle, const void* data, size_t size) override;
         void write_cube_face(texture texture_handle, cube_face face, const void* data, size_t size) override;
         void generate_mipmaps(texture texture_handle) override;
@@ -105,6 +120,31 @@ namespace rendering_engine::gpu::backend::opengl
         // bracket has nothing to wait for, drain or present.
         void begin_frame() override;
         void end_frame() override;
+
+        // -- State cache ---------------------------------------------------
+
+        // The shadow of the context state the encoders set; every
+        // encoder setter goes through it so a run of draws sharing a
+        // pipeline / texture / buffer issues each GL call once.
+        gl_state_cache& state_cache()
+        {
+            return m_state;
+        }
+
+        // Forget every shadowed binding and move the epoch the
+        // per-pipeline vertex-array binding shadows are keyed on. The
+        // encoders call it at every pass boundary — another library
+        // (the debug overlay's ImGui backend) may record into the same
+        // context between passes — and the device calls it whenever a
+        // GL object is deleted, since GL recycles names and a shadow
+        // holding a deleted name would wrongly skip its successor's
+        // bind.
+        void invalidate_state_cache();
+
+        uint64_t state_epoch() const
+        {
+            return m_state_epoch;
+        }
 
         // Internal accessors used by the encoder to map a
         // public handle back to its GL-side record.
@@ -128,6 +168,9 @@ namespace rendering_engine::gpu::backend::opengl
         handle_pool<gl_render_target> m_render_targets;
 
         render_target m_swapchain{};
+
+        gl_state_cache m_state;
+        uint64_t m_state_epoch{1};
 
         bool m_initialised{false};
     };
