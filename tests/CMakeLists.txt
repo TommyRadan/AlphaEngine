@@ -58,6 +58,11 @@ set(ALPHAENGINE_TEST_SOURCES_UNDER_TEST
     ${CMAKE_SOURCE_DIR}/rendering_engine/gpu/device.cpp
     ${CMAKE_SOURCE_DIR}/rendering_engine/util/image.cpp
     ${CMAKE_SOURCE_DIR}/rendering_engine/util/font.cpp
+    # gltf_importer — parses through the vendored cgltf header and builds
+    # meshes / textures through the asset cache above; materials go through
+    # the gltf_material_factory interface, so the tests pass a recorder and
+    # the renderer-backed factory (gltf_material_factory.cpp) stays out.
+    ${CMAKE_SOURCE_DIR}/rendering_engine/assets/gltf_importer.cpp
     # mesh — the CPU-side vertex store behind model::upload_mesh (math only).
     ${CMAKE_SOURCE_DIR}/rendering_engine/mesh/mesh.cpp
     # sdl_input — the SDL keycode / button / axis -> engine enum translation
@@ -86,6 +91,7 @@ set(ALPHAENGINE_TEST_SOURCES
     runtime/scene_graph_test.cpp
     runtime/light_component_test.cpp
     rendering_engine/assets/asset_cache_test.cpp
+    rendering_engine/assets/gltf_importer_test.cpp
     rendering_engine/mesh/mesh_test.cpp
     rendering_engine/mesh/tangent_test.cpp
     rendering_engine/mesh/vertex_format_test.cpp
@@ -102,11 +108,13 @@ add_executable(AlphaEngineTests
 )
 
 # tests/ for the support/ helpers (fake_device); vendor/stb for the
-# header-only stb backends util/image and util/font compile against. The repo
-# root is already on the include path via the top-level include_directories().
+# header-only stb backends util/image and util/font compile against, and
+# vendor/cgltf for the glTF parser behind gltf_importer. The repo root is
+# already on the include path via the top-level include_directories().
 target_include_directories(AlphaEngineTests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_SOURCE_DIR}/vendor/stb
+    ${CMAKE_SOURCE_DIR}/vendor/cgltf
 )
 
 # glm backs core/math + transforms, SDL3 backs core/log, Threads backs

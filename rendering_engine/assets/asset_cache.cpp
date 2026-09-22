@@ -83,6 +83,38 @@ namespace rendering_engine
             }
             return live;
         }
+
+        // Upload @p image as a mipmapped, repeat-addressed 2D texture in the
+        // RGBA8 format for @p space and wrap it in a fresh asset. Shared by
+        // the path and in-memory loaders so both produce identical textures.
+        std::shared_ptr<texture_asset> upload_texture(const util::image& image, gpu::color_space space)
+        {
+            auto& gpu = asset_device();
+            gpu::texture_descriptor descriptor{};
+            descriptor.dimension = gpu::texture_dimension::d2;
+            descriptor.format = gpu::rgba8_format(space);
+            descriptor.width = image.get_width();
+            descriptor.height = image.get_height();
+            descriptor.mipmaps = true;
+            descriptor.min_filter = gpu::filter_mode::linear;
+            descriptor.mag_filter = gpu::filter_mode::linear;
+            descriptor.mipmap_filter = gpu::mipmap_mode::linear;
+            descriptor.address_u = gpu::address_mode::repeat;
+            descriptor.address_v = gpu::address_mode::repeat;
+            descriptor.address_w = gpu::address_mode::repeat;
+
+            auto asset = std::make_shared<texture_asset>();
+            asset->format = descriptor.format;
+            asset->width = image.get_width();
+            asset->height = image.get_height();
+            asset->texture = gpu.create_texture(descriptor);
+
+            const size_t pixel_bytes =
+                static_cast<size_t>(image.get_width()) * static_cast<size_t>(image.get_height()) * sizeof(util::color);
+            gpu.write_texture(asset->texture, image.get_pixels(), pixel_bytes);
+            gpu.generate_mipmaps(asset->texture);
+            return asset;
+        }
     } // namespace
 
     asset_cache::asset_cache() = default;
@@ -113,33 +145,25 @@ namespace rendering_engine
 
         // Miss: decode the image (throws on failure) and upload it once.
         const util::image image{path.string()};
-
-        auto& gpu = asset_device();
-        gpu::texture_descriptor descriptor{};
-        descriptor.dimension = gpu::texture_dimension::d2;
-        descriptor.format = gpu::rgba8_format(space);
-        descriptor.width = image.get_width();
-        descriptor.height = image.get_height();
-        descriptor.mipmaps = true;
-        descriptor.min_filter = gpu::filter_mode::linear;
-        descriptor.mag_filter = gpu::filter_mode::linear;
-        descriptor.mipmap_filter = gpu::mipmap_mode::linear;
-        descriptor.address_u = gpu::address_mode::repeat;
-        descriptor.address_v = gpu::address_mode::repeat;
-        descriptor.address_w = gpu::address_mode::repeat;
-
-        auto asset = std::make_shared<texture_asset>();
-        asset->format = descriptor.format;
-        asset->width = image.get_width();
-        asset->height = image.get_height();
-        asset->texture = gpu.create_texture(descriptor);
-
-        const size_t pixel_bytes =
-            static_cast<size_t>(image.get_width()) * static_cast<size_t>(image.get_height()) * sizeof(util::color);
-        gpu.write_texture(asset->texture, image.get_pixels(), pixel_bytes);
-        gpu.generate_mipmaps(asset->texture);
-
+        auto asset = upload_texture(image, space);
         m_textures[key] = asset;
+        return asset;
+    }
+
+    std::shared_ptr<texture_asset>
+    asset_cache::load_texture_from_image(const std::string& key, const util::image& image, gpu::color_space space)
+    {
+        const std::string full_key = key + '|' + color_space_key(space);
+        if (auto it = m_textures.find(full_key); it != m_textures.end())
+        {
+            if (auto existing = it->second.lock())
+            {
+                return existing;
+            }
+        }
+
+        auto asset = upload_texture(image, space);
+        m_textures[full_key] = asset;
         return asset;
     }
 

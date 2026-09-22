@@ -24,6 +24,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <limits>
 #include <stdexcept>
 #include <utility>
 
@@ -63,6 +64,37 @@ rendering_engine::util::image::image(const std::string& filename)
     stbi_image_free(decoded);
 
     LOG_INF("Loaded image (%s)", filename.c_str());
+}
+
+rendering_engine::util::image::image(const uint8_t* bytes, std::size_t size)
+{
+    // stb takes the length as an int; a buffer past that cannot be an image
+    // it can decode, so reject it up front rather than truncate silently.
+    if (bytes == nullptr || size == 0 || size > static_cast<std::size_t>(std::numeric_limits<int>::max()))
+    {
+        LOG_ERR("Could not load image from memory: %s", bytes == nullptr || size == 0 ? "empty buffer" : "too large");
+        throw std::runtime_error{"Could not load image from memory"};
+    }
+
+    int width = 0;
+    int height = 0;
+    int num_components = 0;
+    stbi_uc* decoded = stbi_load_from_memory(bytes, static_cast<int>(size), &width, &height, &num_components, 4);
+
+    if (decoded == nullptr)
+    {
+        LOG_ERR("Could not load image from memory: %s", stbi_failure_reason());
+        throw std::runtime_error{"Could not load image from memory"};
+    }
+
+    // Same ownership rule as the file constructor: copy the decoder's malloc'd
+    // result into the image's own new[] allocation and release the original.
+    m_width = static_cast<uint32_t>(width);
+    m_height = static_cast<uint32_t>(height);
+    const std::size_t count = pixel_count(m_width, m_height);
+    m_image_data.reset(new color[count]);
+    std::memcpy(m_image_data.get(), decoded, count * sizeof(color));
+    stbi_image_free(decoded);
 }
 
 rendering_engine::util::image::image(const image& other) : m_width{other.m_width}, m_height{other.m_height}

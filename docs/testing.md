@@ -123,6 +123,18 @@ All device-free:
   on the `texture_asset`, and keying the two spaces apart). The texture tests
   decode a tiny PPM written to the temp directory, so the real image loader
   runs headless.
+- `load_gltf` (`rendering_engine/assets/gltf_importer.cpp`) — geometry
+  (the tangent record format and stride, u16 index widening, file tangents
+  kept, flat normals generated for normal-less primitives, bounds from the
+  accessor min / max, non-triangle primitives skipped, a second load of the
+  same file sharing the cached upload), the node tree (TRS and matrix poses,
+  parent / child links, scene roots, multi-primitive meshes), materials
+  through a recording `gltf_material_factory` (factors, maps, the default
+  material, the metallic / roughness split of the packed texture), textures
+  through the cache in the colour space their slot implies, and the three
+  container forms (data URIs, external files, GLB). The `.gltf` / `.glb`
+  files are written to the temp directory; the fake device records each
+  buffer's initial contents so the uploaded records can be read back.
 - `util::image` / `util::color` — the packed 4-byte RGBA8 texel layout the
   upload sites rely on; deep copies, copy-and-swap assignment (larger over
   smaller, over an empty image, self-assignment), moves that leave the source

@@ -179,7 +179,7 @@ target_link_libraries(AlphaEngine
     glslang::SPIRV
     glslang::glslang-default-resource-limits)
 
-target_include_directories(AlphaEngine PRIVATE ${VENDOR_ROOT}stb/)
+target_include_directories(AlphaEngine PRIVATE ${VENDOR_ROOT}stb/ ${VENDOR_ROOT}cgltf/)
 
 # glad — OpenGL loader (generated for GL 4.6 Core, no extensions)
 add_library(glad STATIC ${VENDOR_ROOT}glad/src/gl.c)
