@@ -51,6 +51,10 @@ set(ALPHAENGINE_TEST_SOURCES_UNDER_TEST
     ${CMAKE_SOURCE_DIR}/rendering_engine/util/font.cpp
     # mesh — the CPU-side vertex store behind model::upload_mesh (math only).
     ${CMAKE_SOURCE_DIR}/rendering_engine/mesh/mesh.cpp
+    # sdl_input — the SDL keycode / button / axis -> engine enum translation
+    # the window layer uses. Pure functions over SDL's header constants; no
+    # video subsystem is initialised.
+    ${CMAKE_SOURCE_DIR}/rendering_engine/sdl_input.cpp
 )
 
 set(ALPHAENGINE_TEST_SOURCES
@@ -68,6 +72,7 @@ set(ALPHAENGINE_TEST_SOURCES
     rendering_engine/mesh/mesh_test.cpp
     rendering_engine/mesh/tangent_test.cpp
     rendering_engine/mesh/vertex_format_test.cpp
+    rendering_engine/sdl_input_test.cpp
     rendering_engine/util/font_test.cpp
     rendering_engine/util/image_test.cpp
     external/camera_id_test.cpp

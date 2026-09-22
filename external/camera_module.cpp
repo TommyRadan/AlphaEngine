@@ -48,13 +48,17 @@ namespace
     // this fixed size, indexed by position in this list, rather than in a map
     // keyed by key_code: tracking a key never allocates, and a key that is not
     // listed here is dropped on the way in instead of accumulating an entry.
-    constexpr std::array<core::key_code, 7> tracked_keys{core::key_code::w,
+    // Both sides of each modifier are tracked so the right-hand shift / ctrl
+    // work the same as the left.
+    constexpr std::array<core::key_code, 9> tracked_keys{core::key_code::w,
                                                          core::key_code::a,
                                                          core::key_code::s,
                                                          core::key_code::d,
                                                          core::key_code::space,
-                                                         core::key_code::ctrl,
-                                                         core::key_code::shift};
+                                                         core::key_code::left_ctrl,
+                                                         core::key_code::right_ctrl,
+                                                         core::key_code::left_shift,
+                                                         core::key_code::right_shift};
 
     camera_id g_camera_id = invalid_camera_id;
     std::array<bool, tracked_keys.size()> g_keys{};
@@ -162,7 +166,7 @@ static void on_render_update(const core::render_update& event)
     const core::math::vec3 right = safe_normalize(core::math::cross(forward, up_vector));
 
     float speed = 3.0f;
-    if (is_key_down(core::key_code::shift))
+    if (is_key_down(core::key_code::left_shift) || is_key_down(core::key_code::right_shift))
     {
         speed = 30.0f;
     }
@@ -195,7 +199,7 @@ static void on_render_update(const core::render_update& event)
         new_position += up_vector * distance;
     }
 
-    if (is_key_down(core::key_code::ctrl))
+    if (is_key_down(core::key_code::left_ctrl) || is_key_down(core::key_code::right_ctrl))
     {
         new_position -= up_vector * distance;
     }
@@ -242,8 +246,10 @@ static void on_mouse_move(const core::mouse_move& event)
     // right-handed frame is a clockwise (negative) rotation about +Z; mouse
     // down (positive delta) pitches the view down, a negative rotation about
     // the right axis, unless the settings ask for a reversed pitch.
-    const float yaw_angle = -static_cast<float>(event.m_x) * sensitivity;
-    const float pitch_angle = pitch_direction * static_cast<float>(event.m_y) * sensitivity;
+    // The deltas keep their sub-pixel fraction, so a slow drag still turns
+    // the camera instead of truncating to no motion.
+    const float yaw_angle = -event.m_delta_x * sensitivity;
+    const float pitch_angle = pitch_direction * event.m_delta_y * sensitivity;
 
     const core::math::mat4 yaw_rotation = core::math::rotate(yaw_angle, up_vector);
     const core::math::mat4 pitch_rotation = core::math::rotate(pitch_angle, right);

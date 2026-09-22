@@ -105,6 +105,12 @@ All device-free:
   one the facade allocates from, that a destroyed camera's id never resolves
   again once its slot is recycled. Only the header is exercised: the facade's
   translation unit links the renderer.
+- `sdl_input` — the SDL keycode / mouse-button / gamepad-button / gamepad-axis
+  to engine-enum translation behind `window::tick`: every named key maps, left
+  and right modifiers stay distinct, an unnamed key yields `key_code::unknown`,
+  an unnamed mouse button yields no code (so the window drops the event), and
+  raw axis readings normalise to the unit range at both extremes. Only SDL's
+  header constants are used; no video subsystem is initialised.
 
 ### Testing the asset layer headless
 

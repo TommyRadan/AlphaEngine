@@ -45,7 +45,8 @@ namespace
     // Game modules have no teardown hook: they register at static-init time
     // and their listeners live until event_bus::quit() drops the registry.
     // Detach each token explicitly so that permanence is spelled out rather
-    // than implied by a discarded return value.
+    // than implied by a discarded return value. A slot the module left
+    // empty is simply not wired up.
     template<typename E>
     void install(core::event_bus& bus, const std::function<void(const E&)>& callback)
     {
@@ -63,11 +64,20 @@ namespace
         install(bus, info.on_render_update);
         install(bus, info.on_render_scene);
         install(bus, info.on_render_ui);
-        install(bus, info.on_mouse_key_down);
-        install(bus, info.on_mouse_key_up);
         install(bus, info.on_key_down);
         install(bus, info.on_key_up);
+        install(bus, info.on_mouse_key_down);
+        install(bus, info.on_mouse_key_up);
         install(bus, info.on_mouse_move);
+        install(bus, info.on_mouse_wheel);
+        install(bus, info.on_text_input);
+        install(bus, info.on_window_resized);
+        install(bus, info.on_window_focus);
+        install(bus, info.on_window_minimized);
+        install(bus, info.on_gamepad_connected);
+        install(bus, info.on_gamepad_disconnected);
+        install(bus, info.on_gamepad_button);
+        install(bus, info.on_gamepad_axis);
     }
 } // namespace
 

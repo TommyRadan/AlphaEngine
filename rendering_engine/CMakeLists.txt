@@ -2,6 +2,8 @@ target_sources(AlphaEngine PRIVATE
     render_stats.hpp
     rendering_engine.cpp
     rendering_engine.hpp
+    sdl_input.cpp
+    sdl_input.hpp
     window.cpp
     window.hpp
 )
