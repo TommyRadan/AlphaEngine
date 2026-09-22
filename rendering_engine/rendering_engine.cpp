@@ -32,6 +32,7 @@
 #include <rendering_engine/debug_ui/imgui_layer.hpp>
 #include <rendering_engine/gpu/command_encoder.hpp>
 #include <rendering_engine/gpu/device.hpp>
+#include <rendering_engine/gpu/shader_compiler.hpp>
 #include <rendering_engine/ibl/environment.hpp>
 #include <rendering_engine/materials/basic_material.hpp>
 #include <rendering_engine/materials/grid_material.hpp>
@@ -195,6 +196,16 @@ void rendering_engine::context::init()
     m_ui_material = std::make_unique<ui_material>();
     LOG_INF("Rendering Engine: basic_material, instanced_material, phong_material, standard_material, points_material, "
             "line_material and ui_material constructed");
+
+    // Every built-in pipeline has compiled by now; report how much of it
+    // the on-disk SPIR-V cache served (see gpu/shader_compiler.hpp).
+    {
+        const gpu::shader_cache_stats cache = gpu::shader_cache_statistics();
+        LOG_DBG("Shader cache: %u hits, %u misses%s",
+                cache.hits,
+                cache.misses,
+                gpu::shader_cache_directory().empty() ? " (cache disabled)" : "");
+    }
 
     // Register the built-in passes in render order: scene writes into
     // the HDR target, the skybox pass fills the untouched background of

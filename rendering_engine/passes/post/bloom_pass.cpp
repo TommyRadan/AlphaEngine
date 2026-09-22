@@ -70,99 +70,9 @@ namespace
     // allocation, so each baked params UBO is a single vec4.
     constexpr size_t params_ubo_size = 16;
 
-    // Bright-pass: extract pixels above the threshold with a soft knee.
-    // @c params packs (threshold, knee, 2*knee, 1/(4*knee)) so the knee
-    // curve costs no per-pixel divides. The original colour is preserved
-    // and merely scaled by its contribution, so a bloomed highlight keeps
-    // its hue.
-    const std::string threshold_shader = R"fs(
-        #version 450
-
-        layout(location = 0) in vec2 texCoord;
-        layout(location = 0) out vec4 fragColor;
-
-        layout(set = 0, binding = 0) uniform sampler2D sceneColor;
-
-        layout(set = 0, binding = 1, std140) uniform Threshold
-        {
-            vec4 params; // x threshold, y knee, z 2*knee, w 1/(4*knee)
-        } u_threshold;
-
-        void main()
-        {
-            vec3 color = texture(sceneColor, texCoord).rgb;
-            float brightness = max(color.r, max(color.g, color.b));
-
-            float threshold = u_threshold.params.x;
-            float knee = u_threshold.params.y;
-
-            // Quadratic soft knee around the threshold, then the hard
-            // cutoff above it; the larger of the two wins.
-            float soft = clamp(brightness - threshold + knee, 0.0, u_threshold.params.z);
-            soft = soft * soft * u_threshold.params.w;
-            float contribution = max(soft, brightness - threshold);
-            contribution /= max(brightness, 0.0001);
-
-            fragColor = vec4(color * contribution, 1.0);
-        }
-)fs";
-
-    // Separable Gaussian. @c offset.xy is the per-tap texel step along the
-    // blur axis (horizontal or vertical), baked from the source texture's
-    // texel size. Nine taps (centre + four mirrored pairs) with the
-    // standard sigma-2 weights. clamp_edge sampling on the render-target
-    // textures keeps the kernel well-defined at the borders.
-    const std::string blur_shader = R"fs(
-        #version 450
-
-        layout(location = 0) in vec2 texCoord;
-        layout(location = 0) out vec4 fragColor;
-
-        layout(set = 0, binding = 0) uniform sampler2D src;
-
-        layout(set = 0, binding = 1, std140) uniform Blur
-        {
-            vec4 offset; // xy texel step per tap, zw unused
-        } u_blur;
-
-        void main()
-        {
-            const float weight[5] = float[](0.227027, 0.1945946, 0.1216216, 0.054054, 0.016216);
-            vec2 step = u_blur.offset.xy;
-
-            vec3 result = texture(src, texCoord).rgb * weight[0];
-            for (int i = 1; i < 5; ++i)
-            {
-                result += texture(src, texCoord + step * float(i)).rgb * weight[i];
-                result += texture(src, texCoord - step * float(i)).rgb * weight[i];
-            }
-
-            fragColor = vec4(result, 1.0);
-        }
-)fs";
-
-    // Composite: scale a blurred mip by its weight and emit it. The
-    // pipeline blends additively (one, one) so each level accumulates on
-    // top of the scene already in the target.
-    const std::string composite_shader = R"fs(
-        #version 450
-
-        layout(location = 0) in vec2 texCoord;
-        layout(location = 0) out vec4 fragColor;
-
-        layout(set = 0, binding = 0) uniform sampler2D bloomColor;
-
-        layout(set = 0, binding = 1, std140) uniform Composite
-        {
-            vec4 params; // x weight, yzw unused
-        } u_composite;
-
-        void main()
-        {
-            vec3 color = texture(bloomColor, texCoord).rgb;
-            fragColor = vec4(color * u_composite.params.x, 1.0);
-        }
-)fs";
+    // The bright-pass, separable-blur and composite fragment stages are
+    // shaders/passes/bloom_{threshold,blur,composite}.frag.glsl, drawn over
+    // the shared fullscreen triangle.
 } // namespace
 
 namespace rendering_engine
@@ -182,22 +92,24 @@ namespace rendering_engine
         // -- Shaders --------------------------------------------------
         gpu::shader_module_descriptor vs_descriptor{};
         vs_descriptor.stage = gpu::shader_stage::vertex;
-        vs_descriptor.spirv = gpu::compile_glsl_to_spirv(fullscreen_triangle_vertex_shader, gpu::shader_stage::vertex);
+        vs_descriptor.spirv = gpu::compile_library_shader("passes/fullscreen.vert.glsl", gpu::shader_stage::vertex);
         m_vertex_shader = gpu.create_shader_module(vs_descriptor);
 
         gpu::shader_module_descriptor threshold_descriptor{};
         threshold_descriptor.stage = gpu::shader_stage::fragment;
-        threshold_descriptor.spirv = gpu::compile_glsl_to_spirv(threshold_shader, gpu::shader_stage::fragment);
+        threshold_descriptor.spirv =
+            gpu::compile_library_shader("passes/bloom_threshold.frag.glsl", gpu::shader_stage::fragment);
         m_threshold_shader = gpu.create_shader_module(threshold_descriptor);
 
         gpu::shader_module_descriptor blur_descriptor{};
         blur_descriptor.stage = gpu::shader_stage::fragment;
-        blur_descriptor.spirv = gpu::compile_glsl_to_spirv(blur_shader, gpu::shader_stage::fragment);
+        blur_descriptor.spirv = gpu::compile_library_shader("passes/bloom_blur.frag.glsl", gpu::shader_stage::fragment);
         m_blur_shader = gpu.create_shader_module(blur_descriptor);
 
         gpu::shader_module_descriptor composite_descriptor{};
         composite_descriptor.stage = gpu::shader_stage::fragment;
-        composite_descriptor.spirv = gpu::compile_glsl_to_spirv(composite_shader, gpu::shader_stage::fragment);
+        composite_descriptor.spirv =
+            gpu::compile_library_shader("passes/bloom_composite.frag.glsl", gpu::shader_stage::fragment);
         m_composite_shader = gpu.create_shader_module(composite_descriptor);
 
         // -- Fullscreen-triangle vertex buffer ------------------------

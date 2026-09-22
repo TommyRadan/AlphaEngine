@@ -81,7 +81,7 @@ namespace rendering_engine
         // depth range of [0, 1] and every Vulkan pipeline opts into the
         // same [-1, 1] clip range via VK_EXT_depth_clip_control with a
         // [0, 1] viewport depth, so both backends store the identical
-        // value. depth_utils.hpp ships the GLSL to invert it:
+        // value. shaders/include/depth_utils.glsl ships the GLSL to invert it:
         // depth_to_ndc(d) = 2d - 1 and linearize_depth(d, near, far) =
         // near * far / (far - d * (far - near)), the positive view-space
         // distance in [near, far]. The scene pass clears it to 1.0, so

@@ -44,97 +44,12 @@ namespace
     // clamp below is what stops that long tail from ghosting under motion.
     constexpr float taa_feedback = 0.9f;
 
-    // The temporal resolve. The current jittered frame is blended with last
-    // frame's accumulated result; because the projection jitter moves the
-    // sub-pixel sample location every frame, that blend converges to a
-    // supersampled image. The history is first reprojected along the
-    // per-pixel motion vectors (history sampled at texCoord - velocity) so a
-    // moving camera keeps the accumulated detail glued to the surface rather
-    // than smearing it across the screen. It is then constrained to the 3x3
-    // colour box around the current texel (the standard neighbourhood clamp)
-    // so history that survives reprojection but no longer matches the
-    // present frame — at disocclusions, or for the unmodelled object motion
-    // — is pulled back in; history that reprojects outside the frame is
-    // dropped entirely in favour of the current sample.
-    //
-    // u_taa.params.xy is (1/width, 1/height) — the per-texel step the
-    // neighbourhood taps walk by — and params.z is the history feedback
+    // The resolve and the history copy are shaders/passes/taa_resolve.frag.glsl
+    // and taa_copy.frag.glsl, drawn over the shared fullscreen triangle.
+    // u_taa.params.xy is (1/width, 1/height), the per-texel step the
+    // neighbourhood taps walk by, and params.z is the history feedback
     // weight, baked to 0 on the first frame (history undefined) and to
     // taa_feedback thereafter.
-    const std::string resolve_shader = R"fs(
-        #version 450
-
-        layout(location = 0) in vec2 texCoord;
-        layout(location = 0) out vec4 fragColor;
-
-        layout(set = 0, binding = 0) uniform sampler2D currentColor;
-        layout(set = 0, binding = 1) uniform sampler2D historyColor;
-        layout(set = 0, binding = 2) uniform sampler2D velocity;
-
-        layout(set = 0, binding = 3, std140) uniform Taa
-        {
-            vec4 params; // x = 1/width, y = 1/height, z = history feedback, w unused
-        } u_taa;
-
-        void main()
-        {
-            vec2 inv = u_taa.params.xy;
-
-            vec3 current = texture(currentColor, texCoord).rgb;
-
-            // 3x3 neighbourhood min/max of the current frame: the colour
-            // box the reprojected history is clamped into before blending.
-            vec3 box_min = current;
-            vec3 box_max = current;
-            for (int y = -1; y <= 1; ++y)
-            {
-                for (int x = -1; x <= 1; ++x)
-                {
-                    if (x == 0 && y == 0)
-                    {
-                        continue;
-                    }
-                    vec3 s = texture(currentColor, texCoord + vec2(x, y) * inv).rgb;
-                    box_min = min(box_min, s);
-                    box_max = max(box_max, s);
-                }
-            }
-
-            // Reproject the history along this pixel's motion vector. A
-            // sample that lands off-screen has no valid history, so fall
-            // back to the current frame (feedback 0) there.
-            vec2 motion = texture(velocity, texCoord).xy;
-            vec2 history_uv = texCoord - motion;
-            float feedback = u_taa.params.z;
-            if (any(lessThan(history_uv, vec2(0.0))) || any(greaterThan(history_uv, vec2(1.0))))
-            {
-                feedback = 0.0;
-                history_uv = texCoord;
-            }
-
-            vec3 history = texture(historyColor, history_uv).rgb;
-            history = clamp(history, box_min, box_max);
-
-            vec3 resolved = mix(current, history, feedback);
-            fragColor = vec4(resolved, 1.0);
-        }
-)fs";
-
-    // History store: a straight copy of the resolved frame into the
-    // history target so the next frame's resolve can read it.
-    const std::string copy_shader = R"fs(
-        #version 450
-
-        layout(location = 0) in vec2 texCoord;
-        layout(location = 0) out vec4 fragColor;
-
-        layout(set = 0, binding = 0) uniform sampler2D src;
-
-        void main()
-        {
-            fragColor = texture(src, texCoord);
-        }
-)fs";
 
     // std140 rounds the single vec4 block up to a 16-byte allocation.
     constexpr size_t taa_ubo_size = 16;
@@ -157,17 +72,18 @@ namespace rendering_engine
         // -- Shaders --------------------------------------------------
         gpu::shader_module_descriptor vs_descriptor{};
         vs_descriptor.stage = gpu::shader_stage::vertex;
-        vs_descriptor.spirv = gpu::compile_glsl_to_spirv(fullscreen_triangle_vertex_shader, gpu::shader_stage::vertex);
+        vs_descriptor.spirv = gpu::compile_library_shader("passes/fullscreen.vert.glsl", gpu::shader_stage::vertex);
         m_vertex_shader = gpu.create_shader_module(vs_descriptor);
 
         gpu::shader_module_descriptor resolve_descriptor{};
         resolve_descriptor.stage = gpu::shader_stage::fragment;
-        resolve_descriptor.spirv = gpu::compile_glsl_to_spirv(resolve_shader, gpu::shader_stage::fragment);
+        resolve_descriptor.spirv =
+            gpu::compile_library_shader("passes/taa_resolve.frag.glsl", gpu::shader_stage::fragment);
         m_resolve_shader = gpu.create_shader_module(resolve_descriptor);
 
         gpu::shader_module_descriptor copy_descriptor{};
         copy_descriptor.stage = gpu::shader_stage::fragment;
-        copy_descriptor.spirv = gpu::compile_glsl_to_spirv(copy_shader, gpu::shader_stage::fragment);
+        copy_descriptor.spirv = gpu::compile_library_shader("passes/taa_copy.frag.glsl", gpu::shader_stage::fragment);
         m_copy_shader = gpu.create_shader_module(copy_descriptor);
 
         // -- Fullscreen-triangle vertex buffer ------------------------

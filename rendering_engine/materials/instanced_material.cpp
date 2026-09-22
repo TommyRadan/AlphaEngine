@@ -27,72 +27,28 @@
 
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
+#include <rendering_engine/gpu/shader_bindings.hpp>
 #include <runtime/engine.hpp>
 
 namespace
 {
-    // Binding numbers. UBOs share a single namespace across every
-    // descriptor set on the OpenGL backend (ARB_gl_spirv), so they must
-    // stay globally unique: the scene_pass owns camera = 0 (and lights = 2)
-    // in the per-frame set, leaving 3 for the per-material tint block.
-    constexpr uint32_t material_params_binding = 3;
-
     // std140 layout for the per-material params UBO: a single vec4 tint,
     // 16 bytes.
     constexpr size_t material_ubo_size = 4 * sizeof(float);
 
     // Per-instance vertex attribute locations. Location 0 is the shared
     // geometry position; the model matrix occupies four consecutive vec4
-    // slots (one per column) and the tint follows.
+    // slots (one per column) and the tint follows. The vertex shader
+    // reads them as ordinary attributes from a per-instance stream
+    // (divisor 1), so the path does not depend on gl_InstanceIndex
+    // behaving across the SPIR-V -> GL translation.
     constexpr uint32_t position_location = 0;
     constexpr uint32_t model_column0_location = 1;
     constexpr uint32_t instance_color_location = 5;
 
-    // The model matrix and colour arrive as ordinary vertex attributes from
-    // a per-instance stream (divisor 1), so the path does not depend on
-    // gl_InstanceIndex behaving across the SPIR-V -> GL translation.
-    const std::string vertex_shader = R"vs(
-        #version 450
-
-        layout(location = 0) in vec3 position;
-        layout(location = 1) in vec4 model0;
-        layout(location = 2) in vec4 model1;
-        layout(location = 3) in vec4 model2;
-        layout(location = 4) in vec4 model3;
-        layout(location = 5) in vec4 instanceTint;
-
-        layout(location = 0) out vec4 instanceColor;
-
-        layout(set = 0, binding = 0, std140) uniform PerFrame
-        {
-            mat4 viewMatrix;
-            mat4 projectionMatrix;
-        } u_frame;
-
-        void main()
-        {
-            mat4 model = mat4(model0, model1, model2, model3);
-            instanceColor = instanceTint;
-            gl_Position = u_frame.projectionMatrix * u_frame.viewMatrix * model * vec4(position, 1.0);
-        }
-)vs";
-
-    const std::string fragment_shader = R"fs(
-        #version 450
-
-        layout(location = 0) in vec4 instanceColor;
-        layout(location = 0) out vec4 fragColor;
-
-        layout(set = 2, binding = 3, std140) uniform Material
-        {
-            vec4 color;
-        } u_material;
-
-        void main()
-        {
-            fragColor = u_material.color * instanceColor;
-        }
-)fs";
+    // This material's stages, by shader-library path (see shaders/materials/).
+    const rendering_engine::gpu::shader_variant vertex_shader{"materials/instanced.vert.glsl"};
+    const rendering_engine::gpu::shader_variant fragment_shader{"materials/instanced.frag.glsl"};
 } // namespace
 
 namespace rendering_engine
@@ -128,7 +84,7 @@ namespace rendering_engine
         // Per-material layout (slot 2): the flat-tint UBO owned by this
         // material.
         gpu::bind_group_layout_descriptor material_layout{};
-        material_layout.entries.push_back({material_params_binding, gpu::binding_kind::uniform_buffer});
+        material_layout.entries.push_back({gpu::shader_bindings::material_params, gpu::binding_kind::uniform_buffer});
 
         // Opaque unlit surface: depth tested and written, no blending.
         material_params params{};
@@ -154,7 +110,7 @@ namespace rendering_engine
         gpu::bind_group_descriptor bg_descriptor{};
         bg_descriptor.layout = m_per_material_layout;
         gpu::binding_value ubo_slot{};
-        ubo_slot.binding = material_params_binding;
+        ubo_slot.binding = gpu::shader_bindings::material_params;
         ubo_slot.kind = gpu::binding_kind::uniform_buffer;
         ubo_slot.buffer_value = m_material_ubo;
         bg_descriptor.entries.push_back(ubo_slot);

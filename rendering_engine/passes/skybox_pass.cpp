@@ -38,45 +38,9 @@
 
 namespace
 {
-    // The fullscreen triangle's clip-space xy is reused as the screen
-    // direction lookup. Emitting it at z = w pins every fragment to the
-    // far plane so the depth test rejects the sky wherever scene geometry
-    // already wrote a nearer depth.
-    const std::string vertex_shader = R"vs(
-        #version 450
-
-        layout(location = 0) in vec2 in_pos;
-        layout(location = 0) out vec3 viewDir;
-
-        layout(set = 0, binding = 0, std140) uniform Skybox
-        {
-            mat4 invViewProj;
-        } u_sky;
-
-        void main()
-        {
-            // Unproject the far-plane clip point back to world space. The
-            // view matrix had its translation stripped, so the eye sits at
-            // the origin and the unprojected point doubles as the ray.
-            vec4 world = u_sky.invViewProj * vec4(in_pos, 1.0, 1.0);
-            viewDir = world.xyz / world.w;
-            gl_Position = vec4(in_pos, 1.0, 1.0);
-        }
-)vs";
-
-    const std::string fragment_shader = R"fs(
-        #version 450
-
-        layout(location = 0) in vec3 viewDir;
-        layout(location = 0) out vec4 fragColor;
-
-        layout(set = 0, binding = 1) uniform samplerCube skybox;
-
-        void main()
-        {
-            fragColor = vec4(texture(skybox, normalize(viewDir)).rgb, 1.0);
-        }
-)fs";
+    // The sky is shaders/passes/skybox.{vert,frag}.glsl drawn over the
+    // shared fullscreen triangle, pinned to the far plane so the depth
+    // test rejects it wherever scene geometry already wrote a nearer depth.
 
     // std140 size of the Skybox UBO: a single mat4.
     constexpr size_t sky_ubo_size = sizeof(core::math::mat4);
@@ -90,12 +54,12 @@ namespace rendering_engine
 
         gpu::shader_module_descriptor vs_descriptor{};
         vs_descriptor.stage = gpu::shader_stage::vertex;
-        vs_descriptor.spirv = gpu::compile_glsl_to_spirv(vertex_shader, gpu::shader_stage::vertex);
+        vs_descriptor.spirv = gpu::compile_library_shader("passes/skybox.vert.glsl", gpu::shader_stage::vertex);
         m_vertex_shader = gpu.create_shader_module(vs_descriptor);
 
         gpu::shader_module_descriptor fs_descriptor{};
         fs_descriptor.stage = gpu::shader_stage::fragment;
-        fs_descriptor.spirv = gpu::compile_glsl_to_spirv(fragment_shader, gpu::shader_stage::fragment);
+        fs_descriptor.spirv = gpu::compile_library_shader("passes/skybox.frag.glsl", gpu::shader_stage::fragment);
         m_fragment_shader = gpu.create_shader_module(fs_descriptor);
 
         gpu::buffer_descriptor vb_descriptor{};

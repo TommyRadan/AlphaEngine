@@ -73,38 +73,6 @@ namespace
         {{0.0f, 0.0f, 1.0f}, {0.0f, 1.0f, 0.0f}},
         {{0.0f, 0.0f, -1.0f}, {0.0f, 1.0f, 0.0f}},
     }};
-
-    const std::string vertex_shader = R"vs(
-        #version 450
-
-        layout(location = 0) in vec3 position;
-
-        layout(set = 0, binding = 0, std140) uniform LightFrame
-        {
-            mat4 lightViewProj;
-        } u_light;
-
-        layout(set = 1, binding = 1, std140) uniform PerDraw
-        {
-            mat4 modelMatrix;
-        } u_draw;
-
-        void main()
-        {
-            gl_Position = u_light.lightViewProj * u_draw.modelMatrix * vec4(position, 1.0);
-        }
-)vs";
-
-    const std::string fragment_shader = R"fs(
-        #version 450
-
-        layout(location = 0) out vec4 fragColor;
-
-        void main()
-        {
-            fragColor = vec4(1.0);
-        }
-)fs";
 } // namespace
 
 namespace rendering_engine
@@ -127,12 +95,12 @@ namespace rendering_engine
 
         gpu::shader_module_descriptor vs_descriptor{};
         vs_descriptor.stage = gpu::shader_stage::vertex;
-        vs_descriptor.spirv = gpu::compile_glsl_to_spirv(vertex_shader, gpu::shader_stage::vertex);
+        vs_descriptor.spirv = gpu::compile_library_shader("passes/shadow.vert.glsl", gpu::shader_stage::vertex);
         m_vertex_shader = gpu.create_shader_module(vs_descriptor);
 
         gpu::shader_module_descriptor fs_descriptor{};
         fs_descriptor.stage = gpu::shader_stage::fragment;
-        fs_descriptor.spirv = gpu::compile_glsl_to_spirv(fragment_shader, gpu::shader_stage::fragment);
+        fs_descriptor.spirv = gpu::compile_library_shader("passes/shadow.frag.glsl", gpu::shader_stage::fragment);
         m_fragment_shader = gpu.create_shader_module(fs_descriptor);
 
         gpu::bind_group_layout_descriptor light_layout{};

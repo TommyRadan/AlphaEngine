@@ -26,42 +26,9 @@
 
 namespace
 {
-    const std::string vertex_shader = R"vs(
-        #version 450
-
-        layout(location = 0) in vec3 position;
-        layout(location = 1) in vec2 uv;
-
-        layout(location = 0) out vec2 texCoord;
-
-        void main()
-        {
-            texCoord = uv;
-            gl_Position = vec4(position, 1.0);
-        }
-)vs";
-
-    const std::string fragment_shader = R"fs(
-        #version 450
-
-        layout(location = 0) in vec2 texCoord;
-        layout(location = 0) out vec4 fragColor;
-
-        layout(set = 0, binding = 0, std140) uniform UiDraw
-        {
-            float useTexture;
-            vec4 color;
-        } u_draw;
-
-        layout(set = 0, binding = 1) uniform sampler2D tex;
-
-        void main()
-        {
-            fragColor = (u_draw.useTexture != 0.0)
-                ? texture(tex, vec2(texCoord.x, 1.0 - texCoord.y))
-                : u_draw.color;
-        }
-)fs";
+    // This material's stages, by shader-library path (see shaders/materials/).
+    const rendering_engine::gpu::shader_variant vertex_shader{"materials/ui.vert.glsl"};
+    const rendering_engine::gpu::shader_variant fragment_shader{"materials/ui.frag.glsl"};
 } // namespace
 
 namespace rendering_engine

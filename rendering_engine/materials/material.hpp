@@ -30,6 +30,7 @@
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/gpu/pipeline.hpp>
 #include <rendering_engine/gpu/shader.hpp>
+#include <rendering_engine/gpu/shader_compiler.hpp>
 #include <rendering_engine/mesh/vertex.hpp>
 
 namespace rendering_engine
@@ -150,6 +151,12 @@ namespace rendering_engine
         // blend / rasterizer state before delegating to the explicit
         // overload below. Prefer this entry point for new materials.
         //
+        // @p vertex_shader / @p fragment_shader name the two stages by
+        // shader-library path (see shaders/materials/) plus the
+        // preprocessor definitions the variant is compiled with; the
+        // base compiles them through @ref gpu::compile_library_shader,
+        // so both come back from the SPIR-V cache on a warm launch.
+        //
         // When @p material_layout has entries the pipeline reserves an
         // additional descriptor set for the optional per-material bind
         // group (see @ref m_per_material_layout); the layout is created,
@@ -161,8 +168,8 @@ namespace rendering_engine
         // the pipeline; it defaults to @c triangles so existing
         // materials need no changes. Point-list materials pass
         // @c primitive_topology::points.
-        void construct_pipeline(const std::string& vertex_source,
-                                const std::string& fragment_source,
+        void construct_pipeline(const gpu::shader_variant& vertex_shader,
+                                const gpu::shader_variant& fragment_shader,
                                 const gpu::vertex_buffer_layout& vertex_layout,
                                 const gpu::bind_group_layout_descriptor& draw_layout,
                                 gpu::bind_group_layout frame_layout,
@@ -175,8 +182,8 @@ namespace rendering_engine
         // per-vertex geometry stream with a per-instance stream (see
         // @ref instanced_material). Otherwise identical to the single-layout
         // overload above.
-        void construct_pipeline(const std::string& vertex_source,
-                                const std::string& fragment_source,
+        void construct_pipeline(const gpu::shader_variant& vertex_shader,
+                                const gpu::shader_variant& fragment_shader,
                                 const std::vector<gpu::vertex_buffer_layout>& vertex_layouts,
                                 const gpu::bind_group_layout_descriptor& draw_layout,
                                 gpu::bind_group_layout frame_layout,
@@ -184,7 +191,8 @@ namespace rendering_engine
                                 const gpu::bind_group_layout_descriptor& material_layout = {},
                                 gpu::primitive_topology topology = gpu::primitive_topology::triangles);
 
-        // Build the pipeline + per-draw layout from source. When
+        // Build the pipeline + per-draw layout from the two stage
+        // variants with explicit fixed-function state. When
         // @p frame_layout is valid, slot 0 is reserved for a
         // per-frame bind group owned by the corresponding pass and
         // @ref per_draw_slot returns 1; otherwise the per-draw
@@ -192,8 +200,8 @@ namespace rendering_engine
         // it becomes the trailing descriptor set (per-material).
         // @p topology bakes the primitive assembly mode into the
         // pipeline (defaults to @c triangles).
-        void construct_pipeline(const std::string& vertex_source,
-                                const std::string& fragment_source,
+        void construct_pipeline(const gpu::shader_variant& vertex_shader,
+                                const gpu::shader_variant& fragment_shader,
                                 const gpu::vertex_buffer_layout& vertex_layout,
                                 const gpu::bind_group_layout_descriptor& draw_layout,
                                 gpu::bind_group_layout frame_layout,
@@ -205,8 +213,8 @@ namespace rendering_engine
 
         // Multi-stream variant of the explicit-state overload; see the
         // multi-stream @ref construct_pipeline above.
-        void construct_pipeline(const std::string& vertex_source,
-                                const std::string& fragment_source,
+        void construct_pipeline(const gpu::shader_variant& vertex_shader,
+                                const gpu::shader_variant& fragment_shader,
                                 const std::vector<gpu::vertex_buffer_layout>& vertex_layouts,
                                 const gpu::bind_group_layout_descriptor& draw_layout,
                                 gpu::bind_group_layout frame_layout,

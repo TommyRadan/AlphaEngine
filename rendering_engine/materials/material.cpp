@@ -163,8 +163,8 @@ namespace rendering_engine
         return per_draw_slot();
     }
 
-    void material::construct_pipeline(const std::string& vertex_source,
-                                      const std::string& fragment_source,
+    void material::construct_pipeline(const gpu::shader_variant& vertex_shader,
+                                      const gpu::shader_variant& fragment_shader,
                                       const gpu::vertex_buffer_layout& vertex_layout,
                                       const gpu::bind_group_layout_descriptor& draw_layout,
                                       gpu::bind_group_layout frame_layout,
@@ -172,8 +172,8 @@ namespace rendering_engine
                                       const gpu::bind_group_layout_descriptor& material_layout,
                                       gpu::primitive_topology topology)
     {
-        construct_pipeline(vertex_source,
-                           fragment_source,
+        construct_pipeline(vertex_shader,
+                           fragment_shader,
                            std::vector<gpu::vertex_buffer_layout>{vertex_layout},
                            draw_layout,
                            frame_layout,
@@ -182,8 +182,8 @@ namespace rendering_engine
                            topology);
     }
 
-    void material::construct_pipeline(const std::string& vertex_source,
-                                      const std::string& fragment_source,
+    void material::construct_pipeline(const gpu::shader_variant& vertex_shader,
+                                      const gpu::shader_variant& fragment_shader,
                                       const std::vector<gpu::vertex_buffer_layout>& vertex_layouts,
                                       const gpu::bind_group_layout_descriptor& draw_layout,
                                       gpu::bind_group_layout frame_layout,
@@ -192,8 +192,8 @@ namespace rendering_engine
                                       gpu::primitive_topology topology)
     {
         m_params = params;
-        construct_pipeline(vertex_source,
-                           fragment_source,
+        construct_pipeline(vertex_shader,
+                           fragment_shader,
                            vertex_layouts,
                            draw_layout,
                            frame_layout,
@@ -204,8 +204,8 @@ namespace rendering_engine
                            topology);
     }
 
-    void material::construct_pipeline(const std::string& vertex_source,
-                                      const std::string& fragment_source,
+    void material::construct_pipeline(const gpu::shader_variant& vertex_shader,
+                                      const gpu::shader_variant& fragment_shader,
                                       const gpu::vertex_buffer_layout& vertex_layout,
                                       const gpu::bind_group_layout_descriptor& draw_layout,
                                       gpu::bind_group_layout frame_layout,
@@ -215,8 +215,8 @@ namespace rendering_engine
                                       const gpu::bind_group_layout_descriptor& material_layout,
                                       gpu::primitive_topology topology)
     {
-        construct_pipeline(vertex_source,
-                           fragment_source,
+        construct_pipeline(vertex_shader,
+                           fragment_shader,
                            std::vector<gpu::vertex_buffer_layout>{vertex_layout},
                            draw_layout,
                            frame_layout,
@@ -227,8 +227,8 @@ namespace rendering_engine
                            topology);
     }
 
-    void material::construct_pipeline(const std::string& vertex_source,
-                                      const std::string& fragment_source,
+    void material::construct_pipeline(const gpu::shader_variant& vertex_shader,
+                                      const gpu::shader_variant& fragment_shader,
                                       const std::vector<gpu::vertex_buffer_layout>& vertex_layouts,
                                       const gpu::bind_group_layout_descriptor& draw_layout,
                                       gpu::bind_group_layout frame_layout,
@@ -242,12 +242,12 @@ namespace rendering_engine
 
         gpu::shader_module_descriptor vs_descriptor{};
         vs_descriptor.stage = gpu::shader_stage::vertex;
-        vs_descriptor.spirv = gpu::compile_glsl_to_spirv(vertex_source, gpu::shader_stage::vertex);
+        vs_descriptor.spirv = gpu::compile_library_shader(vertex_shader, gpu::shader_stage::vertex);
         m_vertex_shader = gpu.create_shader_module(vs_descriptor);
 
         gpu::shader_module_descriptor fs_descriptor{};
         fs_descriptor.stage = gpu::shader_stage::fragment;
-        fs_descriptor.spirv = gpu::compile_glsl_to_spirv(fragment_source, gpu::shader_stage::fragment);
+        fs_descriptor.spirv = gpu::compile_library_shader(fragment_shader, gpu::shader_stage::fragment);
         m_fragment_shader = gpu.create_shader_module(fs_descriptor);
 
         m_per_draw_layout = gpu.create_bind_group_layout(draw_layout);

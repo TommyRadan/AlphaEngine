@@ -87,42 +87,6 @@ namespace
     constexpr uint32_t light_frame_binding = 0;
     constexpr uint32_t draw_model_binding = 1;
 
-    const std::string vertex_shader = R"vs(
-        #version 450
-
-        layout(location = 0) in vec3 position;
-
-        layout(set = 0, binding = 0, std140) uniform LightFrame
-        {
-            mat4 lightViewProj;
-        } u_light;
-
-        layout(set = 1, binding = 1, std140) uniform PerDraw
-        {
-            mat4 modelMatrix;
-        } u_draw;
-
-        void main()
-        {
-            gl_Position = u_light.lightViewProj * u_draw.modelMatrix * vec4(position, 1.0);
-        }
-)vs";
-
-    // Depth-only: the colour attachment exists only to keep the
-    // framebuffer complete, so emit a constant. The depth the lit
-    // materials sample comes from the depth attachment, written
-    // automatically by the rasterizer.
-    const std::string fragment_shader = R"fs(
-        #version 450
-
-        layout(location = 0) out vec4 fragColor;
-
-        void main()
-        {
-            fragColor = vec4(1.0);
-        }
-)fs";
-
     // Build a directional light's view-projection auto-fitted to the
     // camera's view frustum. The frustum is capped to @ref shadow_distance
     // depth, then enclosed in its bounding sphere — a rotation-invariant,
@@ -228,12 +192,12 @@ namespace rendering_engine
 
         gpu::shader_module_descriptor vs_descriptor{};
         vs_descriptor.stage = gpu::shader_stage::vertex;
-        vs_descriptor.spirv = gpu::compile_glsl_to_spirv(vertex_shader, gpu::shader_stage::vertex);
+        vs_descriptor.spirv = gpu::compile_library_shader("passes/shadow.vert.glsl", gpu::shader_stage::vertex);
         m_vertex_shader = gpu.create_shader_module(vs_descriptor);
 
         gpu::shader_module_descriptor fs_descriptor{};
         fs_descriptor.stage = gpu::shader_stage::fragment;
-        fs_descriptor.spirv = gpu::compile_glsl_to_spirv(fragment_shader, gpu::shader_stage::fragment);
+        fs_descriptor.spirv = gpu::compile_library_shader("passes/shadow.frag.glsl", gpu::shader_stage::fragment);
         m_fragment_shader = gpu.create_shader_module(fs_descriptor);
 
         // Light-frame layout (slot 0): the view-projection UBO.
