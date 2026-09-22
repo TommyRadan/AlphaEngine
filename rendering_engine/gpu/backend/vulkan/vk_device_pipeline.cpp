@@ -45,6 +45,7 @@
 #include <rendering_engine/gpu/backend/vulkan/vk_device.hpp>
 
 #include <array>
+#include <stdexcept>
 #include <vector>
 
 #include <core/log.hpp>
@@ -110,7 +111,7 @@ namespace rendering_engine::gpu::backend::vulkan
         if (vkCreateDescriptorSetLayout(m_device, &info, nullptr, &record.object) != VK_SUCCESS)
         {
             LOG_FTL("vkCreateDescriptorSetLayout failed");
-            return {};
+            throw std::runtime_error{"vkCreateDescriptorSetLayout failed"};
         }
 
         bind_group_layout h{};

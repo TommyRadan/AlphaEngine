@@ -14,7 +14,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **SDL3 and GLM are fetched from source** by CMake via `FetchContent` — no system packages are required. GLM is pinned to tag `1.0.1` and header-only; SDL3 is built statically. OpenGL, glad, and stb are linked in as well (glad is built from `vendor/glad`, stb is header-only in `vendor/`). Logging is backed by SDL3's logging API behind `core/log.hpp`.
 - **The Vulkan SDK is a required build dependency.** Both the OpenGL and Vulkan backends are always compiled into the binary; CMake calls `find_package(Vulkan REQUIRED)` unconditionally. On Windows the LunarG SDK exposes `VULKAN_SDK`; on Linux install `libvulkan-dev`.
 - **Output:** `Binaries/AlphaEngine.exe` (Ninja / single-config) or `Binaries/<Configuration>/AlphaEngine.exe` (Visual Studio multi-config).
-- **Unit tests** live under `tests/` (GoogleTest, fetched via `FetchContent`) and run through `ctest`. They are built by default (`-DALPHAENGINE_BUILD_TESTS=ON`) and cover the device-free engine core (`core/math`, `core::pool`, `core::event_bus`, `core::jobs`, `runtime::node`, `asset_cache`, the `vertex_format` table, and `generate_tangents`). The asset layer resolves its gpu device through `rendering_engine::asset_device()` (set by the engine, swapped for a fake device in tests) rather than the engine global, so the cache tests stay in the same lean headless binary. CI runs them on Linux. `tests/` is excluded from the format/tidy scope. Build + run: `cmake --build build --target AlphaEngineTests && ctest --test-dir build --output-on-failure`. See `docs/testing.md`.
+- **Unit tests** live under `tests/` (GoogleTest, fetched via `FetchContent`) and run through `ctest`. They are built by default (`-DALPHAENGINE_BUILD_TESTS=ON`) and cover the device-free engine core (`core/math`, `core::pool`, `core::event_bus`, `core::jobs`, `core::logging`, `runtime::node`, `asset_cache`, the `vertex_format` table, and `generate_tangents`). The asset layer resolves its gpu device through `rendering_engine::asset_device()` (set by the engine, swapped for a fake device in tests) rather than the engine global, so the cache tests stay in the same lean headless binary. CI runs them on Linux. `tests/` is excluded from the format/tidy scope. Build + run: `cmake --build build --target AlphaEngineTests && ctest --test-dir build --output-on-failure`. See `docs/testing.md`.
 
 ## Style and naming gates
 
@@ -49,7 +49,7 @@ Each source directory ships its own `CMakeLists.txt` that contributes files to t
 
 ## Logging
 
-Use the wrapper in `core/log.hpp`: `LOG_INF`, `LOG_WRN`, `LOG_ERR`, `LOG_FTL`. There is **no TRACE or DEBUG sink yet** — do not add per-frame or per-draw logs. Level-selection guidance and examples are in `docs/logging.md`.
+Use the wrapper in `core/log.hpp`: `LOG_TRC`, `LOG_DBG`, `LOG_INF`, `LOG_WRN`, `LOG_ERR`, `LOG_FTL`. Per-frame / per-draw logs are `LOG_TRC` only — they are dropped before formatting unless trace is enabled. Every message carries a category (`engine` by default; a translation unit sets `#define LOG_CATEGORY "gpu"` before its first include). The level comes from the build type (`debug` in Debug, `info` otherwise) and the `ALPHAENGINE_LOG_LEVEL` env var (`info,gpu=trace`). `LOG_FTL` logs and flushes but does **not** abort — the call site throws right after it. `message()` carries a printf-format attribute, so GCC/Clang check every call site with `-Wformat`. Level-selection guidance and examples are in `docs/logging.md`.
 
 ## Math
 

@@ -100,6 +100,14 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "App
     target_link_options(AlphaEngine PRIVATE -stdlib=libc++)
 endif()
 
+# Format-string checking. core::logging::message carries a printf-format
+# attribute on GCC / Clang (ALPHAENGINE_PRINTF_FORMAT in core/log.hpp), so
+# -Wformat validates every LOG_* call site's conversions against its
+# arguments. MSVC has no equivalent outside /analyze.
+if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+    target_compile_options(AlphaEngine PRIVATE -Wformat)
+endif()
+
 # SDL3 — fetched and built statically from source
 include(FetchContent)
 set(SDL_STATIC ON CACHE BOOL "" FORCE)

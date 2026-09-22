@@ -60,6 +60,7 @@ set(ALPHAENGINE_TEST_SOURCES
     core/pool_test.cpp
     core/event_bus_test.cpp
     core/jobs_test.cpp
+    core/log_test.cpp
     core/time_test.cpp
     runtime/node_test.cpp
     rendering_engine/assets/asset_cache_test.cpp
@@ -91,6 +92,13 @@ target_link_libraries(AlphaEngineTests PRIVATE
     SDL3::SDL3-static
     Threads::Threads
 )
+
+# Same printf-format checking as the AlphaEngine target (see the root
+# CMakeLists.txt): the LOG_* call sites in the sources under test are
+# validated here too, which is what the Linux CI job compiles.
+if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+    target_compile_options(AlphaEngineTests PRIVATE -Wformat)
+endif()
 
 # Register every TEST() with ctest so `ctest --output-on-failure` runs them.
 # Discovery runs the freshly-built test binary with --gtest_list_tests at build

@@ -60,7 +60,7 @@ The Scene Graph manages the hierarchical organization of objects in the scene. I
 
 ## Logging
 
-AlphaEngine uses a thin wrapper over SDL's logging API exposed via `core/log.hpp`. Four levels are currently available: `LOG_INF`, `LOG_WRN`, `LOG_ERR`, and `LOG_FTL`. See [docs/logging.md](./docs/logging.md) for the conventions used across subsystems and guidance on picking a level when adding new log statements.
+AlphaEngine uses a thin wrapper over SDL's logging API exposed via `core/log.hpp`. Six levels are available: `LOG_TRC`, `LOG_DBG`, `LOG_INF`, `LOG_WRN`, `LOG_ERR`, and `LOG_FTL`; the runtime level is set with the `ALPHAENGINE_LOG_LEVEL` environment variable. See [docs/logging.md](./docs/logging.md) for the conventions used across subsystems and guidance on picking a level when adding new log statements.
 
 ## License
 
