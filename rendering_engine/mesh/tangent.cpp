@@ -22,23 +22,57 @@
 
 #include <rendering_engine/mesh/tangent.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
+
+namespace
+{
+    namespace math = core::math;
+
+    // Interior angle at @p apex of the triangle (@p apex, @p a, @p b), in
+    // radians; 0 when either edge is degenerate so a collapsed corner adds
+    // nothing to the average.
+    float corner_angle(const math::vec3& apex, const math::vec3& a, const math::vec3& b)
+    {
+        const math::vec3 ea = a - apex;
+        const math::vec3 eb = b - apex;
+        const float la = math::length(ea);
+        const float lb = math::length(eb);
+        if (la <= 1e-8f || lb <= 1e-8f)
+        {
+            return 0.0f;
+        }
+        const float cos_angle = std::clamp(math::dot(ea, eb) / (la * lb), -1.0f, 1.0f);
+        return std::acos(cos_angle);
+    }
+
+    // Normalize, or return zero when the vector has no usable direction.
+    math::vec3 safe_normalize(const math::vec3& v)
+    {
+        const float len = math::length(v);
+        return len <= 1e-12f ? math::vec3{0.0f} : v * (1.0f / len);
+    }
+} // namespace
 
 namespace rendering_engine
 {
     std::vector<vertex_position_uv_normal_tangent>
     generate_tangents(const std::vector<vertex_position_uv_normal>& vertices, const std::vector<uint32_t>& indices)
     {
-        namespace math = core::math;
-
         const std::size_t count = vertices.size();
         std::vector<math::vec3> tangent_accum(count, math::vec3{0.0f});
         std::vector<math::vec3> bitangent_accum(count, math::vec3{0.0f});
 
         // Accumulate the per-triangle tangent/bitangent onto each of its
         // three vertices. Solving the [edge1; edge2] = [uv1; uv2] * [T; B]
-        // system gives the tangent basis aligned with the UV gradient.
+        // system gives the tangent basis aligned with the UV gradient. The
+        // per-triangle directions are normalized and weighted by the corner
+        // angle at each vertex: a triangle's share of a vertex's frame then
+        // matches how much of the surface around that vertex it covers,
+        // instead of every triangle counting once (which lets a fan of
+        // slivers outvote a single large neighbour) or the raw gradient
+        // magnitude counting (which lets a tiny UV footprint dominate).
         for (std::size_t i = 0; i + 2 < indices.size(); i += 3)
         {
             const uint32_t i0 = indices[i + 0];
@@ -70,16 +104,20 @@ namespace rendering_engine
             }
             const float r = 1.0f / det;
 
-            const math::vec3 tangent = (edge1 * dv2 - edge2 * dv1) * r;
-            const math::vec3 bitangent = (edge2 * du1 - edge1 * du2) * r;
+            const math::vec3 tangent = safe_normalize((edge1 * dv2 - edge2 * dv1) * r);
+            const math::vec3 bitangent = safe_normalize((edge2 * du1 - edge1 * du2) * r);
 
-            tangent_accum[i0] += tangent;
-            tangent_accum[i1] += tangent;
-            tangent_accum[i2] += tangent;
+            const float a0 = corner_angle(p0, p1, p2);
+            const float a1 = corner_angle(p1, p2, p0);
+            const float a2 = corner_angle(p2, p0, p1);
 
-            bitangent_accum[i0] += bitangent;
-            bitangent_accum[i1] += bitangent;
-            bitangent_accum[i2] += bitangent;
+            tangent_accum[i0] += tangent * a0;
+            tangent_accum[i1] += tangent * a1;
+            tangent_accum[i2] += tangent * a2;
+
+            bitangent_accum[i0] += bitangent * a0;
+            bitangent_accum[i1] += bitangent * a1;
+            bitangent_accum[i2] += bitangent * a2;
         }
 
         std::vector<vertex_position_uv_normal_tangent> out;

@@ -36,7 +36,8 @@ standalone `AlphaEngineTests` executable that compiles the specific subsystem
 translation units under test directly, alongside the test sources, and links
 `GTest::gtest_main` plus only the libraries those sources need (GLM for
 `core/math`, SDL3 for `core/log`, Threads for `core/jobs`). Nothing from the
-renderer, window, or GPU layers is pulled in.
+renderer, window, or GPU layers is pulled in (`mesh/tangent.cpp` is pure
+geometry; the `gpu` header it includes declares types only).
 
 Tests are registered with ctest via `gtest_discover_tests`, so each `TEST()`
 shows up as an individual ctest case.
@@ -65,8 +66,10 @@ All device-free:
   `world_position` / `set_world_position`, `find`, active / effective-active
   flags, and the component-store attach/get/remove path.
 - `asset_cache` — dedup by structural key, builder-runs-only-on-miss,
-  `collect_unused()` / weak-ref semantics, and that a `mesh_asset` releases its
-  GPU buffers when the last handle drops.
+  `collect_unused()` / weak-ref semantics, that a `mesh_asset` releases its
+  GPU buffers when the last handle drops, and that the `vertex_format` a
+  builder declares is carried onto the asset (or demoted to `custom` when it
+  contradicts the stride).
 - `util::image` / `util::color` — the packed 4-byte RGBA8 texel layout the
   upload sites rely on; deep copies, copy-and-swap assignment (larger over
   smaller, over an empty image, self-assignment), moves that leave the source
@@ -77,6 +80,15 @@ All device-free:
   covered).
 - `mesh` — an empty mesh reports zero vertices and its `vertices()` accessor is
   safe to call; `upload_obj` stores a copy.
+- `vertex_format` (`rendering_engine/mesh/vertex.hpp`) — every vertex struct
+  maps to its format and stride, the named strides pin the attribute offsets
+  the built-in materials hard-code, and `vertex_format_compatible` admits
+  exactly the prefix layouts (a position+uv reader accepts a tangent record;
+  a tangent reader rejects a 32-byte position+uv+normal record).
+- `generate_tangents` (`rendering_engine/mesh/tangent.cpp`) — tangent follows
+  the u gradient, mirrored UVs flip the handedness sign, degenerate triangles
+  contribute nothing, and shared vertices weight their triangles by corner
+  angle.
 
 ### Testing the asset layer headless
 

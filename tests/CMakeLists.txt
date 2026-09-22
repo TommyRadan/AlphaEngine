@@ -34,6 +34,9 @@ set(ALPHAENGINE_TEST_SOURCES_UNDER_TEST
     # component store; no renderer or device).
     ${CMAKE_SOURCE_DIR}/runtime/node.cpp
     ${CMAKE_SOURCE_DIR}/rendering_engine/util/transform.cpp
+    # mesh/tangent — pure geometry over core/math (the gpu header it includes
+    # is types only, no device).
+    ${CMAKE_SOURCE_DIR}/rendering_engine/mesh/tangent.cpp
     # asset_cache and the asset handles. These resolve their gpu device through
     # asset_device(), so the tests install a fake device and link none of the
     # gpu backends. device.cpp supplies the abstract device's out-of-line dtor;
@@ -61,6 +64,8 @@ set(ALPHAENGINE_TEST_SOURCES
     runtime/node_test.cpp
     rendering_engine/assets/asset_cache_test.cpp
     rendering_engine/mesh/mesh_test.cpp
+    rendering_engine/mesh/tangent_test.cpp
+    rendering_engine/mesh/vertex_format_test.cpp
     rendering_engine/util/font_test.cpp
     rendering_engine/util/image_test.cpp
 )

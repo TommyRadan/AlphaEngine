@@ -33,6 +33,7 @@
 #include <rendering_engine/materials/material.hpp>
 #include <rendering_engine/mesh/tangent.hpp>
 #include <rendering_engine/mesh/vertex.hpp>
+#include <rendering_engine/renderables/vertex_format_check.hpp>
 #include <runtime/engine.hpp>
 
 rendering_engine::plane::plane(
@@ -61,18 +62,13 @@ rendering_engine::plane::~plane()
 
 void rendering_engine::plane::upload()
 {
-    // Tangent-complete vertices so the plane can be drawn by tangent-aware
-    // materials (standard/PBR) without the vertex stride falling short of the
-    // pipeline's tangent attribute. The position/uv/normal offsets are
-    // unchanged, so materials that ignore the tangent still read correctly.
-    m_vertex_stride = sizeof(vertex_position_uv_normal_tangent);
-
     // Build and upload through the asset cache, keyed by dimensions and segment
     // counts so two planes of the same geometry share one upload. The builder
     // only runs on a cache miss.
     m_mesh = runtime::current_engine().assets->get_or_create_mesh(
         "plane:" + std::to_string(m_width) + "x" + std::to_string(m_height) + ":" + std::to_string(m_width_segments) +
-            "x" + std::to_string(m_height_segments),
+            "x" + std::to_string(m_height_segments) + ":" +
+            vertex_format_name(vertex_format::position_uv_normal_tangent),
         [this]
         {
             const unsigned int columns = m_width_segments + 1;
@@ -126,11 +122,15 @@ void rendering_engine::plane::upload()
                 }
             }
 
+            // Tangents complete the record for tangent-aware materials
+            // (standard/PBR); the position/uv/normal offsets are unchanged so
+            // materials that ignore the tangent still read correctly.
             const auto tangent_vertices = generate_tangents(vertices, indices);
             return mesh_data::from_vertices(tangent_vertices, std::move(indices));
         });
 
     m_index_count = m_mesh->index_count;
+    m_vertex_stride = m_mesh->vertex_stride;
 }
 
 void rendering_engine::plane::collect_draw_items(std::vector<draw_item>& out)
@@ -141,6 +141,11 @@ void rendering_engine::plane::collect_draw_items(std::vector<draw_item>& out)
         return;
     }
     if (!m_mesh)
+    {
+        return;
+    }
+
+    if (!validate_vertex_format(*m_material, *m_mesh, "plane", m_vertex_format_reported))
     {
         return;
     }

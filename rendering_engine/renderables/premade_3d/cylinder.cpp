@@ -32,7 +32,9 @@
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/materials/material.hpp>
+#include <rendering_engine/mesh/tangent.hpp>
 #include <rendering_engine/mesh/vertex.hpp>
+#include <rendering_engine/renderables/vertex_format_check.hpp>
 #include <runtime/engine.hpp>
 
 rendering_engine::cylinder::cylinder(material* mat,
@@ -66,15 +68,14 @@ rendering_engine::cylinder::~cylinder()
 
 void rendering_engine::cylinder::upload()
 {
-    m_vertex_stride = sizeof(vertex_position_uv_normal);
-
     // Build and upload through the asset cache, keyed by every geometry
     // parameter so two cylinders with identical parameters share one upload.
     // The builder only runs on a cache miss.
     m_mesh = runtime::current_engine().assets->get_or_create_mesh(
         "cylinder:" + std::to_string(m_radius_top) + ":" + std::to_string(m_radius_bottom) + ":" +
             std::to_string(m_height) + ":" + std::to_string(m_radial_segments) + ":" +
-            std::to_string(m_height_segments) + ":" + std::to_string(m_open_ended),
+            std::to_string(m_height_segments) + ":" + std::to_string(m_open_ended) + ":" +
+            vertex_format_name(vertex_format::position_uv_normal_tangent),
         [this]
         {
             constexpr float pi = 3.14159265358979323846f;
@@ -203,10 +204,15 @@ void rendering_engine::cylinder::upload()
                 generate_cap(false);
             }
 
-            return mesh_data::from_vertices(vertices, std::move(indices));
+            // Tangents complete the record for tangent-aware materials
+            // (standard/PBR); the position/uv/normal offsets are unchanged so
+            // materials that ignore the tangent still read correctly.
+            const auto tangent_vertices = generate_tangents(vertices, indices);
+            return mesh_data::from_vertices(tangent_vertices, std::move(indices));
         });
 
     m_index_count = m_mesh->index_count;
+    m_vertex_stride = m_mesh->vertex_stride;
 }
 
 void rendering_engine::cylinder::collect_draw_items(std::vector<draw_item>& out)
@@ -217,6 +223,11 @@ void rendering_engine::cylinder::collect_draw_items(std::vector<draw_item>& out)
         return;
     }
     if (!m_mesh)
+    {
+        return;
+    }
+
+    if (!validate_vertex_format(*m_material, *m_mesh, "cylinder", m_vertex_format_reported))
     {
         return;
     }

@@ -70,6 +70,7 @@ namespace rendering_engine
         unsigned int m_depth_segments;
         unsigned int m_index_count{0};
         uint32_t m_vertex_stride{0};
+        bool m_vertex_format_reported{false};
 
         // Shared geometry from the asset cache, keyed by dimensions and
         // segment counts; freed when the last box referencing it is destroyed.

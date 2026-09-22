@@ -26,6 +26,7 @@
 
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/mesh/mesh.hpp>
+#include <rendering_engine/mesh/vertex.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
 #include <rendering_engine/util/transform.hpp>
 
@@ -52,7 +53,8 @@ namespace rendering_engine
         // Draws geometry cached by @ref asset_cache instead of uploading a
         // private copy. The model holds a reference for as long as it draws the
         // mesh; the shared GPU buffer is released once no model references it.
-        // Mutually exclusive with @ref upload_mesh — use one.
+        // An asset with an index buffer is drawn indexed. Mutually exclusive
+        // with @ref upload_mesh — use one.
         void set_mesh(std::shared_ptr<mesh_asset> mesh);
 
         // No-op — meshes upload through @ref upload_mesh / @ref set_mesh, which
@@ -75,5 +77,10 @@ namespace rendering_engine
 
         size_t m_vertex_count{0};
         uint32_t m_vertex_stride{0};
+
+        // Record layout of whichever vertex buffer is drawn, checked against
+        // the material before every draw (see @ref validate_vertex_format).
+        vertex_format m_vertex_format{vertex_format::custom};
+        bool m_vertex_format_reported{false};
     };
 } // namespace rendering_engine

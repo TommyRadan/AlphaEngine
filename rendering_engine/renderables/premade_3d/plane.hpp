@@ -35,7 +35,7 @@ namespace rendering_engine
 
     // Flat subdivided plane lying in the XY plane, centred on the origin.
     // Parameterised by (width, height, width_segments, height_segments).
-    // Vertex format is position + uv + normal; every
+    // Vertex format is position + uv + normal + tangent; every
     // normal points along +Z and UVs span [0, 1] across the surface.
     struct plane : public renderable
     {
@@ -63,6 +63,7 @@ namespace rendering_engine
         unsigned int m_height_segments;
         unsigned int m_index_count{0};
         uint32_t m_vertex_stride{0};
+        bool m_vertex_format_reported{false};
 
         std::shared_ptr<mesh_asset> m_mesh;
         gpu::buffer m_draw_ubo{};

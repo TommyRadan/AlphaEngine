@@ -62,6 +62,7 @@ namespace rendering_engine
         unsigned int m_subdivisions;
         unsigned int m_index_count{0};
         uint32_t m_vertex_stride{0};
+        bool m_vertex_format_reported{false};
 
         std::shared_ptr<mesh_asset> m_mesh;
         gpu::buffer m_draw_ubo{};

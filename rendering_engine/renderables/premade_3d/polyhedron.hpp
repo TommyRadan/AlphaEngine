@@ -42,7 +42,7 @@ namespace rendering_engine
     // sphere of the given @c radius, and derives smooth (sphere) normals plus
     // spherical UVs.
     //
-    // Vertex format is position + uv + normal. Triangles are emitted with CCW
+    // Vertex format is position + uv + normal + tangent. Triangles are emitted with CCW
     // outward winding, matching the convention documented in sphere.cpp. The
     // four platonic-solid wrappers (tetrahedron, octahedron, icosahedron,
     // dodecahedron) feed canonical base tables into this generator.
@@ -72,6 +72,7 @@ namespace rendering_engine
         unsigned int m_detail;
         unsigned int m_index_count{0};
         uint32_t m_vertex_stride{0};
+        bool m_vertex_format_reported{false};
 
         // Shared geometry from the asset cache, keyed by base tables + radius +
         // detail; freed when the last polyhedron referencing it is destroyed.

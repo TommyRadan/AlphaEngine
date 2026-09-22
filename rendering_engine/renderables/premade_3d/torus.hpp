@@ -39,7 +39,7 @@ namespace rendering_engine
     // controls the tessellation around the tube cross-section, @c tubular_segments
     // the tessellation around the main ring, and @c arc sweeps a partial ring
     // (full ring at 2*pi). Each cell is two triangles. Vertex format is
-    // position + uv + normal with outward-facing CCW winding.
+    // position + uv + normal + tangent with outward-facing CCW winding.
     struct torus : public renderable
     {
         explicit torus(material* mat,
@@ -68,6 +68,7 @@ namespace rendering_engine
         float m_arc;
         unsigned int m_index_count{0};
         uint32_t m_vertex_stride{0};
+        bool m_vertex_format_reported{false};
 
         std::shared_ptr<mesh_asset> m_mesh;
         gpu::buffer m_draw_ubo{};

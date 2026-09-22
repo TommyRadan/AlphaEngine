@@ -29,6 +29,7 @@
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/materials/material.hpp>
 #include <rendering_engine/mesh/vertex.hpp>
+#include <rendering_engine/renderables/vertex_format_check.hpp>
 #include <runtime/engine.hpp>
 
 rendering_engine::model::model(material* mat) : m_material{mat} {}
@@ -57,6 +58,7 @@ void rendering_engine::model::upload_mesh(const rendering_engine::mesh& mesh)
 {
     m_vertex_count = mesh.vertex_count();
     m_vertex_stride = sizeof(vertex_position_uv_normal);
+    m_vertex_format = vertex_format::position_uv_normal;
 
     if (m_vertex_count == 0)
     {
@@ -78,6 +80,8 @@ void rendering_engine::model::set_mesh(std::shared_ptr<mesh_asset> mesh)
 {
     m_mesh = std::move(mesh);
     m_vertex_stride = m_mesh ? m_mesh->vertex_stride : 0;
+    m_vertex_format = m_mesh ? m_mesh->format : vertex_format::custom;
+    m_vertex_format_reported = false;
 }
 
 void rendering_engine::model::collect_draw_items(std::vector<draw_item>& out)
@@ -93,6 +97,10 @@ void rendering_engine::model::collect_draw_items(std::vector<draw_item>& out)
     const gpu::buffer vertex_buffer = m_mesh ? m_mesh->vertex_buffer : m_vertex_buffer;
     const uint32_t vertex_count = m_mesh ? m_mesh->vertex_count : static_cast<uint32_t>(m_vertex_count);
     if (!vertex_buffer.valid())
+    {
+        return;
+    }
+    if (!validate_vertex_format(*m_material, m_vertex_format, m_vertex_stride, "model", m_vertex_format_reported))
     {
         return;
     }
@@ -132,5 +140,13 @@ void rendering_engine::model::collect_draw_items(std::vector<draw_item>& out)
     item.per_draw_bind_group = m_draw_bind_group;
     item.vertex_count = vertex_count;
     item.vertex_stride = m_vertex_stride;
+    // A cached asset that carries indices is drawn indexed; the private
+    // upload_mesh path is always a plain vertex array.
+    if (m_mesh && m_mesh->index_buffer.valid())
+    {
+        item.index_buffer = m_mesh->index_buffer;
+        item.index_count = m_mesh->index_count;
+        item.index_format = gpu::index_format::uint32;
+    }
     out.push_back(item);
 }

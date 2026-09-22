@@ -35,7 +35,7 @@ namespace rendering_engine
 
     // Flat annulus lying in the XY plane. Built from a
     // radial/angular grid between an inner and outer radius. Vertex format is
-    // position + uv + normal; every normal points along +Z. Front faces are
+    // position + uv + normal + tangent; every normal points along +Z. Front faces are
     // CCW when viewed from +Z.
     struct ring : public renderable
     {
@@ -67,6 +67,7 @@ namespace rendering_engine
         float m_theta_length;
         unsigned int m_index_count{0};
         uint32_t m_vertex_stride{0};
+        bool m_vertex_format_reported{false};
 
         std::shared_ptr<mesh_asset> m_mesh;
         gpu::buffer m_draw_ubo{};

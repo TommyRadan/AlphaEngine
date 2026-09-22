@@ -35,6 +35,7 @@
 #include <vector>
 
 #include <rendering_engine/gpu/handle.hpp>
+#include <rendering_engine/mesh/vertex.hpp>
 
 namespace rendering_engine
 {
@@ -44,9 +45,12 @@ namespace rendering_engine
      * Layout-agnostic: vertices are stored as raw interleaved bytes plus a
      * @ref vertex_stride, so a cached mesh is not tied to one vertex format
      * (position+uv+normal, +tangent, or a custom importer's record all work).
-     * The builder fills this and the cache uploads it once. @ref indices may be
-     * left empty for non-indexed geometry, in which case the resulting
-     * @ref mesh_asset carries only a vertex buffer.
+     * @ref format names the record layout when it is one of the engine's
+     * vertex structs so renderables can check it against the material that
+     * draws it; raw importer records leave it @c custom. The builder fills
+     * this and the cache uploads it once. @ref indices may be left empty for
+     * non-indexed geometry, in which case the resulting @ref mesh_asset
+     * carries only a vertex buffer.
      */
     struct mesh_data
     {
@@ -62,12 +66,21 @@ namespace rendering_engine
         // for a valid mesh; @ref from_vertices sets it from @c sizeof(VertexT).
         uint32_t vertex_stride{0};
 
+        // Record layout of @ref vertex_bytes. @ref from_vertices deduces it
+        // from @c VertexT (one of the @c vertex_* structs, else @c custom); a
+        // builder that writes raw bytes sets it by hand, or leaves @c custom
+        // when the layout is not one the engine names. For a named format
+        // @ref vertex_stride must equal @ref vertex_format_stride.
+        vertex_format format{vertex_format::custom};
+
         /**
          * @brief Builds @ref vertex_bytes from a typed, trivially-copyable
          *        vertex container.
          *
          * The vertex layout is whatever @c VertexT is, so the same cache holds
-         * meshes of any format. @p idx is optional (empty leaves the mesh
+         * meshes of any format; @ref format is recorded via
+         * @ref vertex_format_of so an engine vertex struct is named and any
+         * other record is @c custom. @p idx is optional (empty leaves the mesh
          * non-indexed).
          */
         template<typename VertexT>
@@ -77,6 +90,7 @@ namespace rendering_engine
 
             mesh_data data;
             data.vertex_stride = static_cast<uint32_t>(sizeof(VertexT));
+            data.format = vertex_format_of_v<VertexT>;
             data.vertex_bytes.resize(verts.size() * sizeof(VertexT));
             if (!verts.empty())
             {
@@ -119,5 +133,11 @@ namespace rendering_engine
         // Bytes per vertex in @ref vertex_buffer; carried so consumers set their
         // draw-item vertex stride without assuming a fixed vertex format.
         uint32_t vertex_stride{0};
+
+        // Record layout of @ref vertex_buffer, copied from the
+        // @ref mesh_data that built it. Renderables compare it against the
+        // material's @c required_vertex_format before emitting a draw so a
+        // pipeline never fetches attributes the record does not carry.
+        vertex_format format{vertex_format::custom};
     };
 } // namespace rendering_engine

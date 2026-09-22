@@ -35,7 +35,9 @@
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/materials/material.hpp>
+#include <rendering_engine/mesh/tangent.hpp>
 #include <rendering_engine/mesh/vertex.hpp>
+#include <rendering_engine/renderables/vertex_format_check.hpp>
 #include <runtime/engine.hpp>
 
 namespace
@@ -84,8 +86,6 @@ namespace rendering_engine
 
     void polyhedron::upload()
     {
-        m_vertex_stride = sizeof(vertex_position_uv_normal);
-
         // Content-addressed cache key: an FNV-1a digest over the base tables
         // distinguishes the different platonic-solid wrappers (so a dodecahedron
         // and an icosahedron at the same radius / detail do not collide), then
@@ -102,8 +102,9 @@ namespace rendering_engine
         };
         mix(m_base_vertices.data(), m_base_vertices.size() * sizeof(float));
         mix(m_base_indices.data(), m_base_indices.size() * sizeof(uint32_t));
-        const std::string key =
-            "polyhedron:" + std::to_string(digest) + ":r" + std::to_string(m_radius) + ":d" + std::to_string(m_detail);
+        const std::string key = "polyhedron:" + std::to_string(digest) + ":r" + std::to_string(m_radius) + ":d" +
+                                std::to_string(m_detail) + ":" +
+                                vertex_format_name(vertex_format::position_uv_normal_tangent);
 
         // Build and upload through the asset cache. The builder only runs on a
         // cache miss; matching keys share one upload.
@@ -242,10 +243,15 @@ namespace rendering_engine
                     fix_pole(vertices[t + 2].pos, uv2, uv0, uv1);
                 }
 
-                return mesh_data::from_vertices(vertices, std::move(indices));
+                // Tangents complete the record for tangent-aware materials
+                // (standard/PBR); the position/uv/normal offsets are unchanged so
+                // materials that ignore the tangent still read correctly.
+                const auto tangent_vertices = generate_tangents(vertices, indices);
+                return mesh_data::from_vertices(tangent_vertices, std::move(indices));
             });
 
         m_index_count = m_mesh->index_count;
+        m_vertex_stride = m_mesh->vertex_stride;
     }
 
     void polyhedron::collect_draw_items(std::vector<draw_item>& out)
@@ -256,6 +262,11 @@ namespace rendering_engine
             return;
         }
         if (!m_mesh)
+        {
+            return;
+        }
+
+        if (!validate_vertex_format(*m_material, *m_mesh, "polyhedron", m_vertex_format_reported))
         {
             return;
         }
