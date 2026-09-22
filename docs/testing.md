@@ -65,6 +65,10 @@ All device-free:
   constructor validation, and the wall-clock side: `perform_tick` /
   `delta_time` / `frame_count`, per-instance timestamps, and the FPS readings
   (bounds only — exact frame times are not reproducible).
+- `core::logging` — level filtering (global and per-category), the
+  `ALPHAENGINE_LOG_LEVEL` specification parser, the bounded recent-message
+  ring, the command-line stash, and the contract that `LOG_FTL` returns so
+  the caller can throw.
 - `runtime::node` — parent/child links and re-parenting, cached world matrices,
   `world_position` / `set_world_position`, `find`, active / effective-active
   flags, and the component-store attach/get/remove path.
