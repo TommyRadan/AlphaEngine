@@ -23,9 +23,38 @@ To configure without the tests (skipping the GoogleTest fetch entirely):
 cmake -S . -B build -DALPHAENGINE_BUILD_TESTS=OFF
 ```
 
-CI runs the suite on Linux on every push/PR (the `unit-tests (linux)` job in
-`.github/workflows/ci.yml`). Because the tests are device-free they run
+CI runs the suite on Linux on every push/PR: the `build (linux-gcc)` and
+`build (linux-clang)` jobs in `.github/workflows/ci.yml` run it through ctest
+after compiling the full engine, and the `sanitizers (linux ...)` jobs run it
+again under the sanitizers (below). Because the tests are device-free they run
 headless — no GL or Vulkan context is created.
+
+### Under the sanitizers
+
+`-DALPHAENGINE_SANITIZE=<value>` (root `CMakeLists.txt`, GCC / Clang only)
+passes `-fsanitize=<value> -fno-omit-frame-pointer` to every target, the
+fetched SDL3 and GoogleTest included, so reports inside dependency code carry a
+usable stack:
+
+```
+cmake -S . -B build-asan -G Ninja -DCMAKE_BUILD_TYPE=Debug -DALPHAENGINE_SANITIZE=address,undefined
+cmake --build build-asan --target AlphaEngineTests
+ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1 \
+  ctest --test-dir build-asan --output-on-failure
+```
+
+`halt_on_error=1` matters: UBSan keeps running after a report by default and
+the process still exits 0. ThreadSanitizer cannot share a binary with ASan, so
+it is a build of its own (`-DALPHAENGINE_SANITIZE=thread`); CI runs the suites
+that exercise threads through it repeatedly, in one process, so a race that
+needs an unlucky interleaving has a chance to surface:
+
+```
+Binaries/AlphaEngineTests --gtest_filter='jobs.*:time.*:event_bus.*:pool.*' --gtest_repeat=20
+```
+
+Every build directory writes its binaries to `Binaries/`, so build one
+configuration at a time.
 
 ## How the test target is wired
 

@@ -45,6 +45,24 @@ else()
     add_compile_options($<$<CONFIG:Debug>:-g> $<$<CONFIG:Debug>:-O0>)
 endif()
 
+# Sanitizers. ALPHAENGINE_SANITIZE is the value handed to -fsanitize=
+# ("address,undefined" or "thread"; ASan and TSan cannot be combined). It is
+# applied directory-wide from this point on, so every target configured
+# below — the engine, the test binary and the fetched dependencies (SDL3,
+# GoogleTest, ...) — is instrumented with the same runtime, which is what
+# keeps a report inside SDL's code readable and avoids mixing instrumented
+# and uninstrumented objects in one link. GCC / Clang only: MSVC spells its
+# (ASan-only) support differently and the CI sanitizer jobs run on Linux.
+set(ALPHAENGINE_SANITIZE "" CACHE STRING
+    "Sanitizers to build with, as the -fsanitize= value (e.g. address,undefined or thread); empty for none")
+if(ALPHAENGINE_SANITIZE)
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+        message(FATAL_ERROR "ALPHAENGINE_SANITIZE is only supported with GCC or Clang")
+    endif()
+    add_compile_options(-fsanitize=${ALPHAENGINE_SANITIZE} -fno-omit-frame-pointer)
+    add_link_options(-fsanitize=${ALPHAENGINE_SANITIZE})
+endif()
+
 # Set cmake module directory
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 
