@@ -24,6 +24,13 @@
  * @file gl_device_buffer.cpp
  * @brief @c gl_device member functions that manage GL buffer objects:
  *        @c create_buffer, @c destroy(buffer), @c write_buffer.
+ *
+ * Everything goes through the named (direct state access) entry
+ * points, so creating or filling a buffer never binds it to a target.
+ * That matters for index buffers in particular: GL_ELEMENT_ARRAY_BUFFER
+ * is vertex-array state, and binding an index buffer there to upload
+ * it between @c set_pipeline and @c end() would silently replace the
+ * bound pipeline's element buffer.
  */
 
 #include <rendering_engine/gpu/backend/opengl/gl_device.hpp>
@@ -31,6 +38,7 @@
 #include <glad/gl.h>
 
 #include <core/log.hpp>
+#include <rendering_engine/gpu/backend/opengl/gl_check.hpp>
 #include <rendering_engine/gpu/backend/opengl/gl_translate.hpp>
 
 namespace rendering_engine::gpu::backend::opengl
@@ -40,41 +48,12 @@ namespace rendering_engine::gpu::backend::opengl
         gl_buffer record{};
         record.size = descriptor.size;
         record.usage = descriptor.usage;
-        // Picking a default bind target is purely about which
-        // target @c glBufferData / @c glBufferSubData target during
-        // create / write — buffers are bound by name through
-        // @c glBindBufferBase at draw time, so any target works
-        // for the underlying object. The order below prefers
-        // targets that don't share state with vertex / index
-        // submission to keep the create / write path tidy.
-        if ((descriptor.usage & buffer_usage_index) != 0u)
-        {
-            record.default_target = GL_ELEMENT_ARRAY_BUFFER;
-        }
-        else if ((descriptor.usage & buffer_usage_uniform) != 0u)
-        {
-            record.default_target = GL_UNIFORM_BUFFER;
-        }
-        else if ((descriptor.usage & buffer_usage_storage) != 0u)
-        {
-            record.default_target = GL_SHADER_STORAGE_BUFFER;
-        }
-        else if ((descriptor.usage & buffer_usage_indirect) != 0u)
-        {
-            record.default_target = GL_DRAW_INDIRECT_BUFFER;
-        }
-        else
-        {
-            record.default_target = GL_ARRAY_BUFFER;
-        }
 
-        glGenBuffers(1, &record.object_id);
-        glBindBuffer(record.default_target, record.object_id);
-        glBufferData(record.default_target,
-                     static_cast<GLsizeiptr>(descriptor.size),
-                     descriptor.initial_data,
-                     to_gl_buffer_usage_hint(descriptor.hint));
-        glBindBuffer(record.default_target, 0);
+        glCreateBuffers(1, &record.object_id);
+        GL_CHECK(glNamedBufferData(record.object_id,
+                                   static_cast<GLsizeiptr>(descriptor.size),
+                                   descriptor.initial_data,
+                                   to_gl_buffer_usage_hint(descriptor.hint)));
 
         buffer h{};
         h.id = m_buffers.insert(record);
@@ -90,6 +69,9 @@ namespace rendering_engine::gpu::backend::opengl
                 glDeleteBuffers(1, &record->object_id);
             }
             m_buffers.remove(handle.id);
+            // The name may be recycled by the next create; a shadow
+            // still holding it must not skip that buffer's bind.
+            invalidate_state_cache();
         }
     }
 
@@ -101,8 +83,12 @@ namespace rendering_engine::gpu::backend::opengl
             LOG_WRN("write_buffer: invalid buffer handle");
             return;
         }
-        glBindBuffer(record->default_target, record->object_id);
-        glBufferSubData(record->default_target, static_cast<GLintptr>(offset), static_cast<GLsizeiptr>(size), data);
-        glBindBuffer(record->default_target, 0);
+        if (offset > record->size || size > record->size - offset)
+        {
+            LOG_WRN("write_buffer: %zu bytes at offset %zu exceed the %zu-byte buffer", size, offset, record->size);
+            return;
+        }
+        GL_CHECK(glNamedBufferSubData(
+            record->object_id, static_cast<GLintptr>(offset), static_cast<GLsizeiptr>(size), data));
     }
 } // namespace rendering_engine::gpu::backend::opengl

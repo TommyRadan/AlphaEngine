@@ -180,35 +180,55 @@ namespace rendering_engine::gpu::backend::vulkan
         return format == index_format::uint16 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32;
     }
 
-    VkFormat to_vk_vertex_format(scalar_type type, uint32_t components)
+    VkFormat to_vk_vertex_format(scalar_type type, uint32_t components, bool normalized)
     {
+        // Indexed by component count - 1. The 32-bit integer types have
+        // no normalised Vulkan vertex format, so @p normalized only
+        // selects the UNORM / SNORM family for the 16- and 8-bit types.
+        static constexpr VkFormat float32_formats[4] = {
+            VK_FORMAT_R32_SFLOAT, VK_FORMAT_R32G32_SFLOAT, VK_FORMAT_R32G32B32_SFLOAT, VK_FORMAT_R32G32B32A32_SFLOAT};
+        static constexpr VkFormat int32_formats[4] = {
+            VK_FORMAT_R32_SINT, VK_FORMAT_R32G32_SINT, VK_FORMAT_R32G32B32_SINT, VK_FORMAT_R32G32B32A32_SINT};
+        static constexpr VkFormat uint32_formats[4] = {
+            VK_FORMAT_R32_UINT, VK_FORMAT_R32G32_UINT, VK_FORMAT_R32G32B32_UINT, VK_FORMAT_R32G32B32A32_UINT};
+        static constexpr VkFormat int16_formats[4] = {
+            VK_FORMAT_R16_SINT, VK_FORMAT_R16G16_SINT, VK_FORMAT_R16G16B16_SINT, VK_FORMAT_R16G16B16A16_SINT};
+        static constexpr VkFormat int16_norm_formats[4] = {
+            VK_FORMAT_R16_SNORM, VK_FORMAT_R16G16_SNORM, VK_FORMAT_R16G16B16_SNORM, VK_FORMAT_R16G16B16A16_SNORM};
+        static constexpr VkFormat uint16_formats[4] = {
+            VK_FORMAT_R16_UINT, VK_FORMAT_R16G16_UINT, VK_FORMAT_R16G16B16_UINT, VK_FORMAT_R16G16B16A16_UINT};
+        static constexpr VkFormat uint16_norm_formats[4] = {
+            VK_FORMAT_R16_UNORM, VK_FORMAT_R16G16_UNORM, VK_FORMAT_R16G16B16_UNORM, VK_FORMAT_R16G16B16A16_UNORM};
+        static constexpr VkFormat int8_formats[4] = {
+            VK_FORMAT_R8_SINT, VK_FORMAT_R8G8_SINT, VK_FORMAT_R8G8B8_SINT, VK_FORMAT_R8G8B8A8_SINT};
+        static constexpr VkFormat int8_norm_formats[4] = {
+            VK_FORMAT_R8_SNORM, VK_FORMAT_R8G8_SNORM, VK_FORMAT_R8G8B8_SNORM, VK_FORMAT_R8G8B8A8_SNORM};
+        static constexpr VkFormat uint8_formats[4] = {
+            VK_FORMAT_R8_UINT, VK_FORMAT_R8G8_UINT, VK_FORMAT_R8G8B8_UINT, VK_FORMAT_R8G8B8A8_UINT};
+        static constexpr VkFormat uint8_norm_formats[4] = {
+            VK_FORMAT_R8_UNORM, VK_FORMAT_R8G8_UNORM, VK_FORMAT_R8G8B8_UNORM, VK_FORMAT_R8G8B8A8_UNORM};
+
+        if (components < 1 || components > 4)
+        {
+            return VK_FORMAT_R32G32B32_SFLOAT;
+        }
+        const uint32_t index = components - 1;
         switch (type)
         {
         case scalar_type::float32:
-            switch (components)
-            {
-            case 1:
-                return VK_FORMAT_R32_SFLOAT;
-            case 2:
-                return VK_FORMAT_R32G32_SFLOAT;
-            case 3:
-                return VK_FORMAT_R32G32B32_SFLOAT;
-            case 4:
-                return VK_FORMAT_R32G32B32A32_SFLOAT;
-            default:
-                break;
-            }
-            break;
+            return float32_formats[index];
         case scalar_type::int32:
-            return components == 4 ? VK_FORMAT_R32G32B32A32_SINT
-                                   : (components == 3 ? VK_FORMAT_R32G32B32_SINT
-                                                      : (components == 2 ? VK_FORMAT_R32G32_SINT : VK_FORMAT_R32_SINT));
+            return int32_formats[index];
         case scalar_type::uint32:
-            return components == 4 ? VK_FORMAT_R32G32B32A32_UINT
-                                   : (components == 3 ? VK_FORMAT_R32G32B32_UINT
-                                                      : (components == 2 ? VK_FORMAT_R32G32_UINT : VK_FORMAT_R32_UINT));
-        default:
-            break;
+            return uint32_formats[index];
+        case scalar_type::int16:
+            return normalized ? int16_norm_formats[index] : int16_formats[index];
+        case scalar_type::uint16:
+            return normalized ? uint16_norm_formats[index] : uint16_formats[index];
+        case scalar_type::int8:
+            return normalized ? int8_norm_formats[index] : int8_formats[index];
+        case scalar_type::uint8:
+            return normalized ? uint8_norm_formats[index] : uint8_formats[index];
         }
         return VK_FORMAT_R32G32B32_SFLOAT;
     }

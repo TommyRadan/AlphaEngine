@@ -49,6 +49,11 @@ namespace rendering_engine::gpu
         // caller may invoke @c device::generate_mipmaps after
         // uploading the level-0 data. @c false leaves the texture
         // single-mip.
+        //
+        // The chain is only worth allocating if it is sampled, so the
+        // backends derive the minification filter from this flag when
+        // @ref mipmap_filter is left at its default: see
+        // @ref effective_mipmap_filter.
         bool mipmaps{false};
 
         // When true, the texture may be bound as a storage image (a
@@ -59,12 +64,12 @@ namespace rendering_engine::gpu
         // this flag.
         bool storage{false};
 
-        // Per-texture sampler state. The GL backend bakes these via
-        // @c glTexParameteri at create time so a texture is fully
-        // configured by its descriptor; standalone @ref sampler
-        // resources are reserved for future explicit-binding-model
-        // backends and currently override per-texture state only on
-        // those backends.
+        // Per-texture sampler state. Every backend bakes these onto the
+        // texture object at create time so a texture is fully
+        // configured by its descriptor and sampled correctly when its
+        // binding carries no separate @ref sampler. A standalone
+        // sampler bound to the same unit (@c binding_kind::sampler)
+        // overrides this state for that draw on both backends.
         filter_mode min_filter{filter_mode::linear};
         filter_mode mag_filter{filter_mode::linear};
         mipmap_mode mipmap_filter{mipmap_mode::none};
@@ -72,6 +77,29 @@ namespace rendering_engine::gpu
         address_mode address_v{address_mode::repeat};
         address_mode address_w{address_mode::repeat};
     };
+
+    // The mip filter a backend applies for a texture created with
+    // @p mipmaps and the requested @p filter. This is the one rule both
+    // backends follow so a descriptor samples the same way everywhere:
+    //
+    //   - @p mipmaps false: the texture has a single level, so the
+    //     chain filter is @c none whatever was requested (a mip filter
+    //     over a one-level texture is either incomplete or pointless).
+    //   - @p mipmaps true and @p filter @c none: the caller asked for a
+    //     chain but did not say how to sample it, so it samples
+    //     trilinearly (@c linear). Pinning level 0 would generate the
+    //     whole chain and never read it: aliasing on minified surfaces
+    //     and wasted memory.
+    //   - @p mipmaps true with an explicit @c nearest / @c linear: as
+    //     requested.
+    constexpr mipmap_mode effective_mipmap_filter(bool mipmaps, mipmap_mode filter)
+    {
+        if (!mipmaps)
+        {
+            return mipmap_mode::none;
+        }
+        return filter == mipmap_mode::none ? mipmap_mode::linear : filter;
+    }
 
     struct sampler_descriptor
     {
@@ -81,5 +109,29 @@ namespace rendering_engine::gpu
         address_mode address_u{address_mode::repeat};
         address_mode address_v{address_mode::repeat};
         address_mode address_w{address_mode::repeat};
+
+        // Depth-comparison sampling for shadow lookups. When enabled the
+        // fetched depth texel is compared against the shader's reference
+        // coordinate with @ref compare and the (filtered) 0 / 1 result is
+        // returned instead of the depth value — the @c sampler2DShadow /
+        // @c samplerCubeShadow contract. Maps to
+        // @c GL_TEXTURE_COMPARE_MODE / @c GL_TEXTURE_COMPARE_FUNC on the
+        // OpenGL sampler object and to @c compareEnable / @c compareOp on
+        // the Vulkan sampler.
+        bool compare_enabled{false};
+        compare_function compare{compare_function::less_equal};
+    };
+
+    // A sub-rectangle of one mip level of a 2D texture, for
+    // @ref device::write_texture_region. Coordinates and extents are in
+    // texels of that level: level @c n measures
+    // @c max(1, width >> n) by @c max(1, height >> n).
+    struct texture_write_region
+    {
+        uint32_t mip_level{0};
+        uint32_t x{0};
+        uint32_t y{0};
+        uint32_t width{0};
+        uint32_t height{0};
     };
 } // namespace rendering_engine::gpu

@@ -153,11 +153,24 @@ namespace rendering_engine
             SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 8);
             SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE, 8);
             SDL_GL_SetAttribute(SDL_GL_BUFFER_SIZE, 32);
-            SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 16);
+            // 24-bit depth + 8-bit stencil: the same layout as the
+            // off-screen depth24_stencil8 attachments, and enough depth
+            // precision for the scene's near/far range (16 bits banded
+            // visibly on large scenes).
+            SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
+            SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
             SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, s.window.double_buffered);
             SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+            // The OpenGL backend is written against 4.6 core (DSA,
+            // SPIR-V shaders, compute); gl_device::init rejects anything
+            // older with a message box rather than a null-function crash.
             SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
             SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 6);
+#if _DEBUG
+            // A debug context makes the driver validate every call and
+            // report through the KHR_debug callback gl_device installs.
+            SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG);
+#endif
         }
 
         m_window.reset(SDL_CreateWindow(s.window.name.c_str(), s.window.width, s.window.height, window_flags));

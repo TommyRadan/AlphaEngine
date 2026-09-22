@@ -114,6 +114,12 @@ All device-free:
   `registered_lights()` and returns on enable, a disabled ancestor counts,
   a light added to a disabled node starts disabled, `on_update` tracks the
   node's world position, and removing the component unregisters the light.
+- `gpu::backend::handle_pool` (the slot allocator behind both device backends'
+  handles) — insert/lookup/remove, generation-based rejection of a removed
+  handle when its slot is recycled, that `clear()` advances generations so a
+  handle from before a `quit()`/`init()` cycle never resolves, and that a
+  `lookup` pointer stays valid across pool growth. Header-only, so no engine
+  translation unit is compiled for it.
 - `asset_cache` — dedup by structural key, builder-runs-only-on-miss,
   `collect_unused()` / weak-ref semantics, that a `mesh_asset` releases its
   GPU buffers when the last handle drops, that the `vertex_format` a

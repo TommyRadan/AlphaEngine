@@ -58,6 +58,21 @@ namespace rendering_engine::gpu::backend::vulkan
             return si;
         }
 
+        // A standalone sampler adds the shadow-comparison state the
+        // texture-baked sampler never carries.
+        VkSamplerCreateInfo make_sampler_create_info(const sampler_descriptor& descriptor)
+        {
+            VkSamplerCreateInfo si = make_sampler_create_info(descriptor.min_filter,
+                                                              descriptor.mag_filter,
+                                                              descriptor.mipmap,
+                                                              descriptor.address_u,
+                                                              descriptor.address_v,
+                                                              descriptor.address_w);
+            si.compareEnable = descriptor.compare_enabled ? VK_TRUE : VK_FALSE;
+            si.compareOp = to_vk_compare(descriptor.compare);
+            return si;
+        }
+
         // Full mip-chain length for a texture of the given footprint:
         // floor(log2(max(w, h))) + 1, matching glGenerateMipmap's chain.
         uint32_t full_mip_chain(uint32_t width, uint32_t height)
@@ -269,12 +284,16 @@ namespace rendering_engine::gpu::backend::vulkan
             return {};
         }
 
-        VkSamplerCreateInfo si = make_sampler_create_info(descriptor.min_filter,
-                                                          descriptor.mag_filter,
-                                                          descriptor.mipmap_filter,
-                                                          descriptor.address_u,
-                                                          descriptor.address_v,
-                                                          descriptor.address_w);
+        // effective_mipmap_filter: a mipmapped texture samples its chain
+        // even when the descriptor left the filter at none (the shared
+        // rule in gpu/texture.hpp), a single-level one never does.
+        VkSamplerCreateInfo si =
+            make_sampler_create_info(descriptor.min_filter,
+                                     descriptor.mag_filter,
+                                     effective_mipmap_filter(record.mip_levels > 1, descriptor.mipmap_filter),
+                                     descriptor.address_u,
+                                     descriptor.address_v,
+                                     descriptor.address_w);
         vkCreateSampler(m_device, &si, nullptr, &record.default_sampler);
 
         record.layout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -567,12 +586,7 @@ namespace rendering_engine::gpu::backend::vulkan
     {
         vk_sampler record{};
         record.descriptor = descriptor;
-        VkSamplerCreateInfo si = make_sampler_create_info(descriptor.min_filter,
-                                                          descriptor.mag_filter,
-                                                          descriptor.mipmap,
-                                                          descriptor.address_u,
-                                                          descriptor.address_v,
-                                                          descriptor.address_w);
+        VkSamplerCreateInfo si = make_sampler_create_info(descriptor);
         if (vkCreateSampler(m_device, &si, nullptr, &record.object) != VK_SUCCESS)
         {
             return {};

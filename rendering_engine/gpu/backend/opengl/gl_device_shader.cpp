@@ -42,6 +42,7 @@
 #include <glad/gl.h>
 
 #include <core/log.hpp>
+#include <rendering_engine/gpu/backend/opengl/gl_check.hpp>
 #include <rendering_engine/gpu/backend/opengl/gl_translate.hpp>
 
 namespace rendering_engine::gpu::backend::opengl
@@ -64,7 +65,10 @@ namespace rendering_engine::gpu::backend::opengl
         }
 
         const GLsizei blob_bytes = static_cast<GLsizei>(descriptor.spirv.size() * sizeof(uint32_t));
-        glShaderBinary(1, &record.object_id, GL_SHADER_BINARY_FORMAT_SPIR_V, descriptor.spirv.data(), blob_bytes);
+        // A rejected blob (bad format enum, truncated module) raises a
+        // GL error without touching the compile status checked below.
+        GL_CHECK(
+            glShaderBinary(1, &record.object_id, GL_SHADER_BINARY_FORMAT_SPIR_V, descriptor.spirv.data(), blob_bytes));
         glSpecializeShader(record.object_id, "main", 0, nullptr, nullptr);
 
         GLint compiled = 0;

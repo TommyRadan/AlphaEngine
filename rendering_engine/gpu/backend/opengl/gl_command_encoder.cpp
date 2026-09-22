@@ -22,8 +22,11 @@
 
 #include <rendering_engine/gpu/backend/opengl/gl_command_encoder.hpp>
 
+#include <array>
+
 #include <core/log.hpp>
 #include <rendering_engine/gpu/backend/opengl/gl_device.hpp>
+#include <rendering_engine/gpu/backend/opengl/gl_state_cache.hpp>
 #include <rendering_engine/gpu/backend/opengl/gl_translate.hpp>
 
 namespace rendering_engine::gpu::backend::opengl
@@ -43,6 +46,51 @@ namespace rendering_engine::gpu::backend::opengl
             return nullptr;
         }
 
+        // Tell the driver the named planes of @p target hold nothing
+        // worth keeping: at pass begin for load_op::dont_care (no
+        // load, no clear) and at pass end for store_op::dont_care (the
+        // results are never read back). A tile-based GPU skips the
+        // load / store traffic; a desktop driver treats it as a hint.
+        void invalidate_attachments(const gl_render_target& target, bool color, bool depth)
+        {
+            std::array<GLenum, 3> attachments{};
+            GLsizei count = 0;
+            const bool default_framebuffer = target.framebuffer_id == 0;
+            if (color)
+            {
+                attachments[count++] = default_framebuffer ? GL_COLOR : GL_COLOR_ATTACHMENT0;
+            }
+            if (depth && target.has_depth)
+            {
+                attachments[count++] = default_framebuffer ? GL_DEPTH : GL_DEPTH_ATTACHMENT;
+                if (target.has_stencil)
+                {
+                    attachments[count++] = default_framebuffer ? GL_STENCIL : GL_STENCIL_ATTACHMENT;
+                }
+            }
+            if (count > 0)
+            {
+                glInvalidateNamedFramebufferData(target.framebuffer_id, count, attachments.data());
+            }
+        }
+
+        // Drop a pipeline's vertex-array binding shadows once the
+        // device's cache epoch has moved on (a pass boundary or an
+        // object deletion since they were recorded).
+        void sync_binding_shadows(const gl_device& device, gl_pipeline& pipe)
+        {
+            if (pipe.shadow_epoch == device.state_epoch())
+            {
+                return;
+            }
+            for (auto& shadow : pipe.vertex_binding_shadows)
+            {
+                shadow.known = false;
+            }
+            pipe.element_buffer_known = false;
+            pipe.shadow_epoch = device.state_epoch();
+        }
+
         void apply_bind_group(gl_device& device, const gl_bind_group& bg)
         {
             // Bindings come straight from the SPIR-V @c Binding
@@ -50,7 +98,25 @@ namespace rendering_engine::gpu::backend::opengl
             // namespaces are disjoint in OpenGL, so the same numeric
             // binding can appear on entries of different kinds
             // without collision.
+            auto& cache = device.state_cache();
             const auto* layout = device.lookup_bind_group_layout(bg.layout);
+
+            // Units a sampler entry of this group claims keep that
+            // sampler; every other texture unit this group touches
+            // falls back to the state baked onto the texture (sampler
+            // object 0), so a sampler left on the unit by an earlier
+            // group or pass never leaks into this draw. A standalone
+            // sampler therefore belongs in the same bind group as the
+            // texture it samples.
+            uint64_t sampler_units = 0;
+            for (const auto& value : bg.entries)
+            {
+                if (value.kind == binding_kind::sampler && value.binding < 64)
+                {
+                    sampler_units |= uint64_t{1} << value.binding;
+                }
+            }
+
             for (const auto& value : bg.entries)
             {
                 switch (value.kind)
@@ -60,7 +126,7 @@ namespace rendering_engine::gpu::backend::opengl
                     auto* buf = device.lookup_buffer(value.buffer_value);
                     if (buf != nullptr && buf->object_id != 0)
                     {
-                        glBindBufferBase(GL_UNIFORM_BUFFER, value.binding, buf->object_id);
+                        cache.bind_uniform_buffer(value.binding, buf->object_id);
                     }
                     break;
                 }
@@ -69,7 +135,7 @@ namespace rendering_engine::gpu::backend::opengl
                     auto* buf = device.lookup_buffer(value.buffer_value);
                     if (buf != nullptr && buf->object_id != 0)
                     {
-                        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, value.binding, buf->object_id);
+                        cache.bind_storage_buffer(value.binding, buf->object_id);
                     }
                     break;
                 }
@@ -78,8 +144,13 @@ namespace rendering_engine::gpu::backend::opengl
                     auto* tex = device.lookup_texture(value.texture_value);
                     if (tex != nullptr && tex->object_id != 0)
                     {
-                        glActiveTexture(GL_TEXTURE0 + value.binding);
-                        glBindTexture(tex->target, tex->object_id);
+                        cache.bind_texture_unit(value.binding, tex->object_id);
+                        const bool has_sampler =
+                            value.binding < 64 && (sampler_units & (uint64_t{1} << value.binding)) != 0;
+                        if (!has_sampler)
+                        {
+                            cache.bind_sampler(value.binding, 0);
+                        }
                     }
                     break;
                 }
@@ -108,67 +179,49 @@ namespace rendering_engine::gpu::backend::opengl
                                        layered,
                                        0,
                                        to_gl_storage_access(entry->storage_access_mode),
-                                       static_cast<GLenum>(fmt.internal_format));
+                                       fmt.internal_format);
                     break;
                 }
                 case binding_kind::sampler:
                 {
                     auto* samp = device.lookup_sampler(value.sampler_value);
-                    (void)samp;
-                    // Sampler state is currently baked into the
-                    // texture object at create time — no separate
-                    // sampler object is bound. Reserved here so a
-                    // future Vulkan-style separate-sampler path
-                    // slots in without churning the call sites.
+                    if (samp != nullptr && samp->object_id != 0)
+                    {
+                        // The sampler object overrides the texture-baked
+                        // state on this unit for the draws that follow.
+                        cache.bind_sampler(value.binding, samp->object_id);
+                    }
                     break;
                 }
                 }
             }
         }
 
-        void apply_pipeline_state(const gl_pipeline& pipe)
+        void apply_pipeline_state(gl_state_cache& cache, const gl_pipeline& pipe, bool use_depth)
         {
-            // Blend
-            if (pipe.blend.enabled)
+            cache.set_blend(pipe.blend.enabled,
+                            to_gl_blend_factor(pipe.blend.src),
+                            to_gl_blend_factor(pipe.blend.dst),
+                            to_gl_blend_op(pipe.blend.op));
+
+            if (use_depth)
             {
-                glEnable(GL_BLEND);
-                glBlendFunc(to_gl_blend_factor(pipe.blend.src), to_gl_blend_factor(pipe.blend.dst));
-                glBlendEquation(to_gl_blend_op(pipe.blend.op));
+                cache.set_depth_test(pipe.depth.test_enabled);
+                cache.set_depth_write(pipe.depth.write_enabled);
+                cache.set_depth_func(to_gl_compare(pipe.depth.compare));
             }
             else
             {
-                glDisable(GL_BLEND);
+                // A pass without depth (UI, post) neither tests nor
+                // writes it, whatever the pipeline asked for — the
+                // target may carry a depth plane another pass owns.
+                cache.set_depth_test(false);
+                cache.set_depth_write(false);
             }
 
-            // Depth
-            if (pipe.depth.test_enabled)
-            {
-                glEnable(GL_DEPTH_TEST);
-            }
-            else
-            {
-                glDisable(GL_DEPTH_TEST);
-            }
-            glDepthMask(pipe.depth.write_enabled ? GL_TRUE : GL_FALSE);
-            glDepthFunc(to_gl_compare(pipe.depth.compare));
-
-            // Rasterizer
-            if (pipe.rasterizer.cull == cull_mode::none)
-            {
-                glDisable(GL_CULL_FACE);
-            }
-            else
-            {
-                glEnable(GL_CULL_FACE);
-                glCullFace(to_gl_cull_face(pipe.rasterizer.cull));
-            }
-            glFrontFace(to_gl_front_face(pipe.rasterizer.front));
-            glPolygonMode(GL_FRONT_AND_BACK, to_gl_polygon_mode(pipe.rasterizer.polygon));
-        }
-
-        GLenum to_gl_topology(primitive_topology t)
-        {
-            return to_gl_primitive(t);
+            cache.set_cull(pipe.rasterizer.cull != cull_mode::none, to_gl_cull_face(pipe.rasterizer.cull));
+            cache.set_front_face(to_gl_front_face(pipe.rasterizer.front));
+            cache.set_polygon_mode(to_gl_polygon_mode(pipe.rasterizer.polygon));
         }
     } // namespace
 
@@ -185,12 +238,31 @@ namespace rendering_engine::gpu::backend::opengl
             return;
         }
 
-        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, target->framebuffer_id);
+        m_target = descriptor.target;
+        m_color_store = descriptor.color.store;
+        m_depth_store = descriptor.depth.store;
+        m_use_depth = descriptor.use_depth;
 
+        // Nothing the cache remembers from before this pass is trusted:
+        // another pass, or the debug overlay recording into the same
+        // context, may have changed anything since.
+        m_device.invalidate_state_cache();
+        auto& cache = m_device.state_cache();
+
+        cache.bind_framebuffer(target->framebuffer_id);
+        cache.set_scissor_test(false);
         if (target->width > 0 && target->height > 0)
         {
-            glViewport(0, 0, static_cast<GLsizei>(target->width), static_cast<GLsizei>(target->height));
+            cache.set_viewport(0, 0, static_cast<GLsizei>(target->width), static_cast<GLsizei>(target->height));
         }
+
+        const bool depth_active = descriptor.use_depth && target->has_depth;
+
+        // load_op::dont_care: neither loaded nor cleared, so tell the
+        // driver the previous contents are dead.
+        invalidate_attachments(*target,
+                               descriptor.color.load == load_op::dont_care,
+                               depth_active && descriptor.depth.load == load_op::dont_care);
 
         GLbitfield clear_mask = 0;
         if (descriptor.color.load == load_op::clear)
@@ -201,18 +273,26 @@ namespace rendering_engine::gpu::backend::opengl
                          descriptor.color.clear_color[3]);
             clear_mask |= GL_COLOR_BUFFER_BIT;
         }
-        if (descriptor.use_depth && target->has_depth && descriptor.depth.load == load_op::clear)
+        if (depth_active && descriptor.depth.load == load_op::clear)
         {
             glClearDepth(static_cast<GLdouble>(descriptor.depth.clear_depth));
             clear_mask |= GL_DEPTH_BUFFER_BIT;
+            if (target->has_stencil)
+            {
+                // A packed attachment clears both planes together.
+                glClearStencil(0);
+                clear_mask |= GL_STENCIL_BUFFER_BIT;
+            }
         }
         if (clear_mask != 0)
         {
-            // glClear honours the depth mask, so make sure
-            // depth writes are open before clearing — the
-            // pipeline state may have flipped it off in a
-            // previous pass.
-            glDepthMask(GL_TRUE);
+            if ((clear_mask & GL_DEPTH_BUFFER_BIT) != 0)
+            {
+                // glClear honours the depth mask, so make sure depth
+                // writes are open before clearing — the pipeline state
+                // may have flipped it off in a previous pass.
+                cache.set_depth_write(true);
+            }
             glClear(clear_mask);
         }
     }
@@ -241,15 +321,19 @@ namespace rendering_engine::gpu::backend::opengl
         m_pipeline_handle = pipeline_handle;
         m_program_id = pipe->program_id;
         m_vao_id = pipe->vao_id;
-        m_topology = to_gl_topology(pipe->topology);
+        m_topology = to_gl_primitive(pipe->topology);
 
-        glUseProgram(m_program_id);
-        glBindVertexArray(m_vao_id);
-        apply_pipeline_state(*pipe);
+        auto& cache = m_device.state_cache();
+        cache.use_program(m_program_id);
+        cache.bind_vertex_array(m_vao_id);
+        apply_pipeline_state(cache, *pipe, m_use_depth);
         if (pipe->topology == primitive_topology::patches && pipe->patch_control_points > 0)
         {
             glPatchParameteri(GL_PATCH_VERTICES, static_cast<GLint>(pipe->patch_control_points));
         }
+        // The element buffer is vertex-array state: a draw may only
+        // source indices once set_index_buffer has attached one to
+        // this pipeline's VAO.
         m_index_buffer_bound = false;
     }
 
@@ -266,40 +350,54 @@ namespace rendering_engine::gpu::backend::opengl
             return;
         }
 
-        glBindVertexArray(pipe->vao_id);
-        glBindBuffer(GL_ARRAY_BUFFER, buf->object_id);
-
+        // The attribute formats are baked into the VAO; only the buffer
+        // behind the slot's binding point changes here. A binding stride
+        // of 0 would make every vertex read the same record (unlike the
+        // old attribute-pointer path, where 0 meant tightly packed), so
+        // a layout that leaves the stride to the draw and a draw that
+        // leaves it to the layout fall back to the record the layout's
+        // attributes span.
         const auto& layout = pipe->vertex_buffers[slot];
-        const uint32_t stride = stride_override != 0 ? stride_override : layout.stride;
-        // Per-instance slots advance once per instance (divisor 1) instead
-        // of once per vertex, so a single record drives a whole instanced
-        // draw copy. The divisor is VAO state, so it is set alongside the
-        // attribute pointer here.
-        const GLuint divisor = layout.step_mode == vertex_step_mode::instance ? 1u : 0u;
-        for (const auto& attribute : layout.attributes)
+        uint32_t stride = stride_override != 0 ? stride_override : layout.stride;
+        if (stride == 0)
         {
-            const GLsizeiptr final_offset = static_cast<GLsizeiptr>(offset + attribute.offset);
-            glEnableVertexAttribArray(attribute.location);
-            glVertexAttribPointer(attribute.location,
-                                  static_cast<GLint>(attribute.components),
-                                  to_gl_scalar(attribute.type),
-                                  GL_FALSE,
-                                  static_cast<GLsizei>(stride),
-                                  reinterpret_cast<const GLvoid*>(final_offset));
-            glVertexAttribDivisor(attribute.location, divisor);
+            stride = pipe->min_strides[slot];
         }
+
+        sync_binding_shadows(m_device, *pipe);
+        auto& shadow = pipe->vertex_binding_shadows[slot];
+        const auto gl_offset = static_cast<GLintptr>(offset);
+        const auto gl_stride = static_cast<GLsizei>(stride);
+        if (shadow.known && shadow.buffer == buf->object_id && shadow.offset == gl_offset && shadow.stride == gl_stride)
+        {
+            return;
+        }
+        glVertexArrayVertexBuffer(pipe->vao_id, slot, buf->object_id, gl_offset, gl_stride);
+        shadow.buffer = buf->object_id;
+        shadow.offset = gl_offset;
+        shadow.stride = gl_stride;
+        shadow.known = true;
     }
 
     void gl_render_pass_encoder::set_index_buffer(buffer buffer_handle, index_format format)
     {
+        auto* pipe = m_device.lookup_pipeline(m_pipeline_handle);
         auto* buf = m_device.lookup_buffer(buffer_handle);
-        if (buf == nullptr)
+        if (pipe == nullptr || buf == nullptr)
         {
-            LOG_WRN("set_index_buffer: invalid buffer handle");
+            LOG_WRN("set_index_buffer: invalid pipeline / buffer handle");
             return;
         }
-        glBindVertexArray(m_vao_id);
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buf->object_id);
+
+        // Attached to the pipeline's VAO by name, never through the
+        // GL_ELEMENT_ARRAY_BUFFER target.
+        sync_binding_shadows(m_device, *pipe);
+        if (!pipe->element_buffer_known || pipe->element_buffer_shadow != buf->object_id)
+        {
+            glVertexArrayElementBuffer(pipe->vao_id, buf->object_id);
+            pipe->element_buffer_shadow = buf->object_id;
+            pipe->element_buffer_known = true;
+        }
         m_index_type = to_gl_index_type(format);
         m_index_size = format == index_format::uint16 ? 2 : 4;
         m_index_buffer_bound = true;
@@ -324,7 +422,7 @@ namespace rendering_engine::gpu::backend::opengl
 
     void gl_render_pass_encoder::set_viewport(int x, int y, int width, int height)
     {
-        glViewport(x, y, static_cast<GLsizei>(width), static_cast<GLsizei>(height));
+        m_device.state_cache().set_viewport(x, y, static_cast<GLsizei>(width), static_cast<GLsizei>(height));
     }
 
     void gl_render_pass_encoder::draw(uint32_t vertex_count, uint32_t first_vertex)
@@ -357,7 +455,7 @@ namespace rendering_engine::gpu::backend::opengl
             LOG_WRN("draw_indexed_indirect: invalid indirect buffer");
             return;
         }
-        glBindBuffer(GL_DRAW_INDIRECT_BUFFER, indirect->object_id);
+        m_device.state_cache().bind_draw_indirect_buffer(indirect->object_id);
         glDrawElementsIndirect(
             m_topology, m_index_type, reinterpret_cast<const GLvoid*>(static_cast<intptr_t>(offset)));
     }
@@ -378,7 +476,7 @@ namespace rendering_engine::gpu::backend::opengl
             LOG_WRN("multi_draw_indexed_indirect: invalid indirect buffer");
             return;
         }
-        glBindBuffer(GL_DRAW_INDIRECT_BUFFER, indirect->object_id);
+        m_device.state_cache().bind_draw_indirect_buffer(indirect->object_id);
         glMultiDrawElementsIndirect(m_topology,
                                     m_index_type,
                                     reinterpret_cast<const GLvoid*>(static_cast<intptr_t>(offset)),
@@ -392,14 +490,32 @@ namespace rendering_engine::gpu::backend::opengl
         {
             return;
         }
-        glBindVertexArray(0);
-        glUseProgram(0);
+
+        // store_op::dont_care: nothing downstream reads these planes,
+        // so the driver may drop them instead of resolving them.
+        if (const auto* target = m_device.lookup_render_target(m_target))
+        {
+            invalidate_attachments(
+                *target, m_color_store == store_op::dont_care, m_use_depth && m_depth_store == store_op::dont_care);
+        }
+
+        // Leave the context with nothing of this pass bound: the next
+        // pass (or the window's present) starts from framebuffer 0, and
+        // an outside recorder never inherits a VAO or program.
+        auto& cache = m_device.state_cache();
+        cache.bind_vertex_array(0);
+        cache.use_program(0);
+        cache.bind_framebuffer(0);
+        m_device.invalidate_state_cache();
         m_active = false;
     }
 
     // -- gl_compute_pass_encoder ----------------------------------
 
-    gl_compute_pass_encoder::gl_compute_pass_encoder(gl_device& device) : m_device{device}, m_active{true} {}
+    gl_compute_pass_encoder::gl_compute_pass_encoder(gl_device& device) : m_device{device}, m_active{true}
+    {
+        m_device.invalidate_state_cache();
+    }
 
     gl_compute_pass_encoder::~gl_compute_pass_encoder()
     {
@@ -424,7 +540,7 @@ namespace rendering_engine::gpu::backend::opengl
         }
         m_pipeline_handle = pipeline_handle;
         m_program_id = pipe->program_id;
-        glUseProgram(m_program_id);
+        m_device.state_cache().use_program(m_program_id);
     }
 
     void gl_compute_pass_encoder::set_bind_group(uint32_t group, bind_group bind_group_handle)
@@ -460,7 +576,8 @@ namespace rendering_engine::gpu::backend::opengl
         {
             return;
         }
-        glUseProgram(0);
+        m_device.state_cache().use_program(0);
+        m_device.invalidate_state_cache();
         m_active = false;
     }
 
@@ -488,15 +605,13 @@ namespace rendering_engine::gpu::backend::opengl
             LOG_WRN("copy_buffer_to_buffer: invalid src / dst buffer");
             return;
         }
-        glBindBuffer(GL_COPY_READ_BUFFER, src_record->object_id);
-        glBindBuffer(GL_COPY_WRITE_BUFFER, dst_record->object_id);
-        glCopyBufferSubData(GL_COPY_READ_BUFFER,
-                            GL_COPY_WRITE_BUFFER,
-                            static_cast<GLintptr>(src_offset),
-                            static_cast<GLintptr>(dst_offset),
-                            static_cast<GLsizeiptr>(size));
-        glBindBuffer(GL_COPY_READ_BUFFER, 0);
-        glBindBuffer(GL_COPY_WRITE_BUFFER, 0);
+        // Named copy: no binding to the copy targets, so a pass that
+        // is open around this call keeps its state.
+        glCopyNamedBufferSubData(src_record->object_id,
+                                 dst_record->object_id,
+                                 static_cast<GLintptr>(src_offset),
+                                 static_cast<GLintptr>(dst_offset),
+                                 static_cast<GLsizeiptr>(size));
     }
 
     void gl_command_encoder::clear_buffer(buffer buffer_handle, size_t offset, size_t size, uint32_t value)
@@ -507,15 +622,13 @@ namespace rendering_engine::gpu::backend::opengl
             LOG_WRN("clear_buffer: invalid buffer handle");
             return;
         }
-        glBindBuffer(GL_COPY_WRITE_BUFFER, record->object_id);
-        glClearBufferSubData(GL_COPY_WRITE_BUFFER,
-                             GL_R32UI,
-                             static_cast<GLintptr>(offset),
-                             static_cast<GLsizeiptr>(size),
-                             GL_RED_INTEGER,
-                             GL_UNSIGNED_INT,
-                             &value);
-        glBindBuffer(GL_COPY_WRITE_BUFFER, 0);
+        glClearNamedBufferSubData(record->object_id,
+                                  GL_R32UI,
+                                  static_cast<GLintptr>(offset),
+                                  static_cast<GLsizeiptr>(size),
+                                  GL_RED_INTEGER,
+                                  GL_UNSIGNED_INT,
+                                  &value);
     }
 
     void gl_command_encoder::barrier(pipeline_stage /*src_stage*/,

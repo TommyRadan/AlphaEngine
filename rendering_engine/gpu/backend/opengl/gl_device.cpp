@@ -30,12 +30,15 @@
 #include <rendering_engine/gpu/backend/opengl/gl_device.hpp>
 
 #include <stdexcept>
+#include <string>
 
 #include <glad/gl.h>
 #include <SDL3/SDL_video.h>
 
 #include <core/log.hpp>
+#include <rendering_engine/gpu/backend/opengl/gl_check.hpp>
 #include <rendering_engine/gpu/backend/opengl/gl_command_encoder.hpp>
+#include <rendering_engine/gpu/backend/opengl/gl_translate.hpp>
 
 namespace rendering_engine::gpu::backend::opengl
 {
@@ -49,56 +52,77 @@ namespace rendering_engine::gpu::backend::opengl
         }
     }
 
-#if _DEBUG
-    static void GLAPIENTRY gl_debug_callback(GLenum /*source*/,
-                                             GLenum type,
-                                             GLuint /*id*/,
-                                             GLenum severity,
-                                             GLsizei /*length*/,
-                                             const GLchar* message,
-                                             const void* /*user*/)
+    namespace
     {
-        if (severity == GL_DEBUG_SEVERITY_NOTIFICATION)
+        // The whole backend is written against this profile (direct
+        // state access, immutable storage, SPIR-V shaders, compute); it
+        // is also what vendor/glad was generated for.
+        constexpr int required_major = 4;
+        constexpr int required_minor = 6;
+
+#if _DEBUG
+        void GLAPIENTRY gl_debug_callback(GLenum source,
+                                          GLenum type,
+                                          GLuint id,
+                                          GLenum severity,
+                                          GLsizei /*length*/,
+                                          const GLchar* message,
+                                          const void* /*user*/)
         {
-            return;
+            // Notifications are driver chatter (buffer placement,
+            // shader recompiles) and are dropped outright.
+            if (severity == GL_DEBUG_SEVERITY_NOTIFICATION)
+            {
+                return;
+            }
+            const char* source_name = gl_debug_source_name(source);
+            const char* type_name = gl_debug_type_name(type);
+            // API misuse and undefined behaviour are errors whatever
+            // severity the driver attached; performance, portability,
+            // deprecation and "other" are warnings.
+            if (type == GL_DEBUG_TYPE_ERROR || type == GL_DEBUG_TYPE_UNDEFINED_BEHAVIOR)
+            {
+                LOG_ERR("GL [%s/%s #%u]: %s", source_name, type_name, id, message);
+            }
+            else
+            {
+                LOG_WRN("GL [%s/%s #%u]: %s", source_name, type_name, id, message);
+            }
         }
-        if (type == GL_DEBUG_TYPE_ERROR)
-        {
-            LOG_ERR("GL: %s", message);
-        }
-        else
-        {
-            LOG_WRN("GL: %s", message);
-        }
-    }
 #endif
+
+        // Bit depth of one plane of the window's default framebuffer,
+        // 0 when the context was created without it.
+        GLint default_framebuffer_bits(GLenum attachment, GLenum size_parameter)
+        {
+            GLint object_type = GL_NONE;
+            glGetNamedFramebufferAttachmentParameteriv(
+                0, attachment, GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE, &object_type);
+            if (object_type == GL_NONE)
+            {
+                return 0;
+            }
+            GLint bits = 0;
+            glGetNamedFramebufferAttachmentParameteriv(0, attachment, size_parameter, &bits);
+            return bits;
+        }
+    } // namespace
 
     void gl_device::init()
     {
         LOG_INF("Init gpu::backend::opengl::gl_device");
 
-        if (!gladLoadGL((GLADloadfunc)SDL_GL_GetProcAddress))
+        const int loaded = gladLoadGL(reinterpret_cast<GLADloadfunc>(SDL_GL_GetProcAddress));
+        if (loaded == 0)
         {
             LOG_FTL("Could not initialize OpenGL (glad failed to load GL functions)");
-            throw std::runtime_error{"Could not initialize OpenGL"};
+            throw std::runtime_error{"Could not initialize OpenGL: the GL function loader failed"};
         }
 
-#if _DEBUG
-        glEnable(GL_DEBUG_OUTPUT);
-        glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
-        glDebugMessageCallback(gl_debug_callback, nullptr);
-#endif
-
-        int version_major = 0;
-        int version_minor = 0;
-        glGetIntegerv(GL_MAJOR_VERSION, &version_major);
-        glGetIntegerv(GL_MINOR_VERSION, &version_minor);
-        if (version_major < 3 || (version_major == 3 && version_minor < 3))
-        {
-            LOG_FTL("Could not initialize OpenGL, supported version is %i.%i", version_major, version_minor);
-            throw std::runtime_error{"OpenGL version error! Unsupported hardware or driver"};
-        }
-
+        // glad reports the version it resolved entry points for.
+        // glGetString is core since 1.0, so it is safe on any context.
+        const int version_major = GLAD_VERSION_MAJOR(loaded);
+        const int version_minor = GLAD_VERSION_MINOR(loaded);
         const char* gl_version = reinterpret_cast<const char*>(glGetString(GL_VERSION));
         const char* gl_vendor = reinterpret_cast<const char*>(glGetString(GL_VENDOR));
         const char* gl_renderer = reinterpret_cast<const char*>(glGetString(GL_RENDERER));
@@ -108,6 +132,42 @@ namespace rendering_engine::gpu::backend::opengl
         LOG_INF("OpenGL renderer: %s", gl_renderer ? gl_renderer : "<unknown>");
         LOG_INF("OpenGL version:  %s", gl_version ? gl_version : "<unknown>");
         LOG_INF("GLSL version:    %s", gl_glsl ? gl_glsl : "<unknown>");
+
+        // Gate before the first 4.x-only call below: on an older
+        // context those entry points are null, and without this check
+        // the first shader create would crash instead of reporting.
+        if (version_major < required_major || (version_major == required_major && version_minor < required_minor))
+        {
+            LOG_FTL("OpenGL %i.%i is required, but the context provides %i.%i",
+                    required_major,
+                    required_minor,
+                    version_major,
+                    version_minor);
+            throw std::runtime_error{"OpenGL 4.6 or newer is required, but this driver provides " +
+                                     std::string{gl_version ? gl_version : "an unknown version"} + " (" +
+                                     std::string{gl_renderer ? gl_renderer : "unknown renderer"} +
+                                     "). Update the graphics driver or run with "
+                                     "ALPHAENGINE_GRAPHICS_BACKEND=vulkan."};
+        }
+
+#if _DEBUG
+        GLint context_flags = 0;
+        glGetIntegerv(GL_CONTEXT_FLAGS, &context_flags);
+        if ((context_flags & GL_CONTEXT_FLAG_DEBUG_BIT) == 0)
+        {
+            LOG_WRN("OpenGL debug context was not granted; driver validation messages may be incomplete");
+        }
+        // Synchronous so a message arrives from inside the call that
+        // caused it and a breakpoint in the callback lands on it.
+        glEnable(GL_DEBUG_OUTPUT);
+        glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
+        glDebugMessageCallback(gl_debug_callback, nullptr);
+#endif
+
+        // Every texture upload hands over tightly packed rows, so an
+        // r8 / rgb8 image with an odd width must not have its rows
+        // padded to the default 4-byte alignment.
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
         // Filter cube-map samples across face boundaries instead of
         // clamping within each face. Without this, sampling near a face
@@ -124,16 +184,28 @@ namespace rendering_engine::gpu::backend::opengl
         // honoured, so this keeps both backends in agreement.
         glEnable(GL_PROGRAM_POINT_SIZE);
 
-        // The default swapchain target is just framebuffer
-        // 0 with the window's current dimensions; the engine
-        // updates dimensions through @ref resize_swapchain.
+        // The default swapchain target is just framebuffer 0 with the
+        // window's current dimensions; the engine updates dimensions
+        // through @ref resize_swapchain. Its depth / stencil planes are
+        // whatever the window system granted for the requested
+        // 24 / 8 bits.
+        const GLint depth_bits = default_framebuffer_bits(GL_DEPTH, GL_FRAMEBUFFER_ATTACHMENT_DEPTH_SIZE);
+        const GLint stencil_bits = default_framebuffer_bits(GL_STENCIL, GL_FRAMEBUFFER_ATTACHMENT_STENCIL_SIZE);
+        LOG_INF("Default framebuffer: depth=%i bits, stencil=%i bits", depth_bits, stencil_bits);
+        if (depth_bits == 0)
+        {
+            LOG_WRN("Default framebuffer has no depth plane; passes targeting the swapchain cannot depth-test");
+        }
+
         gl_render_target swap{};
         swap.framebuffer_id = 0;
         swap.width = 0;
         swap.height = 0;
-        swap.has_depth = true;
+        swap.has_depth = depth_bits > 0;
+        swap.has_stencil = stencil_bits > 0;
         m_swapchain.id = m_render_targets.insert(swap);
 
+        m_state.invalidate();
         m_initialised = true;
     }
 
@@ -179,6 +251,15 @@ namespace rendering_engine::gpu::backend::opengl
                     t.object_id = 0;
                 }
             });
+        m_samplers.for_each(
+            [](gl_sampler& s)
+            {
+                if (s.object_id != 0)
+                {
+                    glDeleteSamplers(1, &s.object_id);
+                    s.object_id = 0;
+                }
+            });
         m_buffers.for_each(
             [](gl_buffer& b)
             {
@@ -198,6 +279,8 @@ namespace rendering_engine::gpu::backend::opengl
                 }
             });
 
+        // The pools keep their generation counters across clear(), so
+        // a handle from this lifetime never resolves in the next one.
         m_pipelines.clear();
         m_shader_modules.clear();
         m_bind_group_layouts.clear();
@@ -206,9 +289,17 @@ namespace rendering_engine::gpu::backend::opengl
         m_textures.clear();
         m_buffers.clear();
         m_render_targets.clear();
+        m_swapchain = {};
 
+        invalidate_state_cache();
         m_initialised = false;
         LOG_INF("Quit gpu::backend::opengl::gl_device");
+    }
+
+    void gl_device::invalidate_state_cache()
+    {
+        m_state.invalidate();
+        ++m_state_epoch;
     }
 
     // -- Render targets / swapchain -------------------------------
@@ -268,30 +359,36 @@ namespace rendering_engine::gpu::backend::opengl
         record.width = descriptor.width;
         record.height = descriptor.height;
         record.has_depth = descriptor.with_depth;
+        record.has_stencil = descriptor.with_depth && is_gl_depth_stencil_format(descriptor.depth_format);
         record.color_attachment = color;
         record.depth_attachment = depth;
 
-        glGenFramebuffers(1, &record.framebuffer_id);
-        glBindFramebuffer(GL_FRAMEBUFFER, record.framebuffer_id);
+        // Wired through the named entry points, so the framebuffer
+        // binding the current pass (if any) may hold is untouched.
+        glCreateFramebuffers(1, &record.framebuffer_id);
 
         if (auto* color_record = m_textures.lookup(color.id))
         {
-            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, color_record->object_id, 0);
+            GL_CHECK(
+                glNamedFramebufferTexture(record.framebuffer_id, GL_COLOR_ATTACHMENT0, color_record->object_id, 0));
         }
         if (descriptor.with_depth)
         {
             if (auto* depth_record = m_textures.lookup(depth.id))
             {
-                glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depth_record->object_id, 0);
+                // A packed depth-stencil texture must go on the combined
+                // attachment point; GL_DEPTH_ATTACHMENT alone leaves the
+                // stencil plane unattached.
+                const GLenum attachment = record.has_stencil ? GL_DEPTH_STENCIL_ATTACHMENT : GL_DEPTH_ATTACHMENT;
+                GL_CHECK(glNamedFramebufferTexture(record.framebuffer_id, attachment, depth_record->object_id, 0));
             }
         }
 
-        const GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+        const GLenum status = glCheckNamedFramebufferStatus(record.framebuffer_id, GL_FRAMEBUFFER);
         if (status != GL_FRAMEBUFFER_COMPLETE)
         {
             LOG_ERR("create_render_target: incomplete framebuffer (status 0x%x)", status);
         }
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
         render_target h{};
         h.id = m_render_targets.insert(record);
@@ -323,6 +420,7 @@ namespace rendering_engine::gpu::backend::opengl
                 record->depth_attachment = {};
             }
             m_render_targets.remove(handle.id);
+            invalidate_state_cache();
         }
     }
 
