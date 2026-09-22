@@ -38,12 +38,14 @@
 #include <memory>
 #include <typeindex>
 #include <unordered_map>
+#include <utility>
 
 #include <core/pool.hpp>
 
 namespace runtime
 {
     struct node;
+    struct context;
 
     /**
      * @brief Untyped handle into a @ref component_store pool.
@@ -71,9 +73,35 @@ namespace runtime
      * @c add_component / @c get_component / @c remove_component calls through
      * here. Type-erased so the store needs no compile-time list of component
      * types — a pool is created lazily the first time a given type is added.
+     *
+     * Destroying the store dispatches @c on_destroy to every component still
+     * alive in it (in pool slot order) before their values are destroyed, so a
+     * component whose node outlives the scene still unwinds its external
+     * registrations. Not copyable or movable: nodes hold the store's address.
      */
     struct component_store
     {
+        component_store() = default;
+
+        component_store(const component_store&) = delete;
+        component_store& operator=(const component_store&) = delete;
+        component_store(component_store&&) = delete;
+        component_store& operator=(component_store&&) = delete;
+
+        /**
+         * @brief The scene this store belongs to, or @c nullptr for a
+         *        standalone store (one built outside a @ref runtime::context,
+         *        e.g. by a test).
+         *
+         * Nodes reach their scene — and its deferred command queue — through
+         * their store, so a component's @c on_update can call
+         * @c owner.scene()->defer_destroy(owner).
+         */
+        context* scene() const noexcept
+        {
+            return m_scene;
+        }
+
         /** @brief Stores @p value in the pool for @c C and returns its handle. */
         template<typename C>
         component_handle add(C value)
@@ -107,6 +135,7 @@ namespace runtime
          *
          * Lets a node free its components without naming each type — it only
          * keeps the @c std::type_index recorded when the component was added.
+         * Dispatches the component's @c on_destroy first, if it defines one.
          */
         void erase(std::type_index type, component_handle handle) noexcept
         {
@@ -115,6 +144,32 @@ namespace runtime
             {
                 it->second->erase(handle);
             }
+        }
+
+        /**
+         * @brief Moves the component named by @p type / @p handle into
+         *        @p target's pool for the same type and returns its new handle.
+         *
+         * Used by @ref node::set_store when a populated node is re-parented
+         * into another scene. The value is moved, not destroyed, so neither
+         * @c on_destroy nor @c on_attach fires: the component keeps whatever
+         * external registrations it made (they key off the node's transform
+         * and the heap objects the component owns, both of which survive the
+         * move). Returns an invalid handle if @p handle is stale; returns
+         * @p handle unchanged when @p target is this store.
+         */
+        component_handle migrate(std::type_index type, component_handle handle, component_store& target)
+        {
+            if (&target == this)
+            {
+                return handle;
+            }
+            auto it = m_pools.find(type);
+            if (it == m_pools.end())
+            {
+                return component_handle{};
+            }
+            return it->second->migrate(handle, target);
         }
 
         /**
@@ -150,10 +205,14 @@ namespace runtime
         }
 
     private:
+        // The owning scene installs itself here on construction.
+        friend struct context;
+
         struct pool_base
         {
             virtual ~pool_base() = default;
             virtual void erase(component_handle handle) noexcept = 0;
+            virtual component_handle migrate(component_handle handle, component_store& target) = 0;
             virtual void update(component_handle handle, node& owner) noexcept = 0;
             virtual void set_active(component_handle handle, node& owner, bool active) noexcept = 0;
         };
@@ -162,6 +221,19 @@ namespace runtime
         struct typed_pool final : pool_base
         {
             core::pool<C> data;
+
+            // The store is going away with components still alive in it (a
+            // node that outlives its scene, or the scene itself tearing down
+            // with nodes attached). Give each one its on_destroy before the
+            // pool destroys the values, exactly as erase() would have; the
+            // pool member is destroyed after this body runs.
+            ~typed_pool() override
+            {
+                if constexpr (requires(C& c) { c.on_destroy(); })
+                {
+                    data.for_each([](C& c) { c.on_destroy(); });
+                }
+            }
 
             void erase(component_handle handle) noexcept override
             {
@@ -178,6 +250,22 @@ namespace runtime
                     }
                 }
                 data.erase(h);
+            }
+
+            component_handle migrate(component_handle handle, component_store& target) override
+            {
+                auto h = make_handle<C>(handle);
+                C* c = data.get(h);
+                if (c == nullptr)
+                {
+                    return component_handle{};
+                }
+                // Move the value across first so a throwing insert leaves the
+                // source intact; the slot here is then freed without any
+                // on_destroy — the component lives on in the target pool.
+                component_handle moved = target.add<C>(std::move(*c));
+                data.erase(h);
+                return moved;
             }
 
             void update(component_handle handle, node& owner) noexcept override
@@ -222,5 +310,6 @@ namespace runtime
         }
 
         std::unordered_map<std::type_index, std::unique_ptr<pool_base>> m_pools;
+        context* m_scene{nullptr};
     };
 } // namespace runtime

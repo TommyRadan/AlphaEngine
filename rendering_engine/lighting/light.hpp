@@ -43,7 +43,8 @@ namespace rendering_engine
     // position, attenuation). A light adds itself to the process-wide
     // registry on construction and removes itself on destruction, so
     // simply keeping a light alive is enough for the scene pass to see
-    // it. Main-thread-only, like the rest of the engine — no
+    // it; set_enabled(false) takes it out of the registry without
+    // destroying it. Main-thread-only, like the rest of the engine — no
     // synchronization.
     struct light
     {
@@ -55,6 +56,14 @@ namespace rendering_engine
 
         light_type type() const noexcept;
 
+        // Adds the light to / removes it from the registry the passes read.
+        // A disabled light keeps its state but neither lights the scene nor
+        // casts a shadow, exactly as if it did not exist. Re-enabling appends
+        // it to the registry, so its position in the packed light arrays may
+        // differ from before. Lights start enabled.
+        void set_enabled(bool enabled);
+        bool is_enabled() const noexcept;
+
         // Linear RGB radiance. Multiplied by @ref intensity before
         // upload.
         core::math::vec3 color{1.0f, 1.0f, 1.0f};
@@ -64,10 +73,13 @@ namespace rendering_engine
 
     private:
         light_type m_type;
+        bool m_enabled{true};
     };
 
-    // The lights alive right now, in construction order. Owned by the
-    // lights themselves (the vector holds non-owning back-pointers); the
-    // scene pass walks it once per frame to pack the lights UBO.
+    // The lights alive and enabled right now, in registration order
+    // (construction order, with a re-enabled light moved to the back).
+    // Owned by the lights themselves (the vector holds non-owning
+    // back-pointers); the scene pass walks it once per frame to pack the
+    // lights UBO.
     const std::vector<light*>& registered_lights();
 } // namespace rendering_engine

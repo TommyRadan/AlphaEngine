@@ -50,6 +50,10 @@ namespace runtime
      * point light's position follows the node's world translation, and a
      * directional light's direction follows the node's world forward (-Z). An
      * ambient light has no spatial term and is left untouched.
+     *
+     * @ref on_active_changed enables / disables the light with its node, so a
+     * disabled subtree stops lighting (and shadowing) the scene as well as
+     * stopping its updates.
      */
     struct light_component
     {
@@ -61,6 +65,15 @@ namespace runtime
 
         /** @brief Syncs the light's position / direction from @p owner's world transform. */
         void on_update(node& owner);
+
+        /**
+         * @brief Takes the light out of the renderer's registry when the
+         *        owning node is disabled, and puts it back when re-enabled.
+         *
+         * Called by @ref node::set_active. The light object and its settings
+         * are untouched; see @ref rendering_engine::light::set_enabled.
+         */
+        void on_active_changed(node& owner, bool active);
 
         /** @brief The owned light, or @c nullptr for an empty component. */
         rendering_engine::light* get() const noexcept

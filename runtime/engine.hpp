@@ -139,11 +139,13 @@ namespace runtime
     /**
      * @brief Returns the currently-live @ref engine instance.
      *
-     * Undefined behaviour if called when no engine is constructed. The
-     * pointer is installed by the @ref engine constructor and cleared
-     * by its destructor; tests that construct their own @c engine on
-     * the stack therefore get a well-defined value here for the
-     * duration of the test.
+     * Logs a fatal error and throws @c std::logic_error if called when no
+     * engine is constructed — in every build configuration, so a module
+     * static that outlives the engine fails visibly rather than
+     * dereferencing null. The pointer is installed by the @ref engine
+     * constructor and cleared by its destructor; tests that construct
+     * their own @c engine on the stack therefore get a well-defined value
+     * here for the duration of the test.
      */
     engine& current_engine();
 } // namespace runtime

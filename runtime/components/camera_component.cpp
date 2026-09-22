@@ -36,17 +36,42 @@ void runtime::camera_component::on_attach(node& owner)
     if (m_camera)
     {
         m_camera->attach();
-        m_attached = true;
     }
 }
 
 void runtime::camera_component::on_destroy()
 {
-    if (m_attached && m_camera && rendering_engine::camera::get_current_camera() == m_camera.get())
+    if (is_current())
     {
         m_camera->detach();
     }
-    m_attached = false;
+}
+
+void runtime::camera_component::on_active_changed(node& owner, bool active)
+{
+    (void)owner;
+    if (!m_camera)
+    {
+        return;
+    }
+    if (active)
+    {
+        // Only step back in if nobody else took the slot while this node was
+        // disabled; a camera that was made current meanwhile keeps it.
+        if (rendering_engine::camera::get_current_camera() == nullptr)
+        {
+            m_camera->attach();
+        }
+    }
+    else if (is_current())
+    {
+        m_camera->detach();
+    }
+}
+
+bool runtime::camera_component::is_current() const noexcept
+{
+    return m_camera && rendering_engine::camera::get_current_camera() == m_camera.get();
 }
 
 void runtime::camera_component::on_update(node& owner)

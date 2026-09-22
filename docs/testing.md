@@ -101,6 +101,19 @@ All device-free:
 - `runtime::node` — parent/child links and re-parenting, cached world matrices,
   `world_position` / `set_world_position`, `find`, active / effective-active
   flags, and the component-store attach/get/remove path.
+- `runtime::context` — the per-frame traversal (only effectively active
+  nodes update; a node detached from a disabled parent is active again), the
+  deferred command queue (`defer_destroy` with its release callback,
+  `defer_remove_component`, `defer_reparent`, `defer_set_active`, queue
+  order, commands queued by commands), `on_destroy` dispatch when a store dies
+  with live components, ancestor-cycle rejection in `node::add`, component
+  migration on a cross-scene re-parent, and (debug builds, as a death test)
+  the assert on an immediate mutation from inside a hook.
+- `light_component` over the light registry (`light.cpp` is a plain vector of
+  back-pointers, so it compiles headless) — a disabled node's light leaves
+  `registered_lights()` and returns on enable, a disabled ancestor counts,
+  a light added to a disabled node starts disabled, `on_update` tracks the
+  node's world position, and removing the component unregisters the light.
 - `asset_cache` — dedup by structural key, builder-runs-only-on-miss,
   `collect_unused()` / weak-ref semantics, that a `mesh_asset` releases its
   GPU buffers when the last handle drops, that the `vertex_format` a

@@ -31,10 +31,19 @@ set(ALPHAENGINE_TEST_SOURCES_UNDER_TEST
     ${CMAKE_SOURCE_DIR}/core/subscription.cpp
     ${CMAKE_SOURCE_DIR}/core/time.cpp
     ${CMAKE_SOURCE_DIR}/core/version.cpp
-    # runtime::node — scene-graph hierarchy (depends only on math + the
-    # component store; no renderer or device).
+    # runtime::node + runtime::context — scene-graph hierarchy, traversal and
+    # the deferred command queue (depend only on math + the component store;
+    # no renderer or device).
     ${CMAKE_SOURCE_DIR}/runtime/node.cpp
+    ${CMAKE_SOURCE_DIR}/runtime/scene_graph.cpp
     ${CMAKE_SOURCE_DIR}/rendering_engine/util/transform.cpp
+    # light_component over the light registry — a plain vector of
+    # back-pointers, no device — so a disabled node's light can be checked to
+    # leave registered_lights().
+    ${CMAKE_SOURCE_DIR}/runtime/components/light_component.cpp
+    ${CMAKE_SOURCE_DIR}/rendering_engine/lighting/light.cpp
+    ${CMAKE_SOURCE_DIR}/rendering_engine/lighting/directional_light.cpp
+    ${CMAKE_SOURCE_DIR}/rendering_engine/lighting/point_light.cpp
     # mesh/tangent — pure geometry over core/math (the gpu header it includes
     # is types only, no device).
     ${CMAKE_SOURCE_DIR}/rendering_engine/mesh/tangent.cpp
@@ -74,6 +83,8 @@ set(ALPHAENGINE_TEST_SOURCES
     core/log_test.cpp
     core/time_test.cpp
     runtime/node_test.cpp
+    runtime/scene_graph_test.cpp
+    runtime/light_component_test.cpp
     rendering_engine/assets/asset_cache_test.cpp
     rendering_engine/mesh/mesh_test.cpp
     rendering_engine/mesh/tangent_test.cpp

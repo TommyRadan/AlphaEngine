@@ -41,11 +41,14 @@ namespace runtime
      * Owns a @ref rendering_engine::camera (perspective or orthographic) on the
      * heap. @ref on_attach makes it the renderer's active camera; @ref on_destroy
      * releases it if it is still active, so destroying the node (or removing the
-     * component) detaches cleanly. @ref on_update drives the camera's position
-     * from the node's world translation, so a camera parented under an animated
-     * node follows it — a turntable rig, a chase cam — without per-frame glue in
-     * the game module. Orientation is left to the camera (e.g. via
-     * @c camera::look_at), which the owner can set up after attaching.
+     * component) detaches cleanly. @ref on_active_changed detaches it while the
+     * node is disabled and re-attaches it — unless another camera has taken
+     * over meanwhile — when the node is enabled again. @ref on_update drives
+     * the camera's position from the node's world translation, so a camera
+     * parented under an animated node follows it — a turntable rig, a chase
+     * cam — without per-frame glue in the game module. Orientation is left to
+     * the camera (e.g. via @c camera::look_at), which the owner can set up
+     * after attaching.
      *
      * The camera lives behind a @c unique_ptr so its address — held by the
      * renderer's active-camera pointer — survives the component being relocated
@@ -65,6 +68,15 @@ namespace runtime
         /** @brief Detaches the owned camera if it is still the active one. */
         void on_destroy();
 
+        /**
+         * @brief Detaches the owned camera when the owning node is disabled
+         *        (if it is the active one) and re-attaches it when the node is
+         *        enabled, provided no other camera is active by then.
+         *
+         * Called by @ref node::set_active.
+         */
+        void on_active_changed(node& owner, bool active);
+
         /** @brief Drives the camera's position from @p owner's world translation. */
         void on_update(node& owner);
 
@@ -75,7 +87,8 @@ namespace runtime
         }
 
     private:
+        bool is_current() const noexcept;
+
         std::unique_ptr<rendering_engine::camera> m_camera;
-        bool m_attached{false};
     };
 } // namespace runtime

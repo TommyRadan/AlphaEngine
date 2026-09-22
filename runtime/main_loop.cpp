@@ -26,6 +26,49 @@
 #include <rendering_engine/window.hpp>
 #include <runtime/engine.hpp>
 
+namespace
+{
+    // Tears the engine down after a failure. The engine on main's stack dies
+    // before the game modules' file-scope statics, so those statics — nodes,
+    // lights, models — would otherwise unwind against freed subsystems: the
+    // engine_stop broadcast is what makes the modules release them while the
+    // renderer and scene are still alive, and quit() then brings the
+    // subsystems down in order. Every subsystem's quit() tolerates an init()
+    // that never ran or ran only partway. Errors raised here are logged and
+    // swallowed so they cannot mask the failure that brought us here.
+    void shut_down_after_failure(runtime::engine& engine, bool started)
+    {
+        if (started)
+        {
+            try
+            {
+                engine.broadcast_engine_stop();
+            }
+            catch (const std::exception& e)
+            {
+                LOG_ERR("engine_stop listener failed during error shutdown: %s", e.what());
+            }
+            catch (...)
+            {
+                LOG_ERR("engine_stop listener failed during error shutdown");
+            }
+        }
+
+        try
+        {
+            engine.quit();
+        }
+        catch (const std::exception& e)
+        {
+            LOG_ERR("Subsystem teardown failed during error shutdown: %s", e.what());
+        }
+        catch (...)
+        {
+            LOG_ERR("Subsystem teardown failed during error shutdown");
+        }
+    }
+} // namespace
+
 int main(int argc, char* argv[])
 {
     LOG_INIT(argc, argv);
@@ -49,6 +92,9 @@ int main(int argc, char* argv[])
         {
             engine.window->show_message("Initialization Error", e.what());
         }
+        // Nothing was started, so there is no engine_stop to deliver; the
+        // subsystems that did come up still need taking down in order.
+        shut_down_after_failure(engine, false);
         return EXIT_FAILURE;
     }
 
@@ -73,6 +119,9 @@ int main(int argc, char* argv[])
         {
             engine.window->show_message("Error", e.what());
         }
+        // engine_start went out (at least partly), so the modules hold live
+        // engine objects: tell them to let go, then take the subsystems down.
+        shut_down_after_failure(engine, true);
         return EXIT_FAILURE;
     }
 

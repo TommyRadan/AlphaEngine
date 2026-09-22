@@ -27,6 +27,8 @@
 
 #pragma once
 
+#include <functional>
+#include <memory>
 #include <string>
 #include <typeindex>
 #include <vector>
@@ -38,6 +40,8 @@
 
 namespace runtime
 {
+    struct context;
+
     /**
      * @brief A node in the scene hierarchy — the entity of the
      *        entity/component model.
@@ -63,6 +67,19 @@ namespace runtime
      * children, and the caller keeps every node alive while it is wired into a
      * tree. The destructor detaches from the parent, orphans children back to
      * world space, and frees this node's components. Main-thread-only.
+     *
+     * **Structural mutation during a traversal.** While the scene is walking
+     * the tree — inside a component's @c on_update (from
+     * @ref update_subtree) or @c on_active_changed (from @ref set_active) —
+     * the node and child lists being iterated must not change. The immediate
+     * APIs (@ref add, @ref remove, @ref set_active, @ref add_component,
+     * @ref remove_component, @ref remove_all_components) detect that case
+     * through the owning @ref runtime::context: in debug builds they assert;
+     * in release builds they log an error and apply the call at the end of
+     * @ref runtime::context::update instead. Code that needs to mutate the
+     * tree from a hook should say so explicitly with the scene's
+     * @c defer_destroy / @c defer_remove_component / @c defer_reparent /
+     * @c defer_set_active, reached via @ref scene.
      */
     struct node
     {
@@ -127,9 +144,15 @@ namespace runtime
          * @brief Enables or disables this node (and, by inheritance, its subtree).
          *
          * A disabled subtree is skipped by @ref update_subtree and its components
-         * are told to hide via @c on_active_changed (e.g. a @c mesh_component
-         * unregisters its model from the renderer), so it stops both updating and
-         * drawing. Re-enabling restores it, provided every ancestor is active.
+         * are told to hide via @c on_active_changed (a @c mesh_component
+         * unregisters its model, a @c light_component takes its light out of
+         * the registry, a @c camera_component detaches its camera), so it stops
+         * both updating and drawing. Re-enabling restores it, provided every
+         * ancestor is active. Detaching a node from a disabled parent (via
+         * @ref remove or the parent's destruction) likewise restores it: a root
+         * is effectively active whenever its own flag is.
+         *
+         * Not callable during a traversal — see the class notes.
          */
         void set_active(bool active);
 
@@ -138,12 +161,27 @@ namespace runtime
          *
          * Re-parents @p child (detaching it from any previous parent first),
          * points its transform at this node so world matrices propagate, and
-         * — if @p child has no store yet — hands it this node's store so it
-         * can carry components. A node is never added to itself.
+         * hands it this node's store: a child with no store simply adopts it,
+         * while a child already scoped to a *different* store has its subtree's
+         * components migrated into this one (see @ref set_store). A parent
+         * without a store leaves the child's store untouched.
+         *
+         * Rejected, with an error logged and no change made, when @p child is
+         * this node or one of its ancestors — that would close a cycle.
+         *
+         * Not callable during a traversal — see the class notes.
          */
         void add(node& child);
 
-        /** @brief Detaches @p child, returning it to world space. No-op if not a child. */
+        /**
+         * @brief Detaches @p child, returning it to world space. No-op if not a child.
+         *
+         * The detached child becomes a root, so its effective-active state
+         * reverts to its own flag (components hidden only because an ancestor
+         * was disabled are shown again).
+         *
+         * Not callable during a traversal — see the class notes.
+         */
         void remove(node& child);
 
         /** @brief Parent node, or @c nullptr when this node is a root. */
@@ -157,9 +195,10 @@ namespace runtime
          *
          * Calls each component's @c on_update(node&) (those that define one) so
          * components can resync from the node's now-settled world transform.
-         * Driven once per frame from @ref runtime::context::update on the
-         * scene root, after game-module @c on_frame has moved nodes and before
-         * the renderer walks the frame.
+         * Skipped entirely — this node and its subtree — unless the node is
+         * effectively active. Driven once per frame from
+         * @ref runtime::context::update on the scene root, after game-module
+         * @c on_frame has moved nodes and before the renderer walks the frame.
          */
         void update_subtree();
 
@@ -172,23 +211,48 @@ namespace runtime
         core::math::mat4 world_matrix() const;
 
         /**
-         * @brief Sets the component store this node draws its component pools
-         *        from, propagating to children that have none.
+         * @brief Sets the component store this node — and its whole subtree —
+         *        draws its component pools from.
          *
          * Usually called indirectly: a scene's root is given the store by
-         * @ref runtime::context, and @ref add hands it down the tree.
+         * @ref runtime::context, and @ref add hands it down the tree. A node
+         * that already carries components has them migrated into the new
+         * store (moved, so no @c on_destroy / @c on_attach fires and every
+         * external registration survives). Passing @c nullptr unscopes the
+         * subtree; components cannot exist without a pool, so any it carries
+         * are freed (with @c on_destroy) first.
          */
-        void set_store(component_store* store) noexcept;
+        void set_store(component_store* store);
 
         /** @brief Component store backing this node, or @c nullptr if unscoped. */
         component_store* store() const noexcept;
+
+        /**
+         * @brief The scene this node belongs to, or @c nullptr when its store
+         *        is not owned by a @ref runtime::context (or it has none).
+         *
+         * This is how a component reaches the scene's deferred command queue
+         * from inside a hook: @c owner.scene()->defer_destroy(owner, ...).
+         */
+        context* scene() const noexcept;
+
+        /**
+         * @brief True between a @c context::defer_destroy(*this) call and the
+         *        end of the @c context::update that applies it.
+         *
+         * Lets a component's @c on_update skip work on a node that is already
+         * on its way out.
+         */
+        bool is_destroy_pending() const noexcept;
 
         /**
          * @brief Adds (or replaces) the @c C component on this node.
          *
          * Stores @p value in the scene's pool for @c C and records its handle.
          * Replaces any existing @c C on this node. Returns a pointer to the
-         * pooled component, or @c nullptr if the node has no store yet.
+         * pooled component, or @c nullptr if the node has no store yet — or if
+         * called during a traversal, in which case (release builds) the add is
+         * applied at the end of the current @c context::update instead.
          */
         template<typename C>
         C* add_component(C value)
@@ -196,6 +260,16 @@ namespace runtime
             if (m_store == nullptr)
             {
                 LOG_WRN("runtime::node::add_component: node has no component store");
+                return nullptr;
+            }
+
+            if (reject_during_traversal("add_component"))
+            {
+                // Release builds apply the add once the traversal has unwound.
+                // The value is boxed so the command stays copyable (as
+                // std::function requires) even for move-only components.
+                auto boxed = std::make_shared<C>(std::move(value));
+                defer([this, boxed] { add_component<C>(std::move(*boxed)); });
                 return nullptr;
             }
 
@@ -260,10 +334,25 @@ namespace runtime
             return false;
         }
 
-        /** @brief Removes this node's @c C component and frees its pooled storage. No-op if absent. */
+        /**
+         * @brief Removes this node's @c C component and frees its pooled
+         *        storage (dispatching @c on_destroy). No-op if absent.
+         *
+         * Not callable during a traversal — see the class notes.
+         */
         template<typename C>
-        void remove_component() noexcept
+        void remove_component()
         {
+            if (!has_component<C>())
+            {
+                return;
+            }
+            if (reject_during_traversal("remove_component"))
+            {
+                defer([this] { remove_component<C>(); });
+                return;
+            }
+
             std::type_index type{typeid(C)};
             for (auto it = m_components.begin(); it != m_components.end(); ++it)
             {
@@ -279,7 +368,19 @@ namespace runtime
             }
         }
 
+        /**
+         * @brief Removes every component on this node, freeing their pooled
+         *        storage (dispatching @c on_destroy on each). Children are
+         *        untouched.
+         *
+         * Not callable during a traversal — see the class notes.
+         */
+        void remove_all_components();
+
     private:
+        // The scene applies deferred commands against these.
+        friend struct context;
+
         struct component_entry
         {
             std::type_index type;
@@ -291,6 +392,22 @@ namespace runtime
         // into children with the new value.
         void refresh_active(bool parent_effective);
 
+        // Frees this node's components without any traversal check; shared by
+        // the destructor, remove_all_components and set_store(nullptr).
+        void release_components();
+
+        // Unlinks this node from its parent (child list and transform) without
+        // touching the active state; add and remove decide what follows.
+        void detach_from_parent();
+
+        // True when the owning scene is mid-traversal, in which case the
+        // named immediate mutation must not run. Logs an error, asserts in
+        // debug builds, and in release builds tells the caller to defer.
+        bool reject_during_traversal(const char* operation) const;
+
+        // Queues @p command on the owning scene for the end of its update.
+        void defer(std::function<void()> command);
+
         node* m_parent;
         std::vector<node*> m_children;
         component_store* m_store;
@@ -298,5 +415,6 @@ namespace runtime
 
         bool m_active;
         bool m_effective_active;
+        bool m_destroy_pending;
     };
 } // namespace runtime
