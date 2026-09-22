@@ -77,6 +77,26 @@ namespace rendering_engine::gpu::backend::vulkan
             return;
         }
 
+        if (target->is_swapchain)
+        {
+            // Acquire before reading anything off the target. The
+            // frame's fence wait and deferred-destroy drain already ran
+            // in vk_device::begin_frame; this acquires the image lazily,
+            // so a frame that never reaches the swapchain does not
+            // acquire one — and it may rebuild the swapchain on the
+            // way, which retires every variant of this target (and the
+            // framebuffers built on the old images), so a variant read
+            // earlier would dangle. While the swapchain is suspended
+            // (minimised) or the acquire failed, the pass records
+            // nothing; the device has logged any real failure, and the
+            // frame's other swapchain passes get the same answer.
+            device.acquire_swapchain_image();
+            if (!device.have_current_swapchain_image())
+            {
+                return;
+            }
+        }
+
         const VkAttachmentLoadOp color_load = to_vk_load_op(descriptor.color.load);
         const VkAttachmentLoadOp depth_load = to_vk_load_op(descriptor.depth.load);
         const bool use_depth = descriptor.use_depth && target->has_depth;
@@ -109,18 +129,6 @@ namespace rendering_engine::gpu::backend::vulkan
         VkFramebuffer framebuffer = VK_NULL_HANDLE;
         if (target->is_swapchain)
         {
-            // The frame's fence wait and deferred-destroy drain already
-            // ran in vk_device::begin_frame at frame top; this only
-            // acquires the swapchain image, lazily, so a frame that
-            // never reaches the swapchain does not acquire one.
-            device.acquire_swapchain_image();
-            if (!device.have_current_swapchain_image() || variant->framebuffers.empty())
-            {
-                LOG_ERR("vk_render_pass_encoder: no swapchain image acquired (have_image=%i framebuffers=%u)",
-                        static_cast<int>(device.have_current_swapchain_image()),
-                        static_cast<unsigned>(variant->framebuffers.size()));
-                return;
-            }
             const uint32_t idx = device.current_swapchain_image_index();
             if (idx < variant->framebuffers.size())
             {
@@ -138,6 +146,7 @@ namespace rendering_engine::gpu::backend::vulkan
         }
 
         m_render_pass = render_pass;
+        m_render_pass_generation = variant->render_pass_generation;
         m_target_width = target->width;
         m_target_height = target->height;
         m_y_flipped = target->is_swapchain;
@@ -197,7 +206,8 @@ namespace rendering_engine::gpu::backend::vulkan
         // compatible with the active render pass. The same
         // pipeline_descriptor maps to one VkPipeline per render
         // pass; the cache is owned by the vk_pipeline record.
-        VkPipeline obj = m_device.graphics_pipeline_for(pipeline_handle, m_render_pass, m_y_flipped);
+        VkPipeline obj =
+            m_device.graphics_pipeline_for(pipeline_handle, m_render_pass, m_render_pass_generation, m_y_flipped);
         if (obj == VK_NULL_HANDLE)
         {
             LOG_ERR("vk_render_pass_encoder::set_pipeline: graphics_pipeline_for returned null");

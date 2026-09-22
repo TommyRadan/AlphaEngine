@@ -139,10 +139,31 @@ namespace rendering_engine::gpu
         // window presents.
         virtual render_target swapchain_target() = 0;
 
-        // Notify the device that the window backbuffer was resized.
-        // The swapchain target's recorded extent updates so the next
-        // pass viewport defaults match the window.
+        // Notify the device that the window backbuffer was resized —
+        // the renderer's window_resized listener is the caller, with
+        // the drawable's pixel size, and context::init makes the same
+        // call once. The swapchain target's recorded extent updates so
+        // the next pass viewport defaults match the window. A zero
+        // extent means the window is minimised: a backend that owns
+        // presentation stops presenting (see @ref swapchain_suspended)
+        // until a later non-zero resize, or its own surface poll, gives
+        // it a size to rebuild against.
         virtual void resize_swapchain(uint32_t width, uint32_t height) = 0;
+
+        // True while the backend has no presentable swapchain: the
+        // surface reports no extent, or the last rebuild failed and is
+        // retried at the next frame top. The main loop skips whole
+        // frames while window::is_minimized(), so this is the device's
+        // own state for what still reaches it — a surface that lags the
+        // window, an out-of-date recovery that found no extent, a
+        // failed rebuild. While set, a frame that does run executes its
+        // off-screen passes but every pass that targets the swapchain
+        // records nothing. Backends that present through the window
+        // (OpenGL) never suspend.
+        virtual bool swapchain_suspended() const
+        {
+            return false;
+        }
 
         // Allocate an off-screen render target. The device owns the
         // colour texture (and the optional depth texture) so the

@@ -55,9 +55,13 @@ namespace rendering_engine::gpu::backend::vulkan
                                          size_t offset,
                                          uint32_t draw_count,
                                          uint32_t stride) override;
+        // Null unless a render pass is open: a pass that failed to
+        // open (no swapchain image this frame — minimised, or the
+        // acquire failed) must not hand out the command buffer, or an
+        // overlay would record draws outside any render pass.
         void* native_command_buffer() const noexcept override
         {
-            return m_cmd;
+            return m_in_pass ? static_cast<void*>(m_cmd) : nullptr;
         }
         void end() override;
 
@@ -65,6 +69,9 @@ namespace rendering_engine::gpu::backend::vulkan
         vk_device& m_device;
         VkCommandBuffer m_cmd{VK_NULL_HANDLE};
         VkRenderPass m_render_pass{VK_NULL_HANDLE};
+        // Generation of m_render_pass (see vk_render_target::variant);
+        // part of the pipeline-cache key passed to graphics_pipeline_for.
+        uint64_t m_render_pass_generation{0};
         uint32_t m_target_width{0};
         uint32_t m_target_height{0};
         pipeline m_pipeline_handle{};

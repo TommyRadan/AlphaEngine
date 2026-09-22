@@ -111,8 +111,10 @@ namespace rendering_engine::gpu
         // pass — Dear ImGui's @c ImGui_ImplVulkan_RenderDrawData wants
         // the raw command buffer. Returns @c nullptr on backends that
         // record immediately (OpenGL) and therefore have no command
-        // buffer to hand out; those overlays issue their draws against
-        // the bound framebuffer instead.
+        // buffer to hand out — those overlays issue their draws against
+        // the bound framebuffer instead — and on any backend while the
+        // pass is not open (it failed to begin, e.g. no swapchain image
+        // this frame), so nothing is recorded outside a render pass.
         virtual void* native_command_buffer() const noexcept
         {
             return nullptr;
