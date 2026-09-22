@@ -72,6 +72,7 @@ namespace rendering_engine
         vertex_layout.stride = 0; // panes use vertex_position_uv = 20 bytes; supplied per draw
         vertex_layout.attributes.push_back({0, 3, gpu::scalar_type::float32, 0});
         vertex_layout.attributes.push_back({1, 2, gpu::scalar_type::float32, sizeof(float) * 3});
+        m_vertex_format = vertex_format::position_uv;
 
         // Per-draw layout: UBO with the {useTexture, color} pair at
         // binding=0; sampler at binding=1. UBOs and samplers live in

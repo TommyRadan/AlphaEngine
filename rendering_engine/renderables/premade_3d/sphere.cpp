@@ -34,6 +34,7 @@
 #include <rendering_engine/materials/material.hpp>
 #include <rendering_engine/mesh/tangent.hpp>
 #include <rendering_engine/mesh/vertex.hpp>
+#include <rendering_engine/renderables/vertex_format_check.hpp>
 #include <runtime/engine.hpp>
 
 rendering_engine::sphere::sphere(material* mat, unsigned int stacks, unsigned int slices)
@@ -60,17 +61,12 @@ rendering_engine::sphere::~sphere()
 
 void rendering_engine::sphere::upload()
 {
-    // Tangent-complete vertices so the sphere can be drawn by tangent-aware
-    // materials (standard/PBR) without the vertex stride falling short of the
-    // pipeline's tangent attribute. The position/uv/normal offsets are
-    // unchanged, so materials that ignore the tangent still read correctly.
-    m_vertex_stride = sizeof(vertex_position_uv_normal_tangent);
-
     // Build and upload through the asset cache, keyed by tessellation so two
     // spheres of the same resolution share one upload. The builder only runs on
     // a cache miss.
     m_mesh = runtime::current_engine().assets->get_or_create_mesh(
-        "sphere:" + std::to_string(m_stacks) + "x" + std::to_string(m_slices),
+        "sphere:" + std::to_string(m_stacks) + "x" + std::to_string(m_slices) + ":" +
+            vertex_format_name(vertex_format::position_uv_normal_tangent),
         [this]
         {
             const unsigned int rings = m_stacks + 1;
@@ -129,11 +125,15 @@ void rendering_engine::sphere::upload()
                 }
             }
 
+            // Tangents complete the record for tangent-aware materials
+            // (standard/PBR); the position/uv/normal offsets are unchanged so
+            // materials that ignore the tangent still read correctly.
             const auto tangent_vertices = generate_tangents(vertices, indices);
             return mesh_data::from_vertices(tangent_vertices, std::move(indices));
         });
 
     m_index_count = m_mesh->index_count;
+    m_vertex_stride = m_mesh->vertex_stride;
 }
 
 void rendering_engine::sphere::collect_draw_items(std::vector<draw_item>& out)
@@ -144,6 +144,11 @@ void rendering_engine::sphere::collect_draw_items(std::vector<draw_item>& out)
         return;
     }
     if (!m_mesh)
+    {
+        return;
+    }
+
+    if (!validate_vertex_format(*m_material, *m_mesh, "sphere", m_vertex_format_reported))
     {
         return;
     }

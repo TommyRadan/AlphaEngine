@@ -99,6 +99,49 @@ TEST_F(asset_cache_test, same_key_returns_the_shared_asset_without_rebuilding)
     EXPECT_EQ(cache.mesh_count(), 1u);
 }
 
+TEST_F(asset_cache_test, an_unlisted_vertex_struct_is_cached_as_a_custom_format)
+{
+    auto mesh = cache.get_or_create_mesh("triangle", make_triangle);
+    ASSERT_NE(mesh, nullptr);
+    EXPECT_EQ(mesh->format, rendering_engine::vertex_format::custom);
+    EXPECT_EQ(mesh->vertex_stride, sizeof(vertex));
+}
+
+TEST_F(asset_cache_test, a_named_vertex_struct_records_its_format_on_the_asset)
+{
+    auto mesh = cache.get_or_create_mesh("tangent_quad",
+                                         []
+                                         {
+                                             const std::vector<rendering_engine::vertex_position_uv_normal_tangent>
+                                                 verts(4);
+                                             return rendering_engine::mesh_data::from_vertices(
+                                                 verts, std::vector<std::uint32_t>{0, 1, 2, 0, 2, 3});
+                                         });
+    ASSERT_NE(mesh, nullptr);
+    EXPECT_EQ(mesh->format, rendering_engine::vertex_format::position_uv_normal_tangent);
+    EXPECT_EQ(mesh->vertex_stride, sizeof(rendering_engine::vertex_position_uv_normal_tangent));
+    EXPECT_EQ(mesh->vertex_count, 4u);
+    EXPECT_EQ(mesh->index_count, 6u);
+}
+
+TEST_F(asset_cache_test, a_format_that_contradicts_the_stride_is_demoted_to_custom)
+{
+    // A builder claiming the 48-byte tangent record over 12-byte vertices
+    // would let a tangent-reading material pass the format check and still
+    // fetch past every vertex; the cache keeps only the stride it can trust.
+    auto mesh = cache.get_or_create_mesh("misdeclared",
+                                         []
+                                         {
+                                             rendering_engine::mesh_data data = make_triangle();
+                                             data.format =
+                                                 rendering_engine::vertex_format::position_uv_normal_tangent;
+                                             return data;
+                                         });
+    ASSERT_NE(mesh, nullptr);
+    EXPECT_EQ(mesh->format, rendering_engine::vertex_format::custom);
+    EXPECT_EQ(mesh->vertex_stride, sizeof(vertex));
+}
+
 TEST_F(asset_cache_test, distinct_keys_produce_distinct_assets)
 {
     auto a = cache.get_or_create_mesh("a", make_triangle);

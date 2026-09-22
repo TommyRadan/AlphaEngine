@@ -40,7 +40,7 @@ namespace rendering_engine
     // the two radii. Unless open_ended, a top and a bottom cap fan are
     // appended with flat normals. A cap whose radius is 0 is skipped, so
     // a top radius of 0 yields a cone. Vertex format is position + uv +
-    // normal with CCW outward winding.
+    // normal + tangent with CCW outward winding.
     struct cylinder : public renderable
     {
         explicit cylinder(material* mat,
@@ -71,6 +71,7 @@ namespace rendering_engine
         bool m_open_ended;
         unsigned int m_index_count{0};
         uint32_t m_vertex_stride{0};
+        bool m_vertex_format_reported{false};
 
         std::shared_ptr<mesh_asset> m_mesh;
         gpu::buffer m_draw_ubo{};

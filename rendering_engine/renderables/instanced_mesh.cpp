@@ -31,6 +31,7 @@
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/materials/instanced_material.hpp>
 #include <rendering_engine/materials/material.hpp>
+#include <rendering_engine/renderables/vertex_format_check.hpp>
 #include <runtime/engine.hpp>
 
 namespace
@@ -89,6 +90,9 @@ void rendering_engine::instanced_mesh::upload_geometry(const std::vector<vertex_
 
     m_index_count = static_cast<uint32_t>(indices.size());
     m_vertex_stride = sizeof(vertex_position_uv_normal);
+    m_vertex_format = vertex_format::position_uv_normal;
+    m_vertex_format_reported = false;
+    m_indirect_dirty = true;
 
     auto& gpu = *runtime::current_engine().gpu;
 
@@ -114,7 +118,11 @@ void rendering_engine::instanced_mesh::set_geometry(std::shared_ptr<mesh_asset> 
     {
         m_index_count = m_mesh->index_count;
         m_vertex_stride = m_mesh->vertex_stride;
+        m_vertex_format = m_mesh->format;
     }
+    m_vertex_format_reported = false;
+    // The command's index count changed with the geometry.
+    m_indirect_dirty = true;
 }
 
 uint32_t rendering_engine::instanced_mesh::instance_capacity() const
@@ -124,7 +132,12 @@ uint32_t rendering_engine::instanced_mesh::instance_capacity() const
 
 void rendering_engine::instanced_mesh::set_instance_count(uint32_t count)
 {
-    m_instance_count = count > m_capacity ? m_capacity : count;
+    const uint32_t clamped = count > m_capacity ? m_capacity : count;
+    if (clamped != m_instance_count)
+    {
+        m_instance_count = clamped;
+        m_indirect_dirty = true;
+    }
 }
 
 uint32_t rendering_engine::instanced_mesh::instance_count() const
@@ -176,6 +189,11 @@ void rendering_engine::instanced_mesh::collect_draw_items(std::vector<draw_item>
     {
         return;
     }
+    if (!validate_vertex_format(
+            *m_material, m_vertex_format, m_vertex_stride, "instanced_mesh", m_vertex_format_reported))
+    {
+        return;
+    }
 
     auto& gpu = *runtime::current_engine().gpu;
 
@@ -193,7 +211,8 @@ void rendering_engine::instanced_mesh::collect_draw_items(std::vector<draw_item>
     }
 
     // Indirect command buffer holding a single DrawElementsIndirectCommand;
-    // its instance-count field drives how many copies the one draw paints.
+    // its index-count field selects the geometry and its instance-count
+    // field drives how many copies the one draw paints.
     if (!m_indirect_buffer.valid())
     {
         gpu::buffer_descriptor indirect_descriptor{};
@@ -201,10 +220,7 @@ void rendering_engine::instanced_mesh::collect_draw_items(std::vector<draw_item>
         indirect_descriptor.usage = gpu::buffer_usage_indirect | gpu::buffer_usage_copy_dst;
         indirect_descriptor.hint = gpu::buffer_usage_hint::dynamic_data;
         m_indirect_buffer = gpu.create_buffer(indirect_descriptor);
-
-        const std::array<uint32_t, indirect_command_uints> command{m_index_count, m_instance_count, 0u, 0u, 0u};
-        gpu.write_buffer(m_indirect_buffer, command.data(), indirect_command_size, 0);
-        m_uploaded_instance_count = m_instance_count;
+        m_indirect_dirty = true;
     }
 
     // Re-upload the whole per-instance array when any record changed. The
@@ -216,13 +232,15 @@ void rendering_engine::instanced_mesh::collect_draw_items(std::vector<draw_item>
         m_instances_dirty = false;
     }
 
-    // Refresh only the instance-count field of the command when the active
-    // count changed (the index count is fixed by the geometry).
-    if (m_uploaded_instance_count != m_instance_count)
+    // Rewrite the command whenever either of its live fields changed: the
+    // active instance count, or the index count after a geometry swap (a
+    // stale index count would draw the old mesh's element range over the
+    // new buffers).
+    if (m_indirect_dirty)
     {
         const std::array<uint32_t, indirect_command_uints> command{m_index_count, m_instance_count, 0u, 0u, 0u};
         gpu.write_buffer(m_indirect_buffer, command.data(), indirect_command_size, 0);
-        m_uploaded_instance_count = m_instance_count;
+        m_indirect_dirty = false;
     }
 
     draw_item item{};

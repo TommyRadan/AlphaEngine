@@ -58,6 +58,7 @@
 #include <rendering_engine/lighting/ambient_light.hpp>
 #include <rendering_engine/lighting/point_light.hpp>
 #include <rendering_engine/materials/standard_material.hpp>
+#include <rendering_engine/mesh/tangent.hpp>
 #include <rendering_engine/mesh/vertex.hpp>
 #include <rendering_engine/rendering_engine.hpp>
 #include <rendering_engine/util/color.hpp>
@@ -68,6 +69,7 @@
 #include <runtime/scene_graph.hpp>
 
 #include <cmath>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
@@ -93,41 +95,43 @@ static std::unique_ptr<rendering_engine::ambient_light> g_ambient;
 static std::shared_ptr<rendering_engine::mesh_asset> g_sphere;
 static float g_time = 0.0f;
 
-static std::vector<rendering_engine::vertex_position_uv_normal> make_sphere(int stacks, int slices)
+// Unit sphere as an indexed (stacks + 1) x (slices + 1) lat/lon grid carrying
+// tangents — the record standard_material reads. The normal equals the
+// position and bodies are scaled per node. Two triangles per stack/slice
+// cell, wound CCW when seen from outside.
+static rendering_engine::mesh_data make_sphere(int stacks, int slices)
 {
-    std::vector<rendering_engine::vertex_position_uv_normal> v;
+    std::vector<rendering_engine::vertex_position_uv_normal> vertices;
+    std::vector<uint32_t> indices;
     const float pi = 3.14159265358979f;
 
-    // Unit sphere; the normal equals the position and bodies are scaled per
-    // node. Two triangles per stack/slice cell, wound CCW when seen from
-    // outside.
-    auto at = [&](int stack, int slice)
+    for (int stack = 0; stack <= stacks; ++stack)
     {
         const float phi = pi * (static_cast<float>(stack) / stacks); // 0..pi from +Z pole
-        const float theta = 2.0f * pi * (static_cast<float>(slice) / slices);
-        const math::vec3 p{std::sin(phi) * std::cos(theta), std::sin(phi) * std::sin(theta), std::cos(phi)};
-        const math::vec2 uv{static_cast<float>(slice) / slices, static_cast<float>(stack) / stacks};
-        return rendering_engine::vertex_position_uv_normal{p, uv, p};
-    };
+        for (int slice = 0; slice <= slices; ++slice)
+        {
+            const float theta = 2.0f * pi * (static_cast<float>(slice) / slices);
+            const math::vec3 p{std::sin(phi) * std::cos(theta), std::sin(phi) * std::sin(theta), std::cos(phi)};
+            const math::vec2 uv{static_cast<float>(slice) / slices, static_cast<float>(stack) / stacks};
+            vertices.push_back(rendering_engine::vertex_position_uv_normal{p, uv, p});
+        }
+    }
 
+    const auto columns = static_cast<uint32_t>(slices + 1);
     for (int stack = 0; stack < stacks; ++stack)
     {
         for (int slice = 0; slice < slices; ++slice)
         {
-            const auto a = at(stack, slice);
-            const auto b = at(stack + 1, slice);
-            const auto c = at(stack + 1, slice + 1);
-            const auto d = at(stack, slice + 1);
-            v.push_back(a);
-            v.push_back(b);
-            v.push_back(c);
-            v.push_back(a);
-            v.push_back(c);
-            v.push_back(d);
+            const uint32_t a = static_cast<uint32_t>(stack) * columns + static_cast<uint32_t>(slice);
+            const uint32_t b = a + columns; // (stack + 1, slice)
+            const uint32_t c = b + 1;       // (stack + 1, slice + 1)
+            const uint32_t d = a + 1;       // (stack, slice + 1)
+            indices.insert(indices.end(), {a, b, c, a, c, d});
         }
     }
 
-    return v;
+    return rendering_engine::mesh_data::from_vertices(rendering_engine::generate_tangents(vertices, indices),
+                                                      std::move(indices));
 }
 
 static runtime::node* make_child(runtime::node& parent)
@@ -205,9 +209,9 @@ static void on_engine_start(const core::engine_start& event)
 
     // Build the sphere once and share it across every body via the asset cache;
     // the key encodes the tessellation so a second request returns this upload.
-    g_sphere = runtime::current_engine().assets->get_or_create_mesh(
-        "scene_graph_demo:sphere:18x36",
-        [] { return rendering_engine::mesh_data::from_vertices(make_sphere(18, 36)); });
+    // The asset is indexed, so each mesh_component's model draws it indexed.
+    g_sphere = runtime::current_engine().assets->get_or_create_mesh("scene_graph_demo:sphere:18x36",
+                                                                    [] { return make_sphere(18, 36); });
 
     // Dim fill so the night side of each body is not pure black.
     g_ambient = std::make_unique<rendering_engine::ambient_light>();

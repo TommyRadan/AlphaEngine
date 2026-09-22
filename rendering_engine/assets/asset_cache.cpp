@@ -169,6 +169,21 @@ namespace rendering_engine
             LOG_WRN("asset_cache: mesh builder for '%s' produced empty geometry", key.c_str());
         }
 
+        // A named format promises the matching struct's stride; a builder
+        // that claims one over differently sized records would let a
+        // renderable pass the format check and still fetch past the vertex,
+        // so demote it to custom (stride-checked only) rather than trust it.
+        vertex_format format = data.format;
+        if (format != vertex_format::custom && vertex_format_stride(format) != data.vertex_stride)
+        {
+            LOG_WRN("asset_cache: mesh '%s' claims format %s (stride %u) but has stride %u; treating as custom",
+                    key.c_str(),
+                    vertex_format_name(format),
+                    vertex_format_stride(format),
+                    data.vertex_stride);
+            format = vertex_format::custom;
+        }
+
         auto& gpu = asset_device();
         auto asset = std::make_shared<mesh_asset>();
 
@@ -178,6 +193,7 @@ namespace rendering_engine
         vertex_descriptor.initial_data = data.vertex_bytes.data();
         asset->vertex_buffer = gpu.create_buffer(vertex_descriptor);
         asset->vertex_stride = data.vertex_stride;
+        asset->format = format;
         asset->vertex_count =
             data.vertex_stride != 0 ? static_cast<uint32_t>(data.vertex_bytes.size() / data.vertex_stride) : 0;
 

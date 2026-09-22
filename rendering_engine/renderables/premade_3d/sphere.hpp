@@ -34,7 +34,7 @@ namespace rendering_engine
     struct mesh_asset;
 
     // UV-sphere with quad-based tessellation (each lat/lon cell is two
-    // triangles). Vertex format is position + uv + normal. Texturing is
+    // triangles). Vertex format is position + uv + normal + tangent. Texturing is
     // well-behaved away from the poles; near the poles UVs pinch but
     // per-vertex normals stay smooth.
     struct sphere : public renderable
@@ -57,6 +57,7 @@ namespace rendering_engine
         unsigned int m_slices;
         unsigned int m_index_count{0};
         uint32_t m_vertex_stride{0};
+        bool m_vertex_format_reported{false};
 
         // Shared geometry from the asset cache, keyed by tessellation; freed
         // when the last sphere referencing it is destroyed.

@@ -547,6 +547,7 @@ namespace rendering_engine
         // attribute offsets that match vertex_position_uv_normal_tangent.
         gpu::vertex_buffer_layout vertex_layout = vertex_position_uv_normal_tangent_layout();
         vertex_layout.stride = 0;
+        m_vertex_format = vertex_format::position_uv_normal_tangent;
 
         // Per-draw layout (slot 1): the model matrix UBO at binding 1,
         // matching every 3D renderable's bind group.

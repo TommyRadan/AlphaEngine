@@ -38,7 +38,7 @@ namespace rendering_engine
     // +length/2]) capped by two hemispheres of @c radius. The surface is
     // generated as a single seamless lat/lon grid — the top hemisphere,
     // the cylindrical body, and the bottom hemisphere share rings so
-    // there are no cracks. Vertex format is position + uv + normal; UVs
+    // there are no cracks. Vertex format is position + uv + normal + tangent; UVs
     // wrap radially and run along the axis. Parameterised by
     // (radius, length, cap_segments, radial_segments).
     struct capsule : public renderable
@@ -67,6 +67,7 @@ namespace rendering_engine
         unsigned int m_radial_segments;
         unsigned int m_index_count{0};
         uint32_t m_vertex_stride{0};
+        bool m_vertex_format_reported{false};
 
         // Shared geometry from the asset cache, keyed by radius, length and
         // segment counts; freed when the last capsule referencing it is

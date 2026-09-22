@@ -192,6 +192,7 @@ namespace rendering_engine
         // Stride supplied per draw by the renderable; one vec3 position.
         vertex_layout.stride = 0;
         vertex_layout.attributes.push_back({0, 3, gpu::scalar_type::float32, 0});
+        m_vertex_format = vertex_format::position;
 
         // Per-draw layout (slot 1): the model matrix UBO at binding 1,
         // matching the renderable's bind group.

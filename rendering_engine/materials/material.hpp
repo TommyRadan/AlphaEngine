@@ -30,6 +30,7 @@
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/gpu/pipeline.hpp>
 #include <rendering_engine/gpu/shader.hpp>
+#include <rendering_engine/mesh/vertex.hpp>
 
 namespace rendering_engine
 {
@@ -109,6 +110,21 @@ namespace rendering_engine
         // from whether the material's pipeline reserves slot 0
         // for a per-frame bind group (1 if so, 0 otherwise).
         uint32_t per_draw_slot() const;
+
+        // The vertex record layout this material's pipeline reads from
+        // vertex slot 0, declared by each material alongside its
+        // attribute layout. Renderables check the mesh they draw against
+        // it (see @ref vertex_format_compatible) before emitting a
+        // @c draw_item; @c custom means the material declared none and
+        // only the stride can be checked.
+        vertex_format required_vertex_format() const;
+
+        // Smallest vertex stride slot 0 can be bound with: the byte
+        // extent of the pipeline's furthest-reaching slot-0 attribute.
+        // Binding a narrower record would fetch that attribute past the
+        // end of every vertex, so renderables refuse to draw meshes whose
+        // stride falls short of this.
+        uint32_t min_vertex_stride() const;
 
         // Optional per-material bind group; invalid when the
         // material has no shared per-material resources. Bound
@@ -203,6 +219,11 @@ namespace rendering_engine
         void destruct_pipeline();
 
         material_params m_params{};
+
+        // Declared by each material next to the slot-0 attribute layout
+        // it hands @ref construct_pipeline; see @ref required_vertex_format.
+        vertex_format m_vertex_format{vertex_format::custom};
+
         gpu::shader_module m_vertex_shader{};
         gpu::shader_module m_fragment_shader{};
         gpu::pipeline m_pipeline{};
@@ -220,5 +241,9 @@ namespace rendering_engine
         // bind group. Stored so @ref per_draw_slot stays correct
         // after @ref destruct_pipeline drops the layout handles.
         bool m_has_frame_layout{false};
+
+        // Computed by @ref construct_pipeline from the slot-0 vertex
+        // layout; see @ref min_vertex_stride.
+        uint32_t m_min_vertex_stride{0};
     };
 } // namespace rendering_engine

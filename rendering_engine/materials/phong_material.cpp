@@ -285,6 +285,7 @@ namespace rendering_engine
         vertex_layout.attributes.push_back({0, 3, gpu::scalar_type::float32, 0});
         vertex_layout.attributes.push_back({1, 2, gpu::scalar_type::float32, sizeof(float) * 3});
         vertex_layout.attributes.push_back({2, 3, gpu::scalar_type::float32, sizeof(float) * 5});
+        m_vertex_format = vertex_format::position_uv_normal;
 
         // Per-draw layout (slot 1): the model matrix UBO at binding 1,
         // matching every 3D renderable's bind group.

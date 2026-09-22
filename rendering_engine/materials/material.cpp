@@ -82,6 +82,38 @@ namespace
         rasterizer.polygon = params.wireframe ? gpu::polygon_mode::line : gpu::polygon_mode::fill;
         return rasterizer;
     }
+
+    uint32_t scalar_size(gpu::scalar_type type)
+    {
+        switch (type)
+        {
+        case gpu::scalar_type::float32:
+        case gpu::scalar_type::int32:
+        case gpu::scalar_type::uint32:
+            return 4;
+        case gpu::scalar_type::int16:
+        case gpu::scalar_type::uint16:
+            return 2;
+        case gpu::scalar_type::int8:
+        case gpu::scalar_type::uint8:
+            return 1;
+        }
+        return 4;
+    }
+
+    // Byte extent of the furthest-reaching attribute in @p layout: the
+    // narrowest vertex record the layout can be bound over without any
+    // attribute fetch running past the end of the vertex.
+    uint32_t layout_extent(const gpu::vertex_buffer_layout& layout)
+    {
+        uint32_t extent = 0;
+        for (const auto& attribute : layout.attributes)
+        {
+            const uint32_t end = attribute.offset + attribute.components * scalar_size(attribute.type);
+            extent = end > extent ? end : extent;
+        }
+        return extent;
+    }
 } // namespace
 
 namespace rendering_engine
@@ -109,6 +141,16 @@ namespace rendering_engine
     uint32_t material::per_draw_slot() const
     {
         return m_has_frame_layout ? 1u : 0u;
+    }
+
+    vertex_format material::required_vertex_format() const
+    {
+        return m_vertex_format;
+    }
+
+    uint32_t material::min_vertex_stride() const
+    {
+        return m_min_vertex_stride;
     }
 
     gpu::bind_group material::per_material_bind_group() const
@@ -210,6 +252,11 @@ namespace rendering_engine
 
         m_per_draw_layout = gpu.create_bind_group_layout(draw_layout);
         m_has_frame_layout = frame_layout.valid();
+
+        // Slot 0 is the per-vertex geometry stream every renderable binds
+        // (a per-instance stream, if any, lives in slot 1 and is owned by
+        // the renderable that declares it).
+        m_min_vertex_stride = vertex_layouts.empty() ? 0u : layout_extent(vertex_layouts.front());
 
         // The trailing per-material descriptor set is optional; only
         // create it when the subclass asked for one. Its set index is

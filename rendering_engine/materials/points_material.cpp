@@ -133,6 +133,7 @@ namespace rendering_engine
         vertex_layout.stride = 0;
         vertex_layout.attributes.push_back({0, 3, gpu::scalar_type::float32, 0});
         vertex_layout.attributes.push_back({1, 3, gpu::scalar_type::float32, sizeof(float) * 3});
+        m_vertex_format = vertex_format::position_color;
 
         // Per-draw layout (slot 1): the model matrix UBO at binding 1,
         // matching the points renderable's bind group.

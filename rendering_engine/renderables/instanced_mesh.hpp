@@ -116,9 +116,11 @@ namespace rendering_engine
         std::vector<instance_record> m_instances;
         bool m_instances_dirty{true};
 
-        // Instance count last written into the indirect command, so the
-        // command is only rewritten when the active count actually changes.
-        uint32_t m_uploaded_instance_count{0};
+        // Whether the indirect command must be (re)written before the next
+        // draw. Set whenever either field it carries changes: the index count
+        // (a geometry swap via @ref set_geometry / @ref upload_geometry) or
+        // the active instance count (@ref set_instance_count).
+        bool m_indirect_dirty{true};
 
         // Shared geometry from @ref asset_cache, set via @ref set_geometry. When
         // present its buffers are drawn instead of the privately-owned
@@ -133,5 +135,10 @@ namespace rendering_engine
 
         uint32_t m_index_count{0};
         uint32_t m_vertex_stride{0};
+
+        // Record layout of whichever vertex buffer is drawn, checked against
+        // the material before every draw (see @ref validate_vertex_format).
+        vertex_format m_vertex_format{vertex_format::custom};
+        bool m_vertex_format_reported{false};
     };
 } // namespace rendering_engine

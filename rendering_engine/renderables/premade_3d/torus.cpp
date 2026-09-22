@@ -32,7 +32,9 @@
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/materials/material.hpp>
+#include <rendering_engine/mesh/tangent.hpp>
 #include <rendering_engine/mesh/vertex.hpp>
+#include <rendering_engine/renderables/vertex_format_check.hpp>
 #include <runtime/engine.hpp>
 
 rendering_engine::torus::torus(
@@ -61,14 +63,13 @@ rendering_engine::torus::~torus()
 
 void rendering_engine::torus::upload()
 {
-    m_vertex_stride = sizeof(vertex_position_uv_normal);
-
     // Build and upload through the asset cache, keyed by the torus geometry
     // parameters so two tori of the same shape share one upload. The builder
     // only runs on a cache miss.
     m_mesh = runtime::current_engine().assets->get_or_create_mesh(
         "torus:" + std::to_string(m_radius) + ":" + std::to_string(m_tube) + ":" + std::to_string(m_radial_segments) +
-            "x" + std::to_string(m_tubular_segments) + ":" + std::to_string(m_arc),
+            "x" + std::to_string(m_tubular_segments) + ":" + std::to_string(m_arc) + ":" +
+            vertex_format_name(vertex_format::position_uv_normal_tangent),
         [this]
         {
             // One extra ring/column of vertices so UVs and the seam wrap cleanly.
@@ -133,10 +134,15 @@ void rendering_engine::torus::upload()
                 }
             }
 
-            return mesh_data::from_vertices(vertices, std::move(indices));
+            // Tangents complete the record for tangent-aware materials
+            // (standard/PBR); the position/uv/normal offsets are unchanged so
+            // materials that ignore the tangent still read correctly.
+            const auto tangent_vertices = generate_tangents(vertices, indices);
+            return mesh_data::from_vertices(tangent_vertices, std::move(indices));
         });
 
     m_index_count = m_mesh->index_count;
+    m_vertex_stride = m_mesh->vertex_stride;
 }
 
 void rendering_engine::torus::collect_draw_items(std::vector<draw_item>& out)
@@ -147,6 +153,11 @@ void rendering_engine::torus::collect_draw_items(std::vector<draw_item>& out)
         return;
     }
     if (!m_mesh)
+    {
+        return;
+    }
+
+    if (!validate_vertex_format(*m_material, *m_mesh, "torus", m_vertex_format_reported))
     {
         return;
     }
