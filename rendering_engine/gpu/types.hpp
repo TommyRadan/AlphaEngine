@@ -293,7 +293,7 @@ namespace rendering_engine::gpu
 
     // Memory-access categories used by @c command_encoder::barrier.
     // The OpenGL backend folds @c dst_access into a bitmask of
-    // @c GL_*_BARRIER_BIT flags; a future Vulkan backend uses both
+    // @c GL_*_BARRIER_BIT flags; the Vulkan backend uses both
     // @c src_access and @c dst_access verbatim. Combine with @c |.
     using access_flag = uint32_t;
     constexpr access_flag access_none = 0u;

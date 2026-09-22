@@ -161,9 +161,9 @@ namespace rendering_engine::gpu
         // single-use: call its methods to record draws, then
         // @ref render_pass_encoder::end before opening another pass.
         // The return type is @c unique_ptr so the OpenGL backend can
-        // allocate a small per-pass state object on the heap; on a
-        // future Vulkan backend the encoder would be a thin handle
-        // wrapping a @c VkCommandBuffer scope.
+        // allocate a small per-pass state object on the heap; on the
+        // Vulkan backend the encoder is a thin handle wrapping a
+        // @c VkCommandBuffer scope.
         virtual std::unique_ptr<render_pass_encoder> begin_render_pass(const render_pass_descriptor& descriptor) = 0;
 
         // Open a new compute pass scope. Compute passes never carry

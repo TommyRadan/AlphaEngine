@@ -41,7 +41,7 @@ namespace
 {
     namespace math = core::math;
 
-    // Per-face resolution. Smaller than the 2048 directional map because six
+    // Per-face resolution. Smaller than the 4096 directional map because six
     // faces are kept resident; 1024 is plenty for the demo's small bodies.
     constexpr uint32_t shadow_map_size = 1024;
 

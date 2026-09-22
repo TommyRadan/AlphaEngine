@@ -17,6 +17,8 @@ cmake --build build --target AlphaEngineTests
 ctest --test-dir build --output-on-failure
 ```
 
+`scripts/build.sh --tests` runs the same three steps on Linux / macOS.
+
 To configure without the tests (skipping the GoogleTest fetch entirely):
 
 ```
@@ -141,7 +143,9 @@ headless binary as the rest of the suite.
 
 `tests/` is intentionally **excluded** from the clang-format and clang-tidy
 gates (it is not listed in `SOURCE_DIRS` in `.github/workflows/ci.yml`, which
-covers `runtime core rendering_engine external`). GoogleTest's macros and house
+covers `runtime core rendering_engine external`; the `scripts/check-style.*` /
+`scripts/check-naming.*` scripts and the `format-check` / `tidy` CMake targets
+enumerate the same four directories). GoogleTest's macros and house
 style — `TEST(suite, name)`, `EXPECT_*` — do not fit the strict `snake_case`
 naming gate enforced on engine code, and the framework headers are vendored
 third-party code. Test code still follows the surrounding conventions where it

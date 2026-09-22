@@ -137,8 +137,8 @@ FetchContent_MakeAvailable(glm)
 target_link_libraries(AlphaEngine glm::glm)
 
 # glslang — fetched and built statically. Compiles GLSL to SPIR-V at
-# runtime so both the OpenGL backend (via ARB_gl_spirv) and a future
-# Vulkan backend can consume the same byte blobs. ENABLE_OPT=OFF
+# runtime so both the OpenGL backend (via ARB_gl_spirv) and the Vulkan
+# backend consume the same byte blobs. ENABLE_OPT=OFF
 # drops the SPIRV-Tools optimizer dependency; the engine ships
 # unoptimised SPIR-V for now.
 set(GLSLANG_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
@@ -173,7 +173,8 @@ target_link_libraries(AlphaEngine ${OPENGL_LIBRARIES})
 
 # Vulkan — always linked. Both the OpenGL and Vulkan backends are
 # compiled into the binary; the runtime choice is driven by
-# settings::get_graphics_backend(). The Vulkan backend at
+# settings->graphics.backend (the ALPHAENGINE_GRAPHICS_BACKEND env
+# var). The Vulkan backend at
 # rendering_engine/gpu/backend/vulkan/ links against the loader from
 # the system Vulkan SDK; the engine already pulls glslang in for the
 # OpenGL ARB_gl_spirv path, so the Vulkan backend reuses that for its
@@ -243,4 +244,78 @@ if(ALPHAENGINE_BUILD_TESTS)
     enable_testing()
     include(GoogleTest)
     add_subdirectory(tests)
+endif()
+
+# Developer convenience targets wrapping the style and naming gates CI
+# runs (.github/workflows/ci.yml), so they can be driven through CMake on
+# any platform alongside scripts/check-style.* and scripts/check-naming.*.
+# Each target is only defined when its tool is found, so a configure on a
+# machine without LLVM (the Windows CI build, for instance) is unaffected.
+# The -18 suffixed binaries are preferred because CI pins LLVM 18 and
+# clang-format output differs between major versions.
+#
+#   format-check  clang-format --dry-run -Werror over runtime/ core/
+#                 rendering_engine/ external/ (fails on any diff)
+#   format-fix    the same file set, rewritten in place
+#   tidy          run-clang-tidy over the same directories with the naming
+#                 check upgraded to errors; needs compile_commands.json, so
+#                 configure with -DCMAKE_EXPORT_COMPILE_COMMANDS=ON and a
+#                 Ninja or Makefile generator
+#
+# The clang-format file list is enumerated at run time by
+# cmake/clang_format.cmake rather than globbed here, so new files are
+# picked up without a re-configure and the explicit-source-list rule for
+# build targets stays intact.
+find_program(ALPHAENGINE_CLANG_FORMAT NAMES clang-format-18 clang-format
+    DOC "clang-format used by the format-check / format-fix targets")
+find_program(ALPHAENGINE_CLANG_TIDY NAMES clang-tidy-18 clang-tidy
+    DOC "clang-tidy used by the tidy target")
+find_program(ALPHAENGINE_RUN_CLANG_TIDY NAMES run-clang-tidy-18 run-clang-tidy
+    DOC "run-clang-tidy used by the tidy target")
+
+if(ALPHAENGINE_CLANG_FORMAT)
+    add_custom_target(format-check
+        COMMAND ${CMAKE_COMMAND}
+            -DCLANG_FORMAT=${ALPHAENGINE_CLANG_FORMAT}
+            -DSOURCE_ROOT=${CMAKE_SOURCE_DIR}
+            -P ${CMAKE_SOURCE_DIR}/cmake/clang_format.cmake
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        COMMENT "Checking formatting with ${ALPHAENGINE_CLANG_FORMAT}"
+        VERBATIM)
+    add_custom_target(format-fix
+        COMMAND ${CMAKE_COMMAND}
+            -DCLANG_FORMAT=${ALPHAENGINE_CLANG_FORMAT}
+            -DSOURCE_ROOT=${CMAKE_SOURCE_DIR}
+            -DFIX=ON
+            -P ${CMAKE_SOURCE_DIR}/cmake/clang_format.cmake
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        COMMENT "Reformatting in place with ${ALPHAENGINE_CLANG_FORMAT}"
+        VERBATIM)
+else()
+    message(STATUS "clang-format not found: format-check / format-fix targets not defined")
+endif()
+
+if(ALPHAENGINE_CLANG_TIDY AND ALPHAENGINE_RUN_CLANG_TIDY)
+    if(CMAKE_EXPORT_COMPILE_COMMANDS AND NOT CMAKE_GENERATOR MATCHES "Visual Studio")
+        # Anchored to the source root so vendored sources under a
+        # like-named subdirectory (e.g. SDL3's src/core/) are excluded,
+        # matching the CI invocation. glad is built first so the tidy
+        # run resolves the GL loader headers the same way CI does.
+        add_custom_target(tidy
+            COMMAND ${ALPHAENGINE_RUN_CLANG_TIDY}
+                -clang-tidy-binary ${ALPHAENGINE_CLANG_TIDY}
+                -p ${CMAKE_BINARY_DIR}
+                -quiet
+                -warnings-as-errors=*
+                "${CMAKE_SOURCE_DIR}/(runtime|core|rendering_engine|external)/"
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+            COMMENT "Checking identifier naming with ${ALPHAENGINE_CLANG_TIDY} (this takes a while)"
+            VERBATIM
+            USES_TERMINAL)
+        add_dependencies(tidy glad)
+    else()
+        message(STATUS "tidy target not defined: configure with -G Ninja -DCMAKE_EXPORT_COMPILE_COMMANDS=ON to enable it")
+    endif()
+else()
+    message(STATUS "clang-tidy / run-clang-tidy not found: tidy target not defined")
 endif()

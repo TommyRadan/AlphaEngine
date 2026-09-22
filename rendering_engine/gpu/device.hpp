@@ -49,7 +49,7 @@ namespace rendering_engine::gpu
 {
     // Backends supported by @ref create_device. Both backends are
     // always compiled into the binary; the runtime choice is driven
-    // by @c settings::get_graphics_backend() at engine construction.
+    // by @c settings->graphics.backend at engine construction.
     enum class backend_type
     {
         opengl,
@@ -78,11 +78,10 @@ namespace rendering_engine::gpu
 
         // Whether the backend can convolve image-based-lighting tables on
         // the GPU: compute pipelines writing storage images into specific
-        // cube-map mip levels, plus a real mip chain to sample. Backends
-        // that lack these (the Vulkan backend's mip generation and storage
-        // images are still stubs) return false and the IBL builder falls
-        // back to the CPU convolution. Defaults to false; the OpenGL
-        // backend overrides it.
+        // cube-map mip levels, plus a real mip chain to sample. A backend
+        // that lacks these returns false and the IBL builder falls back
+        // to the CPU convolution. Defaults to false; both the OpenGL and
+        // the Vulkan backend override it to true.
         virtual bool supports_compute_prefilter() const
         {
             return false;
@@ -199,8 +198,8 @@ namespace rendering_engine::gpu
         // Allocate a new command encoder. Each encoder records one
         // or more render passes; submission is implicit on the
         // OpenGL backend (drawing happens immediately as it's
-        // recorded), but a future Vulkan backend would defer
-        // execution until @ref submit.
+        // recorded), while the Vulkan backend records into a
+        // @c VkCommandBuffer and defers execution until @ref submit.
         virtual std::unique_ptr<command_encoder> create_command_encoder() = 0;
 
         // Submit the encoder's recorded work for execution. After

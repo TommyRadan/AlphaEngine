@@ -24,10 +24,12 @@
  * @file render_target.hpp
  * @brief Render-target descriptors and per-attachment load/store ops.
  *
- * The engine currently renders to the default swapchain target only;
- * @c device::swapchain_target() returns the handle for it. Off-screen
- * targets (offscreen colour + optional depth attachments) will plug in
- * here without changing the @c render_pass_descriptor surface.
+ * The swapchain is one target among several: @c device::swapchain_target()
+ * returns its handle, and the engine allocates off-screen targets (the HDR
+ * scene-colour target, the LDR post-processing target, the directional and
+ * point shadow maps, the post-chain intermediates) through the device from
+ * the same @c render_target_descriptor. Every pass addresses whichever
+ * target it draws into through the same @c render_pass_descriptor surface.
  */
 
 #pragma once
