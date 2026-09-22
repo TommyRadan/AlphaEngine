@@ -8,7 +8,7 @@
     compile_commands.json is available (the Visual Studio generator doesn't
     produce one). By default reports violations; with -Fix, rewrites in place.
 
-    Vendored code under Vendor/ and generated files under build*/Binaries/ are
+    Vendored code under vendor/ and generated files under build*/Binaries/ are
     not touched.
 
 .PARAMETER Fix
