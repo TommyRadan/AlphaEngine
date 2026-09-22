@@ -353,6 +353,11 @@ namespace rendering_engine::gpu::backend::opengl
         {
         case texture_format::rgba8_unorm:
             return {GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE};
+        case texture_format::rgba8_srgb:
+            // Same upload layout as rgba8_unorm; only the internal
+            // format differs, which is what makes sampling (and
+            // glGenerateMipmap's filtering) decode sRGB to linear.
+            return {GL_SRGB8_ALPHA8, GL_RGBA, GL_UNSIGNED_BYTE};
         case texture_format::rgb8_unorm:
             return {GL_RGB8, GL_RGB, GL_UNSIGNED_BYTE};
         case texture_format::r8_unorm:

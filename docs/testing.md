@@ -74,9 +74,13 @@ All device-free:
   flags, and the component-store attach/get/remove path.
 - `asset_cache` — dedup by structural key, builder-runs-only-on-miss,
   `collect_unused()` / weak-ref semantics, that a `mesh_asset` releases its
-  GPU buffers when the last handle drops, and that the `vertex_format` a
+  GPU buffers when the last handle drops, that the `vertex_format` a
   builder declares is carried onto the asset (or demoted to `custom` when it
-  contradicts the stride).
+  contradicts the stride), and that `load_texture` requests `rgba8_srgb` by
+  default and `rgba8_unorm` for `color_space::linear` (recording the format
+  on the `texture_asset`, and keying the two spaces apart). The texture tests
+  decode a tiny PPM written to the temp directory, so the real image loader
+  runs headless.
 - `util::image` / `util::color` — the packed 4-byte RGBA8 texel layout the
   upload sites rely on; deep copies, copy-and-swap assignment (larger over
   smaller, over an empty image, self-assignment), moves that leave the source

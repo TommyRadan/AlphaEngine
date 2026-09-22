@@ -23,6 +23,7 @@
 #pragma once
 
 #include <rendering_engine/gpu/handle.hpp>
+#include <rendering_engine/gpu/types.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
 #include <rendering_engine/util/color.hpp>
 #include <rendering_engine/util/image.hpp>
@@ -38,7 +39,15 @@ namespace rendering_engine
         ~pane() override;
 
         void set_color(const rendering_engine::util::color& color);
-        void set_image(const rendering_engine::util::image& image);
+
+        // Upload @p image as the pane's texture. @p space selects the
+        // RGBA8 format (@ref gpu::rgba8_format). The default is @c linear
+        // — i.e. no decode — because the UI pass composites straight onto
+        // the LDR swapchain with no encode step, so an image (or a glyph
+        // coverage bitmap) must reach the framebuffer with the bytes it
+        // was authored with. Pass @c srgb for a pane drawn into the HDR
+        // scene, where the tonemap pass re-encodes the output.
+        void set_image(const rendering_engine::util::image& image, gpu::color_space space = gpu::color_space::linear);
 
         rendering_engine::util::transform transform;
 

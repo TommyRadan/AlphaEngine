@@ -76,7 +76,7 @@ void rendering_engine::pane::set_color(const rendering_engine::util::color& colo
     m_color = color;
 }
 
-void rendering_engine::pane::set_image(const rendering_engine::util::image& image)
+void rendering_engine::pane::set_image(const rendering_engine::util::image& image, gpu::color_space space)
 {
     auto& gpu = *runtime::current_engine().gpu;
     if (m_texture.valid())
@@ -87,7 +87,7 @@ void rendering_engine::pane::set_image(const rendering_engine::util::image& imag
 
     gpu::texture_descriptor descriptor{};
     descriptor.dimension = gpu::texture_dimension::d2;
-    descriptor.format = gpu::texture_format::rgba8_unorm;
+    descriptor.format = gpu::rgba8_format(space);
     descriptor.width = image.get_width();
     descriptor.height = image.get_height();
     descriptor.mipmaps = true;

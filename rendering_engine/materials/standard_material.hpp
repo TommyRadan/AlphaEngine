@@ -23,6 +23,7 @@
 #pragma once
 
 #include <rendering_engine/gpu/handle.hpp>
+#include <rendering_engine/gpu/types.hpp>
 #include <rendering_engine/materials/material.hpp>
 #include <rendering_engine/util/color.hpp>
 #include <rendering_engine/util/image.hpp>
@@ -81,30 +82,39 @@ namespace rendering_engine
         // Scalar multiplier on the emissive colour.
         void set_emissive_intensity(float intensity);
 
+        // Each set_*_map takes the colour space the image was authored
+        // in and uploads the matching RGBA8 format (@ref gpu::rgba8_format):
+        // colour maps default to sRGB so the sampler decodes them to
+        // linear before the PBR math, data maps default to linear so their
+        // bytes are read as-is. Override only when an asset breaks the
+        // convention (e.g. an albedo exported already-linear).
+
         // Bind an albedo (base-colour) texture; multiplied into the base
         // colour. Replaces any previous map and rebuilds the per-material
-        // bind group.
-        void set_albedo_map(const util::image& image);
+        // bind group. Colour data: sRGB by default.
+        void set_albedo_map(const util::image& image, gpu::color_space space = gpu::color_space::srgb);
         void clear_albedo_map();
 
         // Bind a tangent-space normal map; perturbs the shading normal
         // through the per-vertex TBN basis. Requires tangents on the
-        // vertex stream (this material's layout supplies them).
-        void set_normal_map(const util::image& image);
+        // vertex stream (this material's layout supplies them). Vector
+        // data: linear by default (an sRGB decode would bend the normals).
+        void set_normal_map(const util::image& image, gpu::color_space space = gpu::color_space::linear);
         void clear_normal_map();
 
         // Bind a metalness map; its red channel multiplies the metalness
-        // scalar.
-        void set_metalness_map(const util::image& image);
+        // scalar. Scalar data: linear by default.
+        void set_metalness_map(const util::image& image, gpu::color_space space = gpu::color_space::linear);
         void clear_metalness_map();
 
         // Bind a roughness map; its red channel multiplies the roughness
-        // scalar.
-        void set_roughness_map(const util::image& image);
+        // scalar. Scalar data: linear by default.
+        void set_roughness_map(const util::image& image, gpu::color_space space = gpu::color_space::linear);
         void clear_roughness_map();
 
-        // Bind an emissive map; multiplied into the emissive term.
-        void set_emissive_map(const util::image& image);
+        // Bind an emissive map; multiplied into the emissive term. Colour
+        // data: sRGB by default.
+        void set_emissive_map(const util::image& image, gpu::color_space space = gpu::color_space::srgb);
         void clear_emissive_map();
 
         // Attach an image-based-lighting environment. Its irradiance,
@@ -131,8 +141,9 @@ namespace rendering_engine
         void upload_params();
 
         // Upload an RGBA8 image to a fresh mipmapped, repeat-addressed
-        // 2D texture. Shared by every set_*_map.
-        gpu::texture upload_map(const util::image& image);
+        // 2D texture in the RGBA8 format for @p space. Shared by every
+        // set_*_map.
+        gpu::texture upload_map(const util::image& image, gpu::color_space space);
 
         // Destroy @p map if valid and null it. Shared by every clear_*_map
         // and set_*_map (which replaces the previous map).

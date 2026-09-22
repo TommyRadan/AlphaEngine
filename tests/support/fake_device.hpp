@@ -12,6 +12,7 @@
 #include <unordered_set>
 
 #include <rendering_engine/gpu/device.hpp>
+#include <rendering_engine/gpu/texture.hpp>
 
 namespace test_support
 {
@@ -24,6 +25,9 @@ namespace test_support
         std::uint64_t destroyed_textures = 0;
         std::unordered_set<std::uint64_t> live_buffers;
         std::unordered_set<std::uint64_t> live_textures;
+        // The descriptor of the most recent create_texture call, so a test
+        // can check what format / footprint a loader asked the device for.
+        rendering_engine::gpu::texture_descriptor last_texture_descriptor{};
 
         std::size_t live_buffer_count() const
         {
@@ -47,8 +51,10 @@ namespace test_support
             return rendering_engine::gpu::buffer{id};
         }
 
-        rendering_engine::gpu::texture create_texture(const rendering_engine::gpu::texture_descriptor&) override
+        rendering_engine::gpu::texture
+        create_texture(const rendering_engine::gpu::texture_descriptor& descriptor) override
         {
+            last_texture_descriptor = descriptor;
             const std::uint64_t id = ++m_next_id;
             live_textures.insert(id);
             ++created_textures;

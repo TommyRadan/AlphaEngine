@@ -179,7 +179,7 @@ namespace rendering_engine
         upload_params();
     }
 
-    void basic_material::set_albedo(const util::image& image)
+    void basic_material::set_albedo(const util::image& image, gpu::color_space space)
     {
         auto& gpu = *runtime::current_engine().gpu;
         if (m_albedo.valid())
@@ -190,7 +190,7 @@ namespace rendering_engine
 
         gpu::texture_descriptor descriptor{};
         descriptor.dimension = gpu::texture_dimension::d2;
-        descriptor.format = gpu::texture_format::rgba8_unorm;
+        descriptor.format = gpu::rgba8_format(space);
         descriptor.width = image.get_width();
         descriptor.height = image.get_height();
         descriptor.mipmaps = true;

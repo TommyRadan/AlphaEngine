@@ -23,6 +23,7 @@
 #pragma once
 
 #include <rendering_engine/gpu/handle.hpp>
+#include <rendering_engine/gpu/types.hpp>
 #include <rendering_engine/materials/material.hpp>
 #include <rendering_engine/util/color.hpp>
 #include <rendering_engine/util/image.hpp>
@@ -69,8 +70,11 @@ namespace rendering_engine
         // Bind a sprite texture; the fragment shader samples it at
         // @c gl_PointCoord and modulates the point colour by it.
         // Replaces any previous sprite and rebuilds the per-material
-        // bind group.
-        void set_sprite(const util::image& image);
+        // bind group. @p space is the colour space the sprite was
+        // authored in: sRGB by default (uploaded as @c rgba8_srgb so it
+        // modulates the linear point colour correctly); pass @c linear
+        // for an already-linear mask.
+        void set_sprite(const util::image& image, gpu::color_space space = gpu::color_space::srgb);
 
         // Drop the sprite texture; points fall back to flat square
         // sprites tinted by their colour. No-op when no sprite is set.

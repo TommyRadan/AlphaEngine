@@ -23,6 +23,7 @@
 #pragma once
 
 #include <rendering_engine/gpu/handle.hpp>
+#include <rendering_engine/gpu/types.hpp>
 #include <rendering_engine/materials/material.hpp>
 #include <rendering_engine/util/color.hpp>
 #include <rendering_engine/util/image.hpp>
@@ -65,8 +66,11 @@ namespace rendering_engine
 
         // Bind a diffuse texture; the fragment shader multiplies it into
         // the diffuse term. Replaces any previous map and rebuilds the
-        // per-material bind group.
-        void set_diffuse_map(const util::image& image);
+        // per-material bind group. @p space is the colour space the image
+        // was authored in: diffuse art is sRGB (the default), uploaded as
+        // @c rgba8_srgb so the sampler decodes it to linear before the
+        // lighting math; pass @c linear only for already-linear data.
+        void set_diffuse_map(const util::image& image, gpu::color_space space = gpu::color_space::srgb);
 
         // Drop the diffuse texture; the material falls back to the flat
         // diffuse tint. No-op when no map is set.
