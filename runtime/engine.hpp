@@ -38,6 +38,8 @@
 
 #include <memory>
 
+#include <core/subscription.hpp>
+
 // Forward declarations keep this header lightweight. Subsystem headers
 // are included only in engine.cpp where the unique_ptrs are constructed
 // and destroyed.
@@ -129,6 +131,9 @@ namespace runtime
 
     private:
         bool m_quit_requested{false};
+        // Owns the bus listener that sets m_quit_requested; dropped before the
+        // bus is torn down so the [this] capture never outlives the engine.
+        core::subscription m_quit_subscription;
     };
 
     /**

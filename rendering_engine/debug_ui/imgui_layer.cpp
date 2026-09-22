@@ -39,6 +39,7 @@
 #include <core/event_engine.hpp>
 #include <core/log.hpp>
 #include <core/settings.hpp>
+#include <core/subscription.hpp>
 #include <core/time.hpp>
 #include <rendering_engine/debug/helper.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_device.hpp>
@@ -72,6 +73,11 @@ namespace rendering_engine::debug_ui
         // data, cleared after the draw data is recorded in the debug
         // pass. Guards against recording a half-built frame.
         bool g_frame_ready = false;
+
+        // The render_debug listener that records the overlay's draw data.
+        // Held from init() to shutdown() so the overlay stops receiving the
+        // event as soon as its backend is torn down.
+        core::subscription g_render_debug_subscription;
 
         // Visibility toggles for the optional panels, driven from the
         // FPS overlay's right-click context menu.
@@ -523,7 +529,7 @@ namespace rendering_engine::debug_ui
         // Record the overlay into the swapchain-targeted debug pass. The
         // debug pass emits render_debug while its render pass is open, so
         // both backends land their draws on top of the composited frame.
-        eng.events->subscribe<core::render_debug>(on_render_debug);
+        g_render_debug_subscription = eng.events->subscribe<core::render_debug>(on_render_debug);
 
         LOG_INF("debug_ui: ImGui overlay initialised (SDL3 + %s)", graphics_backend_name(backend));
     }
@@ -534,6 +540,9 @@ namespace rendering_engine::debug_ui
         {
             return;
         }
+        // Stop listening before the backend goes so no render_debug can reach
+        // a torn-down renderer.
+        g_render_debug_subscription.reset();
         if (g_backend == backend_mode::vulkan)
         {
             // The render queue must be idle before tearing the backend's
