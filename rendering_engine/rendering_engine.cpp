@@ -332,6 +332,15 @@ void rendering_engine::context::render()
     auto& eng = runtime::current_engine();
     auto& gpu = *eng.gpu;
 
+    // Open the device frame before anything below touches GPU-visible
+    // memory. A deferred-execution backend (Vulkan) blocks here until
+    // the previous frame's command buffer has finished and then frees
+    // the resources whose destruction it deferred while that buffer
+    // could still reference them, so the per-frame UBO writes and
+    // bind-group rebuilds the passes make during the walk never race
+    // the GPU.
+    gpu.begin_frame();
+
     // Capture per-frame state once so passes cannot disagree about
     // which camera or backbuffer is active mid-frame, and so they
     // do not have to re-query the camera singleton on every entry.
@@ -347,6 +356,11 @@ void rendering_engine::context::render()
     auto encoder = gpu.create_command_encoder();
     m_frame_graph.execute(*encoder, ctx);
     gpu.submit(std::move(encoder));
+
+    // Close the frame. Vulkan presents the swapchain image it acquired
+    // for this frame here; OpenGL presents when the main loop calls
+    // window::swap_buffers.
+    gpu.end_frame();
 }
 
 void rendering_engine::context::register_scene_renderable(renderable* r)

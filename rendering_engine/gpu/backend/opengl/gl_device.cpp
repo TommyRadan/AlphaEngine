@@ -360,6 +360,18 @@ namespace rendering_engine::gpu::backend::opengl
         encoder.reset();
     }
 
+    void gl_device::begin_frame()
+    {
+        // Every recorded command has executed by the time the next
+        // frame starts and destroy() releases GL objects immediately,
+        // so there is nothing to wait for or drain.
+    }
+
+    void gl_device::end_frame()
+    {
+        // Presentation stays with window::swap_buffers on this backend.
+    }
+
     // -- Internal accessors ---------------------------------------
 
     gl_buffer* gl_device::lookup_buffer(buffer h)

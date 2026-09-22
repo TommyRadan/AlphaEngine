@@ -100,6 +100,12 @@ namespace rendering_engine::gpu::backend::opengl
         std::unique_ptr<command_encoder> create_command_encoder() override;
         void submit(std::unique_ptr<command_encoder> encoder) override;
 
+        // OpenGL executes as it records, releases objects on destroy()
+        // and presents through window::swap_buffers, so the frame
+        // bracket has nothing to wait for, drain or present.
+        void begin_frame() override;
+        void end_frame() override;
+
         // Internal accessors used by the encoder to map a
         // public handle back to its GL-side record.
         // Definitions are in gl_device.cpp.

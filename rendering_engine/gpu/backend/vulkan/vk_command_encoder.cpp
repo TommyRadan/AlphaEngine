@@ -109,7 +109,11 @@ namespace rendering_engine::gpu::backend::vulkan
         VkFramebuffer framebuffer = VK_NULL_HANDLE;
         if (target->is_swapchain)
         {
-            device.begin_frame();
+            // The frame's fence wait and deferred-destroy drain already
+            // ran in vk_device::begin_frame at frame top; this only
+            // acquires the swapchain image, lazily, so a frame that
+            // never reaches the swapchain does not acquire one.
+            device.acquire_swapchain_image();
             if (!device.have_current_swapchain_image() || variant->framebuffers.empty())
             {
                 LOG_ERR("vk_render_pass_encoder: no swapchain image acquired (have_image=%i framebuffers=%u)",

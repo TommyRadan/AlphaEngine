@@ -169,6 +169,31 @@ namespace rendering_engine::gpu
         // materials sample it.
         virtual texture render_target_depth_texture(render_target handle) = 0;
 
+        // -- Frame boundary -----------------------------------------------
+
+        // Open a frame. The renderer calls this once per rendered
+        // frame, before it creates the frame's command encoder and
+        // before any per-frame host write (UBO uploads, bind-group
+        // rebuilds, buffer re-uploads) for that frame. A backend that
+        // defers execution blocks here until the previous frame's GPU
+        // work has finished and then frees the resources whose
+        // destruction it deferred while that work could still
+        // reference them — so host writes never race a device read
+        // and nothing is freed out from under a command buffer that
+        // is being recorded. Immediate-mode backends (OpenGL) treat it
+        // as a no-op.
+        virtual void begin_frame() = 0;
+
+        // Close the frame opened by @ref begin_frame, after the frame's
+        // encoder has been submitted. A backend that owns presentation
+        // (Vulkan) presents the swapchain image it acquired for this
+        // frame here and rolls its per-frame bookkeeping; OpenGL
+        // presents through @c window::swap_buffers and treats this as
+        // a no-op. Work submitted outside a begin_frame / end_frame
+        // bracket (start-up uploads, the IBL prefilter) is executed
+        // synchronously by the backend and needs no bracket.
+        virtual void end_frame() = 0;
+
         // -- Command recording --------------------------------------------
 
         // Allocate a new command encoder. Each encoder records one
