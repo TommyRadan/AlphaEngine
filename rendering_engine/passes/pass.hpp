@@ -66,6 +66,34 @@ namespace rendering_engine
         gpu::render_target scene_color_target{};
         gpu::texture scene_color_texture{};
 
+        // Depth attachment of @ref scene_color_target, sampleable as a
+        // shader input once the scene and skybox passes are done with
+        // it. Re-read from the target every frame (not cached) so a
+        // later resize that swaps the attachment reaches every pass;
+        // consumers compare the handle against the one their bind group
+        // was built with and rebuild on change (see velocity_pass).
+        // Passes that sample it declare @c io.read("scene_depth").
+        //
+        // Encoding: non-linear depth24, @c .r in [0, 1], holding the
+        // window-space depth 0.5 * z_ndc + 0.5. The camera's projection
+        // comes from core::math::perspective, which is GL-convention
+        // (clip z in [-w, w], NDC z in [-1, 1]); OpenGL keeps its default
+        // depth range of [0, 1] and every Vulkan pipeline opts into the
+        // same [-1, 1] clip range via VK_EXT_depth_clip_control with a
+        // [0, 1] viewport depth, so both backends store the identical
+        // value. depth_utils.hpp ships the GLSL to invert it:
+        // depth_to_ndc(d) = 2d - 1 and linearize_depth(d, near, far) =
+        // near * far / (far - d * (far - near)), the positive view-space
+        // distance in [near, far]. The scene pass clears it to 1.0, so
+        // untouched background texels linearize to the far plane.
+        //
+        // Synchronisation is the backends' concern: OpenGL samples the
+        // depth texture directly, and the Vulkan render-pass cache rests
+        // an off-screen depth attachment in SHADER_READ_ONLY_OPTIMAL
+        // between render passes (a pass that loads it, the skybox,
+        // resumes from and returns to that layout).
+        gpu::texture scene_depth_texture{};
+
         // Off-screen LDR colour target the tonemap pass resolves into.
         // The swapchain is not sampleable as a shader input, so the
         // final post effect (FXAA) reads its tonemapped source from this

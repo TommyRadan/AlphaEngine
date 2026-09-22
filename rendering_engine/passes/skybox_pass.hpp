@@ -66,6 +66,12 @@ namespace rendering_engine
         {
             io.read("scene_color");
             io.write("scene_color");
+            // Depth is loaded for the less-equal test and stored back
+            // (writes are off, but the attachment round-trips through the
+            // pass), so declare it on both sides: the graph then orders
+            // any depth consumer after the sky has been composited.
+            io.read("scene_depth");
+            io.write("scene_depth");
         }
 
         // Set (or clear, with an invalid handle) the cube map sampled as

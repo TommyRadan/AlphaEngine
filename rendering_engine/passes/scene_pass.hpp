@@ -86,6 +86,7 @@ namespace rendering_engine
             io.read("shadow_map");
             io.read("point_shadow");
             io.write("scene_color");
+            io.write("scene_depth");
         }
 
         // Layout for the per-frame bind group bound at slot 0 each

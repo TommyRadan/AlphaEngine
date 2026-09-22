@@ -61,9 +61,13 @@ namespace rendering_engine
      */
     struct velocity_pass : pass
     {
-        // @p scene_depth is the depth attachment of the HDR scene target;
-        // @p width / @p height size the velocity target.
-        velocity_pass(gpu::texture scene_depth, uint32_t width, uint32_t height);
+        // @p width / @p height size the velocity target. The scene depth the
+        // pass samples is not a constructor input: it arrives every frame
+        // as @ref frame_context::scene_depth_texture, and the input bind
+        // group is (re)built whenever that handle differs from the one it
+        // was last built against, so a resized scene target is picked up
+        // without any re-plumbing.
+        velocity_pass(uint32_t width, uint32_t height);
         ~velocity_pass() override;
 
         velocity_pass(const velocity_pass&) = delete;
@@ -78,7 +82,7 @@ namespace rendering_engine
 
         void declare_io(render_graph::pass_io_builder& io) const override
         {
-            io.read("scene_color");
+            io.read("scene_depth");
             io.write("velocity");
         }
 
@@ -88,6 +92,10 @@ namespace rendering_engine
         gpu::texture velocity_texture() const;
 
     private:
+        // Rebuild the input bind group against @p scene_depth and the
+        // reprojection UBO, remembering the handle in @ref m_bound_depth.
+        void rebuild_bind_group(gpu::texture scene_depth);
+
         gpu::shader_module m_vertex_shader{};
         gpu::shader_module m_fragment_shader{};
 
@@ -101,6 +109,10 @@ namespace rendering_engine
         gpu::render_target m_velocity_target{};
         gpu::texture m_velocity_texture{};
         gpu::bind_group m_bind_group{};
+
+        // The scene depth texture @ref m_bind_group was built against;
+        // invalid until the first camera frame builds the group.
+        gpu::texture m_bound_depth{};
 
         // Previous frame's unjittered view-projection, kept so this frame
         // can build the reprojection matrix. @c m_has_prev is false until

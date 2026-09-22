@@ -55,6 +55,12 @@ set(ALPHAENGINE_TEST_SOURCES_UNDER_TEST
     # the window layer uses. Pure functions over SDL's header constants; no
     # video subsystem is initialised.
     ${CMAKE_SOURCE_DIR}/rendering_engine/sdl_input.cpp
+    # render_graph::frame_graph — declared-I/O validation and ordered
+    # execution over callbacks (log only). The encoder it forwards is the
+    # abstract gpu interface whose vtable anchor lives in command_encoder.cpp;
+    # the tests drive it with a stub, no backend is linked.
+    ${CMAKE_SOURCE_DIR}/rendering_engine/render_graph/frame_graph.cpp
+    ${CMAKE_SOURCE_DIR}/rendering_engine/gpu/command_encoder.cpp
 )
 
 set(ALPHAENGINE_TEST_SOURCES
@@ -73,6 +79,7 @@ set(ALPHAENGINE_TEST_SOURCES
     rendering_engine/mesh/tangent_test.cpp
     rendering_engine/mesh/vertex_format_test.cpp
     rendering_engine/sdl_input_test.cpp
+    rendering_engine/render_graph/frame_graph_test.cpp
     rendering_engine/util/font_test.cpp
     rendering_engine/util/image_test.cpp
     external/camera_id_test.cpp
