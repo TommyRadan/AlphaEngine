@@ -1,12 +1,15 @@
 // Unit tests for runtime::light_component over the renderer's light registry:
 // a disabled node takes its light out of registered_lights() and a re-enabled
-// one puts it back, on_update tracks the node's world pose, and the component's
+// one puts it back, on_update tracks the node's world pose (a point light's
+// position; a directional light's direction along the node's world +X, kept
+// rather than NaN when a zero-scale node has none), and the component's
 // destruction unregisters the light. The registry is a plain vector of
 // back-pointers, so this runs device-free.
 
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <cmath>
 #include <memory>
 
 #include <core/math/vec3.hpp>
@@ -126,6 +129,56 @@ TEST(light_component, update_moves_a_point_light_to_the_node_world_position)
     EXPECT_NEAR(l->position.x, 10.0f, k_eps);
     EXPECT_NEAR(l->position.y, 5.0f, k_eps);
     EXPECT_NEAR(l->position.z, 0.0f, k_eps);
+}
+
+TEST(light_component, update_aims_a_directional_light_along_the_node_world_forward)
+{
+    context scene;
+    node n;
+    scene.root.add(n);
+    auto owned = std::make_unique<rendering_engine::directional_light>();
+    const rendering_engine::directional_light* l = owned.get();
+    n.add_component<light_component>(light_component{std::move(owned)});
+
+    // An identity-oriented node shines along the engine forward, +X, not down.
+    scene.update();
+    EXPECT_NEAR(l->direction.x, 1.0f, k_eps);
+    EXPECT_NEAR(l->direction.y, 0.0f, k_eps);
+    EXPECT_NEAR(l->direction.z, 0.0f, k_eps);
+
+    // look_at aims it: straight down at a point below the node.
+    n.transform.set_position(vec3{0.0f, 0.0f, 5.0f});
+    n.look_at(vec3{0.0f, 0.0f, 0.0f});
+    scene.update();
+    EXPECT_NEAR(l->direction.x, 0.0f, k_eps);
+    EXPECT_NEAR(l->direction.y, 0.0f, k_eps);
+    EXPECT_NEAR(l->direction.z, -1.0f, k_eps);
+
+    // A scaled node still yields a unit direction.
+    n.transform.set_scale(vec3{4.0f, 4.0f, 4.0f});
+    scene.update();
+    EXPECT_NEAR(l->direction.z, -1.0f, k_eps);
+}
+
+TEST(light_component, a_zero_scale_node_keeps_the_last_direction_instead_of_nan)
+{
+    context scene;
+    node n;
+    scene.root.add(n);
+    auto owned = std::make_unique<rendering_engine::directional_light>();
+    const rendering_engine::directional_light* l = owned.get();
+    n.add_component<light_component>(light_component{std::move(owned)});
+
+    n.look_at(vec3{0.0f, 1.0f, 0.0f});
+    scene.update();
+    ASSERT_NEAR(l->direction.y, 1.0f, k_eps);
+
+    n.transform.set_scale(vec3{0.0f, 0.0f, 0.0f});
+    scene.update();
+    EXPECT_FALSE(std::isnan(l->direction.x));
+    EXPECT_FALSE(std::isnan(l->direction.y));
+    EXPECT_FALSE(std::isnan(l->direction.z));
+    EXPECT_NEAR(l->direction.y, 1.0f, k_eps);
 }
 
 TEST(light_component, removing_the_component_unregisters_the_light)

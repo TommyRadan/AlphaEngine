@@ -82,6 +82,12 @@ Primitives without a material draw with the model's shared
 +90° about X: glTF +Y becomes +Z and glTF +Z (the asset's front) becomes -Y.
 A pure rotation commutes past a translation (`R * T(t) = T(R t) * R`), so
 this folds into the root's own TRS and no extra node is inserted. The
+conversion fixes the up axis only: an asset's front ends up facing -Y
+rather than the engine's +X forward (`core/math/math.hpp`), which a mesh
+does not care about; glTF cameras and `KHR_lights_punctual` lights — which
+look down their node's -Z, i.e. +Y after the conversion — are not
+instantiated, and when they are they need a further local rotation onto
++X, applied here beside the root pre-rotation. The
 returned nodes must be destroyed before the `gltf_model` (their mesh
 components draw with its materials) and both before the engine quits.
 

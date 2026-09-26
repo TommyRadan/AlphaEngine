@@ -28,9 +28,12 @@
 #include <core/log.hpp>
 #include <core/math/math.hpp>
 #include <core/pool.hpp>
+#include <core/settings.hpp>
 #include <rendering_engine/camera/camera.hpp>
+#include <rendering_engine/camera/camera_registry.hpp>
 #include <rendering_engine/camera/orthographic_camera.hpp>
 #include <rendering_engine/camera/perspective_camera.hpp>
+#include <runtime/engine.hpp>
 
 namespace
 {
@@ -78,19 +81,17 @@ namespace
         return entry;
     }
 
-    bool is_current(const camera_entry& entry)
+    // A perspective camera built from the engine's configuration: the
+    // settings' field of view and the drawable's aspect as the renderer
+    // last reported it to the camera registry (the settings' logical size
+    // stands in before the renderer is up). The registry keeps the aspect
+    // current once the camera attaches.
+    std::unique_ptr<rendering_engine::camera> make_perspective_camera()
     {
-        return rendering_engine::camera::get_current_camera() == entry.handle.get();
-    }
-
-    // Detaches the camera in @p entry if it is the attached one, so a camera
-    // about to be freed is never left behind as the renderer's current camera.
-    void detach_if_current(camera_entry& entry)
-    {
-        if (is_current(entry))
-        {
-            entry.handle->detach();
-        }
+        const core::settings& s = *runtime::current_engine().settings;
+        const float reported = rendering_engine::drawable_aspect();
+        const float aspect_ratio = reported > 0.0f ? reported : s.window.aspect_ratio();
+        return std::make_unique<rendering_engine::perspective_camera>(s.camera.field_of_view, aspect_ratio);
     }
 } // namespace
 
@@ -105,7 +106,7 @@ camera_id create_camera(camera_type type)
         entry.handle = std::make_unique<rendering_engine::orthographic_camera>();
         break;
     case camera_type::perspective:
-        entry.handle = std::make_unique<rendering_engine::perspective_camera>();
+        entry.handle = make_perspective_camera();
         break;
     case camera_type::unknown:
         break;
@@ -122,13 +123,12 @@ camera_id create_camera(camera_type type)
 
 void destroy_camera(camera_id id)
 {
-    camera_entry* entry = find_camera(id, "destroy_camera");
-    if (entry == nullptr)
+    if (find_camera(id, "destroy_camera") == nullptr)
     {
         return;
     }
 
-    detach_if_current(*entry);
+    // The camera's destructor detaches it from the registry.
     cameras().erase(to_camera_handle(id));
 }
 
@@ -146,8 +146,9 @@ void set_camera_pos(camera_id id, float px, float py, float pz)
         return;
     }
 
+    // The view matrix is derived from the transform on every query, so
+    // there is nothing to invalidate.
     entry->handle->transform.set_position({px, py, pz});
-    entry->handle->invalidate_view_matrix();
 }
 
 bool get_camera_pos(camera_id id, float* px, float* py, float* pz)
@@ -165,30 +166,39 @@ bool get_camera_pos(camera_id id, float* px, float* py, float* pz)
     return true;
 }
 
-void set_camera_rot(camera_id id, float rx, float ry, float rz)
+void set_camera_forward(camera_id id, float fx, float fy, float fz)
 {
-    camera_entry* entry = find_camera(id, "set_camera_rot");
+    camera_entry* entry = find_camera(id, "set_camera_forward");
     if (entry == nullptr)
     {
         return;
     }
 
-    entry->handle->transform.set_rotation({rx, ry, rz});
-    entry->handle->invalidate_view_matrix();
+    const core::math::vec3 forward{fx, fy, fz};
+    if (core::math::length(forward) <= 0.0f)
+    {
+        LOG_WRN("set_camera_forward: a zero vector has no direction; orientation unchanged");
+        return;
+    }
+
+    // look_at stores the orientation as the transform's quaternion (+Z up,
+    // with a horizontal fallback when the direction runs along the up axis).
+    rendering_engine::camera& cam = *entry->handle;
+    cam.look_at(cam.transform.get_position() + forward);
 }
 
-bool get_camera_rot(camera_id id, float* rx, float* ry, float* rz)
+bool get_camera_forward(camera_id id, float* fx, float* fy, float* fz)
 {
-    const camera_entry* entry = find_camera(id, "get_camera_rot");
+    const camera_entry* entry = find_camera(id, "get_camera_forward");
     if (entry == nullptr)
     {
         return false;
     }
 
-    const core::math::vec3 rot = entry->handle->transform.get_rotation();
-    *rx = rot.x;
-    *ry = rot.y;
-    *rz = rot.z;
+    const core::math::vec3 forward = entry->handle->transform.get_forward();
+    *fx = forward.x;
+    *fy = forward.y;
+    *fz = forward.z;
     return true;
 }
 
@@ -196,10 +206,10 @@ void destroy_all_cameras()
 {
     camera_pool& pool = cameras();
     // Erasing the slot an iterator sits on is allowed as long as it is not
-    // dereferenced again before advancing (see core::pool).
+    // dereferenced again before advancing (see core::pool). Each camera
+    // detaches itself from the registry as it is destroyed.
     for (camera_pool::iterator it = pool.begin(); it != pool.end(); ++it)
     {
-        detach_if_current(*it);
         pool.erase(it.handle());
     }
 }
@@ -222,22 +232,19 @@ void attach_camera(camera_id id)
 
 void detach_camera()
 {
-    rendering_engine::camera* current = rendering_engine::camera::get_current_camera();
-    if (current == nullptr)
+    for (camera_entry& entry : cameras())
     {
-        return;
+        entry.handle->detach();
     }
-
-    current->detach();
 }
 
 bool is_camera_attached(camera_id id)
 {
     const camera_entry* entry = find_camera(id, "is_camera_attached");
-    return entry != nullptr && is_current(*entry);
+    return entry != nullptr && entry->handle->is_attached();
 }
 
 bool is_any_camera_attached()
 {
-    return rendering_engine::camera::get_current_camera() != nullptr;
+    return !rendering_engine::registered_cameras().empty();
 }

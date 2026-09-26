@@ -33,8 +33,8 @@ namespace rendering_engine
      * @brief Width over height of a drawable, or @p fallback when either
      *        dimension is zero (no window yet, or a minimised one).
      *
-     * Pure helper shared by the @ref perspective_camera constructor (which
-     * reads the window's pixel size) and the renderer's resize path.
+     * Pure helper the renderer uses to turn the drawable's pixel size into
+     * the aspect it reports to the camera registry at init and on resize.
      */
     constexpr float drawable_aspect_ratio(std::uint32_t width, std::uint32_t height, float fallback) noexcept
     {
@@ -45,23 +45,38 @@ namespace rendering_engine
         return static_cast<float>(width) / static_cast<float>(height);
     }
 
+    /**
+     * @brief Perspective projection. The parameters are private so every
+     *        change goes through a setter that invalidates the cached
+     *        projection; nothing about the projection can go stale.
+     *
+     * The camera itself reads no engine state: the creator supplies the
+     * vertical field of view (radians) and the aspect, and the camera
+     * registry keeps the aspect of an attached camera in step with the
+     * drawable through @ref set_aspect_ratio.
+     */
     struct perspective_camera : public camera
     {
-        // Reads the field of view from the settings and the aspect ratio
-        // from the window's current pixel size, falling back to the
-        // settings' nominal size while the window has no drawable. The
-        // renderer keeps the attached camera's aspect current across
-        // resizes through @ref set_aspect_ratio.
-        perspective_camera();
+        perspective_camera(float field_of_view, float aspect_ratio, float near_clip = 0.1f, float far_clip = 10000.0f);
 
         const core::math::mat4 get_projection_matrix() const final;
 
-        // Sets @ref aspect_ratio and invalidates the projection.
-        void set_aspect_ratio(float value) final;
+        void set_field_of_view(float value);
+        float get_field_of_view() const noexcept;
 
-        float field_of_view;
-        float aspect_ratio;
-        float near_clip;
-        float far_clip;
+        void set_aspect_ratio(float value) final;
+        float get_aspect_ratio() const noexcept;
+
+        void set_near_clip(float value);
+        float get_near_clip() const noexcept;
+
+        void set_far_clip(float value);
+        float get_far_clip() const noexcept;
+
+    private:
+        float m_field_of_view;
+        float m_aspect_ratio;
+        float m_near_clip;
+        float m_far_clip;
     };
 } // namespace rendering_engine

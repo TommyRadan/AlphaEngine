@@ -48,6 +48,18 @@ set(ALPHAENGINE_TEST_SOURCES_UNDER_TEST
     ${CMAKE_SOURCE_DIR}/rendering_engine/lighting/light.cpp
     ${CMAKE_SOURCE_DIR}/rendering_engine/lighting/directional_light.cpp
     ${CMAKE_SOURCE_DIR}/rendering_engine/lighting/point_light.cpp
+    # camera + camera_registry + the two projections, and camera_component
+    # over them. The cameras are math over their transform (the perspective
+    # camera takes its field of view and aspect from the caller; the
+    # renderer, not the camera, reads the window) and the registry is the
+    # same plain vector of back-pointers as the light registry, so the
+    # projection dirty flag, the view derivation and the arbitration all run
+    # device-free.
+    ${CMAKE_SOURCE_DIR}/rendering_engine/camera/camera.cpp
+    ${CMAKE_SOURCE_DIR}/rendering_engine/camera/camera_registry.cpp
+    ${CMAKE_SOURCE_DIR}/rendering_engine/camera/orthographic_camera.cpp
+    ${CMAKE_SOURCE_DIR}/rendering_engine/camera/perspective_camera.cpp
+    ${CMAKE_SOURCE_DIR}/runtime/components/camera_component.cpp
     # mesh/tangent — pure geometry over core/math (the gpu header it includes
     # is types only, no device).
     ${CMAKE_SOURCE_DIR}/rendering_engine/mesh/tangent.cpp
@@ -118,6 +130,7 @@ set(ALPHAENGINE_TEST_SOURCES
     core/math/mat_test.cpp
     core/math/quat_test.cpp
     core/math/bounds_test.cpp
+    core/math/conventions_test.cpp
     core/pool_test.cpp
     core/event_bus_test.cpp
     core/jobs_test.cpp
@@ -128,9 +141,12 @@ set(ALPHAENGINE_TEST_SOURCES
     runtime/node_test.cpp
     runtime/scene_graph_test.cpp
     runtime/light_component_test.cpp
+    runtime/camera_component_test.cpp
     rendering_engine/assets/asset_cache_test.cpp
     rendering_engine/assets/gltf_importer_test.cpp
     rendering_engine/camera/aspect_ratio_test.cpp
+    rendering_engine/camera/camera_test.cpp
+    rendering_engine/util/transform_test.cpp
     rendering_engine/gpu/handle_pool_test.cpp
     rendering_engine/gpu/shader_compiler_test.cpp
     rendering_engine/gpu/shader_library_test.cpp

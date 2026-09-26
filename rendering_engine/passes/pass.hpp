@@ -45,8 +45,8 @@ namespace rendering_engine
      *
      * Captured once at the top of @ref context::render so passes
      * cannot disagree about which camera or backbuffer is active
-     * mid-frame, and so individual passes do not have to re-query
-     * the camera singleton on every entry.
+     * mid-frame, and so individual passes do not have to re-run the
+     * camera arbitration on every entry.
      */
     struct frame_context
     {
@@ -54,9 +54,12 @@ namespace rendering_engine
         // here; the UI pass composites on top of it.
         gpu::render_target swapchain_target{};
 
-        // Active camera, or nullptr if none is attached. Passes that
-        // require a camera (the scene pass today) early-return when
-        // this is null.
+        // The camera this frame renders with — the winner of the camera
+        // registry's arbitration (rendering_engine::active_camera: the
+        // highest-priority attached, enabled camera) evaluated once per
+        // frame — or nullptr when no attached camera is enabled. Passes that
+        // need a camera read it from here, never from the registry, and
+        // early-return when it is null.
         camera* active_camera{nullptr};
 
         // Off-screen HDR colour target the scene pass renders into.

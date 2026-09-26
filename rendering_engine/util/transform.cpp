@@ -84,30 +84,32 @@ core::math::vec3 rendering_engine::util::transform::get_scale() const
 
 void rendering_engine::util::transform::look_at(const core::math::vec3& target, const core::math::vec3& up)
 {
-    core::math::vec3 direction = target - m_position;
+    const core::math::vec3 direction = target - m_position;
     if (core::math::length(direction) <= 0.0f)
     {
         return;
     }
 
-    m_quaternion = core::math::quat_look_at(direction, up);
+    // reference_up substitutes a usable up when the direction runs along
+    // it, so the frame is always well-defined (never a NaN quaternion).
+    m_quaternion = core::math::quat_look_at(direction, core::math::reference_up(direction, up));
     m_rotation = core::math::euler_from_quat(m_quaternion);
     mark_local_dirty();
 }
 
 core::math::vec3 rendering_engine::util::transform::get_forward() const
 {
-    return core::math::normalize(m_quaternion * core::math::vec3{0.0f, 0.0f, -1.0f});
+    return core::math::normalize(m_quaternion * core::math::world_forward);
 }
 
 core::math::vec3 rendering_engine::util::transform::get_right() const
 {
-    return core::math::normalize(m_quaternion * core::math::vec3{1.0f, 0.0f, 0.0f});
+    return core::math::normalize(m_quaternion * core::math::world_right);
 }
 
 core::math::vec3 rendering_engine::util::transform::get_up() const
 {
-    return core::math::normalize(m_quaternion * core::math::vec3{0.0f, 1.0f, 0.0f});
+    return core::math::normalize(m_quaternion * core::math::world_up);
 }
 
 core::math::mat4 rendering_engine::util::transform::get_transform_matrix() const

@@ -71,6 +71,17 @@ hierarchy therefore costs no repeated matrix multiplies, and the scheme stays
 correct for the renderable-transform-parented-to-node case (the renderable polls
 the node transform's world version) without push-based invalidation.
 
+**Up axis.** The engine is right-handed with **+Z up and +X forward**
+(`core::math::world_up` / `world_forward` / `world_right`, documented in
+`core/math/math.hpp`): an identity node faces +X with +Z over its head.
+`node::look_at` / `transform::look_at` / `camera::look_at` all orient that +X
+axis at the target with +Z as the default reference up, `transform::get_forward`
+/ `get_right` / `get_up` report the same frame, a directional light travels along
+its node's +X, and looking straight up or down falls back to a horizontal
+reference up (`core::math::reference_up`) rather than producing a degenerate
+frame. Only view space, inside `core::math::look_at` / `perspective`, keeps the
+OpenGL -Z-forward convention, and `camera::get_view_matrix` does that mapping.
+
 ## Node conveniences
 
 - **`name` + `find(name)`** — depth-first search of a subtree (self included).
@@ -78,7 +89,8 @@ the node transform's world version) without push-based invalidation.
   subtree: `update_subtree` skips it and components are told to hide via the
   `on_active_changed(node&, bool)` hook (`mesh_component` unregisters its
   model from the renderer, `light_component` takes its light out of the light
-  registry, `camera_component` detaches its camera). `is_effective_active()`
+  registry, `camera_component` disables its camera so the camera registry's
+  arbitration skips it). `is_effective_active()`
   folds in ancestors, and the traversal tests exactly that, so a node under a
   disabled parent neither updates nor draws even though its own flag is set.
   A node detached from a disabled parent (`remove`, or the parent dying) is a
@@ -86,8 +98,9 @@ the node transform's world version) without push-based invalidation.
 - **Cycle rejection** — `add(child)` refuses, with an error logged, to link a
   node under itself or under one of its own descendants.
 - **World-space helpers** — `world_position()`, `set_world_position()` (solves for
-  the local position under the current parent), and `look_at(target)` (exact when
-  ancestors are unrotated).
+  the local position under the current parent), and `look_at(target, up = +Z)`
+  (aims the node's +X forward at a world-space target; exact when ancestors are
+  unrotated).
 
 ## Lifecycle
 
@@ -191,12 +204,20 @@ The model lands in stages:
    thus the registration — survives the component being relocated in its pool.
 4. **`light_component` / `camera_component` (done).** Same shape over the light
    and camera registries. Each owns its object behind a `unique_ptr` (the
-   registries hold the object's address), and an `on_update(node&)` hook tracks
-   the node: a point light's position and a directional light's direction follow
-   the node's world transform, and a camera's position follows its node. Both
-   honour `on_active_changed`: a disabled node's light leaves the registry
-   (`light::set_enabled`) and its camera detaches, re-attaching on enable if
-   no other camera has taken over.
+   registries hold the object's address). The light's `on_update(node&)` hook
+   tracks the node: a point light's position and a directional light's
+   direction (its world +X) follow the node's world transform. The camera
+   needs no per-frame hook: `on_attach` parents the camera's transform under
+   the node, so its view is derived from the composed world pose whenever the
+   renderer asks. Both honour `on_active_changed`: a disabled node's light
+   leaves the registry (`light::set_enabled`) and its camera is disabled
+   (`camera::set_enabled`) so the arbitration skips it. Cameras arbitrate
+   rather than stomp: every attached, enabled camera is a candidate, the
+   highest `set_priority` renders (ties: a `set_main` camera, then the most
+   recently attached), the renderer picks the winner once per frame into
+   `frame_context::active_camera`, and destroying or disabling it promotes
+   the next — two camera nodes in a scene are well-defined, and a
+   render-to-texture loop over the registry is the natural next step.
 5. **Traversal (done).** `runtime::context::update()` walks the tree from
    `root` once per frame — wired into `engine::tick` after game-module `on_frame`
    and before the draw — dispatching each component's `on_update` so node-derived

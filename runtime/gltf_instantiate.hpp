@@ -54,6 +54,14 @@ namespace runtime
      * rotation commutes past a translation, so this folds into the root's
      * own TRS and no extra node is inserted.
      *
+     * The conversion fixes the up axis only. An asset's front ends up facing
+     * -Y rather than the engine's +X forward (core/math/math.hpp), which a
+     * mesh does not care about; a glTF camera or KHR light, which looks down
+     * its node's -Z (engine +Y after the conversion), would need a further
+     * local rotation onto +X. Neither is instantiated today; when they are,
+     * that rotation belongs here beside the root pre-rotation, not in the
+     * components.
+     *
      * The nodes are caller-owned: keep the returned vector alive while they
      * are in the scene, destroy it (which unregisters every mesh) before
      * @p model, and both before the engine quits. @p parent must belong to

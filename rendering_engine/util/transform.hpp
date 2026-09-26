@@ -42,10 +42,19 @@ namespace rendering_engine::util
         core::math::quat get_quaternion() const;
         core::math::vec3 get_scale() const;
 
-        // Orients the transform so its forward (-Z) axis points from the current position towards @p target.
-        void look_at(const core::math::vec3& target, const core::math::vec3& up = core::math::vec3{0.0f, 1.0f, 0.0f});
+        // Orients the transform so its forward (+X) axis points from the
+        // current position towards @p target, with @p up as the reference for
+        // its up (+Z) axis — the engine convention (core/math/math.hpp). A
+        // target on the axis of @p up (looking straight up or down) takes the
+        // fallback up of core::math::reference_up; a target at the current
+        // position leaves the orientation unchanged. Local space: under a
+        // parent, @p target and @p up are read in the parent's frame.
+        void look_at(const core::math::vec3& target, const core::math::vec3& up = core::math::world_up);
 
-        // Basis vectors of the current orientation, in world space.
+        // Basis vectors of the current orientation in the parent's frame
+        // (world space for an unparented transform): the local +X, -Y and +Z
+        // axes rotated by the quaternion. An identity transform faces +X
+        // with +Z up and -Y on its right.
         core::math::vec3 get_forward() const;
         core::math::vec3 get_right() const;
         core::math::vec3 get_up() const;

@@ -22,7 +22,6 @@
 
 #include <runtime/components/camera_component.hpp>
 
-#include <core/math/math.hpp>
 #include <runtime/node.hpp>
 
 runtime::camera_component::camera_component(std::unique_ptr<rendering_engine::camera> camera)
@@ -32,59 +31,40 @@ runtime::camera_component::camera_component(std::unique_ptr<rendering_engine::ca
 
 void runtime::camera_component::on_attach(node& owner)
 {
-    (void)owner;
-    if (m_camera)
+    if (!m_camera)
     {
-        m_camera->attach();
+        return;
     }
+
+    // View from the node's world pose: the camera's own transform is a local
+    // offset that inherits the node pose through the transform parent chain,
+    // and the view matrix is derived from the composed world matrix on every
+    // query, so nothing has to be copied per frame.
+    m_camera->transform.set_parent(&owner.transform);
+    m_camera->attach();
 }
 
 void runtime::camera_component::on_destroy()
 {
-    if (is_current())
+    if (!m_camera)
     {
-        m_camera->detach();
+        return;
     }
+
+    m_camera->detach();
+    // The owning node may outlive this component (remove_component, store
+    // teardown); do not leave the camera's transform pointing at it.
+    m_camera->transform.set_parent(nullptr);
 }
 
 void runtime::camera_component::on_active_changed(node& owner, bool active)
 {
     (void)owner;
-    if (!m_camera)
+    if (m_camera)
     {
-        return;
+        // The camera stays attached, so the arbitration promotes it again
+        // the moment the node is re-enabled (unless a higher-priority or
+        // later-attached peer has since taken over).
+        m_camera->set_enabled(active);
     }
-    if (active)
-    {
-        // Only step back in if nobody else took the slot while this node was
-        // disabled; a camera that was made current meanwhile keeps it.
-        if (rendering_engine::camera::get_current_camera() == nullptr)
-        {
-            m_camera->attach();
-        }
-    }
-    else if (is_current())
-    {
-        m_camera->detach();
-    }
-}
-
-bool runtime::camera_component::is_current() const noexcept
-{
-    return m_camera && rendering_engine::camera::get_current_camera() == m_camera.get();
-}
-
-void runtime::camera_component::on_update(node& owner)
-{
-    if (!m_camera)
-    {
-        return;
-    }
-
-    // The camera builds its view from its own transform position (plus a
-    // forward-direction rotation), so place it at the node's world translation
-    // and let the owner set orientation via camera::look_at.
-    const core::math::mat4 world = owner.world_matrix();
-    m_camera->transform.set_position(core::math::vec3{world.m[12], world.m[13], world.m[14]});
-    m_camera->invalidate_view_matrix();
 }

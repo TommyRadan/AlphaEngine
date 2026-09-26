@@ -339,7 +339,7 @@ namespace rendering_engine
         return m_culled;
     }
 
-    void shadow_pass::record(gpu::command_encoder& encoder, const frame_context& /*ctx*/)
+    void shadow_pass::record(gpu::command_encoder& encoder, const frame_context& ctx)
     {
         auto& gpu = *runtime::current_engine().gpu;
         m_culled = 0;
@@ -392,20 +392,18 @@ namespace rendering_engine
             return;
         }
 
-        // Build the light's orthographic view-projection. Pick an up
-        // vector that is not parallel to the direction so look_at stays
-        // well-defined regardless of the world's up axis.
+        // Build the light's orthographic view-projection on the engine up
+        // axis (+Z); reference_up swaps in a horizontal axis for a light
+        // pointing straight up or down so look_at stays well-defined.
         const math::vec3 dir = math::normalize(caster->direction);
-        math::vec3 up{0.0f, 1.0f, 0.0f};
-        if (std::abs(math::dot(dir, up)) > 0.99f)
-        {
-            up = math::vec3{0.0f, 0.0f, 1.0f};
-        }
+        const math::vec3 up = math::reference_up(dir);
 
         // With a camera, auto-fit the box to the visible frustum so the
         // shadow map's texels land on what the viewer actually sees;
-        // otherwise fall back to a fixed box centred on the origin.
-        if (const camera* cam = camera::get_current_camera(); cam != nullptr)
+        // otherwise fall back to a fixed box centred on the origin. The
+        // camera is the frame's, so the fit matches what the scene pass
+        // renders even if the arbitration changes mid-frame.
+        if (const camera* cam = ctx.active_camera; cam != nullptr)
         {
             m_light_view_projection =
                 fit_light_to_camera(dir, up, cam->get_view_matrix(), cam->get_projection_matrix());
