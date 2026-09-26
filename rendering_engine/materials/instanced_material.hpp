@@ -23,9 +23,11 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/materials/material.hpp>
+#include <rendering_engine/materials/material_template.hpp>
 #include <rendering_engine/util/color.hpp>
 
 namespace rendering_engine
@@ -46,15 +48,20 @@ namespace rendering_engine
     //
     // Slot layout: per-frame group at slot 0 (camera, owned by the
     // @ref scene_pass) and the per-material group at slot 2 (a flat tint
-    // multiplied onto every instance, owned by this material). The per-draw
+    // multiplied onto every instance, owned by each instance). The per-draw
     // group (slot 1) is unused.
     struct instanced_material : public material
     {
-        // @p frame_layout is the per-frame bind-group layout owned by the
-        // @ref scene_pass; it must match the layout the pass binds at slot
-        // 0 every frame so the pipeline and the runtime bind group agree.
-        explicit instanced_material(gpu::bind_group_layout frame_layout);
+        // @p tmpl is the shared instanced template (see @ref create_template).
+        explicit instanced_material(std::shared_ptr<material_template> tmpl);
         ~instanced_material() override;
+
+        // The template every instanced_material shares. @p frame_layout
+        // is the per-frame bind-group layout owned by the @ref scene_pass;
+        // it must match the layout the pass binds at slot 0 every frame so
+        // the pipelines and the runtime bind group agree.
+        static std::shared_ptr<material_template> create_template(gpu::device& device,
+                                                                  gpu::bind_group_layout frame_layout);
 
         // Byte stride of one per-instance record: a mat4 model (64 bytes)
         // followed by a vec4 colour (16 bytes). @ref instanced_mesh lays out
@@ -64,10 +71,6 @@ namespace rendering_engine
         // Flat tint multiplied onto every instance's own colour (white
         // leaves the per-instance colours unchanged).
         void set_color(const util::color& color);
-
-        // The per-material group trails the per-frame and per-draw groups,
-        // so it occupies slot 2 (per-frame at 0, per-draw at 1).
-        uint32_t per_material_slot() const override;
 
     private:
         // Push the tint into the per-material UBO.

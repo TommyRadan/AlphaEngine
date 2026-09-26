@@ -1,9 +1,10 @@
 // A minimal in-memory gpu::device for tests. It implements the abstract
 // device interface with stubs, handing back unique non-zero handles for the
-// resources the asset layer creates (buffers, textures) and recording
+// resources the asset layer and the material templates create (buffers,
+// textures, shader modules, layouts, pipelines, bind groups) and recording
 // create/destroy traffic so tests can assert that asset handles release their
-// GPU resources. Everything else returns a default/invalid handle — the asset
-// cache never exercises pipelines, bind groups, or command encoders.
+// GPU resources and that materials share pipelines. Everything else returns a
+// default/invalid handle — nothing here exercises command encoders.
 
 #pragma once
 
@@ -15,6 +16,7 @@
 #include <vector>
 
 #include <rendering_engine/gpu/device.hpp>
+#include <rendering_engine/gpu/pipeline.hpp>
 #include <rendering_engine/gpu/texture.hpp>
 
 namespace test_support
@@ -26,14 +28,27 @@ namespace test_support
         std::uint64_t destroyed_buffers = 0;
         std::uint64_t created_textures = 0;
         std::uint64_t destroyed_textures = 0;
+        std::uint64_t created_shader_modules = 0;
+        std::uint64_t destroyed_shader_modules = 0;
+        std::uint64_t created_bind_group_layouts = 0;
+        std::uint64_t destroyed_bind_group_layouts = 0;
+        std::uint64_t created_pipelines = 0;
+        std::uint64_t destroyed_pipelines = 0;
+        std::uint64_t created_bind_groups = 0;
+        std::uint64_t destroyed_bind_groups = 0;
         std::unordered_set<std::uint64_t> live_buffers;
         std::unordered_set<std::uint64_t> live_textures;
+        std::unordered_set<std::uint64_t> live_pipelines;
         // The descriptor of the most recent create_texture call, so a test
         // can check what format / footprint a loader asked the device for.
         rendering_engine::gpu::texture_descriptor last_texture_descriptor{};
         // The initial data of every buffer created with some, keyed by
         // handle id, so a test can read back the records a loader uploaded.
         std::unordered_map<std::uint64_t, std::vector<std::byte>> buffer_contents;
+        // Every graphics pipeline descriptor handed to create_pipeline, in
+        // order, so a test can check the fixed-function state a material
+        // variant baked (front face, blend, depth, vertex layout).
+        std::vector<rendering_engine::gpu::pipeline_descriptor> pipeline_descriptors;
 
         std::size_t live_buffer_count() const
         {
@@ -42,6 +57,10 @@ namespace test_support
         std::size_t live_texture_count() const
         {
             return live_textures.size();
+        }
+        std::size_t live_pipeline_count() const
+        {
+            return live_pipelines.size();
         }
 
         // -- Lifecycle ------------------------------------------------------
@@ -80,18 +99,25 @@ namespace test_support
         rendering_engine::gpu::shader_module
         create_shader_module(const rendering_engine::gpu::shader_module_descriptor&) override
         {
+            ++created_shader_modules;
             return rendering_engine::gpu::shader_module{++m_next_id};
         }
 
         rendering_engine::gpu::bind_group_layout
         create_bind_group_layout(const rendering_engine::gpu::bind_group_layout_descriptor&) override
         {
+            ++created_bind_group_layouts;
             return rendering_engine::gpu::bind_group_layout{++m_next_id};
         }
 
-        rendering_engine::gpu::pipeline create_pipeline(const rendering_engine::gpu::pipeline_descriptor&) override
+        rendering_engine::gpu::pipeline
+        create_pipeline(const rendering_engine::gpu::pipeline_descriptor& descriptor) override
         {
-            return rendering_engine::gpu::pipeline{++m_next_id};
+            pipeline_descriptors.push_back(descriptor);
+            const std::uint64_t id = ++m_next_id;
+            live_pipelines.insert(id);
+            ++created_pipelines;
+            return rendering_engine::gpu::pipeline{id};
         }
 
         rendering_engine::gpu::pipeline
@@ -102,6 +128,7 @@ namespace test_support
 
         rendering_engine::gpu::bind_group create_bind_group(const rendering_engine::gpu::bind_group_descriptor&) override
         {
+            ++created_bind_groups;
             return rendering_engine::gpu::bind_group{++m_next_id};
         }
 
@@ -121,10 +148,25 @@ namespace test_support
             }
         }
         void destroy(rendering_engine::gpu::sampler) override {}
-        void destroy(rendering_engine::gpu::shader_module) override {}
-        void destroy(rendering_engine::gpu::bind_group_layout) override {}
-        void destroy(rendering_engine::gpu::pipeline) override {}
-        void destroy(rendering_engine::gpu::bind_group) override {}
+        void destroy(rendering_engine::gpu::shader_module) override
+        {
+            ++destroyed_shader_modules;
+        }
+        void destroy(rendering_engine::gpu::bind_group_layout) override
+        {
+            ++destroyed_bind_group_layouts;
+        }
+        void destroy(rendering_engine::gpu::pipeline handle) override
+        {
+            if (live_pipelines.erase(handle.id) != 0)
+            {
+                ++destroyed_pipelines;
+            }
+        }
+        void destroy(rendering_engine::gpu::bind_group) override
+        {
+            ++destroyed_bind_groups;
+        }
 
         // -- Resource updates ----------------------------------------------
         void write_buffer(rendering_engine::gpu::buffer, const void*, std::size_t, std::size_t) override {}

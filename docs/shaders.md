@@ -15,7 +15,7 @@ shaders/
     bindings.glsl           GENERATED from rendering_engine/gpu/shader_bindings.hpp
     constants.glsl          PI
     per_frame.glsl          the PerFrame view block (set 0, binding 0)
-    per_draw.glsl           the PerDraw model-matrix block (set 1, binding 1)
+    per_draw.glsl           the PerDraw model + normal matrix block (set 1, binding 1)
     lights.glsl             the Lights block + DirectionalLight / PointLight
     shadows.glsl            directional_shadow() (5x5 PCF), point_shadow() (omni)
     fog.glsl                apply_fog()
@@ -92,6 +92,14 @@ and is never on disk in the source tree.
 | 11-13   | 2   | IBL irradiance cube, prefiltered cube, BRDF LUT |
 | 14      | 0   | `PointShadow` block                          |
 | 15-20   | 0   | the six omni shadow faces                    |
+| 21      | 2   | occlusion map, or the packed ORM map         |
+
+The `PerDraw` block at binding 1 is 128 bytes: the model matrix and its
+normal matrix (the inverse-transpose of the model's 3x3, widened to a
+`mat4`), both computed on the CPU by `renderables/per_draw_ubo.hpp` so no
+vertex shader runs `inverse()`. The camera position comes from
+`camera_position()` in `include/per_frame.glsl`, the rigid inverse of the
+view matrix (`-t * R`), not a general 4x4 inverse.
 
 ## Adding or changing a shader
 
@@ -100,9 +108,9 @@ and is never on disk in the source tree.
    suffix (or plain `.glsl` for an include).
 2. List it in `shaders/CMakeLists.txt`. The list is explicit; a file that
    is not listed is not embedded and `#include` cannot find it.
-3. Reference it from C++ by path: a material hands
-   `gpu::shader_variant{"materials/x.frag.glsl"}` (plus any defines) to
-   `material::construct_pipeline`; a pass calls
+3. Reference it from C++ by path: a material's template names
+   `gpu::shader_variant{"materials/x.frag.glsl"}` (plus any defines every
+   variant shares) in its `material_template_descriptor`; a pass calls
    `gpu::compile_library_shader("passes/x.frag.glsl", stage)`.
 4. The unit test `shader_compiler.every_embedded_shader_compiles` compiles
    every non-include file through glslang headless, so a build of
@@ -117,11 +125,80 @@ recompiles.
 
 `gpu::shader_compile_options::defines` (or the `defines` of a
 `gpu::shader_variant`) are injected ahead of the source as
-`#define NAME VALUE`. `grid_material` is the example: its fragment shader
-reads `GRID_FADE_DISTANCE`, carries a default under `#ifndef` so the file
-compiles on its own, and the material defines it per instance so each
-fade distance is its own pipeline. Every distinct define set is a separate
-cache entry.
+`#define NAME VALUE`. `grid_material` is the simple example: its fragment
+shader reads `GRID_FADE_DISTANCE`, carries a default under `#ifndef` so
+the file compiles on its own, and the grid template defines it for every
+variant it builds. Every distinct define set is a separate cache entry.
+
+### Material keywords
+
+The lit materials go further: a `material_template` compiles its two
+stages once per *keyword set*, and a keyword is a flag define
+(`#define USE_ALBEDO_MAP`) chosen by what an instance has bound rather
+than a branch on a uniform per fragment. The bits are
+`rendering_engine::material_keyword` (`materials/pipeline_variant.hpp`)
+and `keyword_defines(mask)` turns a mask into the define list, so C++
+and GLSL cannot disagree on the spelling:
+
+| keyword             | effect in `materials/standard.{vert,frag}.glsl`                |
+|---------------------|----------------------------------------------------------------|
+| `USE_ALBEDO_MAP`    | base colour and alpha from `albedoMap`                          |
+| `USE_NORMAL_MAP`    | tangent-space normal from `normalMap` (needs `HAS_TANGENTS`)    |
+| `USE_METALLIC_MAP`  | metalness from `metalnessMap.r`                                 |
+| `USE_ROUGHNESS_MAP` | roughness from `roughnessMap.r`                                 |
+| `USE_EMISSIVE_MAP`  | emissive from `emissiveMap`                                     |
+| `USE_OCCLUSION_MAP` | ambient occlusion from `occlusionMap.r` (overrides the packed map's R when both are set) |
+| `USE_ORM_MAP`       | roughness / metallic from one packed map (R occlusion, G roughness, B metallic, the glTF convention) at the metalness slot; replaces `USE_METALLIC_MAP` / `USE_ROUGHNESS_MAP` and supplies occlusion from R unless `USE_OCCLUSION_MAP` is set |
+| `HAS_TANGENTS`      | the tangent attribute (location 3) is declared and forwarded; off, the pipeline reads a position+uv+normal record and normal mapping is off |
+| `WIREFRAME`         | unlit base colour (set together with `polygon_mode::line`)      |
+| `SKINNED`           | reserved (#221); no shader reads it yet                         |
+
+Every map slot is declared in the shader regardless of the keywords, so
+one per-material layout serves every variant; a variant simply carries
+no sampling code for the maps it does not name. `USE_NORMAL_MAP` without
+`HAS_TANGENTS` compiles but samples nothing.
+`shader_compiler.standard_material_keyword_variants_compile` compiles a
+representative spread of masks (each keyword alone, with and without
+tangents, the ORM and wireframe combinations, and all bits at once)
+through glslang, headless.
+
+## Materials: templates, instances and variants
+
+A material *type* is a `material_template` (`materials/material_template.hpp`):
+its two shader paths plus the defines every variant shares, its vertex
+and bind-group layouts, its topology, and a cache of pipeline variants.
+A material *instance* is a `material` (the thing a `draw_item` points
+at): the shared `material_params` surface (transparent, opacity,
+double-sided, blending, wireframe, depth test / write — every one
+settable at runtime), the keyword set its bound maps imply, its parameter
+UBO and per-material bind group, and a `shared_ptr` to its template. The
+built-in classes (`standard_material`, `phong_material`, ...) are thin
+instance facades: each has a static `create_template(device, frame_layout)`
+and a constructor taking the shared template, and the renderer builds one
+template per type in `context::init`. `create_standard_material()` hands
+every extra instance the same standard template, so N materials cost one
+set of shaders and layouts.
+
+A variant is named by `pipeline_variant_key` (`materials/pipeline_variant.hpp`):
+the keyword mask plus blend mode, cull, front face, polygon mode and the
+two depth flags, packed into one 64-bit word. `make_pipeline_variant_key`
+derives it from the params and keywords; every setter that changes the
+key looks the pipeline up in the template (or builds it once, compiling
+the shader pair only when the keyword set itself is new) and rebinds, so
+two instances with the same key draw through one pipeline object.
+Opacity lives in the parameter block and never changes the key. The
+passes sort draw items by (pipeline id, instance) and rebind the
+per-material group when the instance changes, not only when the
+pipeline does.
+
+Front face is per draw: a renderable whose model matrix has a negative
+determinant (an odd number of negative scale axes) flags its `draw_item`
+as `mirrored`, and the pass asks the instance for `pipeline(true)`, the
+same key with `front_face::clockwise`, resolved lazily through the same
+cache. Nothing is flipped in the shader.
+
+A data-driven `.mat` file (template + keywords + parameter block) waits
+on serialization (#176).
 
 ## Compilation and the SPIR-V cache
 

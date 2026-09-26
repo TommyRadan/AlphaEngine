@@ -22,8 +22,11 @@
 
 #pragma once
 
+#include <memory>
+
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/materials/material.hpp>
+#include <rendering_engine/materials/material_template.hpp>
 
 namespace rendering_engine
 {
@@ -42,10 +45,16 @@ namespace rendering_engine
     // origin grid). There is no per-material group.
     struct grid_material : public material
     {
-        // @p frame_layout is the scene_pass per-frame layout bound at
-        // slot 0. @p fade_distance is the world-space radius (from the
-        // camera) past which the grid has fully faded to nothing.
-        explicit grid_material(gpu::bind_group_layout frame_layout, float fade_distance = 100.0f);
+        // @p tmpl is the grid template (see @ref create_template).
+        explicit grid_material(std::shared_ptr<material_template> tmpl);
         ~grid_material() override;
+
+        // The grid template. @p frame_layout is the scene_pass per-frame
+        // layout bound at slot 0. @p fade_distance is the world-space
+        // radius (from the camera) past which the grid has fully faded to
+        // nothing; it is baked into the template's shaders as the
+        // @c GRID_FADE_DISTANCE define.
+        static std::shared_ptr<material_template>
+        create_template(gpu::device& device, gpu::bind_group_layout frame_layout, float fade_distance = 100.0f);
     };
 } // namespace rendering_engine

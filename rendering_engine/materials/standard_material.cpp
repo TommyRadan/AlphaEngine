@@ -23,7 +23,7 @@
 #include <rendering_engine/materials/standard_material.hpp>
 
 #include <array>
-#include <string>
+#include <utility>
 
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
@@ -31,49 +31,65 @@
 #include <rendering_engine/ibl/environment.hpp>
 #include <rendering_engine/mesh/tangent.hpp>
 #include <rendering_engine/mesh/vertex.hpp>
-#include <runtime/engine.hpp>
 
 namespace
 {
-    // std140 layout for the per-material params UBO, six vec4 rows:
+    // std140 layout for the per-material params UBO, four vec4 rows:
     //   0  baseColor   (rgb tint, a alpha)
     //   16 emissive    (rgb colour, a intensity)
-    //   32 params      (x metalness, y roughness, z opacity)
-    //   48 mapFlags    (x albedo, y normal, z metalness, w roughness)
-    //   64 mapFlags2   (x emissive)
-    //   80 iblParams   (x ibl enabled, y ibl intensity)
-    // 96 bytes total.
-    constexpr size_t material_ubo_size = 96;
+    //   32 params      (x metalness, y roughness, z opacity, w occlusion strength)
+    //   48 iblParams   (x ibl enabled, y ibl intensity)
+    // 64 bytes total. Which maps are sampled is a compile-time keyword,
+    // not a flag in here.
+    constexpr size_t material_ubo_size = 64;
 
-    // This material's stages, by shader-library path (see shaders/materials/).
-    const rendering_engine::gpu::shader_variant vertex_shader{"materials/standard.vert.glsl"};
-    const rendering_engine::gpu::shader_variant fragment_shader{"materials/standard.frag.glsl"};
+    // Attribute location of the tangent in the position+uv+normal+tangent
+    // stream (see vertex_position_uv_normal_tangent_layout).
+    constexpr uint32_t tangent_location = 3;
+
+    // Every keyword the map set can turn on; the tangent flag joins them.
+    constexpr uint32_t keywords_default =
+        rendering_engine::keyword_bit(rendering_engine::material_keyword::has_tangents);
 } // namespace
 
 namespace rendering_engine
 {
-    standard_material::standard_material(gpu::bind_group_layout frame_layout)
+    material_template_descriptor standard_material::template_descriptor(gpu::bind_group_layout frame_layout)
     {
+        material_template_descriptor descriptor{};
+        descriptor.name = "standard";
+        descriptor.vertex_shader = gpu::shader_variant{"materials/standard.vert.glsl"};
+        descriptor.fragment_shader = gpu::shader_variant{"materials/standard.frag.glsl"};
+
         // Position+uv+normal+tangent stream; the layout helper bakes the
         // attribute offsets that match vertex_position_uv_normal_tangent.
+        // A variant without HAS_TANGENTS drops the tangent attribute and
+        // reads the position+uv+normal prefix instead.
         gpu::vertex_buffer_layout vertex_layout = vertex_position_uv_normal_tangent_layout();
         vertex_layout.stride = 0;
-        m_vertex_format = vertex_format::position_uv_normal_tangent;
+        descriptor.vertex_layouts.push_back(vertex_layout);
+        descriptor.required_vertex_format = vertex_format::position_uv_normal_tangent;
+        descriptor.vertex_format_without_tangents = vertex_format::position_uv_normal;
+        descriptor.tangent_location = tangent_location;
 
-        // Per-draw layout (slot 1): the model matrix UBO at binding 1,
-        // matching every 3D renderable's bind group.
-        gpu::bind_group_layout_descriptor draw_layout{};
-        draw_layout.entries.push_back({gpu::shader_bindings::per_draw_model, gpu::binding_kind::uniform_buffer});
+        // Per-draw layout (slot 1): the model + normal matrix UBO at
+        // binding 1, matching every 3D renderable's bind group.
+        descriptor.draw_layout.entries.push_back(
+            {gpu::shader_bindings::per_draw_model, gpu::binding_kind::uniform_buffer});
+        descriptor.frame_layout = frame_layout;
 
-        // Per-material layout (slot 2): the params UBO plus the five PBR
-        // samplers, all owned by this material.
-        gpu::bind_group_layout_descriptor material_layout{};
+        // Per-material layout (slot 2): the params UBO plus the PBR
+        // samplers, all owned by each instance. The layout is the same
+        // for every variant; a variant simply leaves unused slots
+        // unsampled.
+        auto& material_layout = descriptor.material_layout;
         material_layout.entries.push_back({gpu::shader_bindings::material_params, gpu::binding_kind::uniform_buffer});
         material_layout.entries.push_back({gpu::shader_bindings::material_albedo_map, gpu::binding_kind::texture});
         material_layout.entries.push_back({gpu::shader_bindings::material_normal_map, gpu::binding_kind::texture});
         material_layout.entries.push_back({gpu::shader_bindings::material_metalness_map, gpu::binding_kind::texture});
         material_layout.entries.push_back({gpu::shader_bindings::material_roughness_map, gpu::binding_kind::texture});
         material_layout.entries.push_back({gpu::shader_bindings::material_emissive_map, gpu::binding_kind::texture});
+        material_layout.entries.push_back({gpu::shader_bindings::material_occlusion_map, gpu::binding_kind::texture});
         // irradiance and prefiltered are samplerCube; flag them so a
         // backend that placeholders an unbound slot picks a cube, not a
         // 2D, texture when no environment is attached. brdfLut is 2D.
@@ -87,21 +103,26 @@ namespace rendering_engine
         material_layout.entries.push_back(prefiltered_entry);
         material_layout.entries.push_back({gpu::shader_bindings::material_brdf_lut, gpu::binding_kind::texture});
 
-        // Opaque lit surface: depth tested and written, no blending.
-        material_params params{};
-        params.transparent = false;
-        params.depth_test = true;
-        params.depth_write = true;
+        descriptor.topology = gpu::primitive_topology::triangles;
+        return descriptor;
+    }
 
-        construct_pipeline(
-            vertex_shader, fragment_shader, vertex_layout, draw_layout, frame_layout, params, material_layout);
+    std::shared_ptr<material_template> standard_material::create_template(gpu::device& device,
+                                                                          gpu::bind_group_layout frame_layout)
+    {
+        return std::make_shared<material_template>(device, template_descriptor(frame_layout));
+    }
 
+    standard_material::standard_material(std::shared_ptr<material_template> tmpl)
+        // Opaque lit surface: depth tested and written, no blending. The
+        // tangent keyword is on until set_tangents says otherwise.
+        : material(std::move(tmpl), material_params{}, keywords_default)
+    {
         gpu::buffer_descriptor ubo_descriptor{};
         ubo_descriptor.size = material_ubo_size;
         ubo_descriptor.usage = gpu::buffer_usage_uniform | gpu::buffer_usage_copy_dst;
         ubo_descriptor.hint = gpu::buffer_usage_hint::dynamic_data;
-        auto& gpu = *runtime::current_engine().gpu;
-        m_material_ubo = gpu.create_buffer(ubo_descriptor);
+        m_material_ubo = device().create_buffer(ubo_descriptor);
 
         rebuild_bind_group();
     }
@@ -109,14 +130,10 @@ namespace rendering_engine
     standard_material::~standard_material()
     {
         // Drop the bind group before the buffers / textures it
-        // references, then null it so the base destructor's
-        // destruct_pipeline does not double-free.
-        auto& gpu = *runtime::current_engine().gpu;
-        if (m_per_material_bind_group.valid())
-        {
-            gpu.destroy(m_per_material_bind_group);
-            m_per_material_bind_group = {};
-        }
+        // references.
+        release_per_material_bind_group();
+        release_map(m_orm_map);
+        release_map(m_occlusion_map);
         release_map(m_emissive_map);
         release_map(m_roughness_map);
         release_map(m_metalness_map);
@@ -124,14 +141,9 @@ namespace rendering_engine
         release_map(m_albedo_map);
         if (m_material_ubo.valid())
         {
-            gpu.destroy(m_material_ubo);
+            device().destroy(m_material_ubo);
             m_material_ubo = {};
         }
-    }
-
-    uint32_t standard_material::per_material_slot() const
-    {
-        return per_draw_slot() + 1u;
     }
 
     void standard_material::set_base_color(const util::color& color)
@@ -232,6 +244,46 @@ namespace rendering_engine
         rebuild_bind_group();
     }
 
+    void standard_material::set_occlusion_map(const util::image& image, gpu::color_space space)
+    {
+        release_map(m_occlusion_map);
+        m_occlusion_map = upload_map(image, space);
+        rebuild_bind_group();
+    }
+
+    void standard_material::clear_occlusion_map()
+    {
+        if (!m_occlusion_map.valid())
+        {
+            return;
+        }
+        release_map(m_occlusion_map);
+        rebuild_bind_group();
+    }
+
+    void standard_material::set_orm_map(const util::image& image, gpu::color_space space)
+    {
+        release_map(m_orm_map);
+        m_orm_map = upload_map(image, space);
+        rebuild_bind_group();
+    }
+
+    void standard_material::clear_orm_map()
+    {
+        if (!m_orm_map.valid())
+        {
+            return;
+        }
+        release_map(m_orm_map);
+        rebuild_bind_group();
+    }
+
+    void standard_material::set_occlusion_strength(float strength)
+    {
+        m_occlusion_strength = strength;
+        upload_params();
+    }
+
     void standard_material::set_emissive_map(const util::image& image, gpu::color_space space)
     {
         release_map(m_emissive_map);
@@ -265,52 +317,91 @@ namespace rendering_engine
         rebuild_bind_group();
     }
 
-    gpu::texture standard_material::upload_map(const util::image& image, gpu::color_space space)
+    void standard_material::set_ibl_intensity(float intensity)
     {
-        auto& gpu = *runtime::current_engine().gpu;
-
-        gpu::texture_descriptor descriptor{};
-        descriptor.dimension = gpu::texture_dimension::d2;
-        descriptor.format = gpu::rgba8_format(space);
-        descriptor.width = image.get_width();
-        descriptor.height = image.get_height();
-        descriptor.mipmaps = true;
-        descriptor.min_filter = gpu::filter_mode::linear;
-        descriptor.mag_filter = gpu::filter_mode::linear;
-        descriptor.address_u = gpu::address_mode::repeat;
-        descriptor.address_v = gpu::address_mode::repeat;
-        descriptor.address_w = gpu::address_mode::repeat;
-        gpu::texture map = gpu.create_texture(descriptor);
-
-        const size_t pixel_bytes =
-            static_cast<size_t>(image.get_width()) * static_cast<size_t>(image.get_height()) * sizeof(util::color);
-        gpu.write_texture(map, image.get_pixels(), pixel_bytes);
-        gpu.generate_mipmaps(map);
-        return map;
+        m_ibl_intensity = intensity;
+        upload_params();
     }
 
-    void standard_material::release_map(gpu::texture& map)
+    void standard_material::set_tangents(bool enabled)
     {
-        if (!map.valid())
+        if (m_tangents == enabled)
         {
             return;
         }
-        auto& gpu = *runtime::current_engine().gpu;
-        gpu.destroy(map);
-        map = {};
+        m_tangents = enabled;
+        update_keywords();
+    }
+
+    bool standard_material::has_tangents() const
+    {
+        return (keywords() & keyword_bit(material_keyword::has_tangents)) != 0;
+    }
+
+    bool standard_material::uses_orm_map() const
+    {
+        return (keywords() & keyword_bit(material_keyword::use_orm_map)) != 0;
+    }
+
+    void standard_material::on_params_changed()
+    {
+        upload_params();
+    }
+
+    void standard_material::update_keywords()
+    {
+        uint32_t mask = 0;
+        if (m_tangents)
+        {
+            mask |= keyword_bit(material_keyword::has_tangents);
+        }
+        if (m_albedo_map.valid())
+        {
+            mask |= keyword_bit(material_keyword::use_albedo_map);
+        }
+        // Normal mapping needs the tangent frame; without it the map
+        // stays bound but the variant has no code to sample it.
+        if (m_normal_map.valid() && m_tangents)
+        {
+            mask |= keyword_bit(material_keyword::use_normal_map);
+        }
+        if (m_orm_map.valid())
+        {
+            // The packed map supersedes the two single-channel ones, so
+            // their keywords stay off and no extra variant is compiled.
+            mask |= keyword_bit(material_keyword::use_orm_map);
+        }
+        else
+        {
+            if (m_metalness_map.valid())
+            {
+                mask |= keyword_bit(material_keyword::use_metallic_map);
+            }
+            if (m_roughness_map.valid())
+            {
+                mask |= keyword_bit(material_keyword::use_roughness_map);
+            }
+        }
+        // A separate occlusion map overrides the packed map's R channel,
+        // so it stays independent of the ORM keyword.
+        if (m_occlusion_map.valid())
+        {
+            mask |= keyword_bit(material_keyword::use_occlusion_map);
+        }
+        if (m_emissive_map.valid())
+        {
+            mask |= keyword_bit(material_keyword::use_emissive_map);
+        }
+        set_keywords(mask);
     }
 
     void standard_material::rebuild_bind_group()
     {
-        auto& gpu = *runtime::current_engine().gpu;
-        if (m_per_material_bind_group.valid())
-        {
-            gpu.destroy(m_per_material_bind_group);
-            m_per_material_bind_group = {};
-        }
+        auto& gpu = device();
+        release_per_material_bind_group();
 
         gpu::bind_group_descriptor bg_descriptor{};
-        bg_descriptor.layout = m_per_material_layout;
+        bg_descriptor.layout = get_template().per_material_layout();
 
         gpu::binding_value ubo_slot{};
         ubo_slot.binding = gpu::shader_bindings::material_params;
@@ -318,12 +409,16 @@ namespace rendering_engine
         ubo_slot.buffer_value = m_material_ubo;
         bg_descriptor.entries.push_back(ubo_slot);
 
-        const std::array<std::pair<uint32_t, gpu::texture>, 5> maps = {{
+        // The metalness slot carries the packed ORM map when one is
+        // bound; the USE_ORM_MAP variant reads roughness, metalness and
+        // (absent a separate occlusion map) occlusion from it.
+        const std::array<std::pair<uint32_t, gpu::texture>, 6> maps = {{
             {gpu::shader_bindings::material_albedo_map, m_albedo_map},
             {gpu::shader_bindings::material_normal_map, m_normal_map},
-            {gpu::shader_bindings::material_metalness_map, m_metalness_map},
+            {gpu::shader_bindings::material_metalness_map, m_orm_map.valid() ? m_orm_map : m_metalness_map},
             {gpu::shader_bindings::material_roughness_map, m_roughness_map},
             {gpu::shader_bindings::material_emissive_map, m_emissive_map},
+            {gpu::shader_bindings::material_occlusion_map, m_occlusion_map},
         }};
         for (const auto& [binding, texture] : maps)
         {
@@ -357,12 +452,13 @@ namespace rendering_engine
 
         m_per_material_bind_group = gpu.create_bind_group(bg_descriptor);
 
+        update_keywords();
         upload_params();
     }
 
     void standard_material::upload_params()
     {
-        std::array<float, 24> payload{};
+        std::array<float, 16> payload{};
         payload[0] = static_cast<float>(m_base_color.r) / 255.0f;
         payload[1] = static_cast<float>(m_base_color.g) / 255.0f;
         payload[2] = static_cast<float>(m_base_color.b) / 255.0f;
@@ -373,18 +469,13 @@ namespace rendering_engine
         payload[7] = m_emissive_intensity;
         payload[8] = m_metalness;
         payload[9] = m_roughness;
-        payload[10] = m_params.opacity;
-        payload[12] = m_albedo_map.valid() ? 1.0f : 0.0f;
-        payload[13] = m_normal_map.valid() ? 1.0f : 0.0f;
-        payload[14] = m_metalness_map.valid() ? 1.0f : 0.0f;
-        payload[15] = m_roughness_map.valid() ? 1.0f : 0.0f;
-        payload[16] = m_emissive_map.valid() ? 1.0f : 0.0f;
-        // iblParams row at offset 80 (float index 20): enable flag + the
+        payload[10] = params().opacity;
+        payload[11] = m_occlusion_strength;
+        // iblParams row at offset 48 (float index 12): enable flag + the
         // intensity multiplier the shader applies to the ambient term.
-        payload[20] = m_environment != nullptr ? 1.0f : 0.0f;
-        payload[21] = 1.0f;
+        payload[12] = m_environment != nullptr ? 1.0f : 0.0f;
+        payload[13] = m_ibl_intensity;
 
-        auto& gpu = *runtime::current_engine().gpu;
-        gpu.write_buffer(m_material_ubo, payload.data(), material_ubo_size, 0);
+        device().write_buffer(m_material_ubo, payload.data(), material_ubo_size, 0);
     }
 } // namespace rendering_engine

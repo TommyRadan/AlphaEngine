@@ -20,4 +20,14 @@ layout(set = 0, binding = BINDING_PER_FRAME, std140) uniform PerFrame
     vec4 fogParams;
 } u_frame;
 
+// The camera's world-space position. The view matrix is rigid (a
+// rotation R and a translation t from look_at), so its inverse is
+// transpose(R) with translation -transpose(R) * t; that is the camera
+// position, and it needs no general 4x4 inverse per vertex. GLSL's
+// vector * matrix product is the transpose product.
+vec3 camera_position()
+{
+    return -(u_frame.viewMatrix[3].xyz * mat3(u_frame.viewMatrix));
+}
+
 #endif // AE_PER_FRAME_GLSL

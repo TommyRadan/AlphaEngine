@@ -23,6 +23,7 @@
 #include <rendering_engine/passes/ui_pass.hpp>
 
 #include <algorithm>
+#include <functional>
 
 #include <core/event.hpp>
 #include <core/event_engine.hpp>
@@ -56,23 +57,40 @@ namespace rendering_engine
         {
             r->collect_draw_items(m_items);
         }
+        // Sorted by (pipeline, material instance) so instances sharing
+        // a pipeline sit together; the per-material group is rebound
+        // when the instance changes, not only when the pipeline does.
         std::stable_sort(m_items.begin(),
                          m_items.end(),
                          [](const draw_item& a, const draw_item& b)
-                         { return a.mat->pipeline().id < b.mat->pipeline().id; });
+                         {
+                             const uint64_t pipeline_a = a.mat->pipeline().id;
+                             const uint64_t pipeline_b = b.mat->pipeline().id;
+                             if (pipeline_a != pipeline_b)
+                             {
+                                 return pipeline_a < pipeline_b;
+                             }
+                             return std::less<const material*>{}(a.mat, b.mat);
+                         });
 
         uint64_t last_pipeline_id = 0;
+        const material* last_material = nullptr;
         for (const auto& item : m_items)
         {
             const uint64_t pid = item.mat->pipeline().id;
             if (pid != last_pipeline_id)
             {
                 pass_encoder->set_pipeline(item.mat->pipeline());
+                last_pipeline_id = pid;
+                last_material = nullptr;
+            }
+            if (item.mat != last_material)
+            {
                 if (item.mat->per_material_bind_group().valid())
                 {
                     pass_encoder->set_bind_group(item.mat->per_material_slot(), item.mat->per_material_bind_group());
                 }
-                last_pipeline_id = pid;
+                last_material = item.mat;
             }
 
             pass_encoder->set_bind_group(item.mat->per_draw_slot(), item.per_draw_bind_group);

@@ -22,9 +22,12 @@
 
 #pragma once
 
+#include <memory>
+
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/gpu/types.hpp>
 #include <rendering_engine/materials/material.hpp>
+#include <rendering_engine/materials/material_template.hpp>
 #include <rendering_engine/util/color.hpp>
 #include <rendering_engine/util/image.hpp>
 
@@ -36,18 +39,22 @@ namespace rendering_engine
     //
     // Slot layout: the per-frame group at slot 0 (camera + lights,
     // owned by the @ref scene_pass) and the per-draw group at slot 1
-    // (@c modelMatrix, built by each renderable) match the previous
-    // built-in 3D material, so renderables need no changes. The tint
+    // (model + normal matrix, built by each renderable) match the other
+    // built-in 3D materials, so renderables need no changes. The tint
     // and texture live in the per-material group at slot 2 owned by
-    // this material — every renderable that fronts it shares them.
+    // each instance — every renderable that fronts it shares them.
     struct basic_material : public material
     {
-        // @p frame_layout is the per-frame bind-group layout owned by
-        // the @ref scene_pass; it must match the layout the pass binds
-        // at slot 0 every frame so the pipeline and the runtime bind
-        // group agree on slot shape.
-        explicit basic_material(gpu::bind_group_layout frame_layout);
+        // @p tmpl is the shared basic template (see @ref create_template).
+        explicit basic_material(std::shared_ptr<material_template> tmpl);
         ~basic_material() override;
+
+        // The template every basic_material shares. @p frame_layout is
+        // the per-frame bind-group layout owned by the @ref scene_pass;
+        // it must match the layout the pass binds at slot 0 every frame
+        // so the pipelines and the runtime bind group agree on slot shape.
+        static std::shared_ptr<material_template> create_template(gpu::device& device,
+                                                                  gpu::bind_group_layout frame_layout);
 
         // Base colour tint. When an albedo texture is set the sampled
         // texel is multiplied by this tint (white leaves it unchanged).
@@ -65,10 +72,6 @@ namespace rendering_engine
         // Drop the albedo texture; the material falls back to the flat
         // tint. No-op when no texture is set.
         void clear_albedo();
-
-        // The per-material group trails the per-frame and per-draw
-        // groups, so it occupies slot 2 (per-frame at 0, per-draw at 1).
-        uint32_t per_material_slot() const override;
 
     private:
         // (Re)create the per-material bind group against the current

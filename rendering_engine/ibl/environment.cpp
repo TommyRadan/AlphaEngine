@@ -322,28 +322,6 @@ namespace rendering_engine
         }
     }
 
-    gpu::texture environment::skybox() const
-    {
-        return m_skybox;
-    }
-
-    gpu::texture environment::prefiltered() const
-    {
-        // The GPU path builds a dedicated GGX-convolved cube; the CPU
-        // fallback reuses the source mip chain as the specular source.
-        return m_prefiltered.valid() ? m_prefiltered : m_skybox;
-    }
-
-    gpu::texture environment::irradiance() const
-    {
-        return m_irradiance;
-    }
-
-    gpu::texture environment::brdf_lut() const
-    {
-        return m_brdf_lut;
-    }
-
     void environment::build(uint32_t face_size, const std::array<std::vector<float>, 6>& faces)
     {
         upload_source(face_size, faces);

@@ -22,9 +22,12 @@
 
 #pragma once
 
+#include <memory>
+
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/gpu/types.hpp>
 #include <rendering_engine/materials/material.hpp>
+#include <rendering_engine/materials/material_template.hpp>
 #include <rendering_engine/util/color.hpp>
 #include <rendering_engine/util/image.hpp>
 
@@ -38,18 +41,22 @@ namespace rendering_engine
     //
     // Slot layout matches the other 3D materials: the per-frame group
     // at slot 0 (camera + lights, owned by the @ref scene_pass) and the
-    // per-draw group at slot 1 (@c modelMatrix, built by each
+    // per-draw group at slot 1 (model + normal matrix, built by each
     // renderable), so renderables need no changes. The diffuse /
     // specular params and the optional diffuse map live in the
-    // per-material group at slot 2 owned by this material.
+    // per-material group at slot 2 owned by each instance.
     struct phong_material : public material
     {
-        // @p frame_layout is the per-frame bind-group layout owned by
-        // the @ref scene_pass; it must match the layout the pass binds
-        // at slot 0 every frame so the pipeline and the runtime bind
-        // group agree on slot shape.
-        explicit phong_material(gpu::bind_group_layout frame_layout);
+        // @p tmpl is the shared phong template (see @ref create_template).
+        explicit phong_material(std::shared_ptr<material_template> tmpl);
         ~phong_material() override;
+
+        // The template every phong_material shares. @p frame_layout is
+        // the per-frame bind-group layout owned by the @ref scene_pass;
+        // it must match the layout the pass binds at slot 0 every frame
+        // so the pipelines and the runtime bind group agree on slot shape.
+        static std::shared_ptr<material_template> create_template(gpu::device& device,
+                                                                  gpu::bind_group_layout frame_layout);
 
         // Base diffuse (Lambertian) colour. When a diffuse map is set
         // the sampled texel modulates this tint (white leaves it
@@ -75,10 +82,6 @@ namespace rendering_engine
         // Drop the diffuse texture; the material falls back to the flat
         // diffuse tint. No-op when no map is set.
         void clear_diffuse_map();
-
-        // The per-material group trails the per-frame and per-draw
-        // groups, so it occupies slot 2 (per-frame at 0, per-draw at 1).
-        uint32_t per_material_slot() const override;
 
     private:
         // (Re)create the per-material bind group against the current

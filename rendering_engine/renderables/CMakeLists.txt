@@ -8,6 +8,8 @@ target_sources(AlphaEngine PRIVATE
     mesh_bounds.hpp
     model.cpp
     model.hpp
+    per_draw_ubo.cpp
+    per_draw_ubo.hpp
     points.cpp
     points.hpp
     renderable.hpp

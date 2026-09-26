@@ -22,105 +22,34 @@
 
 #include <rendering_engine/materials/material.hpp>
 
+#include <utility>
+
 #include <rendering_engine/gpu/device.hpp>
-#include <rendering_engine/gpu/shader_compiler.hpp>
-#include <runtime/engine.hpp>
-
-namespace
-{
-    using rendering_engine::blend_mode;
-    using rendering_engine::material_params;
-    namespace gpu = rendering_engine::gpu;
-
-    gpu::depth_state to_depth_state(const material_params& params)
-    {
-        gpu::depth_state depth{};
-        depth.test_enabled = params.depth_test;
-        depth.write_enabled = params.depth_write;
-        depth.compare = params.depth_test ? gpu::compare_function::less : gpu::compare_function::always;
-        return depth;
-    }
-
-    gpu::blend_state to_blend_state(const material_params& params)
-    {
-        gpu::blend_state blend{};
-        blend.enabled = params.transparent && params.blending != blend_mode::none;
-        if (!blend.enabled)
-        {
-            return blend;
-        }
-
-        blend.op = gpu::blend_op::add;
-        switch (params.blending)
-        {
-        case blend_mode::additive:
-            blend.src = gpu::blend_factor::src_alpha;
-            blend.dst = gpu::blend_factor::one;
-            break;
-        case blend_mode::subtractive:
-            blend.src = gpu::blend_factor::zero;
-            blend.dst = gpu::blend_factor::one_minus_src_color;
-            break;
-        case blend_mode::multiply:
-            blend.src = gpu::blend_factor::zero;
-            blend.dst = gpu::blend_factor::src_color;
-            break;
-        case blend_mode::normal:
-        case blend_mode::none:
-            blend.src = gpu::blend_factor::src_alpha;
-            blend.dst = gpu::blend_factor::one_minus_src_alpha;
-            break;
-        }
-        return blend;
-    }
-
-    gpu::rasterizer_state to_rasterizer_state(const material_params& params)
-    {
-        gpu::rasterizer_state rasterizer{};
-        rasterizer.cull = params.double_sided ? gpu::cull_mode::none : gpu::cull_mode::back;
-        rasterizer.front = gpu::front_face::counter_clockwise;
-        rasterizer.polygon = params.wireframe ? gpu::polygon_mode::line : gpu::polygon_mode::fill;
-        return rasterizer;
-    }
-
-    uint32_t scalar_size(gpu::scalar_type type)
-    {
-        switch (type)
-        {
-        case gpu::scalar_type::float32:
-        case gpu::scalar_type::int32:
-        case gpu::scalar_type::uint32:
-            return 4;
-        case gpu::scalar_type::int16:
-        case gpu::scalar_type::uint16:
-            return 2;
-        case gpu::scalar_type::int8:
-        case gpu::scalar_type::uint8:
-            return 1;
-        }
-        return 4;
-    }
-
-    // Byte extent of the furthest-reaching attribute in @p layout: the
-    // narrowest vertex record the layout can be bound over without any
-    // attribute fetch running past the end of the vertex.
-    uint32_t layout_extent(const gpu::vertex_buffer_layout& layout)
-    {
-        uint32_t extent = 0;
-        for (const auto& attribute : layout.attributes)
-        {
-            const uint32_t end = attribute.offset + attribute.components * scalar_size(attribute.type);
-            extent = end > extent ? end : extent;
-        }
-        return extent;
-    }
-} // namespace
+#include <rendering_engine/gpu/texture.hpp>
+#include <rendering_engine/materials/material_template.hpp>
+#include <rendering_engine/util/color.hpp>
 
 namespace rendering_engine
 {
+    material::material(std::shared_ptr<material_template> tmpl, const material_params& params, uint32_t keywords)
+        : m_template(std::move(tmpl)), m_params(params), m_keywords(keywords)
+    {
+        rebind_variant();
+        m_template->register_instance(this);
+    }
+
     material::~material()
     {
-        destruct_pipeline();
+        // Instances are released while the device is live (before
+        // rendering_engine::context::quit tears it down); the template
+        // they share outlives them through the shared handle.
+        m_template->unregister_instance(this);
+        release_per_material_bind_group();
+    }
+
+    material_template& material::get_template() const
+    {
+        return *m_template;
     }
 
     gpu::pipeline material::pipeline() const
@@ -128,29 +57,105 @@ namespace rendering_engine
         return m_pipeline;
     }
 
+    gpu::pipeline material::pipeline(bool mirrored)
+    {
+        if (!mirrored)
+        {
+            return m_pipeline;
+        }
+        if (!m_mirrored_pipeline.valid())
+        {
+            pipeline_variant_key mirrored_key = m_key;
+            mirrored_key.front = gpu::front_face::clockwise;
+            m_mirrored_pipeline = m_template->pipeline(mirrored_key);
+        }
+        return m_mirrored_pipeline;
+    }
+
+    const pipeline_variant_key& material::variant_key() const
+    {
+        return m_key;
+    }
+
     const material_params& material::params() const
     {
         return m_params;
     }
 
+    uint32_t material::keywords() const
+    {
+        return m_keywords;
+    }
+
+    void material::set_params(const material_params& params)
+    {
+        m_params = params;
+        rebind_variant();
+        on_params_changed();
+    }
+
+    void material::set_transparent(bool transparent)
+    {
+        material_params params = m_params;
+        params.transparent = transparent;
+        set_params(params);
+    }
+
+    void material::set_opacity(float opacity)
+    {
+        material_params params = m_params;
+        params.opacity = opacity;
+        set_params(params);
+    }
+
+    void material::set_double_sided(bool double_sided)
+    {
+        material_params params = m_params;
+        params.double_sided = double_sided;
+        set_params(params);
+    }
+
+    void material::set_blending(blend_mode blending)
+    {
+        material_params params = m_params;
+        params.blending = blending;
+        set_params(params);
+    }
+
+    void material::set_wireframe(bool wireframe)
+    {
+        material_params params = m_params;
+        params.wireframe = wireframe;
+        set_params(params);
+    }
+
+    void material::set_depth_test(bool depth_test)
+    {
+        material_params params = m_params;
+        params.depth_test = depth_test;
+        set_params(params);
+    }
+
+    void material::set_depth_write(bool depth_write)
+    {
+        material_params params = m_params;
+        params.depth_write = depth_write;
+        set_params(params);
+    }
+
     gpu::bind_group_layout material::per_draw_layout() const
     {
-        return m_per_draw_layout;
+        return m_template->per_draw_layout();
     }
 
     uint32_t material::per_draw_slot() const
     {
-        return m_has_frame_layout ? 1u : 0u;
+        return m_template->per_draw_slot();
     }
 
-    vertex_format material::required_vertex_format() const
+    uint32_t material::per_material_slot() const
     {
-        return m_vertex_format;
-    }
-
-    uint32_t material::min_vertex_stride() const
-    {
-        return m_min_vertex_stride;
+        return m_template->per_material_slot();
     }
 
     gpu::bind_group material::per_material_bind_group() const
@@ -158,173 +163,91 @@ namespace rendering_engine
         return m_per_material_bind_group;
     }
 
-    uint32_t material::per_material_slot() const
+    vertex_format material::required_vertex_format() const
     {
-        return per_draw_slot();
+        return m_template->required_vertex_format(m_key.keywords);
     }
 
-    void material::construct_pipeline(const gpu::shader_variant& vertex_shader,
-                                      const gpu::shader_variant& fragment_shader,
-                                      const gpu::vertex_buffer_layout& vertex_layout,
-                                      const gpu::bind_group_layout_descriptor& draw_layout,
-                                      gpu::bind_group_layout frame_layout,
-                                      const material_params& params,
-                                      const gpu::bind_group_layout_descriptor& material_layout,
-                                      gpu::primitive_topology topology)
+    uint32_t material::min_vertex_stride() const
     {
-        construct_pipeline(vertex_shader,
-                           fragment_shader,
-                           std::vector<gpu::vertex_buffer_layout>{vertex_layout},
-                           draw_layout,
-                           frame_layout,
-                           params,
-                           material_layout,
-                           topology);
+        return m_template->min_vertex_stride(m_key.keywords);
     }
 
-    void material::construct_pipeline(const gpu::shader_variant& vertex_shader,
-                                      const gpu::shader_variant& fragment_shader,
-                                      const std::vector<gpu::vertex_buffer_layout>& vertex_layouts,
-                                      const gpu::bind_group_layout_descriptor& draw_layout,
-                                      gpu::bind_group_layout frame_layout,
-                                      const material_params& params,
-                                      const gpu::bind_group_layout_descriptor& material_layout,
-                                      gpu::primitive_topology topology)
+    gpu::device& material::device() const
     {
-        m_params = params;
-        construct_pipeline(vertex_shader,
-                           fragment_shader,
-                           vertex_layouts,
-                           draw_layout,
-                           frame_layout,
-                           to_depth_state(params),
-                           to_blend_state(params),
-                           to_rasterizer_state(params),
-                           material_layout,
-                           topology);
+        return m_template->device();
     }
 
-    void material::construct_pipeline(const gpu::shader_variant& vertex_shader,
-                                      const gpu::shader_variant& fragment_shader,
-                                      const gpu::vertex_buffer_layout& vertex_layout,
-                                      const gpu::bind_group_layout_descriptor& draw_layout,
-                                      gpu::bind_group_layout frame_layout,
-                                      const gpu::depth_state& depth,
-                                      const gpu::blend_state& blend,
-                                      const gpu::rasterizer_state& rasterizer,
-                                      const gpu::bind_group_layout_descriptor& material_layout,
-                                      gpu::primitive_topology topology)
+    void material::set_keyword(material_keyword keyword, bool enabled)
     {
-        construct_pipeline(vertex_shader,
-                           fragment_shader,
-                           std::vector<gpu::vertex_buffer_layout>{vertex_layout},
-                           draw_layout,
-                           frame_layout,
-                           depth,
-                           blend,
-                           rasterizer,
-                           material_layout,
-                           topology);
+        const uint32_t bit = keyword_bit(keyword);
+        set_keywords(enabled ? (m_keywords | bit) : (m_keywords & ~bit));
     }
 
-    void material::construct_pipeline(const gpu::shader_variant& vertex_shader,
-                                      const gpu::shader_variant& fragment_shader,
-                                      const std::vector<gpu::vertex_buffer_layout>& vertex_layouts,
-                                      const gpu::bind_group_layout_descriptor& draw_layout,
-                                      gpu::bind_group_layout frame_layout,
-                                      const gpu::depth_state& depth,
-                                      const gpu::blend_state& blend,
-                                      const gpu::rasterizer_state& rasterizer,
-                                      const gpu::bind_group_layout_descriptor& material_layout,
-                                      gpu::primitive_topology topology)
+    void material::set_keywords(uint32_t keywords)
     {
-        auto& gpu = *runtime::current_engine().gpu;
-
-        gpu::shader_module_descriptor vs_descriptor{};
-        vs_descriptor.stage = gpu::shader_stage::vertex;
-        vs_descriptor.spirv = gpu::compile_library_shader(vertex_shader, gpu::shader_stage::vertex);
-        m_vertex_shader = gpu.create_shader_module(vs_descriptor);
-
-        gpu::shader_module_descriptor fs_descriptor{};
-        fs_descriptor.stage = gpu::shader_stage::fragment;
-        fs_descriptor.spirv = gpu::compile_library_shader(fragment_shader, gpu::shader_stage::fragment);
-        m_fragment_shader = gpu.create_shader_module(fs_descriptor);
-
-        m_per_draw_layout = gpu.create_bind_group_layout(draw_layout);
-        m_has_frame_layout = frame_layout.valid();
-
-        // Slot 0 is the per-vertex geometry stream every renderable binds
-        // (a per-instance stream, if any, lives in slot 1 and is owned by
-        // the renderable that declares it).
-        m_min_vertex_stride = vertex_layouts.empty() ? 0u : layout_extent(vertex_layouts.front());
-
-        // The trailing per-material descriptor set is optional; only
-        // create it when the subclass asked for one. Its set index is
-        // whatever comes after the per-frame (if any) and per-draw
-        // layouts, so subclasses must report that slot via
-        // @ref per_material_slot.
-        if (!material_layout.entries.empty())
+        if (keywords == m_keywords)
         {
-            m_per_material_layout = gpu.create_bind_group_layout(material_layout);
+            return;
         }
-
-        gpu::pipeline_descriptor pipeline_descriptor{};
-        pipeline_descriptor.vertex_shader = m_vertex_shader;
-        pipeline_descriptor.fragment_shader = m_fragment_shader;
-        pipeline_descriptor.vertex_buffers = vertex_layouts;
-        pipeline_descriptor.topology = topology;
-        pipeline_descriptor.depth = depth;
-        pipeline_descriptor.blend = blend;
-        pipeline_descriptor.rasterizer = rasterizer;
-        if (m_has_frame_layout)
-        {
-            pipeline_descriptor.bind_group_layouts.push_back(frame_layout);
-        }
-        pipeline_descriptor.bind_group_layouts.push_back(m_per_draw_layout);
-        if (m_per_material_layout.valid())
-        {
-            pipeline_descriptor.bind_group_layouts.push_back(m_per_material_layout);
-        }
-
-        m_pipeline = gpu.create_pipeline(pipeline_descriptor);
+        m_keywords = keywords;
+        rebind_variant();
     }
 
-    void material::destruct_pipeline()
+    void material::release_per_material_bind_group()
     {
-        // Materials are released in @ref rendering_engine::context::quit
-        // before the device tears its pools down, so the device is live
-        // here. Callers that construct/destruct materials outside that
-        // lifecycle must arrange the same ordering.
-        auto& gpu = *runtime::current_engine().gpu;
         if (m_per_material_bind_group.valid())
         {
-            gpu.destroy(m_per_material_bind_group);
+            device().destroy(m_per_material_bind_group);
             m_per_material_bind_group = {};
         }
-        if (m_pipeline.valid())
+    }
+
+    gpu::texture material::upload_map(const util::image& image, gpu::color_space space, gpu::address_mode address) const
+    {
+        auto& gpu = device();
+
+        gpu::texture_descriptor descriptor{};
+        descriptor.dimension = gpu::texture_dimension::d2;
+        descriptor.format = gpu::rgba8_format(space);
+        descriptor.width = image.get_width();
+        descriptor.height = image.get_height();
+        descriptor.mipmaps = true;
+        descriptor.min_filter = gpu::filter_mode::linear;
+        descriptor.mag_filter = gpu::filter_mode::linear;
+        descriptor.address_u = address;
+        descriptor.address_v = address;
+        descriptor.address_w = address;
+        gpu::texture map = gpu.create_texture(descriptor);
+
+        const size_t pixel_bytes =
+            static_cast<size_t>(image.get_width()) * static_cast<size_t>(image.get_height()) * sizeof(util::color);
+        gpu.write_texture(map, image.get_pixels(), pixel_bytes);
+        gpu.generate_mipmaps(map);
+        return map;
+    }
+
+    void material::release_map(gpu::texture& map) const
+    {
+        if (!map.valid())
         {
-            gpu.destroy(m_pipeline);
-            m_pipeline = {};
+            return;
         }
-        if (m_per_material_layout.valid())
+        device().destroy(map);
+        map = {};
+    }
+
+    void material::rebind_variant()
+    {
+        const pipeline_variant_key key = make_pipeline_variant_key(m_params, m_keywords);
+        if (key == m_key && m_pipeline.valid())
         {
-            gpu.destroy(m_per_material_layout);
-            m_per_material_layout = {};
+            return;
         }
-        if (m_per_draw_layout.valid())
-        {
-            gpu.destroy(m_per_draw_layout);
-            m_per_draw_layout = {};
-        }
-        if (m_vertex_shader.valid())
-        {
-            gpu.destroy(m_vertex_shader);
-            m_vertex_shader = {};
-        }
-        if (m_fragment_shader.valid())
-        {
-            gpu.destroy(m_fragment_shader);
-            m_fragment_shader = {};
-        }
+        m_key = key;
+        m_pipeline = m_template->pipeline(key);
+        // The clockwise twin belongs to the old key; the next mirrored
+        // draw resolves it again through the cache.
+        m_mirrored_pipeline = {};
     }
 } // namespace rendering_engine

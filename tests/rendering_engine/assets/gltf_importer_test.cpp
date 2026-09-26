@@ -1,7 +1,8 @@
 // Unit tests for rendering_engine::load_gltf: geometry (record format,
 // stride, index widening, generated flat normals / tangents, bounds), the
 // node tree (TRS, matrix decomposition, parents / children, roots, multi-
-// primitive meshes), materials (factors, maps, the metallic-roughness split)
+// primitive meshes), materials (factors, maps, the packed metallic-roughness
+// texture passed through as the ORM map, shared or separate occlusion)
 // through a recording gltf_material_factory, textures through the asset cache
 // in the colour space their slot implies, and the three container forms:
 // .gltf with data URIs, .gltf with external files, and .glb. Files are written
@@ -38,7 +39,8 @@ namespace
 
     // A 2x2 RGBA PNG whose texels are (10,20,30), (40,50,60) on the top row
     // and (70,80,90), (100,110,120) on the bottom, all opaque. Distinct R/G/B
-    // per texel so the metallic (B) / roughness (G) split is observable.
+    // per texel so the occlusion (R) / roughness (G) / metallic (B) channels
+    // of the packed map can be told apart.
     const std::vector<std::uint8_t> k_png{
         0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, 0x00,
         0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x02, 0x08, 0x06, 0x00, 0x00, 0x00, 0x72, 0xb6, 0x0d, 0x24, 0x00,
@@ -194,9 +196,13 @@ namespace
         rendering_engine::gpu::color_space base_color_space;
         std::optional<rendering_engine::util::image> base_color_map;
         std::optional<rendering_engine::util::image> normal_map;
-        std::optional<rendering_engine::util::image> metallic_map;
-        std::optional<rendering_engine::util::image> roughness_map;
+        std::optional<rendering_engine::util::image> metallic_roughness_map;
+        std::optional<rendering_engine::util::image> occlusion_map;
         std::optional<rendering_engine::util::image> emissive_map;
+        // Whether the occlusion texture named the very image the packed
+        // metallic-roughness map did (the factory then reads its R).
+        bool occlusion_shares_metallic_roughness{false};
+        float occlusion_strength{1.0f};
     };
 
     // Stands in for the renderer-backed factory: copies what the importer
@@ -221,9 +227,12 @@ namespace
             { return image != nullptr ? std::optional{*image} : std::nullopt; };
             record.base_color_map = copy(description.base_color_map);
             record.normal_map = copy(description.normal_map);
-            record.metallic_map = copy(description.metallic_map);
-            record.roughness_map = copy(description.roughness_map);
+            record.metallic_roughness_map = copy(description.metallic_roughness_map);
+            record.occlusion_map = copy(description.occlusion_map);
             record.emissive_map = copy(description.emissive_map);
+            record.occlusion_shares_metallic_roughness = description.occlusion_map != nullptr &&
+                                                        description.occlusion_map == description.metallic_roughness_map;
+            record.occlusion_strength = description.occlusion_strength;
             records.push_back(std::move(record));
             return nullptr;
         }
@@ -523,7 +532,7 @@ TEST_F(gltf_importer_test, a_primitive_without_a_material_gets_the_default_mater
     EXPECT_FALSE(record.base_color_map.has_value());
 }
 
-TEST_F(gltf_importer_test, materials_carry_their_factors_and_maps_and_split_the_orm_texture)
+TEST_F(gltf_importer_test, materials_carry_their_factors_and_maps_and_pass_the_packed_orm_texture)
 {
     // One embedded PNG sampled by four textures in four slots.
     const std::string extra = R"("images": [{"uri": ")" + data_uri(k_png, "image/png") + R"("}],
@@ -574,15 +583,18 @@ TEST_F(gltf_importer_test, materials_carry_their_factors_and_maps_and_split_the_
     ASSERT_TRUE(record.normal_map.has_value());
     ASSERT_TRUE(record.emissive_map.has_value());
 
-    // glTF packs metalness in B and roughness in G; the material samples .r
-    // of two separate maps, so the importer splits them out.
-    ASSERT_TRUE(record.metallic_map.has_value());
-    ASSERT_TRUE(record.roughness_map.has_value());
-    EXPECT_EQ(record.metallic_map->get_pixel(0, 0).r, 30);
-    EXPECT_EQ(record.metallic_map->get_pixel(1, 1).r, 120);
-    EXPECT_EQ(record.roughness_map->get_pixel(0, 0).r, 20);
-    EXPECT_EQ(record.roughness_map->get_pixel(1, 0).r, 50);
-    EXPECT_EQ(record.metallic_map->get_pixel(0, 0).a, 255);
+    // glTF packs roughness in G and metalness in B; that is the material's
+    // ORM layout, so the decoded image passes through untouched.
+    ASSERT_TRUE(record.metallic_roughness_map.has_value());
+    EXPECT_EQ(record.metallic_roughness_map->get_pixel(0, 0).g, 20);
+    EXPECT_EQ(record.metallic_roughness_map->get_pixel(0, 0).b, 30);
+    EXPECT_EQ(record.metallic_roughness_map->get_pixel(1, 0).g, 50);
+    EXPECT_EQ(record.metallic_roughness_map->get_pixel(1, 1).b, 120);
+    // No occlusion texture: nothing shares the packed R, and the strength
+    // stays at its default (the factory mutes the R channel itself).
+    EXPECT_FALSE(record.occlusion_map.has_value());
+    EXPECT_FALSE(record.occlusion_shares_metallic_roughness);
+    EXPECT_NEAR(record.occlusion_strength, 1.0f, k_eps);
 
     // The cache textures are uploaded in the colour space their slot
     // implies: base colour / emissive as sRGB, data maps as linear — and the
@@ -601,6 +613,61 @@ TEST_F(gltf_importer_test, materials_carry_their_factors_and_maps_and_split_the_
     EXPECT_EQ(model.textures[1].get(), model.textures[2].get());
     EXPECT_EQ(cache.texture_count(), 2u);
     EXPECT_EQ(device.created_textures, 2u);
+}
+
+TEST_F(gltf_importer_test, an_occlusion_texture_sharing_the_packed_image_is_reported_as_its_r_channel)
+{
+    // The usual ORM packing: one texture for both slots, plus a strength.
+    const std::string extra = R"("images": [{"uri": ")" + data_uri(k_png, "image/png") + R"("}],
+  "textures": [{"source": 0}],
+  "materials": [{
+    "name": "orm",
+    "pbrMetallicRoughness": {"metallicRoughnessTexture": {"index": 0}},
+    "occlusionTexture": {"index": 0, "strength": 0.5}
+  }])";
+    const auto model = load(write("orm.gltf",
+                                  triangle_gltf(data_uri(triangle_bytes(), "application/octet-stream"),
+                                                extra,
+                                                "\"material\": 0")));
+
+    ASSERT_EQ(factory.records.size(), 1u);
+    const auto& record = factory.records[0];
+    ASSERT_TRUE(record.metallic_roughness_map.has_value());
+    ASSERT_TRUE(record.occlusion_map.has_value());
+    EXPECT_TRUE(record.occlusion_shares_metallic_roughness);
+    EXPECT_EQ(record.occlusion_map->get_pixel(0, 0).r, 10);
+    EXPECT_EQ(record.occlusion_map->get_pixel(1, 1).r, 100);
+    EXPECT_NEAR(record.occlusion_strength, 0.5f, k_eps);
+
+    // One data texture in the cache, uploaded linear.
+    ASSERT_EQ(model.textures.size(), 1u);
+    ASSERT_NE(model.textures[0], nullptr);
+    EXPECT_EQ(model.textures[0]->format, rendering_engine::gpu::texture_format::rgba8_unorm);
+    EXPECT_EQ(device.created_textures, 1u);
+}
+
+TEST_F(gltf_importer_test, a_separate_occlusion_texture_is_passed_beside_the_packed_map)
+{
+    // The same PNG embedded twice is two glTF images, decoded apart, so the
+    // occlusion map is a different image from the packed one.
+    const std::string png = data_uri(k_png, "image/png");
+    const std::string extra = R"("images": [{"uri": ")" + png + R"("}, {"uri": ")" + png + R"("}],
+  "textures": [{"source": 0}, {"source": 1}],
+  "materials": [{
+    "name": "separate",
+    "pbrMetallicRoughness": {"metallicRoughnessTexture": {"index": 0}},
+    "occlusionTexture": {"index": 1}
+  }])";
+    load(write("separate.gltf",
+               triangle_gltf(data_uri(triangle_bytes(), "application/octet-stream"), extra, "\"material\": 0")));
+
+    ASSERT_EQ(factory.records.size(), 1u);
+    const auto& record = factory.records[0];
+    ASSERT_TRUE(record.metallic_roughness_map.has_value());
+    ASSERT_TRUE(record.occlusion_map.has_value());
+    EXPECT_FALSE(record.occlusion_shares_metallic_roughness);
+    EXPECT_EQ(record.occlusion_map->get_pixel(0, 0).r, 10);
+    EXPECT_NEAR(record.occlusion_strength, 1.0f, k_eps) << "strength defaults to 1 when the file omits it";
 }
 
 TEST_F(gltf_importer_test, base_color_space_option_selects_the_albedo_upload_format)
