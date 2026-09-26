@@ -29,6 +29,7 @@
 #include <core/log.hpp>
 #include <core/math/math.hpp>
 #include <rendering_engine/assets/asset_cache.hpp>
+#include <rendering_engine/assets/cache_key.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/materials/material.hpp>
@@ -76,9 +77,9 @@ void rendering_engine::box::upload()
     // segment counts so two boxes of the same geometry share one upload. The
     // builder only runs on a cache miss.
     m_mesh = runtime::current_engine().assets->get_or_create_mesh(
-        "box:" + std::to_string(m_width) + "x" + std::to_string(m_height) + "x" + std::to_string(m_depth) + ":" +
-            std::to_string(m_width_segments) + "x" + std::to_string(m_height_segments) + "x" +
-            std::to_string(m_depth_segments) + ":" + vertex_format_name(vertex_format::position_uv_normal_tangent),
+        "box:" + cache_key_number(m_width) + "x" + cache_key_number(m_height) + "x" + cache_key_number(m_depth) + ":" +
+            cache_key_number(m_width_segments) + "x" + cache_key_number(m_height_segments) + "x" +
+            cache_key_number(m_depth_segments) + ":" + vertex_format_name(vertex_format::position_uv_normal_tangent),
         [this]
         {
             using core::math::vec2;

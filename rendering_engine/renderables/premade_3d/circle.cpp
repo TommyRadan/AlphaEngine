@@ -29,6 +29,7 @@
 #include <core/log.hpp>
 #include <core/math/math.hpp>
 #include <rendering_engine/assets/asset_cache.hpp>
+#include <rendering_engine/assets/cache_key.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/materials/material.hpp>
@@ -68,8 +69,9 @@ void rendering_engine::circle::upload()
     // parameter so two circles with identical parameters share one upload. The
     // builder only runs on a cache miss.
     m_mesh = runtime::current_engine().assets->get_or_create_mesh(
-        "circle:" + std::to_string(m_radius) + ":" + std::to_string(m_segments) + ":" + std::to_string(m_theta_start) +
-            ":" + std::to_string(m_theta_length) + ":" + vertex_format_name(vertex_format::position_uv_normal_tangent),
+        "circle:" + cache_key_number(m_radius) + ":" + cache_key_number(m_segments) + ":" +
+            cache_key_number(m_theta_start) + ":" + cache_key_number(m_theta_length) + ":" +
+            vertex_format_name(vertex_format::position_uv_normal_tangent),
         [this]
         {
             const unsigned int segments = m_segments < 3 ? 3 : m_segments;

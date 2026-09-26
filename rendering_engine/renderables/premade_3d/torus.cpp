@@ -29,6 +29,7 @@
 #include <core/log.hpp>
 #include <core/math/math.hpp>
 #include <rendering_engine/assets/asset_cache.hpp>
+#include <rendering_engine/assets/cache_key.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/materials/material.hpp>
@@ -69,9 +70,9 @@ void rendering_engine::torus::upload()
     // parameters so two tori of the same shape share one upload. The builder
     // only runs on a cache miss.
     m_mesh = runtime::current_engine().assets->get_or_create_mesh(
-        "torus:" + std::to_string(m_radius) + ":" + std::to_string(m_tube) + ":" + std::to_string(m_radial_segments) +
-            "x" + std::to_string(m_tubular_segments) + ":" + std::to_string(m_arc) + ":" +
-            vertex_format_name(vertex_format::position_uv_normal_tangent),
+        "torus:" + cache_key_number(m_radius) + ":" + cache_key_number(m_tube) + ":" +
+            cache_key_number(m_radial_segments) + "x" + cache_key_number(m_tubular_segments) + ":" +
+            cache_key_number(m_arc) + ":" + vertex_format_name(vertex_format::position_uv_normal_tangent),
         [this]
         {
             // One extra ring/column of vertices so UVs and the seam wrap cleanly.

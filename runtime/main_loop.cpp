@@ -26,6 +26,7 @@
 #include <utility>
 
 #include <core/log.hpp>
+#include <core/platform/platform.hpp>
 #include <core/settings.hpp>
 #include <core/settings_parse.hpp>
 #include <rendering_engine/window.hpp>
@@ -72,11 +73,23 @@ namespace
             LOG_ERR("Subsystem teardown failed during error shutdown");
         }
     }
+
+    // The crash hook runs inside a signal handler, so it stays within what is
+    // safe there: one line to stderr. Every logged line is already flushed to
+    // engine.log as it is written, so nothing else is lost.
+    void on_crash(const char* reason)
+    {
+        std::fputs("AlphaEngine: fatal ", stderr);
+        std::fputs(reason, stderr);
+        std::fputs("\n", stderr);
+        std::fflush(stderr);
+    }
 } // namespace
 
 int main(int argc, char* argv[])
 {
     LOG_INIT(argc, argv);
+    core::platform::install_crash_handler(&on_crash);
 
     // Resolve the configuration before anything else exists: compiled
     // defaults, the settings file, the environment, then the command line

@@ -22,14 +22,18 @@
 
 #include <runtime/engine.hpp>
 
+#include <cstddef>
+#include <filesystem>
 #include <stdexcept>
 #include <utility>
 
 #include <core/event_engine.hpp>
 #include <core/jobs.hpp>
 #include <core/log.hpp>
+#include <core/platform/platform.hpp>
 #include <core/settings.hpp>
 #include <core/time.hpp>
+#include <core/vfs/vfs.hpp>
 #include <rendering_engine/assets/asset_cache.hpp>
 #include <rendering_engine/assets/asset_device.hpp>
 #include <rendering_engine/debug_ui/imgui_layer.hpp>
@@ -110,6 +114,10 @@ namespace runtime
         // constructed after the device; its loaders are only usable once the
         // device is brought up in init().
         assets = std::make_unique<rendering_engine::asset_cache>();
+        // Asynchronous loads decode on the worker pool; the pool outlives the
+        // cache (it is destroyed after it, below), and the cache waits for
+        // its in-flight decodes before it goes.
+        assets->set_jobs(jobs.get());
         // The built-in materials inside @c renderer are deferred
         // until init() because they compile GL shader programs and
         // need the GL context to be live first.
@@ -157,6 +165,15 @@ namespace runtime
         // now-live event bus before anything broadcasts.
         install_pending_game_modules();
 
+        // Mount the asset root before anything loads a file: the configured
+        // directory when one is set, else the discovered default beside the
+        // executable (or in one of its parents).
+        const std::filesystem::path asset_root = settings->assets.root.empty()
+                                                     ? core::platform::asset_root()
+                                                     : core::platform::utf8_path(settings->assets.root);
+        LOG_INF("Asset root: %s", core::platform::path_to_utf8(asset_root).c_str());
+        core::default_vfs().mount_directory(asset_root);
+
         renderer->init();
         // The renderer brings the gpu device up, so the asset cache — whose
         // loaders need a live device — is initialised right after it. Publish
@@ -176,8 +193,16 @@ namespace runtime
     void engine::quit()
     {
         scenes->quit();
+        // Scene teardown is where the bulk of the asset handles drop; reclaim
+        // the index slots they leave behind before the cache itself goes.
+        const std::size_t swept = assets->collect_unused();
+        if (swept != 0)
+        {
+            LOG_INF("Asset cache: swept %zu expired entries at scene teardown", swept);
+        }
         assets->quit();
         renderer->quit();
+        core::default_vfs().unmount_all();
         m_quit_subscription.reset();
         events->quit();
     }
@@ -199,6 +224,11 @@ namespace runtime
         // last tick, now that this frame's input has been pumped and before
         // the fixed-step updates consume it.
         events->flush();
+
+        // Resolve the asynchronous asset loads whose decodes have landed —
+        // the device upload happens here, on the main thread — so a texture
+        // that finished decoding is drawn this frame.
+        assets->pump();
 
         // Fixed-step update, decoupled from the render rate. Feed the time
         // elapsed since the previous frame into the accumulator, then drain

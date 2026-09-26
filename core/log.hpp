@@ -22,7 +22,7 @@
 
 /**
  * @file log.hpp
- * @brief Printf-style logging facade backed by SDL's logging API.
+ * @brief Printf-style logging facade: stderr, an engine.log mirror beside the executable, and an in-memory ring.
  *
  * Prefer the @c LOG_TRC / @c LOG_DBG / @c LOG_INF / @c LOG_WRN / @c LOG_ERR / @c LOG_FTL macros over calling
  * @ref core::logging::message directly — they capture the originating @c __FILE__ / @c __LINE__ and the
@@ -139,7 +139,8 @@ namespace core
         inline constexpr std::size_t k_recent_capacity = 512;
 
         /**
-         * @brief Initializes the logging system: installs the SDL output callback, stashes the command line
+         * @brief Initializes the logging system: captures the platform library's own messages (through
+         * @c core::platform::set_native_log_sink, under the @c "sdl" category), stashes the command line
          * (see @ref arguments), resolves the level from the build type and @c ALPHAENGINE_LOG_LEVEL, and
          * registers @ref shutdown with @c atexit so the file sink is closed when the process exits.
          * @param argc The number of arguments

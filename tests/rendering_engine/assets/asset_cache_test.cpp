@@ -385,7 +385,7 @@ TEST_F(asset_cache_test, a_builder_supplied_box_overrides_the_computed_bounds)
     EXPECT_FLOAT_EQ(mesh->bounds.max.z, 9.0f);
 }
 
-TEST_F(asset_cache_test, empty_geometry_leaves_a_zero_box)
+TEST_F(asset_cache_test, empty_geometry_is_rejected_without_an_upload)
 {
     auto mesh = cache.get_or_create_mesh("empty",
                                          []
@@ -394,10 +394,9 @@ TEST_F(asset_cache_test, empty_geometry_leaves_a_zero_box)
                                              data.vertex_stride = sizeof(vertex);
                                              return data;
                                          });
-    ASSERT_NE(mesh, nullptr);
-    EXPECT_EQ(mesh->vertex_count, 0u);
-    EXPECT_FLOAT_EQ(mesh->bounds.min.x, 0.0f);
-    EXPECT_FLOAT_EQ(mesh->bounds.max.x, 0.0f);
+    EXPECT_EQ(mesh, nullptr);
+    EXPECT_EQ(device.created_buffers, 0u);
+    EXPECT_EQ(cache.mesh_count(), 0u);
 }
 
 TEST(mesh_data_bounds, compute_bounds_walks_every_record_at_the_stride)

@@ -77,8 +77,8 @@ namespace core
     using environment_getter = std::function<const char*(const char* name)>;
 
     /**
-     * @brief Applies the `ALPHAENGINE_WIDTH`, `_HEIGHT`, `_WINDOW_MODE`, `_VSYNC`, `_GRAPHICS_BACKEND` and
-     *        `_TAA` variables on top of @p out. An unset or empty variable leaves its setting as it is.
+     * @brief Applies the `ALPHAENGINE_WIDTH`, `_HEIGHT`, `_WINDOW_MODE`, `_VSYNC`, `_GRAPHICS_BACKEND`, `_TAA`
+     *        and `_ASSET_ROOT` variables on top of @p out. An unset or empty variable leaves its setting as it is.
      *        (`ALPHAENGINE_LOG_LEVEL` belongs to @ref core::logging::init.)
      */
     void apply_environment(settings& out, const environment_getter& get);
@@ -97,6 +97,8 @@ namespace core
 
         /** @brief The `--settings` override of the settings-file path. */
         std::optional<std::string> settings_path;
+        /** @brief The `--asset-root` override of @ref asset_settings::root. */
+        std::optional<std::string> asset_root;
 
         bool help_requested{false};
     };
@@ -109,7 +111,7 @@ namespace core
      */
     command_line_options parse_command_line(std::span<const char* const> args);
 
-    /** @brief Applies the window / graphics options present in @p options on top of @p out. */
+    /** @brief Applies the window / graphics / asset options present in @p options on top of @p out. */
     void apply_command_line(settings& out, const command_line_options& options);
 
     /** @brief The `--help` text. */

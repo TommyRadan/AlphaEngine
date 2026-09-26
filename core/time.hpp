@@ -34,7 +34,8 @@ namespace core
     /**
      * @brief Frame clock owned by @ref runtime::engine.
      *
-     * Backed by SDL's high-resolution performance counter. Call
+     * Backed by the platform layer's high-resolution performance counter
+     * (@c core::platform::performance_counter). Call
      * @ref perform_tick once per frame, at the top of the frame, so the
      * variable-rate accessors (@ref delta_time, @ref current_fps,
      * @ref frame_count) describe the frame being processed. Each instance
@@ -93,7 +94,7 @@ namespace core
          */
         double delta_time() const;
 
-        /** @brief Milliseconds since SDL was initialized. */
+        /** @brief Milliseconds since the platform library was initialized. */
         float total_time() const;
 
         /**

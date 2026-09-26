@@ -24,14 +24,11 @@
 
 #include <cstdlib>
 #include <filesystem>
-#include <fstream>
-#include <iterator>
 #include <string>
 #include <vector>
 
-#include <SDL3/SDL.h>
-
 #include <core/log.hpp>
+#include <core/platform/platform.hpp>
 #include <core/settings_parse.hpp>
 #include <core/version.hpp>
 
@@ -41,27 +38,17 @@ namespace core
     {
         constexpr const char* k_settings_file_name = "settings.json";
 
-        // SDL hands paths back as UTF-8; going through char8_t keeps that
-        // meaning on Windows, where a narrow std::filesystem::path would be
-        // read in the ANSI code page.
-        std::filesystem::path utf8_path(const std::string& path)
-        {
-            return std::filesystem::path{std::u8string(path.begin(), path.end())};
-        }
-
-        // <SDL pref path>/settings.json, or empty when the platform has no
-        // per-user directory for the application (SDL creates it on demand).
+        // <pref path>/settings.json, or empty when the platform has no
+        // per-user directory for the application (it is created on demand).
         std::string default_settings_path()
         {
-            char* pref_path = SDL_GetPrefPath("AlphaEngine", "AlphaEngine");
-            if (pref_path == nullptr)
+            const std::filesystem::path pref_path = platform::pref_path("AlphaEngine", "AlphaEngine");
+            if (pref_path.empty())
             {
-                LOG_WRN("settings: SDL_GetPrefPath failed (%s); no settings file will be read", SDL_GetError());
+                LOG_WRN("settings: no per-user preference directory; no settings file will be read");
                 return {};
             }
-            std::string path = std::string{pref_path} + k_settings_file_name;
-            SDL_free(pref_path);
-            return path;
+            return platform::path_to_utf8(pref_path / k_settings_file_name);
         }
 
         // Reads the file at `path` and applies it as a settings.json document.
@@ -70,13 +57,12 @@ namespace core
         // INFO line that names the file.
         void apply_settings_file(settings& out, const std::string& path)
         {
-            std::ifstream file{utf8_path(path), std::ios::binary};
-            if (!file.is_open())
+            std::string text;
+            if (!platform::read_text_file(platform::utf8_path(path), text))
             {
                 LOG_INF("Settings: no settings file at %s; continuing with the defaults", path.c_str());
                 return;
             }
-            const std::string text{std::istreambuf_iterator<char>{file}, std::istreambuf_iterator<char>{}};
             LOG_INF("Settings: reading %s", path.c_str());
             apply_json(out, text);
         }
@@ -200,7 +186,7 @@ namespace core
 
         const settings& s = result.values;
         LOG_INF("Settings resolved: window=%ux%u%s mode=%s vsync=%s double_buffered=%s backend=%s temporal_aa=%s "
-                "fov=%.1f mouse_sensitivity=%.4f mouse_reversed=%s title='%s'",
+                "fov=%.1f mouse_sensitivity=%.4f mouse_reversed=%s title='%s' asset_root='%s'",
                 s.window.width,
                 s.window.height,
                 s.window.uses_native_resolution() ? " (match the display)" : "",
@@ -212,7 +198,8 @@ namespace core
                 static_cast<double>(s.camera.field_of_view),
                 static_cast<double>(s.input.mouse_sensitivity),
                 on_off(s.input.mouse_reversed),
-                s.window.title.c_str());
+                s.window.title.c_str(),
+                s.assets.root.empty() ? "(discover)" : s.assets.root.c_str());
         return result;
     }
 } // namespace core

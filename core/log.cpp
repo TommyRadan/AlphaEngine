@@ -20,9 +20,6 @@
  * SOFTWARE.
  */
 
-#include <SDL3/SDL_filesystem.h>
-#include <SDL3/SDL_log.h>
-
 #include <algorithm>
 #include <atomic>
 #include <cctype>
@@ -31,13 +28,16 @@
 #include <cstdio>
 #include <cstdlib>
 #include <ctime>
+#include <filesystem>
 #include <mutex>
 #include <sstream>
 #include <string>
 #include <thread>
 #include <utility>
+#include <vector>
 
 #include <core/log.hpp>
+#include <core/platform/platform.hpp>
 #include <core/version.hpp>
 
 namespace
@@ -45,8 +45,8 @@ namespace
     using core::logging::record;
     using core::logging::verbosity;
 
-    // The category stamped on messages SDL emits itself; they arrive through the same output callback with no
-    // engine call site attached.
+    // The category stamped on messages the platform library (SDL) emits itself; they arrive through the platform
+    // layer's native log sink with no engine call site attached.
     constexpr const char* k_sdl_category = "sdl";
     constexpr const char* k_default_category = "engine";
     constexpr const char* k_level_environment_variable = "ALPHAENGINE_LOG_LEVEL";
@@ -56,20 +56,6 @@ namespace
 #else
     constexpr verbosity k_default_level = verbosity::info;
 #endif
-
-    // Per-message origin carried from the LOG_* macro down into the SDL log output callback. SDL's public logging
-    // API does not surface the level enum, the category or the call site of a message, so we stash them in
-    // thread-local storage for the duration of a single SDL_LogMessageV() invocation. `active` is false while a
-    // message SDL originated itself is being delivered.
-    struct origin
-    {
-        bool active = false;
-        verbosity level = verbosity::info;
-        const char* category = nullptr;
-        const char* file = nullptr;
-        unsigned line = 0;
-    };
-    thread_local origin tls_origin{};
 
     struct logging_state
     {
@@ -129,65 +115,52 @@ namespace
         return "???";
     }
 
-    SDL_LogPriority verbosity_to_sdl(verbosity level)
+    core::platform::native_log_level to_native(verbosity level)
     {
         switch (level)
         {
         case verbosity::trace:
-            return SDL_LOG_PRIORITY_VERBOSE;
+            return core::platform::native_log_level::trace;
         case verbosity::debug:
-            return SDL_LOG_PRIORITY_DEBUG;
+            return core::platform::native_log_level::debug;
         case verbosity::info:
-            return SDL_LOG_PRIORITY_INFO;
+            return core::platform::native_log_level::info;
         case verbosity::warn:
-            return SDL_LOG_PRIORITY_WARN;
+            return core::platform::native_log_level::warn;
         case verbosity::error:
-            return SDL_LOG_PRIORITY_ERROR;
+            return core::platform::native_log_level::error;
         case verbosity::fatal:
-            return SDL_LOG_PRIORITY_CRITICAL;
+            return core::platform::native_log_level::fatal;
         }
-        return SDL_LOG_PRIORITY_INFO;
+        return core::platform::native_log_level::info;
     }
 
-    verbosity verbosity_from_sdl(SDL_LogPriority priority)
+    verbosity from_native(core::platform::native_log_level level)
     {
-        switch (priority)
+        switch (level)
         {
-        case SDL_LOG_PRIORITY_TRACE:
-        case SDL_LOG_PRIORITY_VERBOSE:
+        case core::platform::native_log_level::trace:
             return verbosity::trace;
-        case SDL_LOG_PRIORITY_DEBUG:
+        case core::platform::native_log_level::debug:
             return verbosity::debug;
-        case SDL_LOG_PRIORITY_INFO:
+        case core::platform::native_log_level::info:
             return verbosity::info;
-        case SDL_LOG_PRIORITY_WARN:
+        case core::platform::native_log_level::warn:
             return verbosity::warn;
-        case SDL_LOG_PRIORITY_ERROR:
+        case core::platform::native_log_level::error:
             return verbosity::error;
-        case SDL_LOG_PRIORITY_CRITICAL:
+        case core::platform::native_log_level::fatal:
             return verbosity::fatal;
-        default:
-            return verbosity::info;
         }
+        return verbosity::info;
     }
 
-    // Mirrors the engine's level table into SDL's own priority filter. Every engine message travels through
-    // SDL_LOG_CATEGORY_APPLICATION, so that category is opened up to the most permissive level in effect anywhere
-    // (message() applies the precise per-category filter before SDL sees the call); SDL's internal categories
-    // follow the level configured for "sdl", i.e. the global level unless overridden.
-    void apply_sdl_priorities()
+    // Mirrors the level configured for the "sdl" category (the global level unless overridden) into the
+    // platform library's own priority filter, so it does not format messages the engine would drop anyway.
+    // Engine messages never pass through that filter: message() applies the precise per-category level itself.
+    void apply_native_log_level()
     {
-        auto& s = state();
-        verbosity most_permissive = s.global_level.load(std::memory_order_relaxed);
-        {
-            std::lock_guard<std::mutex> lock{s.level_mutex};
-            for (const auto& [category, level] : s.category_levels)
-            {
-                most_permissive = std::min(most_permissive, level);
-            }
-        }
-        SDL_SetLogPriorities(verbosity_to_sdl(core::logging::level_for(k_sdl_category)));
-        SDL_SetLogPriority(SDL_LOG_CATEGORY_APPLICATION, verbosity_to_sdl(most_permissive));
+        core::platform::set_native_log_level(to_native(core::logging::level_for(k_sdl_category)));
     }
 
     void push_recent(record&& entry)
@@ -203,28 +176,17 @@ namespace
         s.ring_count = std::min(s.ring_count + 1, core::logging::k_recent_capacity);
     }
 
-    void SDLCALL log_output_callback(void* /*userdata*/,
-                                     int /*category*/,
-                                     SDL_LogPriority priority,
-                                     const char* message)
+    // Delivers one formatted message to every sink: stderr, the engine.log mirror beside the executable, and
+    // the in-memory ring.
+    void emit(verbosity level, const char* category, const char* file, unsigned line, const char* message)
     {
-        const origin from = tls_origin;
-        const verbosity level = from.active ? from.level : verbosity_from_sdl(priority);
-        const char* category = from.active ? from.category : k_sdl_category;
-        const char* file = from.active && from.file != nullptr ? from.file : "?";
-        const unsigned line = from.active ? from.line : 0;
-
         // Timestamp with millisecond precision.
         const auto now = std::chrono::system_clock::now();
         const auto time_t_now = std::chrono::system_clock::to_time_t(now);
         const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count() % 1000;
 
         std::tm tm_buf{};
-#if defined(_WIN32)
-        localtime_s(&tm_buf, &time_t_now);
-#else
-        localtime_r(&time_t_now, &tm_buf);
-#endif
+        core::platform::local_time(time_t_now, tm_buf);
 
         // Sized for the worst case -Wformat-truncation can construct, not the 23 characters a real date needs.
         char timestamp[64];
@@ -269,10 +231,10 @@ namespace
             if (!s.log_file_attempted)
             {
                 s.log_file_attempted = true;
-                const char* base_path = SDL_GetBasePath();
-                if (base_path != nullptr)
+                const std::filesystem::path base_path = core::platform::base_path();
+                if (!base_path.empty())
                 {
-                    const std::string path = std::string{base_path} + "engine.log";
+                    const std::string path = core::platform::path_to_utf8(base_path / "engine.log");
                     s.log_file = std::fopen(path.c_str(), "w");
                 }
             }
@@ -280,6 +242,42 @@ namespace
         }
 
         push_recent(record{now, level, category, file, line, message});
+    }
+
+    // The platform layer's native log sink: a message the platform library emitted on its own, delivered under the
+    // "sdl" category with no call site. Subject to the same level filter as everything else.
+    void native_log_sink(core::platform::native_log_level native_level, const char* message)
+    {
+        const verbosity level = from_native(native_level);
+        if (!core::logging::is_enabled(level, k_sdl_category))
+        {
+            return;
+        }
+        emit(level, k_sdl_category, "?", 0, message);
+    }
+
+    // Formats @p format with @p args the way vsnprintf does, growing the buffer for a message longer than the
+    // stack-sized one. A formatting error yields an empty string rather than a crash.
+    std::string format_message(const char* format, va_list args)
+    {
+        char stack_buffer[1024];
+        va_list copy;
+        va_copy(copy, args);
+        const int needed = std::vsnprintf(stack_buffer, sizeof(stack_buffer), format, copy);
+        va_end(copy);
+        if (needed < 0)
+        {
+            return {};
+        }
+        if (static_cast<std::size_t>(needed) < sizeof(stack_buffer))
+        {
+            return std::string{stack_buffer, static_cast<std::size_t>(needed)};
+        }
+        std::vector<char> heap_buffer(static_cast<std::size_t>(needed) + 1);
+        va_copy(copy, args);
+        std::vsnprintf(heap_buffer.data(), heap_buffer.size(), format, copy);
+        va_end(copy);
+        return std::string{heap_buffer.data(), static_cast<std::size_t>(needed)};
     }
 
     std::string_view trim(std::string_view text)
@@ -322,9 +320,9 @@ void core::logging::init(int argc, char* argv[])
         }
     }
 
-    // Install our custom output callback, then resolve the level: the build-type default first so a re-init is
-    // deterministic, then the environment override on top of it.
-    SDL_SetLogOutputFunction(&log_output_callback, nullptr);
+    // Capture the platform library's own messages, then resolve the level: the build-type default first so a
+    // re-init is deterministic, then the environment override on top of it.
+    core::platform::set_native_log_sink(&native_log_sink);
     clear_category_levels();
     set_level(k_default_level);
 
@@ -393,16 +391,13 @@ void core::logging::message(
         return;
     }
 
-    tls_origin = origin{true, level, category, file, line};
-
     va_list args;
     va_start(args, format);
-    // Forward the va_list unchanged — SDL consumes it internally. Do not call
-    // va_arg here and do not copy/advance it; that regresses issue #30.
-    SDL_LogMessageV(SDL_LOG_CATEGORY_APPLICATION, verbosity_to_sdl(level), format, args);
+    // Formatted through a va_copy inside format_message; the original list is never advanced here (issue #30).
+    const std::string text = format_message(format != nullptr ? format : "", args);
     va_end(args);
 
-    tls_origin = origin{};
+    emit(level, category, file != nullptr ? file : "?", line, text.c_str());
 
     if (level == verbosity::fatal)
     {
@@ -414,7 +409,7 @@ void core::logging::message(
 void core::logging::set_level(verbosity level)
 {
     state().global_level.store(level, std::memory_order_relaxed);
-    apply_sdl_priorities();
+    apply_native_log_level();
 }
 
 core::logging::verbosity core::logging::level()
@@ -444,7 +439,7 @@ void core::logging::set_category_level(const char* category, verbosity level)
         }
         s.has_category_levels.store(true, std::memory_order_relaxed);
     }
-    apply_sdl_priorities();
+    apply_native_log_level();
 }
 
 void core::logging::clear_category_levels()
@@ -455,7 +450,7 @@ void core::logging::clear_category_levels()
         s.category_levels.clear();
         s.has_category_levels.store(false, std::memory_order_relaxed);
     }
-    apply_sdl_priorities();
+    apply_native_log_level();
 }
 
 core::logging::verbosity core::logging::level_for(const char* category)

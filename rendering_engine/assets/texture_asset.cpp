@@ -33,7 +33,8 @@ namespace rendering_engine
         // the handle. The engine tears the asset cache (and the renderer /
         // scenes that hold these handles) down ahead of the gpu device, so the
         // device is always installed when this runs.
-        if (texture.valid())
+        // A placeholder handle belongs to the cache, not to this asset.
+        if (owns_texture && texture.valid())
         {
             asset_device().destroy(texture);
         }
