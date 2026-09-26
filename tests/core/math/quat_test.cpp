@@ -1,5 +1,6 @@
 // Unit tests for core::math quat: identity rotation, normalization, the
-// Hamilton product, inverse, euler round-tripping, and to_mat4 consistency.
+// Hamilton product, inverse, euler round-tripping, to_mat4 consistency, and
+// quat_look_at (forward lands on the direction, up stays upright).
 
 #include <gtest/gtest.h>
 
@@ -86,4 +87,53 @@ TEST(quat, to_mat4_matches_direct_rotation)
     EXPECT_NEAR(via_matrix.x, via_quat.x, k_eps);
     EXPECT_NEAR(via_matrix.y, via_quat.y, k_eps);
     EXPECT_NEAR(via_matrix.z, via_quat.z, k_eps);
+}
+
+// -- quat_look_at -------------------------------------------------------------
+
+TEST(quat, quat_look_at_points_forward_along_the_direction)
+{
+    // The engine's forward is -Z: the rotation must carry it onto the
+    // (normalised) direction, for an axis and for an arbitrary vector.
+    const vec3 forward(0.0f, 0.0f, -1.0f);
+    const vec3 up(0.0f, 1.0f, 0.0f);
+
+    quat to_x = quat_look_at(vec3(1.0f, 0.0f, 0.0f), up);
+    expect_vec3_near(to_x * forward, vec3(1.0f, 0.0f, 0.0f));
+
+    quat to_back = quat_look_at(vec3(0.0f, 0.0f, 1.0f), up);
+    expect_vec3_near(to_back * forward, vec3(0.0f, 0.0f, 1.0f));
+
+    const vec3 direction(3.0f, -1.0f, 2.0f); // not unit length: normalised inside
+    quat to_direction = quat_look_at(direction, up);
+    const float len = std::sqrt(3.0f * 3.0f + 1.0f + 2.0f * 2.0f);
+    expect_vec3_near(to_direction * forward, vec3(3.0f / len, -1.0f / len, 2.0f / len));
+}
+
+TEST(quat, quat_look_at_yields_a_unit_rotation_that_keeps_up_upright)
+{
+    const vec3 up(0.0f, 1.0f, 0.0f);
+    quat q = quat_look_at(vec3(1.0f, 0.0f, -1.0f), up);
+
+    // Unit quaternion, so it is a pure rotation (lengths preserved).
+    EXPECT_NEAR(q.w * q.w + q.x * q.x + q.y * q.y + q.z * q.z, 1.0f, k_eps);
+    EXPECT_NEAR(length(q * vec3(2.0f, 3.0f, 4.0f)), std::sqrt(29.0f), k_eps);
+
+    // With the direction perpendicular to up, up is mapped onto itself and
+    // right stays in the horizontal plane (no roll).
+    expect_vec3_near(q * up, up);
+    const vec3 right = q * vec3(1.0f, 0.0f, 0.0f);
+    EXPECT_NEAR(right.y, 0.0f, k_eps);
+    EXPECT_NEAR(dot(right, q * vec3(0.0f, 0.0f, -1.0f)), 0.0f, k_eps);
+}
+
+TEST(quat, quat_look_at_down_the_forward_axis_is_the_identity)
+{
+    // Looking straight down -Z with +Y up is where the identity already
+    // points, so the rotation is the identity (up to the sign of w).
+    quat q = quat_look_at(vec3(0.0f, 0.0f, -1.0f), vec3(0.0f, 1.0f, 0.0f));
+    EXPECT_NEAR(std::abs(q.w), 1.0f, k_eps);
+    EXPECT_NEAR(q.x, 0.0f, k_eps);
+    EXPECT_NEAR(q.y, 0.0f, k_eps);
+    EXPECT_NEAR(q.z, 0.0f, k_eps);
 }

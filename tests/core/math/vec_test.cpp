@@ -1,7 +1,10 @@
-// Unit tests for core::math vec2 / vec3 / vec4: arithmetic operators and the
-// free functions (dot, cross, normalize, length, distance, lerp).
+// Unit tests for core::math vec2 / vec3 / vec4: arithmetic operators, the
+// free functions (dot, cross, normalize, length, distance, lerp), and the
+// NaN normalize of a zero vector yields.
 
 #include <gtest/gtest.h>
+
+#include <cmath>
 
 #include <core/math/vec2.hpp>
 #include <core/math/vec3.hpp>
@@ -150,4 +153,40 @@ TEST(vec4, lerp_midpoint)
 {
     vec4 mid = lerp(vec4(0.0f, 0.0f, 0.0f, 0.0f), vec4(2.0f, 4.0f, 6.0f, 8.0f), 0.5f);
     EXPECT_TRUE(mid == vec4(1.0f, 2.0f, 3.0f, 4.0f));
+}
+
+// -- normalize of a zero vector ----------------------------------------------
+
+// There is no unit vector in the direction of zero, and the wrappers add no
+// guard over glm: the result is the 0 * (1 / sqrt(0)) indeterminate, i.e.
+// every component is NaN. Pinned here so a caller that might hand normalize a
+// degenerate input (a look_at at its own position, a zero-length light
+// direction) knows to test for it first — node::look_at and
+// transform::look_at do — rather than expect a zero or unchanged vector back.
+
+TEST(vec2, normalize_of_zero_is_nan)
+{
+    vec2 n = normalize(vec2(0.0f, 0.0f));
+    EXPECT_TRUE(std::isnan(n.x));
+    EXPECT_TRUE(std::isnan(n.y));
+}
+
+TEST(vec3, normalize_of_zero_is_nan)
+{
+    vec3 n = normalize(vec3(0.0f, 0.0f, 0.0f));
+    EXPECT_TRUE(std::isnan(n.x));
+    EXPECT_TRUE(std::isnan(n.y));
+    EXPECT_TRUE(std::isnan(n.z));
+    // length() itself is well-defined: exactly zero, which is the check to
+    // make before normalizing.
+    EXPECT_FLOAT_EQ(length(vec3(0.0f, 0.0f, 0.0f)), 0.0f);
+}
+
+TEST(vec4, normalize_of_zero_is_nan)
+{
+    vec4 n = normalize(vec4(0.0f, 0.0f, 0.0f, 0.0f));
+    EXPECT_TRUE(std::isnan(n.x));
+    EXPECT_TRUE(std::isnan(n.y));
+    EXPECT_TRUE(std::isnan(n.z));
+    EXPECT_TRUE(std::isnan(n.w));
 }

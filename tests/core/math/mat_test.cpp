@@ -1,6 +1,7 @@
 // Unit tests for core::math mat3 / mat4 and the scalar lerp: matrix products,
-// matrix-vector application, the affine builders (translate/rotate/scale), and
-// the inverse/transpose identities.
+// matrix-vector application (both mat * vec and the row-vector vec * mat),
+// the affine builders (translate/rotate/scale), the inverse/transpose
+// identities, and the look_at / perspective / ortho projections.
 
 #include <gtest/gtest.h>
 
@@ -165,4 +166,115 @@ TEST(mat4, perspective_maps_near_plane_to_minus_one_ndc)
     vec4 clip = p * vec4(0.0f, 0.0f, -near_z, 1.0f);
     ASSERT_GT(std::abs(clip.w), k_eps);
     EXPECT_NEAR(clip.z / clip.w, -1.0f, 1e-3f);
+}
+
+TEST(mat4, ortho_maps_the_box_onto_the_ndc_cube)
+{
+    // An off-centre, non-square box so every axis has a distinct scale and
+    // offset. GL clip conventions: x/y land in [-1, 1] left-to-right and
+    // bottom-to-top, the near plane (view-space z = -near_z) on NDC z = -1
+    // and the far plane on +1, with w untouched (no perspective divide).
+    const float left = -2.0f;
+    const float right = 6.0f;
+    const float bottom = 1.0f;
+    const float top = 5.0f;
+    const float near_z = 0.5f;
+    const float far_z = 20.5f;
+    mat4 o = ortho(left, right, bottom, top, near_z, far_z);
+
+    vec4 lower_near = o * vec4(left, bottom, -near_z, 1.0f);
+    expect_vec3_near(vec3(lower_near.x, lower_near.y, lower_near.z), vec3(-1.0f, -1.0f, -1.0f));
+    EXPECT_NEAR(lower_near.w, 1.0f, k_eps);
+
+    vec4 upper_far = o * vec4(right, top, -far_z, 1.0f);
+    expect_vec3_near(vec3(upper_far.x, upper_far.y, upper_far.z), vec3(1.0f, 1.0f, 1.0f));
+    EXPECT_NEAR(upper_far.w, 1.0f, k_eps);
+
+    // The box centre maps to the NDC origin, and it is affine: a step of a
+    // quarter of the width in x moves half a unit in NDC.
+    vec4 centre = o * vec4((left + right) * 0.5f, (bottom + top) * 0.5f, -(near_z + far_z) * 0.5f, 1.0f);
+    expect_vec3_near(vec3(centre.x, centre.y, centre.z), vec3(0.0f, 0.0f, 0.0f));
+    vec4 shifted = o * vec4((left + right) * 0.5f + (right - left) * 0.25f, bottom, -near_z, 1.0f);
+    EXPECT_NEAR(shifted.x, 0.5f, k_eps);
+}
+
+TEST(mat4, ortho_is_a_pure_scale_and_translate)
+{
+    // Directions (w == 0) are only scaled, never offset, and the scale is
+    // 2 / extent on each axis (negated on z, since the view looks down -Z).
+    mat4 o = ortho(-4.0f, 4.0f, -2.0f, 2.0f, 1.0f, 11.0f);
+    vec4 d = o * vec4(4.0f, 2.0f, -5.0f, 0.0f);
+    EXPECT_NEAR(d.x, 1.0f, k_eps);
+    EXPECT_NEAR(d.y, 1.0f, k_eps);
+    EXPECT_NEAR(d.z, 1.0f, k_eps);
+    EXPECT_NEAR(d.w, 0.0f, k_eps);
+
+    // Invertible, as a projection the shadow pass unprojects through must be.
+    expect_mat4_near(o * inverse(o), mat4(1.0f));
+}
+
+// -- vec4 * mat4 (row-vector product) -------------------------------------------
+
+TEST(mat4, vector_times_matrix_is_the_transposed_product)
+{
+    // v * M treats v as a row vector: it equals transpose(M) * v, so the two
+    // overloads agree only for a symmetric matrix. camera_module uses this
+    // form to pull a world-space axis through a view matrix.
+    mat4 m;
+    for (int k = 0; k < 16; ++k)
+    {
+        m.m[k] = static_cast<float>(k * k % 7 + 1);
+    }
+    const vec4 v(1.0f, -2.0f, 3.0f, 0.5f);
+
+    const vec4 row = v * m;
+    const vec4 via_transpose = transpose(m) * v;
+    EXPECT_NEAR(row.x, via_transpose.x, k_eps);
+    EXPECT_NEAR(row.y, via_transpose.y, k_eps);
+    EXPECT_NEAR(row.z, via_transpose.z, k_eps);
+    EXPECT_NEAR(row.w, via_transpose.w, k_eps);
+
+    // Written out: component i of v * M is the dot of v with column i,
+    // i.e. with m.m[i * 4 .. i * 4 + 3] in column-major storage.
+    for (int col = 0; col < 4; ++col)
+    {
+        const float expected = v.x * m.m[col * 4 + 0] + v.y * m.m[col * 4 + 1] + v.z * m.m[col * 4 + 2] +
+                               v.w * m.m[col * 4 + 3];
+        EXPECT_NEAR(row.data()[col], expected, k_eps) << "component " << col;
+    }
+}
+
+TEST(mat4, vector_times_matrix_differs_from_matrix_times_vector)
+{
+    // A translation is the simplest asymmetric case: as a row vector the
+    // point is not moved (the translation sits in the last column, which
+    // v * M reads into w), whereas M * v moves it.
+    mat4 t = translate(vec3(10.0f, 20.0f, 30.0f));
+    const vec4 p(1.0f, 2.0f, 3.0f, 1.0f);
+
+    const vec4 column_form = t * p;
+    expect_vec3_near(vec3(column_form.x, column_form.y, column_form.z), vec3(11.0f, 22.0f, 33.0f));
+
+    const vec4 row_form = p * t;
+    expect_vec3_near(vec3(row_form.x, row_form.y, row_form.z), vec3(1.0f, 2.0f, 3.0f));
+    EXPECT_NEAR(row_form.w, 10.0f + 40.0f + 90.0f + 1.0f, k_eps);
+
+    // Identity is the one case where the two agree for every vector.
+    const vec4 through_identity = p * mat4(1.0f);
+    EXPECT_TRUE(through_identity == p);
+}
+
+TEST(mat4, vector_times_matrix_undoes_the_rotation_of_matrix_times_vector)
+{
+    // For a rotation R, transpose(R) == inverse(R): pulling a vector through
+    // R as a row vector is the inverse rotation of pushing it through as a
+    // column — how a view-space axis is taken back to world space.
+    mat4 r = rotate(k_pi * 0.5f, vec3(0.0f, 0.0f, 1.0f));
+    const vec4 x(1.0f, 0.0f, 0.0f, 0.0f);
+
+    const vec4 rotated = r * x;
+    expect_vec3_near(vec3(rotated.x, rotated.y, rotated.z), vec3(0.0f, 1.0f, 0.0f));
+
+    const vec4 back = rotated * r;
+    expect_vec3_near(vec3(back.x, back.y, back.z), vec3(1.0f, 0.0f, 0.0f));
 }

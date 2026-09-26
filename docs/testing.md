@@ -83,7 +83,13 @@ shows up as an individual ctest case.
 All device-free:
 
 - `core/math` — `vec2/3/4`, `mat3/4`, `quat`, `aabb`, `sphere`, `frustum`, and
-  the scalar `lerp`.
+  the scalar `lerp`; including the row-vector `vec4 * mat4` overload (the
+  transposed product, as `camera_module` relies on), `ortho` (box corners
+  onto the NDC cube, invertible), `quat_look_at` (forward onto the direction,
+  up kept upright), the general-case `sphere::merge` (partially overlapping
+  and disjoint spheres give the tight enclosing sphere; an enclosed one comes
+  back unchanged), and the documented NaN that `normalize` of a zero vector
+  yields (no guard in the wrappers; callers test `length` first).
 - `core::pool` — insert/get/erase, generation-based handle invalidation
   (including the wrap past generation 0), slot recycling, in-place
   construction/destruction of move-only and non-default-constructible values,
@@ -96,7 +102,12 @@ All device-free:
 - `core::jobs` — `parallel_for` coverage and correctness, `dispatch` +
   `wait_idle` completion, the exception boundary (a throwing job neither
   escapes nor wedges `wait_idle`), low-priority work not delaying a
-  `parallel_for`, and the destructor draining queued jobs.
+  `parallel_for`, the documented `hardware_concurrency() - 1` worker sizing,
+  `dispatch` and `parallel_for` interleaved (bursts between batches, a batch
+  body that dispatches, a dispatched job that forks its own batch, several
+  forking at once), and teardown: the destructor drains queued jobs, waits
+  for one still executing, and finishes background work a batch jumped ahead
+  of.
 - `core::time` — the fixed-step accumulator (drain, remainder, clamp),
   constructor validation, and the wall-clock side: `perform_tick` /
   `delta_time` / `frame_count`, per-instance timestamps, and the FPS readings
@@ -108,6 +119,10 @@ All device-free:
 - `core::fnv1a_64` (`core/hash.hpp`) — the published FNV-1a reference vectors,
   `constexpr` evaluation, seeded chaining, and the incremental hasher agreeing
   with the one-shot digest over the concatenated input.
+- `core::version` — the version string is the dotted triplet built from the
+  `VERSION_MAJOR` / `VERSION_MINOR` / `VERSION_PATCH` definitions (the test
+  binary receives the same ones), the build date has the predefined
+  `__DATE__` layout, and both are stable across calls.
 - `gpu::shader_library` — the embedded registry generated from `shaders/`
   serves every listed file by its `shaders/`-relative path, the generated
   `include/bindings.glsl` mirrors `gpu/shader_bindings.hpp`, an unknown path
@@ -133,11 +148,35 @@ All device-free:
   with live components, ancestor-cycle rejection in `node::add`, component
   migration on a cross-scene re-parent, and (debug builds, as a death test)
   the assert on an immediate mutation from inside a hook.
+- The component lifecycle hooks, as ordered sequences over a
+  `recording_component` (`tests/support/recording_component.hpp`, shared with
+  the `runtime::context` suite) that implements all four: `on_attach` /
+  `on_update` / `on_active_changed` / `on_destroy` in that order for one
+  component, `add_component` to a disabled node (or under a disabled
+  ancestor) attaching then hiding, a same-type replacement destroying the old
+  before attaching the new, `remove_all_components`, moves between enabled
+  and disabled parents flipping exactly once, `on_active_changed` and
+  `on_update` reaching parents before children (children in insertion order,
+  a disabled subtree skipped without touching its siblings), `on_update`
+  seeing the settled world transform, what `~node` does (frees its
+  components, detaches from its parent, orphans its children with their
+  components and store intact), and `node::look_at` — as a root, under a
+  translated parent, under a rotated parent (the forward axis is exact
+  either way), with the given or default up axis, and as a no-op at the
+  node's own position.
 - `light_component` over the light registry (`light.cpp` is a plain vector of
   back-pointers, so it compiles headless) — a disabled node's light leaves
   `registered_lights()` and returns on enable, a disabled ancestor counts,
   a light added to a disabled node starts disabled, `on_update` tracks the
   node's world position, and removing the component unregisters the light.
+- `pack_lights` (`rendering_engine/lighting/lights_ubo.cpp`) — the std140
+  mirror structs match the GLSL `Lights` block byte-for-byte (sizes and
+  offsets), packing fully overwrites the block, ambient lights sum into one
+  premultiplied term, directional lights pack a unit direction and point
+  lights their position / attenuation (both with colour premultiplied by
+  intensity), each kind fills its array in input order, and lights past
+  `max_directional_lights` / `max_point_lights` are dropped without blocking
+  the other kind.
 - `gpu::backend::handle_pool` (the slot allocator behind both device backends'
   handles) — insert/lookup/remove, generation-based rejection of a removed
   handle when its slot is recycled, that `clear()` advances generations so a
@@ -217,6 +256,14 @@ install a lightweight `test_support::fake_device` (see
 create/destroy traffic, then exercise the cache with no engine, window, or
 backend present. This is what keeps the asset-cache tests in the same lean,
 headless binary as the rest of the suite.
+
+The fake device does not reach further than the asset layer. `material`
+(pipeline construction), every renderable's `collect_draw_items`, the passes
+(including the shadow pass's light-frustum fit, a file-local helper of
+`shadow_pass.cpp`), `runtime::engine` and the `external/api` translation units
+all resolve the device through `runtime::current_engine()`, so they cannot be
+compiled into this binary without the whole engine; they stay uncovered until
+that seam is widened.
 
 ## Style and naming scope
 

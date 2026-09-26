@@ -101,6 +101,98 @@ TEST(sphere, merge_contained_sphere_is_noop_on_coverage)
     EXPECT_TRUE(m.contains(vec3(9.0f, 0.0f, 0.0f)));
 }
 
+TEST(sphere, merge_returns_the_enclosing_sphere_whichever_side_it_is_on)
+{
+    sphere big(vec3(0.0f, 0.0f, 0.0f), 10.0f);
+    sphere small(vec3(1.0f, 0.0f, 0.0f), 1.0f);
+
+    // Neither grows: the enclosing one comes back unchanged from either side.
+    sphere a = merge(big, small);
+    sphere b = merge(small, big);
+    EXPECT_NEAR(a.radius, 10.0f, k_eps);
+    EXPECT_NEAR(b.radius, 10.0f, k_eps);
+    EXPECT_NEAR(a.center.x, 0.0f, k_eps);
+    EXPECT_NEAR(b.center.x, 0.0f, k_eps);
+
+    // Merging a sphere with itself, or with a copy, is the identity.
+    sphere self = merge(big, big);
+    EXPECT_NEAR(self.radius, 10.0f, k_eps);
+    EXPECT_NEAR(self.center.x, 0.0f, k_eps);
+}
+
+TEST(sphere, merge_of_partially_overlapping_spheres_is_the_tight_enclosing_sphere)
+{
+    // Centres 4 apart along x, radii 2 and 3: the union spans from -2 to 7 on
+    // the x axis, so the smallest enclosing sphere is centred at 2.5 with
+    // radius 4.5 — (distance + ra + rb) / 2 on the segment between them.
+    sphere a(vec3(0.0f, 0.0f, 0.0f), 2.0f);
+    sphere b(vec3(4.0f, 0.0f, 0.0f), 3.0f);
+
+    sphere m = merge(a, b);
+    EXPECT_NEAR(m.radius, 4.5f, k_eps);
+    EXPECT_NEAR(m.center.x, 2.5f, k_eps);
+    EXPECT_NEAR(m.center.y, 0.0f, k_eps);
+    EXPECT_NEAR(m.center.z, 0.0f, k_eps);
+
+    // Both inputs' far surface points lie on the result.
+    EXPECT_TRUE(m.contains(vec3(-2.0f, 0.0f, 0.0f)));
+    EXPECT_TRUE(m.contains(vec3(7.0f, 0.0f, 0.0f)));
+    EXPECT_FALSE(m.contains(vec3(-2.01f, 0.0f, 0.0f)));
+    EXPECT_FALSE(m.contains(vec3(7.01f, 0.0f, 0.0f)));
+    // And the perpendicular extremes of both inputs are inside.
+    EXPECT_TRUE(m.contains(vec3(0.0f, 2.0f, 0.0f)));
+    EXPECT_TRUE(m.contains(vec3(4.0f, 0.0f, 3.0f)));
+
+    // The operation is symmetric.
+    sphere reversed = merge(b, a);
+    EXPECT_NEAR(reversed.radius, m.radius, k_eps);
+    EXPECT_NEAR(reversed.center.x, m.center.x, k_eps);
+}
+
+TEST(sphere, merge_of_disjoint_spheres_spans_the_gap_between_them)
+{
+    // No overlap, off-axis: the result still covers both and is no larger
+    // than needed (its diameter is the far-surface-to-far-surface distance).
+    sphere a(vec3(-3.0f, 0.0f, 0.0f), 1.0f);
+    sphere b(vec3(3.0f, 8.0f, 0.0f), 2.0f);
+    const float centre_distance = 10.0f; // (-3,0) to (3,8)
+
+    sphere m = merge(a, b);
+    EXPECT_NEAR(m.radius, (centre_distance + 1.0f + 2.0f) * 0.5f, k_eps);
+
+    // The centre sits on the segment between the inputs' centres, offset
+    // from a by (new_radius - a.radius) along it.
+    const float t = (m.radius - a.radius) / centre_distance;
+    EXPECT_NEAR(m.center.x, -3.0f + 6.0f * t, k_eps);
+    EXPECT_NEAR(m.center.y, 0.0f + 8.0f * t, k_eps);
+    EXPECT_NEAR(m.center.z, 0.0f, k_eps);
+
+    // The far surface point of each input lies on the merged sphere.
+    const vec3 axis = normalize(b.center - a.center);
+    const vec3 a_far = a.center - axis * a.radius;
+    const vec3 b_far = b.center + axis * b.radius;
+    EXPECT_NEAR(distance(m.center, a_far), m.radius, 1e-4f);
+    EXPECT_NEAR(distance(m.center, b_far), m.radius, 1e-4f);
+}
+
+TEST(sphere, merge_with_a_point_sphere_behaves_like_merge_with_the_point)
+{
+    sphere s(vec3(0.0f, 0.0f, 0.0f), 1.0f);
+    const vec3 p(5.0f, 0.0f, 0.0f);
+
+    sphere via_point = merge(s, p);
+    sphere via_sphere = merge(s, sphere(p, 0.0f));
+    EXPECT_NEAR(via_point.radius, 3.0f, k_eps);
+    EXPECT_NEAR(via_point.center.x, 2.0f, k_eps);
+    EXPECT_NEAR(via_sphere.radius, via_point.radius, k_eps);
+    EXPECT_NEAR(via_sphere.center.x, via_point.center.x, k_eps);
+
+    // A point already inside changes nothing.
+    sphere unchanged = merge(s, vec3(0.5f, 0.5f, 0.0f));
+    EXPECT_NEAR(unchanged.radius, 1.0f, k_eps);
+    EXPECT_NEAR(unchanged.center.x, 0.0f, k_eps);
+}
+
 // -- frustum ----------------------------------------------------------------
 
 TEST(frustum, sphere_in_front_intersects_and_behind_does_not)

@@ -44,6 +44,11 @@ set(ALPHAENGINE_TEST_SOURCES_UNDER_TEST
     ${CMAKE_SOURCE_DIR}/rendering_engine/lighting/light.cpp
     ${CMAKE_SOURCE_DIR}/rendering_engine/lighting/directional_light.cpp
     ${CMAKE_SOURCE_DIR}/rendering_engine/lighting/point_light.cpp
+    # pack_lights — the std140 Lights-block packer the scene pass fills every
+    # frame; pure over the light structs above (ambient_light joins for the
+    # ambient sum), no device.
+    ${CMAKE_SOURCE_DIR}/rendering_engine/lighting/ambient_light.cpp
+    ${CMAKE_SOURCE_DIR}/rendering_engine/lighting/lights_ubo.cpp
     # mesh/tangent — pure geometry over core/math (the gpu header it includes
     # is types only, no device).
     ${CMAKE_SOURCE_DIR}/rendering_engine/mesh/tangent.cpp
@@ -95,14 +100,17 @@ set(ALPHAENGINE_TEST_SOURCES
     core/log_test.cpp
     core/hash_test.cpp
     core/time_test.cpp
+    core/version_test.cpp
     runtime/node_test.cpp
     runtime/scene_graph_test.cpp
+    runtime/component_lifecycle_test.cpp
     runtime/light_component_test.cpp
     rendering_engine/assets/asset_cache_test.cpp
     rendering_engine/camera/aspect_ratio_test.cpp
     rendering_engine/gpu/handle_pool_test.cpp
     rendering_engine/gpu/shader_compiler_test.cpp
     rendering_engine/gpu/shader_library_test.cpp
+    rendering_engine/lighting/lights_ubo_test.cpp
     rendering_engine/mesh/mesh_test.cpp
     rendering_engine/mesh/tangent_test.cpp
     rendering_engine/mesh/vertex_format_test.cpp
@@ -119,9 +127,9 @@ add_executable(AlphaEngineTests
     ${ALPHAENGINE_TEST_SOURCES_UNDER_TEST}
 )
 
-# tests/ for the support/ helpers (fake_device); vendor/stb for the
-# header-only stb backends util/image and util/font compile against; the
-# Vulkan SDK headers (found by the root find_package(Vulkan)) for
+# tests/ for the support/ helpers (fake_device, recording_component);
+# vendor/stb for the header-only stb backends util/image and util/font compile
+# against; the Vulkan SDK headers (found by the root find_package(Vulkan)) for
 # vk_negotiate, which uses the VkFormat constants and nothing from the
 # loader. The repo root is already on the include path via the top-level
 # include_directories().

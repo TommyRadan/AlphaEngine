@@ -7,71 +7,21 @@
 
 #include <gtest/gtest.h>
 
-#include <functional>
 #include <memory>
+#include <utility>
 #include <vector>
 
 #include <runtime/component.hpp>
 #include <runtime/node.hpp>
 #include <runtime/scene_graph.hpp>
+#include <support/recording_component.hpp>
 
 using runtime::component_store;
 using runtime::context;
 using runtime::node;
-
-namespace
-{
-    // What a component saw, shared by every copy of it (components are moved
-    // between pool slots and stores, so the log lives outside them).
-    struct hook_log
-    {
-        int attaches{0};
-        int updates{0};
-        int destroys{0};
-        std::vector<bool> active_changes;
-    };
-
-    // A component implementing every hook, with a pluggable on_update body so
-    // a test can make it act on its node from inside the traversal.
-    struct recording_component
-    {
-        hook_log* log{nullptr};
-        int value{0};
-        std::function<void(node&)> on_update_action;
-
-        void on_attach(node&)
-        {
-            ++log->attaches;
-        }
-
-        void on_update(node& owner)
-        {
-            ++log->updates;
-            if (on_update_action)
-            {
-                on_update_action(owner);
-            }
-        }
-
-        void on_active_changed(node&, bool active)
-        {
-            log->active_changes.push_back(active);
-        }
-
-        void on_destroy()
-        {
-            ++log->destroys;
-        }
-    };
-
-    recording_component recorder(hook_log& log, int value = 0)
-    {
-        recording_component c;
-        c.log = &log;
-        c.value = value;
-        return c;
-    }
-} // namespace
+using test_support::hook_log;
+using test_support::recorder;
+using test_support::recording_component;
 
 // -- construction -----------------------------------------------------------
 
