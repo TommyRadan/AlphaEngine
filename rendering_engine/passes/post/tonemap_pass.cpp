@@ -120,7 +120,7 @@ namespace
 
 namespace rendering_engine
 {
-    tonemap_pass::tonemap_pass(gpu::texture input_color)
+    tonemap_pass::tonemap_pass()
     {
         auto& gpu = *runtime::current_engine().gpu;
 
@@ -161,22 +161,9 @@ namespace rendering_engine
         input_layout.entries.push_back({1, gpu::binding_kind::uniform_buffer});
         m_input_layout = gpu.create_bind_group_layout(input_layout);
 
-        gpu::bind_group_descriptor input_bind_group_descriptor{};
-        input_bind_group_descriptor.layout = m_input_layout;
-
-        gpu::binding_value scene_color_slot{};
-        scene_color_slot.binding = 0;
-        scene_color_slot.kind = gpu::binding_kind::texture;
-        scene_color_slot.texture_value = input_color;
-        input_bind_group_descriptor.entries.push_back(scene_color_slot);
-
-        gpu::binding_value tonemap_slot{};
-        tonemap_slot.binding = 1;
-        tonemap_slot.kind = gpu::binding_kind::uniform_buffer;
-        tonemap_slot.buffer_value = m_tonemap_ubo;
-        input_bind_group_descriptor.entries.push_back(tonemap_slot);
-
-        m_input_bind_group = gpu.create_bind_group(input_bind_group_descriptor);
+        // The input bind group is built lazily by record(): the HDR image
+        // it samples arrives through frame_context::scene_color_texture
+        // and is rebound whenever that handle changes.
 
         // Fullscreen triangle: depth disabled, blend disabled, no
         // culling so the triangle's winding is irrelevant. The
@@ -251,8 +238,48 @@ namespace rendering_engine
         }
     }
 
+    void tonemap_pass::rebuild_bind_group(gpu::texture input_color)
+    {
+        auto& gpu = *runtime::current_engine().gpu;
+
+        // Safe mid-frame: the device defers the destroy until the command
+        // buffer that may still reference the old group has retired.
+        if (m_input_bind_group.valid())
+        {
+            gpu.destroy(m_input_bind_group);
+            m_input_bind_group = {};
+        }
+
+        gpu::bind_group_descriptor input_bind_group_descriptor{};
+        input_bind_group_descriptor.layout = m_input_layout;
+
+        gpu::binding_value scene_color_slot{};
+        scene_color_slot.binding = 0;
+        scene_color_slot.kind = gpu::binding_kind::texture;
+        scene_color_slot.texture_value = input_color;
+        input_bind_group_descriptor.entries.push_back(scene_color_slot);
+
+        gpu::binding_value tonemap_slot{};
+        tonemap_slot.binding = 1;
+        tonemap_slot.kind = gpu::binding_kind::uniform_buffer;
+        tonemap_slot.buffer_value = m_tonemap_ubo;
+        input_bind_group_descriptor.entries.push_back(tonemap_slot);
+
+        m_input_bind_group = gpu.create_bind_group(input_bind_group_descriptor);
+        m_bound_input = input_color;
+    }
+
     void tonemap_pass::record(gpu::command_encoder& encoder, const frame_context& ctx)
     {
+        // Bind this frame's HDR scene colour. The handle only changes when
+        // the scene target is recreated (a resize), so compare against the
+        // one the bind group was built with and rebuild on change — the
+        // first frame included.
+        if (ctx.scene_color_texture != m_bound_input || !m_input_bind_group.valid())
+        {
+            rebuild_bind_group(ctx.scene_color_texture);
+        }
+
         gpu::render_pass_descriptor descriptor{};
         // Resolve into the off-screen LDR target rather than straight to
         // the swapchain: the final post effect (FXAA) needs to sample

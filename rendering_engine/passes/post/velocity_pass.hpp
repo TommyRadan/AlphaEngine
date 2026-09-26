@@ -86,15 +86,26 @@ namespace rendering_engine
             io.write("velocity");
         }
 
+        // Recreates the velocity target at the new drawable size. The new
+        // target is created before the old one is released so the handle
+        // published through frame_context::velocity_texture changes and the
+        // TAA resolve rebinds. No-op while the pass is disabled.
+        void resize(uint32_t width, uint32_t height) override;
+
         // The motion-vector texture the TAA resolve samples (signed UV
-        // displacement in xy). Stable across frames; invalid when the pass
-        // is disabled (degenerate backbuffer).
+        // displacement in xy). The engine publishes it every frame as
+        // @ref frame_context::velocity_texture; it changes on @ref resize.
+        // Invalid when the pass is disabled (degenerate backbuffer).
         gpu::texture velocity_texture() const;
 
     private:
         // Rebuild the input bind group against @p scene_depth and the
         // reprojection UBO, remembering the handle in @ref m_bound_depth.
         void rebuild_bind_group(gpu::texture scene_depth);
+
+        // Allocates the rgba16f velocity target at @p width x @p height
+        // and points @ref m_velocity_target / @ref m_velocity_texture at it.
+        void create_target(uint32_t width, uint32_t height);
 
         gpu::shader_module m_vertex_shader{};
         gpu::shader_module m_fragment_shader{};

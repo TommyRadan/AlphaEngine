@@ -132,15 +132,7 @@ namespace rendering_engine
         layout.entries.push_back({1, gpu::binding_kind::uniform_buffer});
         m_layout = gpu.create_bind_group_layout(layout);
 
-        // Two-channel signed motion needs a float target; the engine has no
-        // RG format, so rgba16f carries the vector in xy and leaves zw at 0.
-        gpu::render_target_descriptor velocity_descriptor{};
-        velocity_descriptor.color_format = gpu::texture_format::rgba16_float;
-        velocity_descriptor.width = width;
-        velocity_descriptor.height = height;
-        velocity_descriptor.with_depth = false;
-        m_velocity_target = gpu.create_render_target(velocity_descriptor);
-        m_velocity_texture = gpu.render_target_color_texture(m_velocity_target);
+        create_target(width, height);
 
         gpu::vertex_buffer_layout vertex_layout{};
         vertex_layout.stride = sizeof(float) * 2;
@@ -225,6 +217,46 @@ namespace rendering_engine
     gpu::texture velocity_pass::velocity_texture() const
     {
         return m_velocity_texture;
+    }
+
+    void velocity_pass::create_target(uint32_t width, uint32_t height)
+    {
+        auto& gpu = *runtime::current_engine().gpu;
+
+        // Two-channel signed motion needs a float target; the engine has no
+        // RG format, so rgba16f carries the vector in xy and leaves zw at 0.
+        gpu::render_target_descriptor velocity_descriptor{};
+        velocity_descriptor.color_format = gpu::texture_format::rgba16_float;
+        velocity_descriptor.width = width;
+        velocity_descriptor.height = height;
+        velocity_descriptor.with_depth = false;
+        m_velocity_target = gpu.create_render_target(velocity_descriptor);
+        m_velocity_texture = gpu.render_target_color_texture(m_velocity_target);
+    }
+
+    void velocity_pass::resize(uint32_t width, uint32_t height)
+    {
+        if (!m_enabled || width == 0 || height == 0)
+        {
+            return;
+        }
+        auto& gpu = *runtime::current_engine().gpu;
+
+        // Create the replacement before releasing the old target so the
+        // TAA resolve, which compares frame_context::velocity_texture
+        // against the handle it bound, sees a different handle. The
+        // release is safe here: resize runs between frames, and a
+        // deferred-execution backend retires the attachment only once the
+        // last command buffer that sampled it has finished.
+        const gpu::render_target old_target = m_velocity_target;
+        create_target(width, height);
+        if (old_target.valid())
+        {
+            gpu.destroy(old_target);
+        }
+        // The input bind group samples the scene depth, not this target,
+        // so it stays valid; the reprojection history is unaffected by the
+        // target size and carries across.
     }
 
     void velocity_pass::rebuild_bind_group(gpu::texture scene_depth)

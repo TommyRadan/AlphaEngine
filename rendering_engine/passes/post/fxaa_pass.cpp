@@ -123,7 +123,7 @@ namespace
 
 namespace rendering_engine
 {
-    fxaa_pass::fxaa_pass(gpu::texture input_color, uint32_t width, uint32_t height)
+    fxaa_pass::fxaa_pass(uint32_t width, uint32_t height)
     {
         auto& gpu = *runtime::current_engine().gpu;
 
@@ -164,22 +164,9 @@ namespace rendering_engine
         input_layout.entries.push_back({1, gpu::binding_kind::uniform_buffer});
         m_input_layout = gpu.create_bind_group_layout(input_layout);
 
-        gpu::bind_group_descriptor input_bind_group_descriptor{};
-        input_bind_group_descriptor.layout = m_input_layout;
-
-        gpu::binding_value ldr_color_slot{};
-        ldr_color_slot.binding = 0;
-        ldr_color_slot.kind = gpu::binding_kind::texture;
-        ldr_color_slot.texture_value = input_color;
-        input_bind_group_descriptor.entries.push_back(ldr_color_slot);
-
-        gpu::binding_value rcp_frame_slot{};
-        rcp_frame_slot.binding = 1;
-        rcp_frame_slot.kind = gpu::binding_kind::uniform_buffer;
-        rcp_frame_slot.buffer_value = m_rcp_frame_ubo;
-        input_bind_group_descriptor.entries.push_back(rcp_frame_slot);
-
-        m_input_bind_group = gpu.create_bind_group(input_bind_group_descriptor);
+        // The input bind group is built lazily by record(): the image it
+        // samples (the TAA resolve or the LDR target) arrives through the
+        // frame context and is rebound whenever that handle changes.
 
         // Fullscreen triangle: depth disabled, blend disabled, no culling
         // so the triangle's winding is irrelevant. The vertex shader reads
@@ -253,8 +240,81 @@ namespace rendering_engine
         }
     }
 
+    void fxaa_pass::rebuild_bind_group(gpu::texture input_color)
+    {
+        auto& gpu = *runtime::current_engine().gpu;
+
+        // Safe mid-frame: the device defers the destroy until the command
+        // buffer that may still reference the old group has retired.
+        if (m_input_bind_group.valid())
+        {
+            gpu.destroy(m_input_bind_group);
+            m_input_bind_group = {};
+        }
+
+        gpu::bind_group_descriptor input_bind_group_descriptor{};
+        input_bind_group_descriptor.layout = m_input_layout;
+
+        gpu::binding_value ldr_color_slot{};
+        ldr_color_slot.binding = 0;
+        ldr_color_slot.kind = gpu::binding_kind::texture;
+        ldr_color_slot.texture_value = input_color;
+        input_bind_group_descriptor.entries.push_back(ldr_color_slot);
+
+        gpu::binding_value rcp_frame_slot{};
+        rcp_frame_slot.binding = 1;
+        rcp_frame_slot.kind = gpu::binding_kind::uniform_buffer;
+        rcp_frame_slot.buffer_value = m_rcp_frame_ubo;
+        input_bind_group_descriptor.entries.push_back(rcp_frame_slot);
+
+        m_input_bind_group = gpu.create_bind_group(input_bind_group_descriptor);
+        m_bound_input = input_color;
+    }
+
+    void fxaa_pass::write_rcp_frame(uint32_t width, uint32_t height)
+    {
+        auto& gpu = *runtime::current_engine().gpu;
+        // Same encoding as the construction-time bake: a zero dimension
+        // writes a zero step so the pass degrades to a straight copy.
+        const float rcp_x = (width != 0) ? 1.0f / static_cast<float>(width) : 0.0f;
+        const float rcp_y = (height != 0) ? 1.0f / static_cast<float>(height) : 0.0f;
+        const std::array<float, 4> rcp_frame = {rcp_x, rcp_y, 0.0f, 0.0f};
+        gpu.write_buffer(m_rcp_frame_ubo, rcp_frame.data(), rcp_frame.size() * sizeof(float), 0);
+    }
+
+    void fxaa_pass::resize(uint32_t width, uint32_t height)
+    {
+        // Runs between frames, when the previous frame's command buffer
+        // may still be sampling the UBO on a deferred-execution backend,
+        // so only note the size; record() rewrites the buffer once
+        // begin_frame has waited for that frame. The bind group keeps
+        // referencing the same buffer; only its contents change.
+        m_pending_width = width;
+        m_pending_height = height;
+        m_rcp_frame_dirty = true;
+    }
+
     void fxaa_pass::record(gpu::command_encoder& encoder, const frame_context& ctx)
     {
+        // Sample the TAA resolve when temporal AA produced one this frame,
+        // otherwise the raw tonemap output. Either handle only changes
+        // when its target is recreated (a resize), so compare against the
+        // one the bind group was built with and rebuild on change — the
+        // first frame included.
+        const gpu::texture input = ctx.taa_resolve_texture.valid() ? ctx.taa_resolve_texture : ctx.ldr_color_texture;
+        if (input != m_bound_input || !m_input_bind_group.valid())
+        {
+            rebuild_bind_group(input);
+        }
+
+        // Apply the edge step a resize reported, now that begin_frame has
+        // waited for the frame that may still have been reading the UBO.
+        if (m_rcp_frame_dirty)
+        {
+            write_rcp_frame(m_pending_width, m_pending_height);
+            m_rcp_frame_dirty = false;
+        }
+
         gpu::render_pass_descriptor descriptor{};
         descriptor.target = ctx.swapchain_target;
         // The fullscreen triangle covers every pixel; clearing is strictly

@@ -305,6 +305,19 @@ namespace rendering_engine
         return m_overlay_frame_bind_group.valid() ? m_overlay_frame_bind_group : m_frame_bind_group;
     }
 
+    void scene_pass::resize(uint32_t width, uint32_t height)
+    {
+        // Whether jitter runs is decided at construction (the overlay bind
+        // group only exists when it does); a resize only rescales the
+        // offsets so they stay sub-pixel in the new drawable.
+        if (!m_taa_jitter || width == 0 || height == 0)
+        {
+            return;
+        }
+        m_inv_width = 1.0f / static_cast<float>(width);
+        m_inv_height = 1.0f / static_cast<float>(height);
+    }
+
     void scene_pass::record(gpu::command_encoder& encoder, const frame_context& ctx)
     {
         auto& eng = runtime::current_engine();

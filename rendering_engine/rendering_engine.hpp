@@ -41,6 +41,8 @@ namespace rendering_engine
     struct pass;
     struct renderable;
     struct skybox_pass;
+    struct velocity_pass;
+    struct taa_pass;
     struct environment;
     struct basic_material;
     struct instanced_material;
@@ -102,6 +104,37 @@ namespace rendering_engine
          * invokes @c window::swap_buffers.
          */
         void render();
+
+        /**
+         * @brief Follows a change of the drawable's pixel size.
+         *
+         * Called by the @ref core::window_resized listener @ref init
+         * installs, right after it forwarded the size to
+         * @c gpu::device::resize_swapchain. The listener runs from the
+         * window's event pump inside @c engine::tick, before the frame is
+         * built, so no command encoder is recording; the method asserts
+         * as much and must not be called from inside @ref render.
+         *
+         * A zero dimension (a minimised window; the main loop skips frames
+         * until it is restored) and a size equal to the current one are
+         * ignored. Otherwise it recreates the HDR scene-colour target (and
+         * its depth) and the LDR target at the new size — new targets
+         * first, then the old ones are released, so every handle the
+         * passes compare against changes — calls @ref pass::resize on
+         * every pass in order so they rebuild their own full-resolution
+         * targets and size-dependent UBOs, and sets the attached camera's
+         * aspect ratio (@ref camera::set_aspect_ratio) so the projection
+         * matches the new drawable. Passes that sample a texture owned by
+         * the context or another pass rebind on the next frame through
+         * the handle comparison they make in @c record. Shadow maps are
+         * fixed-size by design and unaffected.
+         *
+         * Releasing the old targets is safe here on both backends: the
+         * OpenGL device frees immediately (nothing is bound outside a
+         * frame) and the Vulkan device defers the free until the last
+         * command buffer that referenced them has retired.
+         */
+        void on_resize(uint32_t pixel_width, uint32_t pixel_height);
 
         /**
          * @brief Adds @p r to the scene-pass registry.
@@ -259,6 +292,15 @@ namespace rendering_engine
         // map after construction. Null until @ref init runs.
         skybox_pass* m_skybox{nullptr};
 
+        // Non-owning back-pointers to the optional temporal-AA passes
+        // owned by @ref m_passes, null when temporal AA is off. Kept so
+        // @ref render can publish the textures they own (motion vectors,
+        // the TAA resolve) through @ref frame_context every frame; their
+        // consumers compare those handles and rebind on change, which is
+        // how a resize that recreates the targets reaches them.
+        velocity_pass* m_velocity{nullptr};
+        taa_pass* m_taa{nullptr};
+
         // The scene pass's per-frame bind-group layout, captured in
         // @ref init so @ref create_standard_material can build additional
         // materials against the same slot 0.
@@ -268,7 +310,8 @@ namespace rendering_engine
         // holds a pointer to it) and surfaced via @ref get_render_stats.
         render_stats m_render_stats{};
 
-        // The window_resized listener that keeps the swapchain extent in
+        // The window_resized listener that keeps the swapchain extent and,
+        // through @ref on_resize, the off-screen targets and passes in
         // step with the drawable. Held from @ref init to @ref quit so it
         // is dropped before the device it resizes is torn down.
         core::subscription m_window_resized_subscription;
@@ -298,18 +341,40 @@ namespace rendering_engine
         std::unique_ptr<ui_material> m_ui_material;
 
         // Off-screen HDR target the scene pass renders into.
-        // Created in @ref init at the current backbuffer size and
-        // released in @ref quit. Surfaced to passes via
-        // @ref frame_context::scene_color_target / @c scene_color_texture
+        // Created in @ref init at the current backbuffer size, recreated
+        // by @ref on_resize and released in @ref quit. Surfaced to passes
+        // via @ref frame_context::scene_color_target / @c scene_color_texture
         // so the post chain can sample it as input.
         gpu::render_target m_scene_color_target{};
         gpu::texture m_scene_color_texture{};
 
         // Off-screen LDR target the tonemap pass resolves into and the
         // FXAA pass samples. rgba8, no depth; created alongside the HDR
-        // target in @ref init and released in @ref quit. Surfaced via
-        // @ref frame_context::ldr_color_target / @c ldr_color_texture.
+        // target in @ref init, recreated by @ref on_resize and released in
+        // @ref quit. Surfaced via @ref frame_context::ldr_color_target /
+        // @c ldr_color_texture.
         gpu::render_target m_ldr_color_target{};
         gpu::texture m_ldr_color_texture{};
+
+        // Pixel size the two targets above (and, through pass::resize,
+        // every pass) are currently built for. @ref on_resize compares
+        // against it so a resize event that repeats the live size is a
+        // no-op.
+        uint32_t m_target_width{0};
+        uint32_t m_target_height{0};
+
+        // Set for the duration of @ref render so @ref on_resize can assert
+        // it is not recreating targets while a frame is being recorded.
+        bool m_in_frame{false};
+
+        // Allocates the HDR scene-colour target (+ depth) and the LDR
+        // target at @p width x @p height, pointing the four members above
+        // at them and recording the size. Does not release what they
+        // pointed at before.
+        void create_color_targets(uint32_t width, uint32_t height);
+
+        // Releases the two targets (and their attachments) and resets the
+        // members. No-op for invalid handles.
+        void release_color_targets();
     };
 } // namespace rendering_engine

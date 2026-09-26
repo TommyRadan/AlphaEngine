@@ -142,7 +142,7 @@ namespace
 
 namespace rendering_engine
 {
-    taa_pass::taa_pass(gpu::texture current_color, gpu::texture velocity, uint32_t width, uint32_t height)
+    taa_pass::taa_pass(uint32_t width, uint32_t height)
     {
         auto& gpu = *runtime::current_engine().gpu;
 
@@ -205,22 +205,7 @@ namespace rendering_engine
         m_copy_layout = gpu.create_bind_group_layout(copy_layout);
 
         // -- Targets --------------------------------------------------
-        // Both rgba8, no depth: the post chain runs depth-disabled and the
-        // image is already tonemapped LDR at this point.
-        auto make_target = [&]()
-        {
-            gpu::render_target_descriptor descriptor{};
-            descriptor.color_format = gpu::texture_format::rgba8_unorm;
-            descriptor.width = width;
-            descriptor.height = height;
-            descriptor.with_depth = false;
-            return gpu.create_render_target(descriptor);
-        };
-
-        m_history_target = make_target();
-        m_history_texture = gpu.render_target_color_texture(m_history_target);
-        m_resolve_target = make_target();
-        m_resolve_texture = gpu.render_target_color_texture(m_resolve_target);
+        create_targets(width, height);
 
         // -- Pipelines ------------------------------------------------
         gpu::vertex_buffer_layout vertex_layout{};
@@ -257,6 +242,50 @@ namespace rendering_engine
         m_copy_pipeline = make_pipeline(m_copy_shader, m_copy_layout);
 
         // -- Bind groups ----------------------------------------------
+        // The history-store copy samples this pass's own resolve target,
+        // so its group is built here. The resolve group samples the LDR
+        // image and the motion vectors, which arrive through the frame
+        // context; record() builds it on the first frame and rebuilds it
+        // whenever either handle changes.
+        rebuild_copy_bind_group();
+
+        m_enabled = true;
+    }
+
+    void taa_pass::create_targets(uint32_t width, uint32_t height)
+    {
+        auto& gpu = *runtime::current_engine().gpu;
+
+        // Both rgba8, no depth: the post chain runs depth-disabled and the
+        // image is already tonemapped LDR at this point.
+        auto make_target = [&]()
+        {
+            gpu::render_target_descriptor descriptor{};
+            descriptor.color_format = gpu::texture_format::rgba8_unorm;
+            descriptor.width = width;
+            descriptor.height = height;
+            descriptor.with_depth = false;
+            return gpu.create_render_target(descriptor);
+        };
+
+        m_history_target = make_target();
+        m_history_texture = gpu.render_target_color_texture(m_history_target);
+        m_resolve_target = make_target();
+        m_resolve_texture = gpu.render_target_color_texture(m_resolve_target);
+    }
+
+    void taa_pass::rebuild_resolve_bind_group(gpu::texture current_color, gpu::texture velocity)
+    {
+        auto& gpu = *runtime::current_engine().gpu;
+
+        // Safe mid-frame: the device defers the destroy until the command
+        // buffer that may still reference the old group has retired.
+        if (m_resolve_bind_group.valid())
+        {
+            gpu.destroy(m_resolve_bind_group);
+            m_resolve_bind_group = {};
+        }
+
         gpu::bind_group_descriptor resolve_bind_group_descriptor{};
         resolve_bind_group_descriptor.layout = m_resolve_layout;
 
@@ -285,6 +314,19 @@ namespace rendering_engine
         resolve_bind_group_descriptor.entries.push_back(params_slot);
 
         m_resolve_bind_group = gpu.create_bind_group(resolve_bind_group_descriptor);
+        m_bound_current = current_color;
+        m_bound_velocity = velocity;
+    }
+
+    void taa_pass::rebuild_copy_bind_group()
+    {
+        auto& gpu = *runtime::current_engine().gpu;
+
+        if (m_copy_bind_group.valid())
+        {
+            gpu.destroy(m_copy_bind_group);
+            m_copy_bind_group = {};
+        }
 
         gpu::bind_group_descriptor copy_bind_group_descriptor{};
         copy_bind_group_descriptor.layout = m_copy_layout;
@@ -296,8 +338,66 @@ namespace rendering_engine
         copy_bind_group_descriptor.entries.push_back(src_slot);
 
         m_copy_bind_group = gpu.create_bind_group(copy_bind_group_descriptor);
+    }
 
-        m_enabled = true;
+    void taa_pass::write_params(float feedback)
+    {
+        auto& gpu = *runtime::current_engine().gpu;
+        // Rewrite the whole vec4 so the texel step (xy) travels with the
+        // feedback weight (z).
+        const std::array<float, 4> params = {m_inv_width, m_inv_height, feedback, 0.0f};
+        gpu.write_buffer(m_resolve_ubo, params.data(), taa_ubo_size, 0);
+        m_uploaded_feedback = feedback;
+    }
+
+    void taa_pass::resize(uint32_t width, uint32_t height)
+    {
+        if (!m_enabled || width == 0 || height == 0)
+        {
+            return;
+        }
+        auto& gpu = *runtime::current_engine().gpu;
+
+        // Create the replacements before releasing the old targets so the
+        // handle published through frame_context::taa_resolve_texture
+        // changes and FXAA rebinds. The releases are safe here: resize
+        // runs between frames, and a deferred-execution backend retires
+        // the attachments only once the last command buffer that sampled
+        // them has finished.
+        const gpu::render_target old_history = m_history_target;
+        const gpu::render_target old_resolve = m_resolve_target;
+        create_targets(width, height);
+        if (old_resolve.valid())
+        {
+            gpu.destroy(old_resolve);
+        }
+        if (old_history.valid())
+        {
+            gpu.destroy(old_history);
+        }
+
+        // Both bind groups reference the replaced targets: the copy group
+        // samples the resolve texture, the resolve group samples the
+        // history. Rebuild the copy group now; forget the inputs the
+        // resolve group was built with so the next record() rebuilds it
+        // against the new history (and whatever LDR / velocity handles
+        // that frame publishes).
+        rebuild_copy_bind_group();
+        m_bound_current = {};
+        m_bound_velocity = {};
+
+        // The history is a differently sized image of a differently
+        // projected frame: drop it. Pin the feedback to 0 again so the
+        // first frame at the new size resolves from the current image
+        // alone, exactly like the first frame after construction. The
+        // params UBO is not touched here: it is host-mapped on a
+        // deferred-execution backend and the previous frame may still be
+        // reading it, so the next record() rewrites it (with the new
+        // texel step) once begin_frame has waited for that frame.
+        m_inv_width = 1.0f / static_cast<float>(width);
+        m_inv_height = 1.0f / static_cast<float>(height);
+        m_first_frame = true;
+        m_uploaded_feedback = -1.0f;
     }
 
     taa_pass::~taa_pass()
@@ -380,14 +480,36 @@ namespace rendering_engine
         return m_resolve_texture;
     }
 
-    void taa_pass::record(gpu::command_encoder& encoder, const frame_context&)
+    void taa_pass::record(gpu::command_encoder& encoder, const frame_context& ctx)
     {
         if (!m_enabled)
         {
             return;
         }
 
-        auto& gpu = *runtime::current_engine().gpu;
+        // Bind this frame's LDR image and motion vectors. Both handles are
+        // stable from frame to frame, but a resize recreates the targets
+        // behind them (and resize() forgets the bound pair so the new
+        // history is picked up), so compare against what the group was
+        // built with and rebuild on change — the first frame included.
+        if (ctx.ldr_color_texture != m_bound_current || ctx.velocity_texture != m_bound_velocity ||
+            !m_resolve_bind_group.valid())
+        {
+            rebuild_resolve_bind_group(ctx.ldr_color_texture, ctx.velocity_texture);
+        }
+
+        // The first frame after construction or a resize resolves against
+        // an undefined history, so its feedback is pinned to 0 (current
+        // frame only); every later frame accumulates with the steady-state
+        // weight. Written here, before the draws and after begin_frame
+        // waited for the previous frame, so the value the GPU reads for
+        // this frame is the one this frame needs — a mismatch also covers
+        // the texel step a resize changed.
+        const float feedback = m_first_frame ? 0.0f : taa_feedback;
+        if (feedback != m_uploaded_feedback)
+        {
+            write_params(feedback);
+        }
 
         auto draw_fullscreen =
             [&](gpu::render_pass_encoder* pass_encoder, gpu::pipeline pipeline, gpu::bind_group bind_group)
@@ -426,17 +548,9 @@ namespace rendering_engine
             pass_encoder->end();
         }
 
-        // The first frame resolved against an undefined history with the
-        // feedback pinned to 0 (current frame only). Now that the history
-        // target holds a real frame, switch to the steady-state feedback so
-        // subsequent frames accumulate.
-        if (m_first_frame)
-        {
-            m_first_frame = false;
-            // Rewrite the whole vec4 so the baked texel step (xy) is kept
-            // alongside the now-live feedback weight (z).
-            const std::array<float, 4> params = {m_inv_width, m_inv_height, taa_feedback, 0.0f};
-            gpu.write_buffer(m_resolve_ubo, params.data(), taa_ubo_size, 0);
-        }
+        // The history target now holds a real frame: the next record()
+        // switches to the steady-state feedback so subsequent frames
+        // accumulate.
+        m_first_frame = false;
     }
 } // namespace rendering_engine

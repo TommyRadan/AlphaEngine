@@ -26,6 +26,7 @@
 #include <core/log.hpp>
 #include <core/settings.hpp>
 #include <rendering_engine/camera/camera.hpp>
+#include <rendering_engine/camera/perspective_camera.hpp>
 #include <rendering_engine/debug/axes_helper.hpp>
 #include <rendering_engine/debug/helper.hpp>
 #include <rendering_engine/debug/infinite_grid.hpp>
@@ -58,6 +59,7 @@
 #include <runtime/engine.hpp>
 
 #include <algorithm>
+#include <cassert>
 
 rendering_engine::context::context() = default;
 rendering_engine::context::~context() = default;
@@ -80,40 +82,21 @@ void rendering_engine::context::init()
     const uint32_t height = drawable.height;
     eng.gpu->resize_swapchain(width, height);
 
-    // Keep the swapchain extent in step with the drawable as the window is
-    // resized or moved across displays. The off-screen targets and the
-    // passes sized below stay at their initial size (recreating them on
-    // resize is a follow-up), so a resized window presents the initial-size
-    // image scaled to the new swapchain.
+    // Keep the swapchain extent, the off-screen targets and the passes in
+    // step with the drawable as the window is resized, maximised, restored
+    // or moved across displays. The listener runs from the window's event
+    // pump in engine::tick, before the frame is built, so on_resize never
+    // recreates a target a command buffer is being recorded against.
     m_window_resized_subscription = eng.events->subscribe<core::window_resized>(
-        [&eng](const core::window_resized& e) { eng.gpu->resize_swapchain(e.m_pixel_width, e.m_pixel_height); });
+        [this, &eng](const core::window_resized& e)
+        {
+            eng.gpu->resize_swapchain(e.m_pixel_width, e.m_pixel_height);
+            on_resize(e.m_pixel_width, e.m_pixel_height);
+        });
 
-    // Allocate the off-screen HDR scene-colour target. The scene pass
-    // renders into rgba16f instead of straight to the swapchain so
-    // tonemap, bloom and any other post effect can sample real HDR
-    // luminance. Sized at the current backbuffer; resize handling is
-    // a follow-up.
-    gpu::render_target_descriptor scene_color_descriptor{};
-    scene_color_descriptor.color_format = gpu::texture_format::rgba16_float;
-    scene_color_descriptor.width = width;
-    scene_color_descriptor.height = height;
-    scene_color_descriptor.with_depth = true;
-    scene_color_descriptor.depth_format = gpu::texture_format::depth24;
-    m_scene_color_target = eng.gpu->create_render_target(scene_color_descriptor);
-    m_scene_color_texture = eng.gpu->render_target_color_texture(m_scene_color_target);
-
-    // Allocate the off-screen LDR target the tonemap pass resolves into
-    // and the FXAA pass samples. The swapchain cannot be bound as a
-    // shader input, so the final anti-aliasing pass reads its tonemapped
-    // source from this rgba8 intermediate and writes to the swapchain.
-    // No depth: the post chain runs depth-disabled.
-    gpu::render_target_descriptor ldr_color_descriptor{};
-    ldr_color_descriptor.color_format = gpu::texture_format::rgba8_unorm;
-    ldr_color_descriptor.width = width;
-    ldr_color_descriptor.height = height;
-    ldr_color_descriptor.with_depth = false;
-    m_ldr_color_target = eng.gpu->create_render_target(ldr_color_descriptor);
-    m_ldr_color_texture = eng.gpu->render_target_color_texture(m_ldr_color_target);
+    // Allocate the off-screen HDR scene-colour target and the LDR target
+    // at the current backbuffer size (on_resize recreates them later).
+    create_color_targets(width, height);
 
     // Construct the built-in passes first — each pass owns the
     // per-frame bind-group layout its matching material reads at
@@ -139,8 +122,12 @@ void rendering_engine::context::init()
     // Bloom runs between the scene and tonemap passes: it reads the HDR
     // scene colour, blurs the bright pixels and additively composites the
     // glow back into the same target, so tonemap maps the bloomed result.
-    auto bloom = std::make_unique<bloom_pass>(m_scene_color_texture, width, height);
-    auto post = std::make_unique<tonemap_pass>(m_scene_color_texture);
+    // Neither pass takes the scene-colour texture here: both read it from
+    // frame_context::scene_color_texture every frame and rebind when the
+    // handle changes, so a resize that recreates the target reaches them
+    // without re-plumbing.
+    auto bloom = std::make_unique<bloom_pass>(width, height);
+    auto post = std::make_unique<tonemap_pass>();
     // Temporal AA optionally slots in between tonemap and FXAA: it
     // accumulates the projection-jittered frames the scene pass produces
     // (Halton sub-pixel offsets, applied only while this is enabled) into a
@@ -148,12 +135,15 @@ void rendering_engine::context::init()
     // edges remain. Gated on the temporal_aa setting; when off the LDR
     // target flows straight into FXAA exactly as before. The TAA resolve
     // becomes FXAA's input so the swapchain still receives a single
-    // anti-aliased image.
+    // anti-aliased image. The textures the passes hand each other (scene
+    // depth, motion vectors, the resolve) travel through frame_context
+    // rather than constructor arguments: render() publishes them from the
+    // owning pass each frame and the consumer rebinds when the handle
+    // changes.
     const bool taa_enabled =
         (eng.settings != nullptr) && eng.settings->graphics.temporal_aa && width != 0 && height != 0;
     std::unique_ptr<velocity_pass> velocity;
     std::unique_ptr<taa_pass> taa;
-    gpu::texture fxaa_input = m_ldr_color_texture;
     if (taa_enabled)
     {
         // Per-pixel motion vectors are reconstructed from the scene depth
@@ -161,12 +151,14 @@ void rendering_engine::context::init()
         // through frame_context::scene_depth_texture each frame. They drive
         // the TAA history reprojection.
         velocity = std::make_unique<velocity_pass>(width, height);
-        taa = std::make_unique<taa_pass>(m_ldr_color_texture, velocity->velocity_texture(), width, height);
-        fxaa_input = taa->output_texture();
+        taa = std::make_unique<taa_pass>(width, height);
+        m_velocity = velocity.get();
+        m_taa = taa.get();
     }
-    // FXAA closes the post chain: it samples the LDR/TAA result and writes
-    // the anti-aliased image to the swapchain.
-    auto fxaa = std::make_unique<fxaa_pass>(fxaa_input, width, height);
+    // FXAA closes the post chain: it samples the TAA resolve when one is
+    // published (else the LDR target) and writes the anti-aliased image to
+    // the swapchain.
+    auto fxaa = std::make_unique<fxaa_pass>(width, height);
     auto ui = std::make_unique<ui_pass>(&m_ui_renderables);
 #if _DEBUG
     // The debug pass binds the scene pass's per-frame camera group at
@@ -304,6 +296,8 @@ void rendering_engine::context::quit()
     // bind-group layouts referenced by the materials' pipelines.
     m_passes.clear();
     m_skybox = nullptr;
+    m_velocity = nullptr;
+    m_taa = nullptr;
 
     // Then materials, which own pipelines that reference the device.
     // Release them before the device tears its pools down.
@@ -317,21 +311,10 @@ void rendering_engine::context::quit()
     m_instanced_material.reset();
     m_basic_material.reset();
 
-    // Release the off-screen HDR target before the device tears its
-    // pools down. The colour and depth attachments are owned by the
-    // target so destroy() releases all three.
-    if (m_ldr_color_target.valid())
-    {
-        eng.gpu->destroy(m_ldr_color_target);
-        m_ldr_color_target = {};
-        m_ldr_color_texture = {};
-    }
-    if (m_scene_color_target.valid())
-    {
-        eng.gpu->destroy(m_scene_color_target);
-        m_scene_color_target = {};
-        m_scene_color_texture = {};
-    }
+    // Release the off-screen HDR and LDR targets before the device tears
+    // its pools down. The colour and depth attachments are owned by the
+    // targets so destroy() releases them too.
+    release_color_targets();
 
     eng.gpu->quit();
     eng.window->quit();
@@ -352,6 +335,7 @@ void rendering_engine::context::render()
     // bind-group rebuilds the passes make during the walk never race
     // the GPU.
     gpu.begin_frame();
+    m_in_frame = true;
 
     // Capture per-frame state once so passes cannot disagree about
     // which camera or backbuffer is active mid-frame, and so they
@@ -367,6 +351,11 @@ void rendering_engine::context::render()
     ctx.scene_depth_texture = gpu.render_target_depth_texture(m_scene_color_target);
     ctx.ldr_color_target = m_ldr_color_target;
     ctx.ldr_color_texture = m_ldr_color_texture;
+    // The textures the temporal-AA passes own are published the same way:
+    // read from the owning pass every frame so the TAA resolve and FXAA
+    // rebind after a resize recreated them. Invalid while TAA is off.
+    ctx.velocity_texture = (m_velocity != nullptr) ? m_velocity->velocity_texture() : gpu::texture{};
+    ctx.taa_resolve_texture = (m_taa != nullptr) ? m_taa->output_texture() : gpu::texture{};
     ctx.fog = m_fog;
 
     // One encoder records the frame graph's passes in order, then submits.
@@ -378,6 +367,122 @@ void rendering_engine::context::render()
     // for this frame here; OpenGL presents when the main loop calls
     // window::swap_buffers.
     gpu.end_frame();
+    m_in_frame = false;
+}
+
+void rendering_engine::context::on_resize(uint32_t pixel_width, uint32_t pixel_height)
+{
+    // The listener that calls this runs from the window's event pump,
+    // never from inside render(): the targets released below may still be
+    // bound to the frame being recorded otherwise.
+    assert(!m_in_frame && "context::on_resize must not run while a frame is being recorded");
+
+    // A zero dimension is a minimised window; the main loop skips whole
+    // frames until it is restored (and the restore reports the real size),
+    // so the targets keep their last usable size. A repeat of the live
+    // size (the initial event, a DPI-only notification) changes nothing.
+    if (pixel_width == 0 || pixel_height == 0)
+    {
+        return;
+    }
+    if (pixel_width == m_target_width && pixel_height == m_target_height)
+    {
+        return;
+    }
+
+    auto& eng = runtime::current_engine();
+    auto& gpu = *eng.gpu;
+
+    // Recreate the context-owned targets: new ones first, so every
+    // consumer that compares the handle it bound against the one
+    // frame_context publishes (tonemap, bloom, the velocity pass's depth,
+    // the TAA resolve's LDR input) sees a different handle next frame;
+    // then release the old ones. OpenGL frees them immediately, which is
+    // fine between frames; Vulkan defers the free until the last command
+    // buffer that referenced them has retired.
+    const gpu::render_target old_scene_color = m_scene_color_target;
+    const gpu::render_target old_ldr_color = m_ldr_color_target;
+    create_color_targets(pixel_width, pixel_height);
+    if (old_ldr_color.valid())
+    {
+        gpu.destroy(old_ldr_color);
+    }
+    if (old_scene_color.valid())
+    {
+        gpu.destroy(old_scene_color);
+    }
+
+    // Let every pass follow: the bloom pyramid, the velocity target, the
+    // TAA history / resolve (+ texel step, history reset), the FXAA edge
+    // step and the scene pass's jitter amplitude. Fixed-size passes
+    // (shadow maps, UI, debug) keep the default no-op.
+    for (auto& p : m_passes)
+    {
+        p->resize(pixel_width, pixel_height);
+    }
+
+    // The projection follows the drawable so the image is not stretched.
+    // A camera attached later reads the window's aspect when it is
+    // constructed (see perspective_camera).
+    if (camera* active = camera::get_current_camera(); active != nullptr)
+    {
+        active->set_aspect_ratio(drawable_aspect_ratio(pixel_width, pixel_height, 1.0f));
+    }
+
+    LOG_INF("Rendering Engine: render targets resized to %ux%u", pixel_width, pixel_height);
+}
+
+void rendering_engine::context::create_color_targets(uint32_t width, uint32_t height)
+{
+    auto& gpu = *runtime::current_engine().gpu;
+
+    // The HDR scene-colour target the scene pass renders into: rgba16f
+    // instead of straight to the swapchain so tonemap, bloom and any
+    // other post effect can sample real HDR luminance.
+    gpu::render_target_descriptor scene_color_descriptor{};
+    scene_color_descriptor.color_format = gpu::texture_format::rgba16_float;
+    scene_color_descriptor.width = width;
+    scene_color_descriptor.height = height;
+    scene_color_descriptor.with_depth = true;
+    scene_color_descriptor.depth_format = gpu::texture_format::depth24;
+    m_scene_color_target = gpu.create_render_target(scene_color_descriptor);
+    m_scene_color_texture = gpu.render_target_color_texture(m_scene_color_target);
+
+    // The LDR target the tonemap pass resolves into and the FXAA pass
+    // samples. The swapchain cannot be bound as a shader input, so the
+    // final anti-aliasing pass reads its tonemapped source from this
+    // rgba8 intermediate and writes to the swapchain. No depth: the post
+    // chain runs depth-disabled.
+    gpu::render_target_descriptor ldr_color_descriptor{};
+    ldr_color_descriptor.color_format = gpu::texture_format::rgba8_unorm;
+    ldr_color_descriptor.width = width;
+    ldr_color_descriptor.height = height;
+    ldr_color_descriptor.with_depth = false;
+    m_ldr_color_target = gpu.create_render_target(ldr_color_descriptor);
+    m_ldr_color_texture = gpu.render_target_color_texture(m_ldr_color_target);
+
+    m_target_width = width;
+    m_target_height = height;
+}
+
+void rendering_engine::context::release_color_targets()
+{
+    auto& gpu = *runtime::current_engine().gpu;
+
+    if (m_ldr_color_target.valid())
+    {
+        gpu.destroy(m_ldr_color_target);
+        m_ldr_color_target = {};
+        m_ldr_color_texture = {};
+    }
+    if (m_scene_color_target.valid())
+    {
+        gpu.destroy(m_scene_color_target);
+        m_scene_color_target = {};
+        m_scene_color_texture = {};
+    }
+    m_target_width = 0;
+    m_target_height = 0;
 }
 
 void rendering_engine::context::register_scene_renderable(renderable* r)
