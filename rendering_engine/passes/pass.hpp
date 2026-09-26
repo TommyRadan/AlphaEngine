@@ -102,6 +102,22 @@ namespace rendering_engine
         gpu::render_target ldr_color_target{};
         gpu::texture ldr_color_texture{};
 
+        // Per-pixel motion vectors the velocity pass wrote this frame
+        // (signed UV displacement in xy), or an invalid handle while
+        // temporal AA is off. The pass owns the target; @ref context
+        // publishes the handle here every frame so the TAA resolve can
+        // sample it without holding a pointer to its producer, and so a
+        // resize that recreates the target is picked up through the same
+        // handle comparison as @ref scene_depth_texture.
+        gpu::texture velocity_texture{};
+
+        // The TAA resolve of this frame, or an invalid handle while
+        // temporal AA is off. The final anti-aliasing pass (FXAA) samples
+        // this when valid and @ref ldr_color_texture otherwise, so the
+        // swapchain always receives a single anti-aliased image. Published
+        // by @ref context from the pass that owns the target.
+        gpu::texture taa_resolve_texture{};
+
         // Scene-wide atmospheric fog, copied from @ref context::set_fog
         // each frame. The scene pass packs it into the per-view PerFrame
         // UBO so the lit materials can blend toward it by camera
@@ -159,6 +175,33 @@ namespace rendering_engine
         virtual void declare_io(render_graph::pass_io_builder& io) const
         {
             (void)io;
+        }
+
+        /**
+         * @brief Notifies the pass that the drawable changed size.
+         *
+         * Called by @ref context::on_resize with the new pixel size,
+         * outside any frame (no command encoder is recording), after the
+         * context has recreated its scene-colour and LDR targets at that
+         * size and before the next @ref record. Never called with a zero
+         * dimension. Passes that own full-resolution targets recreate
+         * them here (creating the new target before destroying the old
+         * one so consumers see a different handle); passes that bake a
+         * size-dependent UBO note the new size and rewrite the buffer at
+         * their next @ref record, inside the frame bracket, since the
+         * previous frame may still be reading it on a deferred-execution
+         * backend until @c begin_frame waits. Passes that sample a texture
+         * owned by the context or by another pass do not re-plumb here:
+         * they compare the handle in @ref frame_context against the one
+         * their bind group was built with on every @ref record and
+         * rebuild on change, so any recreation reaches them on the next
+         * frame. Defaults to a no-op for passes whose resources do not
+         * follow the drawable (shadow maps, UI, debug).
+         */
+        virtual void resize(uint32_t width, uint32_t height)
+        {
+            (void)width;
+            (void)height;
         }
     };
 } // namespace rendering_engine

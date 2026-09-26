@@ -94,6 +94,7 @@ set(ALPHAENGINE_TEST_SOURCES
     runtime/scene_graph_test.cpp
     runtime/light_component_test.cpp
     rendering_engine/assets/asset_cache_test.cpp
+    rendering_engine/camera/aspect_ratio_test.cpp
     rendering_engine/gpu/handle_pool_test.cpp
     rendering_engine/gpu/shader_compiler_test.cpp
     rendering_engine/gpu/shader_library_test.cpp

@@ -22,6 +22,7 @@
 
 #pragma once
 
+#include <array>
 #include <vector>
 
 #include <rendering_engine/gpu/handle.hpp>
@@ -57,18 +58,21 @@ namespace rendering_engine
      * vertex buffers beyond the @ref fullscreen_triangle_vertices).
      *
      * Thresholds, blur offsets and composite weights are static — they
-     * depend only on the target dimensions known at construction — so
-     * they are baked into per-stage UBOs once, mirroring the way
-     * @ref tonemap_pass captures its exposure. Live tuning is out of
-     * scope.
+     * depend only on the target dimensions — so they are baked into
+     * per-stage UBOs when the pyramid is built (at construction and again
+     * by @ref resize), mirroring the way @ref tonemap_pass captures its
+     * exposure. Live tuning is out of scope.
      */
     struct bloom_pass : pass
     {
-        // @p scene_color is the HDR scene-colour texture the bright-pass
-        // samples; @p width / @p height are the backbuffer dimensions the
-        // mip pyramid is sized against. The composite target is taken from
+        // @p width / @p height are the backbuffer dimensions the mip
+        // pyramid is sized against. The HDR scene colour the bright-pass
+        // samples is not a constructor input: it arrives every frame as
+        // @ref frame_context::scene_color_texture, and the threshold bind
+        // group is (re)built whenever that handle differs from the one it
+        // was last built against. The composite target is taken from
         // @ref frame_context::scene_color_target each frame.
-        bloom_pass(gpu::texture scene_color, uint32_t width, uint32_t height);
+        bloom_pass(uint32_t width, uint32_t height);
         ~bloom_pass() override;
 
         bloom_pass(const bloom_pass&) = delete;
@@ -86,6 +90,14 @@ namespace rendering_engine
             io.read("scene_color");
             io.write("scene_color");
         }
+
+        // Rebuilds the bright-pass target and the whole blur pyramid (its
+        // targets, per-level texel-step UBOs and bind groups) for the new
+        // drawable size. Every consumer of the pyramid textures is this
+        // pass's own bind groups, so they are rebuilt here directly; the
+        // threshold bind group is rebound by record() when the scene
+        // colour handle changes. No-op while the pass is disabled.
+        void resize(uint32_t width, uint32_t height) override;
 
     private:
         // One mip of the blur pyramid. @c horizontal holds the result of
@@ -134,7 +146,31 @@ namespace rendering_engine
         gpu::buffer m_threshold_ubo{};
         gpu::bind_group m_threshold_bind_group{};
 
+        // The scene-colour texture @ref m_threshold_bind_group was built
+        // against; invalid until the first record() builds the group.
+        gpu::texture m_bound_scene_color{};
+
         std::vector<bloom_level> m_levels;
+
+        // Resource helpers shared by every stage: an rgba16f target of the
+        // given size, a static vec4 params UBO, and a {texture @0, ubo @1}
+        // bind group on @ref m_io_layout.
+        gpu::render_target create_target(uint32_t width, uint32_t height) const;
+        gpu::buffer create_params_ubo(const std::array<float, 4>& values) const;
+        gpu::bind_group create_bind_group(gpu::texture input, gpu::buffer ubo) const;
+
+        // Builds the bright-pass target and the blur pyramid (targets,
+        // per-level UBOs and bind groups) for a @p width x @p height
+        // backbuffer. Expects @ref m_levels to be empty and the bright
+        // target to be invalid.
+        void create_pyramid(uint32_t width, uint32_t height);
+
+        // Releases everything create_pyramid built, bind groups first.
+        void release_pyramid();
+
+        // Rebuild the threshold bind group against @p scene_color and the
+        // threshold UBO, remembering the handle in @ref m_bound_scene_color.
+        void rebuild_threshold_bind_group(gpu::texture scene_color);
 
         // False when the backbuffer dimensions are degenerate (no
         // settings, zero-sized window); record() then no-ops so the scene
