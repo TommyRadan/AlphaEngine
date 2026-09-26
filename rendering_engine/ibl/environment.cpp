@@ -761,18 +761,30 @@ namespace rendering_engine
             return gpu.create_texture(td);
         };
 
-        // Layout entry helpers.
+        // Layout entry helpers. These layouts are only ever bound by
+        // the compute pipelines above, so every entry declares the
+        // compute stage (the Vulkan backend bakes it into the
+        // descriptor-set layout; OpenGL ignores it).
         const auto sampler_entry = [](uint32_t binding)
-        { return gpu::bind_group_layout_entry{binding, gpu::binding_kind::texture}; };
+        {
+            gpu::bind_group_layout_entry e{binding, gpu::binding_kind::texture};
+            e.stages = gpu::shader_stages_compute;
+            return e;
+        };
         const auto image_entry = [](uint32_t binding)
         {
             gpu::bind_group_layout_entry e{binding, gpu::binding_kind::storage_texture};
             e.storage_format = gpu::texture_format::rgba16_float;
             e.storage_access_mode = gpu::storage_access::write_only;
+            e.stages = gpu::shader_stages_compute;
             return e;
         };
         const auto ubo_entry = [](uint32_t binding)
-        { return gpu::bind_group_layout_entry{binding, gpu::binding_kind::uniform_buffer}; };
+        {
+            gpu::bind_group_layout_entry e{binding, gpu::binding_kind::uniform_buffer};
+            e.stages = gpu::shader_stages_compute;
+            return e;
+        };
 
         // ---- pipelines --------------------------------------------------
         gpu::bind_group_layout_descriptor irr_layout{};

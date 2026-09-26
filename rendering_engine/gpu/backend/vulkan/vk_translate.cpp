@@ -262,7 +262,9 @@ namespace rendering_engine::gpu::backend::vulkan
             return VK_FORMAT_R8G8B8A8_SRGB;
         case texture_format::rgb8_unorm:
             // R8G8B8 isn't broadly supported as a sampled format on
-            // Vulkan; widen to rgba8 and let the upload path pad.
+            // Vulkan; widen to rgba8. The texture upload path pads a
+            // 3-byte-per-texel source to RGBA8 with an opaque alpha
+            // (vk_device_texture.cpp, upload_region).
             return VK_FORMAT_R8G8B8A8_UNORM;
         case texture_format::r8_unorm:
             return VK_FORMAT_R8_UNORM;
@@ -270,6 +272,12 @@ namespace rendering_engine::gpu::backend::vulkan
             return VK_FORMAT_R16G16B16A16_SFLOAT;
         case texture_format::rgba32_float:
             return VK_FORMAT_R32G32B32A32_SFLOAT;
+        // The depth cases are the *preferred* format only. Neither
+        // packed 24-bit format is a mandatory depth attachment, so the
+        // device resolves each depth format once at init through the
+        // fallback chains in vk_negotiate.hpp and serves the result
+        // from vk_device::vk_format_for; every image and render pass
+        // goes through that, not through this table.
         case texture_format::depth24:
             return VK_FORMAT_X8_D24_UNORM_PACK32;
         case texture_format::depth32_float:

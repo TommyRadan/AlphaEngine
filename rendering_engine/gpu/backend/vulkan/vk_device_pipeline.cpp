@@ -55,10 +55,43 @@ namespace rendering_engine::gpu::backend::vulkan
 {
     namespace
     {
-        constexpr VkShaderStageFlags k_all_stages =
-            VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT |
-            VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT | VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_FRAGMENT_BIT |
-            VK_SHADER_STAGE_COMPUTE_BIT;
+        // The descriptor's stageFlags come from the stages the layout
+        // entry declares (vertex + fragment by default, compute for the
+        // IBL layouts) rather than every stage Vulkan knows: a binding
+        // flagged for a geometry or tessellation stage whose feature
+        // was never granted is what the validation layer objects to,
+        // and a narrower mask is also what lets a driver place the
+        // descriptor. An entry that declares nothing at all falls back
+        // to the default pair rather than producing an unusable layout.
+        VkShaderStageFlags to_vk_stage_flags(shader_stages stages)
+        {
+            VkShaderStageFlags out = 0;
+            if ((stages & shader_stages_vertex) != 0u)
+            {
+                out |= VK_SHADER_STAGE_VERTEX_BIT;
+            }
+            if ((stages & shader_stages_fragment) != 0u)
+            {
+                out |= VK_SHADER_STAGE_FRAGMENT_BIT;
+            }
+            if ((stages & shader_stages_geometry) != 0u)
+            {
+                out |= VK_SHADER_STAGE_GEOMETRY_BIT;
+            }
+            if ((stages & shader_stages_tessellation_control) != 0u)
+            {
+                out |= VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
+            }
+            if ((stages & shader_stages_tessellation_evaluation) != 0u)
+            {
+                out |= VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
+            }
+            if ((stages & shader_stages_compute) != 0u)
+            {
+                out |= VK_SHADER_STAGE_COMPUTE_BIT;
+            }
+            return out != 0u ? out : (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+        }
 
         VkDescriptorType to_descriptor_type(binding_kind kind)
         {
@@ -100,7 +133,7 @@ namespace rendering_engine::gpu::backend::vulkan
             b.binding = entry.binding;
             b.descriptorType = to_descriptor_type(entry.kind);
             b.descriptorCount = 1;
-            b.stageFlags = k_all_stages;
+            b.stageFlags = to_vk_stage_flags(entry.stages);
             bindings.push_back(b);
         }
 
@@ -108,9 +141,9 @@ namespace rendering_engine::gpu::backend::vulkan
         info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
         info.bindingCount = static_cast<uint32_t>(bindings.size());
         info.pBindings = bindings.data();
-        if (vkCreateDescriptorSetLayout(m_device, &info, nullptr, &record.object) != VK_SUCCESS)
+        if (!vk_check(vkCreateDescriptorSetLayout(m_device, &info, nullptr, &record.object),
+                      "vkCreateDescriptorSetLayout"))
         {
-            LOG_FTL("vkCreateDescriptorSetLayout failed");
             throw std::runtime_error{"vkCreateDescriptorSetLayout failed"};
         }
 
@@ -121,15 +154,23 @@ namespace rendering_engine::gpu::backend::vulkan
 
     void vk_device::destroy(bind_group_layout handle)
     {
-        if (auto* record = m_bind_group_layouts.lookup(handle.id))
+        auto* record = m_bind_group_layouts.lookup(handle.id);
+        if (record == nullptr)
         {
-            if (record->object != VK_NULL_HANDLE)
-            {
-                vkDestroyDescriptorSetLayout(m_device, record->object, nullptr);
-                record->object = VK_NULL_HANDLE;
-            }
-            m_bind_group_layouts.remove(handle.id);
+            return;
         }
+        // Deferred with the rest so a layout released mid-frame (a
+        // material rebuild) stays valid for the pipeline-layout build
+        // or descriptor-set allocation the same frame still names it
+        // in; the handle-pool slot is freed now.
+        const VkDevice dev = m_device;
+        const VkDescriptorSetLayout object = record->object;
+        if (object != VK_NULL_HANDLE)
+        {
+            enqueue_destroy([dev, object] { vkDestroyDescriptorSetLayout(dev, object, nullptr); });
+        }
+        record->object = VK_NULL_HANDLE;
+        m_bind_group_layouts.remove(handle.id);
     }
 
     namespace
@@ -174,6 +215,25 @@ namespace rendering_engine::gpu::backend::vulkan
                                            VkRenderPass render_pass,
                                            bool y_flipped)
         {
+            // A stage whose feature the device did not grant cannot be
+            // part of a pipeline (vkCreateGraphicsPipelines would be
+            // rejected outright); the gap itself was logged once at
+            // device creation.
+            const vk_device_features& features = device.features();
+            if (descriptor.geometry_shader.valid() && !features.geometry_shader)
+            {
+                LOG_ERR("vk_device: pipeline attaches a geometry shader but the device has no geometryShader "
+                        "feature; refusing to build it");
+                return VK_NULL_HANDLE;
+            }
+            if ((descriptor.tessellation_control_shader.valid() || descriptor.tessellation_evaluation_shader.valid()) &&
+                !features.tessellation_shader)
+            {
+                LOG_ERR("vk_device: pipeline attaches tessellation shaders but the device has no "
+                        "tessellationShader feature; refusing to build it");
+                return VK_NULL_HANDLE;
+            }
+
             std::vector<VkPipelineShaderStageCreateInfo> stages;
             const auto attach = [&](shader_module module, VkShaderStageFlagBits stage_bit)
             {
@@ -259,6 +319,13 @@ namespace rendering_engine::gpu::backend::vulkan
             VkPipelineRasterizationStateCreateInfo rs{};
             rs.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
             rs.polygonMode = to_vk_polygon_mode(descriptor.rasterizer.polygon);
+            if (rs.polygonMode != VK_POLYGON_MODE_FILL && !features.fill_mode_non_solid)
+            {
+                // Only FILL is legal without fillModeNonSolid; a
+                // wireframe material rasterises filled on such a
+                // device rather than failing to build.
+                rs.polygonMode = VK_POLYGON_MODE_FILL;
+            }
             rs.cullMode = to_vk_cull_mode(descriptor.rasterizer.cull);
             rs.frontFace = to_vk_front_face(descriptor.rasterizer.front);
             // Caller intent is "CCW = front" in math-Y-up (world Z up
@@ -414,8 +481,9 @@ namespace rendering_engine::gpu::backend::vulkan
         }
 
         auto* sm = m_shader_modules.lookup(descriptor.compute_shader.id);
-        if (sm == nullptr)
+        if (sm == nullptr || sm->object == VK_NULL_HANDLE)
         {
+            LOG_ERR("vk_device::create_compute_pipeline: compute shader module is not live");
             vkDestroyPipelineLayout(m_device, record.layout, nullptr);
             return {};
         }
@@ -430,7 +498,8 @@ namespace rendering_engine::gpu::backend::vulkan
         cpi.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
         cpi.stage = stage;
         cpi.layout = record.layout;
-        if (vkCreateComputePipelines(m_device, VK_NULL_HANDLE, 1, &cpi, nullptr, &record.compute_object) != VK_SUCCESS)
+        if (!vk_check(vkCreateComputePipelines(m_device, VK_NULL_HANDLE, 1, &cpi, nullptr, &record.compute_object),
+                      "vkCreateComputePipelines"))
         {
             vkDestroyPipelineLayout(m_device, record.layout, nullptr);
             return {};
@@ -497,15 +566,14 @@ namespace rendering_engine::gpu::backend::vulkan
         record.layout = descriptor.layout;
         record.entries = descriptor.entries;
 
-        VkDescriptorSetAllocateInfo ai{};
-        ai.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        ai.descriptorPool = m_descriptor_pool;
-        ai.descriptorSetCount = 1;
-        ai.pSetLayouts = &layout_record->object;
-        const VkResult alloc_result = vkAllocateDescriptorSets(m_device, &ai, &record.descriptor_set);
-        if (alloc_result != VK_SUCCESS)
+        // From the pool chain: an exhausted pool grows the chain and
+        // the allocation is retried, so the per-draw / per-material
+        // churn of a larger scene never silently produces an invalid
+        // group. The pool is recorded so destroy() frees the set to
+        // the pool it came from.
+        if (!allocate_descriptor_set(layout_record->object, record.descriptor_set, record.pool))
         {
-            LOG_ERR("vkAllocateDescriptorSets failed: %s", vk_result_to_string(alloc_result));
+            LOG_ERR("vk_device::create_bind_group: no descriptor set could be allocated; the bind group is invalid");
             return {};
         }
 
@@ -572,10 +640,24 @@ namespace rendering_engine::gpu::backend::vulkan
                         continue;
                     }
                 }
+                VkSampler sampler = tex->default_sampler;
+                if (sampler == VK_NULL_HANDLE)
+                {
+                    // The texture's own sampler failed to create (logged
+                    // then). A combined-image-sampler descriptor must
+                    // name a valid sampler, so the device's fallback
+                    // stands in rather than a null handle reaching
+                    // vkUpdateDescriptorSets.
+                    LOG_ERR("vk_device::create_bind_group: texture %llu bound at %u has no sampler; "
+                            "using the device fallback sampler",
+                            static_cast<unsigned long long>(entry.texture_value.id),
+                            entry.binding);
+                    sampler = m_fallback_sampler;
+                }
                 VkDescriptorImageInfo ii{};
                 ii.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
                 ii.imageView = tex->view;
-                ii.sampler = tex->default_sampler;
+                ii.sampler = sampler;
                 image_infos.push_back(ii);
                 w.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
                 w.pImageInfo = &image_infos.back();
@@ -630,7 +712,9 @@ namespace rendering_engine::gpu::backend::vulkan
             return;
         }
         VkDevice dev = m_device;
-        VkDescriptorPool pool = m_descriptor_pool;
+        // The set goes back to the pool it was allocated from, which
+        // need not be the chain's current pool.
+        VkDescriptorPool pool = record->pool;
         VkDescriptorSet set = record->descriptor_set;
         // Same deferred-destroy rationale as in destroy(buffer): the
         // descriptor set might still be referenced by an in-flight
@@ -640,10 +724,11 @@ namespace rendering_engine::gpu::backend::vulkan
             {
                 if (set != VK_NULL_HANDLE && pool != VK_NULL_HANDLE)
                 {
-                    vkFreeDescriptorSets(dev, pool, 1, &set);
+                    vk_check(vkFreeDescriptorSets(dev, pool, 1, &set), "vkFreeDescriptorSets");
                 }
             });
         record->descriptor_set = VK_NULL_HANDLE;
+        record->pool = VK_NULL_HANDLE;
         m_bind_groups.remove(handle.id);
     }
 } // namespace rendering_engine::gpu::backend::vulkan

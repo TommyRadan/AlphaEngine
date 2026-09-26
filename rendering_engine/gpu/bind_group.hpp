@@ -79,6 +79,15 @@ namespace rendering_engine::gpu
         // bind group leaves this slot unset; the OpenGL backend ignores
         // it. Defaults to 2D.
         texture_dimension dimension{texture_dimension::d2};
+
+        // The shader stages that read this binding. The Vulkan backend
+        // bakes it into the descriptor-set layout's @c stageFlags, so a
+        // layout must name every stage that declares the binding: the
+        // default covers the vertex + fragment pair of a rasterisation
+        // pipeline, a compute layout sets @c shader_stages_compute, and
+        // a geometry / tessellation consumer widens it. The OpenGL
+        // backend ignores it.
+        shader_stages stages{shader_stages_default};
     };
 
     struct bind_group_layout_descriptor
