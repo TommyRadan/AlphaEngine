@@ -51,11 +51,12 @@ namespace rendering_engine
     {
         // std140 layout for the per-view PerFrame UBO: mat4 viewMatrix
         // at offset 0, mat4 projectionMatrix at offset 64, then the fog
-        // block — vec4 fogColor at 128 (rgb colour, a = fog mode) and
-        // vec4 fogParams at 144 (x near, y far, z density). mat4 / vec4
-        // are 16-byte aligned, so no padding is needed between members.
-        // 160 bytes total.
-        constexpr size_t per_frame_ubo_size = 2 * sizeof(core::math::mat4) + 2 * sizeof(core::math::vec4);
+        // block — vec4 fogColor at 128 (rgb colour, a = fog mode), vec4
+        // fogParams at 144 (x near, y far, z density, w height density)
+        // and vec4 heightFogParams at 160 (x falloff, y reference
+        // height). mat4 / vec4 are 16-byte aligned, so no padding is
+        // needed between members. 176 bytes total.
+        constexpr size_t per_frame_ubo_size = 2 * sizeof(core::math::mat4) + 3 * sizeof(core::math::vec4);
 
         // Binding numbers within the per-frame bind group (slot 0), from
         // the global table in gpu/shader_bindings.hpp (which explains why
@@ -305,8 +306,9 @@ namespace rendering_engine
         // Refill the per-frame UBO before any draw consults it.
         // Layout matches the GLSL @c PerFrame block: viewMatrix at
         // offset 0, projectionMatrix at offset sizeof(mat4), then the
-        // fog block (fogColor at float 32, fogParams at float 36).
-        std::array<float, 40> ubo_payload{};
+        // fog block (fogColor at float 32, fogParams at float 36,
+        // heightFogParams at float 40).
+        std::array<float, 44> ubo_payload{};
         const auto view = ctx.active_camera->get_view_matrix();
         const core::math::mat4 projection = ctx.active_camera->get_projection_matrix();
         std::memcpy(ubo_payload.data(), view.data(), sizeof(core::math::mat4));
@@ -320,6 +322,12 @@ namespace rendering_engine
         ubo_payload[36] = ctx.fog.near_distance;
         ubo_payload[37] = ctx.fog.far_distance;
         ubo_payload[38] = ctx.fog.density;
+        // Height fog: fogParams.w is the height density (0 disables the
+        // term); heightFogParams.xy carry the falloff and reference
+        // height, keeping the same UBO the distance fog already uses.
+        ubo_payload[39] = ctx.fog.height_density;
+        ubo_payload[40] = ctx.fog.height_falloff;
+        ubo_payload[41] = ctx.fog.reference_height;
 
         // The overlay group carries the unjittered projection so the debug
         // pass — which paints after the TAA resolve and so cannot average

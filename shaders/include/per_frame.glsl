@@ -2,11 +2,12 @@
 // binding BINDING_PER_FRAME. This is the one declaration of that block;
 // every scene shader includes it rather than restating the layout.
 //
-// std140, 160 bytes, matching scene_pass::per_frame_ubo_size:
+// std140, 176 bytes, matching scene_pass::per_frame_ubo_size:
 //     0   mat4 viewMatrix
 //    64   mat4 projectionMatrix
-//   128   vec4 fogColor    rgb colour, a = mode (0 none, 1 linear, 2 exp2)
-//   144   vec4 fogParams   x near, y far, z density
+//   128   vec4 fogColor         rgb colour, a = mode (0 none, 1 linear, 2 exp2)
+//   144   vec4 fogParams        x near, y far, z density, w height density
+//   160   vec4 heightFogParams  x falloff, y reference height (z, w unused)
 #ifndef AE_PER_FRAME_GLSL
 #define AE_PER_FRAME_GLSL
 
@@ -18,6 +19,7 @@ layout(set = 0, binding = BINDING_PER_FRAME, std140) uniform PerFrame
     mat4 projectionMatrix;
     vec4 fogColor;
     vec4 fogParams;
+    vec4 heightFogParams;
 } u_frame;
 
 // The camera's world-space position. The view matrix is rigid (a
