@@ -116,6 +116,12 @@ namespace rendering_engine
         // (there is nothing to undo). Stable across frames.
         gpu::bind_group overlay_frame_bind_group() const;
 
+        // Rescales the temporal-AA jitter to the new drawable so the Halton
+        // offsets stay sub-pixel. The pass renders into the scene target
+        // the context hands it each frame, so nothing else here follows the
+        // size. No-op while jitter is off.
+        void resize(uint32_t width, uint32_t height) override;
+
     private:
         // Non-owning back-pointer to the engine context's
         // scene-renderable registry. The context outlives every
@@ -161,7 +167,8 @@ namespace rendering_engine
         // before uploading it, so consecutive frames sample the scene at
         // slightly different positions for the @ref taa_pass to accumulate.
         // @c m_jitter_index cycles the Halton sequence; the two reciprocal
-        // dimensions scale the NDC offset to a sub-pixel amount.
+        // dimensions scale the NDC offset to a sub-pixel amount and are
+        // rewritten by resize() so the amount tracks the drawable.
         bool m_taa_jitter{false};
         uint32_t m_jitter_index{0};
         float m_inv_width{0.0f};

@@ -86,6 +86,7 @@ set(ALPHAENGINE_TEST_SOURCES
     runtime/scene_graph_test.cpp
     runtime/light_component_test.cpp
     rendering_engine/assets/asset_cache_test.cpp
+    rendering_engine/camera/aspect_ratio_test.cpp
     rendering_engine/mesh/mesh_test.cpp
     rendering_engine/mesh/tangent_test.cpp
     rendering_engine/mesh/vertex_format_test.cpp

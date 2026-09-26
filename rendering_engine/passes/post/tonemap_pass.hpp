@@ -79,7 +79,12 @@ namespace rendering_engine
      */
     struct tonemap_pass : pass
     {
-        explicit tonemap_pass(gpu::texture input_color);
+        // The HDR image it maps is not a constructor input: it arrives
+        // every frame as @ref frame_context::scene_color_texture, and the
+        // input bind group is (re)built whenever that handle differs from
+        // the one it was last built against, so a resize that recreates
+        // the scene target is picked up without any re-plumbing.
+        tonemap_pass();
         ~tonemap_pass() override;
 
         tonemap_pass(const tonemap_pass&) = delete;
@@ -119,6 +124,10 @@ namespace rendering_engine
         // Tonemap UBO; called by the setters whenever a value changes.
         void upload_uniforms();
 
+        // Rebuild the input bind group against @p input_color and the
+        // Tonemap UBO, remembering the handle in @ref m_bound_input.
+        void rebuild_bind_group(gpu::texture input_color);
+
         // CPU-side mirror of the std140 @c Tonemap UBO: the float
         // exposure scale and the int operator selector.
         float m_exposure{1.0f};
@@ -131,5 +140,9 @@ namespace rendering_engine
         gpu::bind_group_layout m_input_layout{};
         gpu::bind_group m_input_bind_group{};
         gpu::pipeline m_pipeline{};
+
+        // The texture @ref m_input_bind_group was built against; invalid
+        // until the first record() builds the group.
+        gpu::texture m_bound_input{};
     };
 } // namespace rendering_engine

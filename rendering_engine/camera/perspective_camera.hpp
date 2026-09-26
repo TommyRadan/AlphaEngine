@@ -22,16 +22,42 @@
 
 #pragma once
 
+#include <cstdint>
+
 #include <core/math/math.hpp>
 #include <rendering_engine/camera/camera.hpp>
 
 namespace rendering_engine
 {
+    /**
+     * @brief Width over height of a drawable, or @p fallback when either
+     *        dimension is zero (no window yet, or a minimised one).
+     *
+     * Pure helper shared by the @ref perspective_camera constructor (which
+     * reads the window's pixel size) and the renderer's resize path.
+     */
+    constexpr float drawable_aspect_ratio(std::uint32_t width, std::uint32_t height, float fallback) noexcept
+    {
+        if (width == 0 || height == 0)
+        {
+            return fallback;
+        }
+        return static_cast<float>(width) / static_cast<float>(height);
+    }
+
     struct perspective_camera : public camera
     {
+        // Reads the field of view from the settings and the aspect ratio
+        // from the window's current pixel size, falling back to the
+        // settings' nominal size while the window has no drawable. The
+        // renderer keeps the attached camera's aspect current across
+        // resizes through @ref set_aspect_ratio.
         perspective_camera();
 
         const core::math::mat4 get_projection_matrix() const final;
+
+        // Sets @ref aspect_ratio and invalidates the projection.
+        void set_aspect_ratio(float value) final;
 
         float field_of_view;
         float aspect_ratio;
