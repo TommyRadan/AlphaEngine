@@ -28,7 +28,7 @@
  * function in its own translation unit (@c gl_factory.cpp,
  * @c vk_factory.cpp). Both backends are always linked into the
  * binary; the runtime choice is driven by
- * @c settings::get_graphics_backend(), which the engine consults at
+ * @c core::settings::graphics.backend, which the engine consults at
  * construction time.
  */
 

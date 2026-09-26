@@ -99,7 +99,10 @@ namespace rendering_engine
         /**
          * @brief Initializes SDL video (and the gamepad subsystem), creates
          *        the window and the GL context using the dimensions and
-         *        flags read from the engine-wide @c settings object.
+         *        flags read from the engine-wide @ref core::settings object.
+         *        A zero width or height ("match the display", the release
+         *        default) is resolved against the primary display once video
+         *        is up and written back to the settings.
          *
          * The window is resizable and requests a high-pixel-density
          * drawable, so @ref pixel_size may exceed @ref size on scaled

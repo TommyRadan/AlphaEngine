@@ -49,7 +49,7 @@ namespace rendering_engine::gpu
 {
     // Backends supported by @ref create_device. Both backends are
     // always compiled into the binary; the runtime choice is driven
-    // by @c settings::get_graphics_backend() at engine construction.
+    // by @c core::settings::graphics.backend at engine construction.
     enum class backend_type
     {
         opengl,

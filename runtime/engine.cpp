@@ -23,6 +23,7 @@
 #include <runtime/engine.hpp>
 
 #include <stdexcept>
+#include <utility>
 
 #include <core/event_engine.hpp>
 #include <core/jobs.hpp>
@@ -53,13 +54,13 @@ namespace runtime
         // old singleton::get_instance() hooks.
         engine* g_current_engine = nullptr;
 
-        rendering_engine::gpu::backend_type to_backend_type(graphics_backend b)
+        rendering_engine::gpu::backend_type to_backend_type(core::graphics_backend b)
         {
             switch (b)
             {
-            case graphics_backend::opengl:
+            case core::graphics_backend::opengl:
                 return rendering_engine::gpu::backend_type::opengl;
-            case graphics_backend::vulkan:
+            case core::graphics_backend::vulkan:
                 return rendering_engine::gpu::backend_type::vulkan;
             }
             throw std::logic_error{"to_backend_type: unknown graphics_backend"};
@@ -80,11 +81,10 @@ namespace runtime
         return *g_current_engine;
     }
 
-    engine::engine()
+    engine::engine(core::settings values)
     {
         // Install ourselves first so subsystem constructors can observe
-        // the engine (for example, settings reads config, time queries
-        // SDL).
+        // the engine (for example, time queries SDL).
         if (g_current_engine != nullptr)
         {
             LOG_FTL("engine: another instance is already live");
@@ -94,7 +94,10 @@ namespace runtime
 
         // Construction order mirrors the declaration order in the
         // header and the old subsystem init order in main_loop.cpp.
-        settings = std::make_unique<::settings>();
+        // The settings arrive resolved (defaults, file, environment, command
+        // line — see core::load_settings), so every subsystem below reads a
+        // final value.
+        settings = std::make_unique<core::settings>(std::move(values));
         time = std::make_unique<core::time>();
         // The worker pool has no dependencies and is brought up early so any
         // subsystem can hand it work during init or per frame. Its threads

@@ -9,6 +9,8 @@ target_sources(AlphaEngine PRIVATE
     pool.hpp
     settings.cpp
     settings.hpp
+    settings_parse.cpp
+    settings_parse.hpp
     subscription.cpp
     subscription.hpp
     time.cpp

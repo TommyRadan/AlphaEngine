@@ -154,6 +154,20 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(glm)
 target_link_libraries(AlphaEngine glm::glm)
 
+# nlohmann/json — header-only, fetched from upstream and pinned to v3.11.3.
+# Backs the settings.json loader in core/settings_parse. The FetchContent
+# name is `json` so an offline build can point FETCHCONTENT_SOURCE_DIR_JSON
+# at a local checkout.
+set(JSON_BuildTests OFF CACHE INTERNAL "")
+FetchContent_Declare(
+    json
+    GIT_REPOSITORY https://github.com/nlohmann/json.git
+    GIT_TAG v3.11.3
+    GIT_SHALLOW TRUE
+)
+FetchContent_MakeAvailable(json)
+target_link_libraries(AlphaEngine nlohmann_json::nlohmann_json)
+
 # glslang — fetched and built statically. Compiles GLSL to SPIR-V at
 # runtime so both the OpenGL backend (via ARB_gl_spirv) and a future
 # Vulkan backend can consume the same byte blobs. ENABLE_OPT=OFF
@@ -191,7 +205,7 @@ target_link_libraries(AlphaEngine ${OPENGL_LIBRARIES})
 
 # Vulkan — always linked. Both the OpenGL and Vulkan backends are
 # compiled into the binary; the runtime choice is driven by
-# settings::get_graphics_backend(). The Vulkan backend at
+# core::settings::graphics.backend. The Vulkan backend at
 # rendering_engine/gpu/backend/vulkan/ links against the loader from
 # the system Vulkan SDK; the engine already pulls glslang in for the
 # OpenGL ARB_gl_spirv path, so the Vulkan backend reuses that for its

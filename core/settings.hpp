@@ -23,102 +23,142 @@
 /**
  * @file settings.hpp
  * @brief Engine-wide configuration, grouped per subsystem domain.
+ *
+ * The values are resolved once at startup by @ref core::load_settings: compiled defaults, then
+ * `<pref path>/settings.json`, then the `ALPHAENGINE_*` environment variables, then the command line, each
+ * layer overriding the one before it (see docs/settings.md). The per-layer steps are pure functions in
+ * core/settings_parse.hpp so they can be exercised without touching the process environment or SDL.
  */
 
 #pragma once
 
 #include <string>
 
-/** @brief Presentation mode for the application window. */
-enum class win_type
+namespace core
 {
-    win_type_windowed,   /**< Standard decorated window. */
-    win_type_borderless, /**< Borderless window. */
-    win_type_fullscreen  /**< Exclusive fullscreen. */
-};
+    /** @brief Presentation mode for the application window. */
+    enum class window_mode
+    {
+        windowed,   /**< Standard decorated window. */
+        fullscreen, /**< Fullscreen at the display's resolution. */
+        borderless  /**< Borderless window. */
+    };
 
-/** @brief GPU backend selected by @ref graphics_settings. */
-enum class graphics_backend
-{
-    opengl, /**< OpenGL 4.6 core. */
-    vulkan, /**< Vulkan. */
-};
+    /** @brief GPU backend selected by @ref graphics_settings. */
+    enum class graphics_backend
+    {
+        opengl, /**< OpenGL 4.6 core. */
+        vulkan, /**< Vulkan. */
+    };
 
-/** @brief Window / presentation configuration. */
-struct window_settings
-{
-    unsigned int width;
-    unsigned int height;
-    std::string name;
-    win_type type;
-    bool double_buffered;
+    /** @brief Window / presentation configuration. */
+    struct window_settings
+    {
+        /**
+         * @brief Window size in logical points. Zero on either axis means "match the primary display": that
+         *        query needs SDL's video subsystem, so @ref rendering_engine::window::init resolves it after
+         *        bringing video up and writes the concrete size back here for every later reader.
+         */
+        unsigned int width{0};
+        unsigned int height{0};
+        std::string title;
+        window_mode mode{window_mode::windowed};
+        bool double_buffered{true};
+
+        /**
+         * @brief Whether the presentation engine should wait for vertical
+         *        sync. Off by default in both configurations so the frame
+         *        rate is uncapped (the debug FPS overlay is more useful with
+         *        vsync off, and release favours latency over tearing).
+         */
+        bool vsync{false};
+
+        /** @brief Whether @ref width or @ref height is still the "match the display" placeholder. */
+        bool uses_native_resolution() const noexcept;
+
+        /** @brief Returns @c width / @c height, or 1 while the size is unresolved (@ref uses_native_resolution). */
+        float aspect_ratio() const noexcept;
+    };
+
+    /** @brief GPU backend configuration. */
+    struct graphics_settings
+    {
+        /** @brief GPU backend the engine brings up at startup. Read once during @ref runtime::engine construction. */
+        graphics_backend backend{graphics_backend::vulkan};
+
+        /**
+         * @brief Whether temporal anti-aliasing is enabled.
+         *
+         * When on, the scene pass jitters the projection matrix with a
+         * Halton sub-pixel sequence and the @ref rendering_engine::taa_pass
+         * accumulates the jittered frames into a stable, supersampled image
+         * (a neighbourhood colour clamp keeps moving content from ghosting).
+         * Read once during rendering-engine init.
+         */
+        bool temporal_aa{true};
+    };
+
+    /** @brief Camera configuration. */
+    struct camera_settings
+    {
+        /** @brief Vertical field of view of the perspective camera, in degrees. */
+        float field_of_view{70.0f};
+    };
+
+    /** @brief Input / mouse configuration. */
+    struct input_settings
+    {
+        /** @brief Mouse-look scale, radians per point of cursor travel. */
+        float mouse_sensitivity{0.005f};
+        bool mouse_reversed{false};
+    };
 
     /**
-     * @brief Whether the presentation engine should wait for vertical
-     *        sync. Disabled by default for both debug and release so the
-     *        frame rate is uncapped (the debug FPS overlay is more useful
-     *        with vsync off, and release favours latency over tearing).
-     */
-    bool vsync;
-
-    /** @brief Returns @c width / @c height of the window. */
-    float aspect_ratio() const noexcept;
-};
-
-/** @brief GPU backend configuration. */
-struct graphics_settings
-{
-    /**
-     * @brief GPU backend the engine should bring up at startup.
+     * @brief Engine-wide configuration, owned by @ref runtime::engine.
      *
-     * Read once during @ref runtime::engine construction. The default
-     * is @ref graphics_backend::vulkan; the value can be overridden
-     * via the @c ALPHAENGINE_GRAPHICS_BACKEND environment variable
-     * (`opengl` or `vulkan`).
+     * Plain data. The default constructor holds the compiled defaults (debug builds: 1600x900 windowed;
+     * release builds: fullscreen at the display's native size); @ref load_settings layers the config file, the
+     * environment and the command line on top. The engine takes the resolved struct by value at construction
+     * and subsystems read it afterwards. Nothing writes to it once the engine is up, except the one documented
+     * write-back of the resolved native size in @ref rendering_engine::window::init.
      */
-    graphics_backend backend;
+    struct settings
+    {
+        settings();
+
+        window_settings window;
+        graphics_settings graphics;
+        camera_settings camera;
+        input_settings input;
+    };
+
+    /** @brief The lowercase name of @p mode (`windowed`, `fullscreen`, `borderless`). */
+    const char* window_mode_name(window_mode mode) noexcept;
+
+    /** @brief The lowercase name of @p backend (`opengl`, `vulkan`). */
+    const char* graphics_backend_name(graphics_backend backend) noexcept;
+
+    /** @brief Outcome of @ref load_settings. */
+    struct settings_load_result
+    {
+        settings values;
+
+        /**
+         * @brief @c --help (or @c -h) was on the command line: the caller prints @ref command_line_usage and
+         *        exits instead of starting the engine. @ref values is left at the compiled defaults.
+         */
+        bool help_requested{false};
+    };
 
     /**
-     * @brief Whether temporal anti-aliasing is enabled.
-     *
-     * When on, the scene pass jitters the projection matrix with a
-     * Halton sub-pixel sequence and the @ref rendering_engine::taa_pass
-     * accumulates the jittered frames into a stable, supersampled image
-     * (a neighbourhood colour clamp keeps moving content from ghosting).
-     * Read once during rendering-engine init. Enabled by default; set
-     * the @c ALPHAENGINE_TAA environment variable to `0` / `off` /
-     * `false` to disable it (or `1` / `on` / `true` to force it on).
+     * @brief Resolves the process-wide settings: compiled defaults, then `settings.json` under
+     *        @c SDL_GetPrefPath("AlphaEngine", "AlphaEngine") (or the file named by @c --settings), then the
+     *        `ALPHAENGINE_*` environment variables, then the command line. A missing or malformed file and any
+     *        unrecognised value are logged and skipped, never fatal. Applies @c --log-level to
+     *        @ref core::logging on the way and logs the resolved values once at INFO. Requires @c LOG_INIT to
+     *        have run.
+     * @param argc Argument count as given to @c main.
+     * @param argv Arguments as given to @c main; @c argv[0] (the program name) is skipped.
      */
-    bool temporal_aa;
-};
-
-/** @brief Camera configuration. */
-struct camera_settings
-{
-    float field_of_view;
-};
-
-/** @brief Input / mouse configuration. */
-struct input_settings
-{
-    float mouse_sensitivity;
-    bool mouse_reversed;
-};
-
-/**
- * @brief Engine-wide configuration, owned by @ref runtime::engine.
- *
- * Values are populated in the constructor — debug builds default to a
- * 1600x900 windowed layout, release builds match the current display
- * mode and go fullscreen. The struct is intended as read-only engine-wide
- * configuration, grouped into per-subsystem domains.
- */
-struct settings
-{
-    settings();
-
-    window_settings window;
-    graphics_settings graphics;
-    camera_settings camera;
-    input_settings input;
-};
+    settings_load_result load_settings(int argc, char* const argv[]);
+} // namespace core
