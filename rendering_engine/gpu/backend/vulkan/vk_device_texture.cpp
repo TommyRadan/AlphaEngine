@@ -30,9 +30,12 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <cstring>
+#include <vector>
 
 #include <core/log.hpp>
+#include <rendering_engine/gpu/backend/vulkan/vk_negotiate.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_translate.hpp>
 
 namespace rendering_engine::gpu::backend::vulkan
@@ -176,7 +179,11 @@ namespace rendering_engine::gpu::backend::vulkan
     {
         vk_texture record{};
         record.format = descriptor.format;
-        record.vk_format = to_vk_format(descriptor.format);
+        // Depth formats resolve through the device's fallback chains
+        // (the packed 24-bit formats are optional); the aspect follows
+        // the resolved VkFormat, not the engine format.
+        record.vk_format = vk_format_for(descriptor.format);
+        record.aspect = aspect_for_vk_format(record.vk_format);
         record.width = descriptor.width;
         record.height = descriptor.height;
         record.depth = (descriptor.dimension == texture_dimension::d3) ? descriptor.depth : 1u;
@@ -235,7 +242,7 @@ namespace rendering_engine::gpu::backend::vulkan
         ii.usage = usage;
         ii.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         ii.flags = record.is_cube ? VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT : 0;
-        if (vkCreateImage(m_device, &ii, nullptr, &record.image) != VK_SUCCESS)
+        if (!vk_check(vkCreateImage(m_device, &ii, nullptr, &record.image), "vkCreateImage"))
         {
             return {};
         }
@@ -246,12 +253,32 @@ namespace rendering_engine::gpu::backend::vulkan
         ai.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
         ai.allocationSize = mr.size;
         ai.memoryTypeIndex = find_memory_type(mr.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-        if (vkAllocateMemory(m_device, &ai, nullptr, &record.memory) != VK_SUCCESS)
+        if (!vk_check(vkAllocateMemory(m_device, &ai, nullptr, &record.memory), "vkAllocateMemory (image)"))
         {
             vkDestroyImage(m_device, record.image, nullptr);
             return {};
         }
-        vkBindImageMemory(m_device, record.image, record.memory, 0);
+        // Everything past this point releases the image + memory (and
+        // whatever else was built) on failure; nothing half-created is
+        // handed out.
+        const auto release = [&]
+        {
+            if (record.default_sampler != VK_NULL_HANDLE)
+            {
+                vkDestroySampler(m_device, record.default_sampler, nullptr);
+            }
+            if (record.view != VK_NULL_HANDLE)
+            {
+                vkDestroyImageView(m_device, record.view, nullptr);
+            }
+            vkDestroyImage(m_device, record.image, nullptr);
+            vkFreeMemory(m_device, record.memory, nullptr);
+        };
+        if (!vk_check(vkBindImageMemory(m_device, record.image, record.memory, 0), "vkBindImageMemory"))
+        {
+            release();
+            return {};
+        }
 
         VkImageViewCreateInfo vi{};
         vi.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -259,13 +286,13 @@ namespace rendering_engine::gpu::backend::vulkan
         vi.viewType =
             record.is_cube ? VK_IMAGE_VIEW_TYPE_CUBE : (record.is_3d ? VK_IMAGE_VIEW_TYPE_3D : VK_IMAGE_VIEW_TYPE_2D);
         vi.format = record.vk_format;
-        vi.subresourceRange.aspectMask = aspect_for_format(descriptor.format);
+        vi.subresourceRange.aspectMask = record.aspect;
         vi.subresourceRange.levelCount = record.mip_levels;
         vi.subresourceRange.layerCount = record.array_layers;
-        if (vkCreateImageView(m_device, &vi, nullptr, &record.view) != VK_SUCCESS)
+        if (!vk_check(vkCreateImageView(m_device, &vi, nullptr, &record.view), "vkCreateImageView"))
         {
-            vkDestroyImage(m_device, record.image, nullptr);
-            vkFreeMemory(m_device, record.memory, nullptr);
+            record.view = VK_NULL_HANDLE;
+            release();
             return {};
         }
 
@@ -275,15 +302,28 @@ namespace rendering_engine::gpu::backend::vulkan
                                                           descriptor.address_u,
                                                           descriptor.address_v,
                                                           descriptor.address_w);
-        vkCreateSampler(m_device, &si, nullptr, &record.default_sampler);
+        if (!vk_check(vkCreateSampler(m_device, &si, nullptr, &record.default_sampler), "vkCreateSampler (texture)"))
+        {
+            // The image is still usable as an attachment and as a copy
+            // target; a bind group that samples it substitutes the
+            // device's fallback sampler (and says so), so a null
+            // sampler never reaches a descriptor.
+            record.default_sampler = VK_NULL_HANDLE;
+        }
 
         record.layout = VK_IMAGE_LAYOUT_UNDEFINED;
         VkCommandBuffer cmd = begin_one_shot();
+        if (cmd == VK_NULL_HANDLE)
+        {
+            LOG_ERR("vk_device::create_texture: no command buffer for the initial layout transition");
+            release();
+            return {};
+        }
         const VkImageLayout target = record.is_depth ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
                                                      : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         transition_image(cmd,
                          record.image,
-                         aspect_for_format(descriptor.format),
+                         record.aspect,
                          VK_IMAGE_LAYOUT_UNDEFINED,
                          target,
                          record.mip_levels,
@@ -355,42 +395,73 @@ namespace rendering_engine::gpu::backend::vulkan
                            const void* data,
                            size_t size)
         {
-            const VkDevice dev = device.vk_handle();
+            if (data == nullptr || size == 0)
+            {
+                LOG_ERR("vk_device: texture upload with no data (%zu bytes)", size);
+                return;
+            }
 
-            VkBufferCreateInfo bi{};
-            bi.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-            bi.size = size;
-            bi.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-            bi.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+            // rgb8_unorm images are backed by R8G8B8A8_UNORM (see
+            // to_vk_format: R8G8B8 is not a sampled format on most
+            // devices), so a 3-byte-per-texel source is widened here
+            // with an opaque alpha before it is staged. The size has
+            // to match the region exactly for the widening to be
+            // meaningful, so a mismatch is refused rather than padded
+            // into garbage.
+            const void* source = data;
+            size_t source_size = size;
+            std::vector<uint8_t> padded;
+            if (record.format == texture_format::rgb8_unorm)
+            {
+                const size_t texels = static_cast<size_t>(extent.width) * extent.height * extent.depth;
+                if (size != texels * 3)
+                {
+                    LOG_ERR("vk_device: rgb8_unorm upload is %zu bytes, expected %zu for %ux%ux%u",
+                            size,
+                            texels * 3,
+                            extent.width,
+                            extent.height,
+                            extent.depth);
+                    return;
+                }
+                padded.resize(texels * 4);
+                const auto* in = static_cast<const uint8_t*>(data);
+                for (size_t i = 0; i < texels; ++i)
+                {
+                    padded[i * 4 + 0] = in[i * 3 + 0];
+                    padded[i * 4 + 1] = in[i * 3 + 1];
+                    padded[i * 4 + 2] = in[i * 3 + 2];
+                    padded[i * 4 + 3] = 0xFF;
+                }
+                source = padded.data();
+                source_size = padded.size();
+            }
+
             VkBuffer staging = VK_NULL_HANDLE;
-            vkCreateBuffer(dev, &bi, nullptr, &staging);
-            VkMemoryRequirements mr{};
-            vkGetBufferMemoryRequirements(dev, staging, &mr);
-            VkMemoryAllocateInfo ai{};
-            ai.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-            ai.allocationSize = mr.size;
-            ai.memoryTypeIndex = device.find_memory_type(
-                mr.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-            VkDeviceMemory mem = VK_NULL_HANDLE;
-            vkAllocateMemory(dev, &ai, nullptr, &mem);
-            vkBindBufferMemory(dev, staging, mem, 0);
-
-            void* mapped = nullptr;
-            vkMapMemory(dev, mem, 0, size, 0, &mapped);
-            std::memcpy(mapped, data, size);
-            vkUnmapMemory(dev, mem);
+            VkDeviceMemory staging_memory = VK_NULL_HANDLE;
+            if (!device.create_staging_buffer(source, source_size, staging, staging_memory))
+            {
+                LOG_ERR("vk_device: texture upload of %zu bytes skipped (staging buffer failed)", source_size);
+                return;
+            }
 
             VkCommandBuffer cmd = device.begin_one_shot();
+            if (cmd == VK_NULL_HANDLE)
+            {
+                LOG_ERR("vk_device: texture upload of %zu bytes skipped (no command buffer)", source_size);
+                device.destroy_staging_buffer(staging, staging_memory);
+                return;
+            }
             transition_image(cmd,
                              record.image,
-                             VK_IMAGE_ASPECT_COLOR_BIT,
+                             record.aspect,
                              record.layout,
                              VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                              record.mip_levels,
                              record.array_layers);
 
             VkBufferImageCopy region{};
-            region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            region.imageSubresource.aspectMask = record.aspect;
             region.imageSubresource.layerCount = 1;
             region.imageSubresource.baseArrayLayer = base_layer;
             region.imageExtent = extent;
@@ -398,7 +469,7 @@ namespace rendering_engine::gpu::backend::vulkan
 
             transition_image(cmd,
                              record.image,
-                             VK_IMAGE_ASPECT_COLOR_BIT,
+                             record.aspect,
                              VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                              VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                              record.mip_levels,
@@ -406,8 +477,7 @@ namespace rendering_engine::gpu::backend::vulkan
             device.end_one_shot(cmd);
             record.layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
-            vkDestroyBuffer(dev, staging, nullptr);
-            vkFreeMemory(dev, mem, nullptr);
+            device.destroy_staging_buffer(staging, staging_memory);
         }
     } // namespace
 
@@ -453,6 +523,11 @@ namespace rendering_engine::gpu::backend::vulkan
 
         const uint32_t layers = record->array_layers;
         VkCommandBuffer cmd = begin_one_shot();
+        if (cmd == VK_NULL_HANDLE)
+        {
+            LOG_ERR("vk_device::generate_mipmaps: no command buffer; the chain keeps level 0 only");
+            return;
+        }
 
         // The upload path leaves every level in SHADER_READ_ONLY with only
         // level 0 populated. Move the whole chain to TRANSFER_DST so the
@@ -573,7 +648,7 @@ namespace rendering_engine::gpu::backend::vulkan
                                                           descriptor.address_u,
                                                           descriptor.address_v,
                                                           descriptor.address_w);
-        if (vkCreateSampler(m_device, &si, nullptr, &record.object) != VK_SUCCESS)
+        if (!vk_check(vkCreateSampler(m_device, &si, nullptr, &record.object), "vkCreateSampler"))
         {
             return {};
         }
@@ -584,15 +659,22 @@ namespace rendering_engine::gpu::backend::vulkan
 
     void vk_device::destroy(sampler handle)
     {
-        if (auto* record = m_samplers.lookup(handle.id))
+        auto* record = m_samplers.lookup(handle.id);
+        if (record == nullptr)
         {
-            if (record->object != VK_NULL_HANDLE)
-            {
-                vkDestroySampler(m_device, record->object, nullptr);
-                record->object = VK_NULL_HANDLE;
-            }
-            m_samplers.remove(handle.id);
+            return;
         }
+        // Deferred like every other resource: a sampler named by a
+        // descriptor set the in-flight command buffer still binds must
+        // outlive that submission.
+        const VkDevice dev = m_device;
+        const VkSampler object = record->object;
+        if (object != VK_NULL_HANDLE)
+        {
+            enqueue_destroy([dev, object] { vkDestroySampler(dev, object, nullptr); });
+        }
+        record->object = VK_NULL_HANDLE;
+        m_samplers.remove(handle.id);
     }
 
     VkImageView vk_device::storage_image_view(vk_texture& tex, uint32_t level)
@@ -620,7 +702,8 @@ namespace rendering_engine::gpu::backend::vulkan
         vi.subresourceRange.levelCount = 1;
         vi.subresourceRange.baseArrayLayer = 0;
         vi.subresourceRange.layerCount = tex.array_layers;
-        if (vkCreateImageView(m_device, &vi, nullptr, &tex.storage_views[level]) != VK_SUCCESS)
+        if (!vk_check(vkCreateImageView(m_device, &vi, nullptr, &tex.storage_views[level]),
+                      "vkCreateImageView (storage level)"))
         {
             tex.storage_views[level] = VK_NULL_HANDLE;
         }

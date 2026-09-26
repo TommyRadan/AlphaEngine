@@ -70,6 +70,11 @@ set(ALPHAENGINE_TEST_SOURCES_UNDER_TEST
     # the tests drive it with a stub, no backend is linked.
     ${CMAKE_SOURCE_DIR}/rendering_engine/render_graph/frame_graph.cpp
     ${CMAKE_SOURCE_DIR}/rendering_engine/gpu/command_encoder.cpp
+    # vk_negotiate — the Vulkan backend's depth-format fallback chains and
+    # descriptor-pool budgets. Pure functions over Vulkan's header constants
+    # (the format-support query is a callback); no loader call is made, so
+    # only the Vulkan headers are needed and nothing links the library.
+    ${CMAKE_SOURCE_DIR}/rendering_engine/gpu/backend/vulkan/vk_negotiate.cpp
 )
 
 set(ALPHAENGINE_TEST_SOURCES
@@ -91,6 +96,7 @@ set(ALPHAENGINE_TEST_SOURCES
     rendering_engine/mesh/vertex_format_test.cpp
     rendering_engine/sdl_input_test.cpp
     rendering_engine/render_graph/frame_graph_test.cpp
+    rendering_engine/gpu/vk_format_fallback_test.cpp
     rendering_engine/util/font_test.cpp
     rendering_engine/util/image_test.cpp
     external/camera_id_test.cpp
@@ -102,11 +108,15 @@ add_executable(AlphaEngineTests
 )
 
 # tests/ for the support/ helpers (fake_device); vendor/stb for the
-# header-only stb backends util/image and util/font compile against. The repo
-# root is already on the include path via the top-level include_directories().
+# header-only stb backends util/image and util/font compile against; the
+# Vulkan SDK headers (found by the root find_package(Vulkan)) for
+# vk_negotiate, which uses the VkFormat constants and nothing from the
+# loader. The repo root is already on the include path via the top-level
+# include_directories().
 target_include_directories(AlphaEngineTests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_SOURCE_DIR}/vendor/stb
+    ${Vulkan_INCLUDE_DIRS}
 )
 
 # glm backs core/math + transforms, SDL3 backs core/log, Threads backs

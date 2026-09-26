@@ -66,7 +66,10 @@ translation units under test directly, alongside the test sources, and links
 `GTest::gtest_main` plus only the libraries those sources need (GLM for
 `core/math`, SDL3 for `core/log`, Threads for `core/jobs`). Nothing from the
 renderer, window, or GPU layers is pulled in (`mesh/tangent.cpp` is pure
-geometry; the `gpu` header it includes declares types only).
+geometry; the `gpu` header it includes declares types only). The one Vulkan
+backend TU compiled, `gpu/backend/vulkan/vk_negotiate.cpp`, is a set of pure
+functions over the constants in the Vulkan headers — the format-support query
+is a callback — so it needs the SDK's include directory and links no loader.
 
 Tests are registered with ctest via `gtest_discover_tests`, so each `TEST()`
 shows up as an individual ctest case.
@@ -159,6 +162,15 @@ All device-free:
   with `execute_range` clamping, `clear()`, and a hand-kept mirror of the
   engine's built-in pass declarations (including `scene_depth`) that must
   compile hazard-free. The encoder the graph forwards is driven by a stub.
+- `vk_negotiate` (`rendering_engine/gpu/backend/vulkan/vk_negotiate.cpp`) —
+  the Vulkan depth-format fallback chains (`depth24` prefers the packed
+  24-bit format, falls back to `D32_SFLOAT` and reaches the stencil formats
+  last; `depth32_float` resolves to `D32_SFLOAT`; `depth24_stencil8` never
+  resolves to a depth-only format; an empty support set or a colour format
+  resolves to nothing), the image aspect of a resolved format, and the
+  descriptor-pool budget growth (base sizes, doubling per pool, the cap,
+  and that every pool holds a full material set per allocated set). The
+  support query is a table; no loader call is made.
 
 ### Testing the asset layer headless
 

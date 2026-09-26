@@ -78,7 +78,13 @@ namespace rendering_engine::gpu::backend::vulkan
 
         VkImageLayout layout{VK_IMAGE_LAYOUT_UNDEFINED};
         texture_format format{texture_format::rgba8_unorm};
+        // The VkFormat actually backing the image. For depth formats
+        // this is what the device's fallback chain resolved at init
+        // (see vk_device::vk_format_for), not a fixed translation of
+        // @c format, so the aspect is recorded alongside it rather
+        // than re-derived from the engine format.
         VkFormat vk_format{VK_FORMAT_R8G8B8A8_UNORM};
+        VkImageAspectFlags aspect{VK_IMAGE_ASPECT_COLOR_BIT};
         uint32_t width{0};
         uint32_t height{0};
         uint32_t depth{1};
@@ -165,6 +171,9 @@ namespace rendering_engine::gpu::backend::vulkan
     {
         bind_group_layout layout{};
         VkDescriptorSet descriptor_set{VK_NULL_HANDLE};
+        // The pool of the device's grow-on-demand chain the set was
+        // allocated from; a set is only ever freed back to that pool.
+        VkDescriptorPool pool{VK_NULL_HANDLE};
         std::vector<binding_value> entries;
     };
 

@@ -22,6 +22,7 @@
 
 #include <rendering_engine/gpu/backend/vulkan/vk_command_encoder.hpp>
 
+#include <algorithm>
 #include <array>
 
 #include <core/log.hpp>
@@ -43,7 +44,17 @@ namespace rendering_engine::gpu::backend::vulkan
         // the texCoord origin the OpenGL-style shader assumes. The
         // matching front-face mapping happens at pipeline build
         // time, keyed off the same y_flipped flag.
-        VkViewport make_viewport(uint32_t x, uint32_t y, uint32_t width, uint32_t height, bool y_flipped)
+        //
+        // @p x / @p y / @p width / @p height are the rectangle in the
+        // window convention the abstract encoder uses (bottom-left
+        // origin, as glViewport takes it). A flipped viewport covers
+        // framebuffer rows [vp.y - height, vp.y] with NDC +Y at the
+        // top row, so the bottom-left @p y maps to
+        // vp.y = target_height - y: the rectangle sits where the GL
+        // backend would put it, and a full-target rectangle is
+        // unchanged (vp.y = target_height, height = -height).
+        VkViewport
+        make_viewport(int32_t x, int32_t y, int32_t width, int32_t height, uint32_t target_height, bool y_flipped)
         {
             VkViewport vp{};
             vp.x = static_cast<float>(x);
@@ -51,7 +62,7 @@ namespace rendering_engine::gpu::backend::vulkan
             vp.maxDepth = 1.0f;
             if (y_flipped)
             {
-                vp.y = static_cast<float>(y + height);
+                vp.y = static_cast<float>(static_cast<int32_t>(target_height) - y);
                 vp.width = static_cast<float>(width);
                 vp.height = -static_cast<float>(height);
             }
@@ -62,6 +73,45 @@ namespace rendering_engine::gpu::backend::vulkan
                 vp.height = static_cast<float>(height);
             }
             return vp;
+        }
+
+        // The scissor is a framebuffer-space rectangle that a negative
+        // viewport height does not flip, so it is flipped alongside the
+        // viewport: the bottom-left @p y becomes the top-left row
+        // target_height - (y + height). Negative extents are clamped
+        // away, since VkRect2D's extent is unsigned.
+        VkRect2D
+        make_scissor(int32_t x, int32_t y, int32_t width, int32_t height, uint32_t target_height, bool y_flipped)
+        {
+            VkRect2D scissor{};
+            scissor.offset.x = x;
+            scissor.offset.y = y_flipped ? static_cast<int32_t>(target_height) - (y + height) : y;
+            scissor.extent.width = static_cast<uint32_t>(std::max(width, 0));
+            scissor.extent.height = static_cast<uint32_t>(std::max(height, 0));
+            return scissor;
+        }
+
+        // A bind group that does not resolve — never created, already
+        // destroyed, or its descriptor-set allocation failed — used to
+        // be skipped silently, so the draw ran against whatever set was
+        // bound before and produced wrong output with nothing in the
+        // log. It is an error; reported once per handle per pass
+        // encoder rather than once per draw.
+        void report_missing_bind_group(std::vector<uint64_t>& reported,
+                                       const char* encoder,
+                                       uint32_t group,
+                                       bind_group handle)
+        {
+            if (std::find(reported.begin(), reported.end(), handle.id) != reported.end())
+            {
+                return;
+            }
+            reported.push_back(handle.id);
+            LOG_ERR("%s::set_bind_group: bind group %llu at slot %u is not a live descriptor set; "
+                    "draws keep the previously bound set",
+                    encoder,
+                    static_cast<unsigned long long>(handle.id),
+                    group);
         }
     } // namespace
 
@@ -169,12 +219,20 @@ namespace rendering_engine::gpu::backend::vulkan
         bi.pClearValues = clears.data();
         vkCmdBeginRenderPass(m_cmd, &bi, VK_SUBPASS_CONTENTS_INLINE);
 
-        const VkViewport vp = make_viewport(0, 0, target->width, target->height, m_y_flipped);
+        const VkViewport vp = make_viewport(0,
+                                            0,
+                                            static_cast<int32_t>(target->width),
+                                            static_cast<int32_t>(target->height),
+                                            target->height,
+                                            m_y_flipped);
         vkCmdSetViewport(m_cmd, 0, 1, &vp);
 
-        VkRect2D scissor{};
-        scissor.offset = {0, 0};
-        scissor.extent = {target->width, target->height};
+        const VkRect2D scissor = make_scissor(0,
+                                              0,
+                                              static_cast<int32_t>(target->width),
+                                              static_cast<int32_t>(target->height),
+                                              target->height,
+                                              m_y_flipped);
         vkCmdSetScissor(m_cmd, 0, 1, &scissor);
         m_in_pass = true;
     }
@@ -285,6 +343,7 @@ namespace rendering_engine::gpu::backend::vulkan
         auto* bg = m_device.lookup_bind_group(bind_group_handle);
         if (bg == nullptr || bg->descriptor_set == VK_NULL_HANDLE)
         {
+            report_missing_bind_group(m_reported_bind_groups, "vk_render_pass_encoder", group, bind_group_handle);
             return;
         }
         vkCmdBindDescriptorSets(m_cmd,
@@ -303,15 +362,9 @@ namespace rendering_engine::gpu::backend::vulkan
         {
             return;
         }
-        const VkViewport vp = make_viewport(static_cast<uint32_t>(x),
-                                            static_cast<uint32_t>(y),
-                                            static_cast<uint32_t>(width),
-                                            static_cast<uint32_t>(height),
-                                            m_y_flipped);
+        const VkViewport vp = make_viewport(x, y, width, height, m_target_height, m_y_flipped);
         vkCmdSetViewport(m_cmd, 0, 1, &vp);
-        VkRect2D scissor{};
-        scissor.offset = {x, y};
-        scissor.extent = {static_cast<uint32_t>(width), static_cast<uint32_t>(height)};
+        const VkRect2D scissor = make_scissor(x, y, width, height, m_target_height, m_y_flipped);
         vkCmdSetScissor(m_cmd, 0, 1, &scissor);
     }
 
@@ -359,6 +412,17 @@ namespace rendering_engine::gpu::backend::vulkan
         auto* buf = m_device.lookup_buffer(indirect_buffer);
         if (buf == nullptr || buf->object == VK_NULL_HANDLE)
         {
+            return;
+        }
+        if (draw_count > 1 && !m_device.features().multi_draw_indirect)
+        {
+            // Without multiDrawIndirect a drawCount above one is
+            // illegal; the records are issued one at a time, stepping
+            // by the caller's stride.
+            for (uint32_t i = 0; i < draw_count; ++i)
+            {
+                vkCmdDrawIndexedIndirect(m_cmd, buf->object, offset + static_cast<VkDeviceSize>(i) * stride, 1, stride);
+            }
             return;
         }
         vkCmdDrawIndexedIndirect(m_cmd, buf->object, offset, draw_count, stride);
@@ -413,6 +477,7 @@ namespace rendering_engine::gpu::backend::vulkan
         auto* bg = m_device.lookup_bind_group(bind_group_handle);
         if (bg == nullptr || bg->descriptor_set == VK_NULL_HANDLE)
         {
+            report_missing_bind_group(m_reported_bind_groups, "vk_compute_pass_encoder", group, bind_group_handle);
             return;
         }
         // The descriptors declare storage images as VK_IMAGE_LAYOUT_GENERAL,
