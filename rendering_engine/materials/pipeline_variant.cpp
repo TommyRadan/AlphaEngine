@@ -65,6 +65,17 @@ namespace rendering_engine
         {
             key.keywords &= ~keyword_bit(material_keyword::wireframe);
         }
+        // Like WIREFRAME, the fog keyword follows the param, never the
+        // caller's mask, so a fogged surface always compiles the fog blend
+        // and a fog-less one never does.
+        if (params.fog)
+        {
+            key.keywords &= ~keyword_bit(material_keyword::no_fog);
+        }
+        else
+        {
+            key.keywords |= keyword_bit(material_keyword::no_fog);
+        }
         key.blending = params.transparent ? params.blending : blend_mode::none;
         key.cull = params.double_sided ? gpu::cull_mode::none : gpu::cull_mode::back;
         key.front = front;

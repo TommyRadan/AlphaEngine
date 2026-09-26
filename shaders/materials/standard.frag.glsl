@@ -24,6 +24,8 @@
 //   USE_EMISSIVE_MAP   emissive from emissiveMap
 //   HAS_TANGENTS       the vertex stage forwards a tangent frame
 //   WIREFRAME          unlit base colour, for the line-rasterized view
+//   NO_FOG             skip the fog blend (the material's fog flag is
+//                      off); the default variant is fogged
 // A variant without a keyword carries no sampling code for that map.
 
 #include "include/bindings.glsl"
@@ -238,6 +240,8 @@ void main()
 #endif
 
     vec3 color = ambient + Lo + emissive;
+#ifndef NO_FOG
     color = apply_fog(color, worldPosition, cameraPosition);
+#endif
     fragColor = vec4(color, alpha);
 }

@@ -95,6 +95,13 @@ namespace rendering_engine
 
         // Whether passing fragments write their depth back.
         bool depth_write{true};
+
+        // Whether the scene fog blends over the surface (three.js
+        // Material.fog). Off, the lit materials compile a variant with
+        // no fog code at all (@c NO_FOG) — for skyboxes, in-world UI,
+        // emissive markers. The unlit materials never apply fog, so the
+        // flag has no effect on them.
+        bool fog{true};
     };
 
     // Shader keywords: each bit becomes a @c #define injected ahead of
@@ -129,6 +136,13 @@ namespace rendering_engine
 
         // Reserved for skeletal skinning (#221); no shader reads it yet.
         skinned = 1u << 9,
+
+        // The surface ignores the scene fog: the lit fragment shaders
+        // skip the fog blend, so the variant carries no fog code.
+        // Inverted (rather than USE_FOG) so the default, fogged variant
+        // keeps a zero keyword mask and the SPIR-V it always had. Set
+        // from @ref material_params::fog.
+        no_fog = 1u << 10,
     };
 
     constexpr uint32_t keyword_bit(material_keyword keyword)
@@ -136,7 +150,7 @@ namespace rendering_engine
         return static_cast<uint32_t>(keyword);
     }
 
-    constexpr uint32_t material_keyword_count = 10;
+    constexpr uint32_t material_keyword_count = 11;
 
     // Every keyword, in bit order.
     constexpr std::array<material_keyword, material_keyword_count> all_material_keywords = {
@@ -150,6 +164,7 @@ namespace rendering_engine
         material_keyword::has_tangents,
         material_keyword::wireframe,
         material_keyword::skinned,
+        material_keyword::no_fog,
     };
 
     // The preprocessor symbol @p keyword defines (@c "USE_ALBEDO_MAP", ...).
@@ -177,6 +192,8 @@ namespace rendering_engine
             return "WIREFRAME";
         case material_keyword::skinned:
             return "SKINNED";
+        case material_keyword::no_fog:
+            return "NO_FOG";
         }
         return "";
     }
@@ -211,9 +228,10 @@ namespace rendering_engine
     // Builds the key for @p params and the instance's @p keywords, drawing
     // with @p front as the front-facing winding. Folds @c transparent
     // into @c blending (opaque reads as @c none), @c double_sided into the
-    // cull mode and @c wireframe into both the polygon mode and the
-    // @c WIREFRAME keyword. @c opacity does not take part: it lives in
-    // the parameter block, not the pipeline.
+    // cull mode, @c wireframe into both the polygon mode and the
+    // @c WIREFRAME keyword, and a cleared @c fog into the @c NO_FOG
+    // keyword. @c opacity does not take part: it lives in the parameter
+    // block, not the pipeline.
     pipeline_variant_key make_pipeline_variant_key(const material_params& params,
                                                    uint32_t keywords,
                                                    gpu::front_face front = gpu::front_face::counter_clockwise);

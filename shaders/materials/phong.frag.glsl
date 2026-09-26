@@ -4,6 +4,9 @@
 // the packed directional and point lights, the directional caster's
 // shadow, and distance fog. The per-frame, lights, shadow and fog code
 // is shared with standard_material through the includes.
+//
+// NO_FOG (injected when the material's fog flag is off) compiles the
+// fog blend out entirely; every other keyword is ignored here.
 
 #include "include/bindings.glsl"
 #include "include/per_frame.glsl"
@@ -84,6 +87,8 @@ void main()
         }
     }
 
+#ifndef NO_FOG
     result = apply_fog(result, worldPosition, cameraPosition);
+#endif
     fragColor = vec4(result, u_material.diffuseColor.a);
 }
