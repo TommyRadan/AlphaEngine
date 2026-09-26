@@ -49,6 +49,16 @@ namespace rendering_engine
         void invalidate_projection_matrix();
         virtual const core::math::mat4 get_projection_matrix() const = 0;
 
+        // Follows the drawable's width / height. The renderer calls this on
+        // the attached camera whenever the window's pixel size changes, so a
+        // resize does not stretch the image; a camera created later reads
+        // the window's aspect at construction. Cameras whose projection has
+        // no aspect (orthographic magnifications) ignore it.
+        virtual void set_aspect_ratio(float aspect_ratio)
+        {
+            (void)aspect_ratio;
+        }
+
         const core::math::frustum get_frustum() const;
 
     protected:

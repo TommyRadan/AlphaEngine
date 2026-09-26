@@ -61,25 +61,31 @@ namespace rendering_engine
      * The resolved result is exposed via @ref output_texture so the next
      * pass (FXAA) samples it instead of the raw tonemap output. A fixed
      * resolve target (rather than ping-ponged history handles) keeps that
-     * handle stable across frames so the FXAA bind group never has to be
-     * rebuilt.
+     * handle stable from frame to frame; it only changes on @ref resize,
+     * which the FXAA pass detects through the handle comparison it makes
+     * on every frame.
      *
      * Pipeline state mirrors every other fullscreen-triangle post pass
      * (depth off, blend off, no culling, single vec2 vertex attribute).
      * The reciprocal frame size the neighbourhood taps step by is baked
      * from the backbuffer dimensions at construction, mirroring
-     * @ref fxaa_pass; live resolution changes are out of scope. A
+     * @ref fxaa_pass, and rewritten by @ref resize, which also recreates
+     * both targets and drops the history so the first frame at the new
+     * size does not reproject a stale, differently sized image. A
      * degenerate backbuffer leaves the pass disabled so the LDR target
      * flows straight through to FXAA.
      */
     struct taa_pass : pass
     {
-        // @p current_color is the LDR texture @ref tonemap_pass renders
-        // into; @p velocity is the motion-vector texture @ref velocity_pass
-        // produces, sampled to reproject the history; @p width / @p height
-        // are the backbuffer dimensions the history and resolve targets are
-        // sized against.
-        taa_pass(gpu::texture current_color, gpu::texture velocity, uint32_t width, uint32_t height);
+        // @p width / @p height are the backbuffer dimensions the history
+        // and resolve targets are sized against. The two textures the
+        // resolve samples are not constructor inputs: the tonemapped LDR
+        // image and the motion vectors arrive every frame as
+        // @ref frame_context::ldr_color_texture and
+        // @ref frame_context::velocity_texture, and the resolve bind group
+        // is (re)built whenever either handle differs from the one it was
+        // last built against.
+        taa_pass(uint32_t width, uint32_t height);
         ~taa_pass() override;
 
         taa_pass(const taa_pass&) = delete;
@@ -101,8 +107,20 @@ namespace rendering_engine
             io.write("taa_history");
         }
 
-        // The resolved LDR texture the next pass (FXAA) samples. Stable
-        // across frames. Invalid when the pass is disabled (degenerate
+        // Recreates the history and resolve targets at the new drawable
+        // size, notes the new texel step for the resolve params UBO (the
+        // next record() rewrites it, inside the frame bracket) and drops
+        // the history (the next frame resolves from the current image
+        // alone, exactly like the first frame after construction). The
+        // new targets are created before the old ones are released so the
+        // handle published through frame_context::taa_resolve_texture
+        // changes and FXAA rebinds. No-op while the pass is disabled.
+        void resize(uint32_t width, uint32_t height) override;
+
+        // The resolved LDR texture the next pass (FXAA) samples. The
+        // engine publishes it every frame as
+        // @ref frame_context::taa_resolve_texture; it changes on
+        // @ref resize. Invalid when the pass is disabled (degenerate
         // backbuffer), in which case the caller should keep sampling the
         // raw tonemap output.
         gpu::texture output_texture() const;
@@ -135,16 +153,51 @@ namespace rendering_engine
         gpu::bind_group m_resolve_bind_group{};
         gpu::bind_group m_copy_bind_group{};
 
-        // Per-texel step (1/width, 1/height) baked at construction. Kept so
-        // record() can rewrite the resolve params UBO — bumping only the
-        // feedback weight — without losing the step in xy.
+        // The LDR and velocity textures @ref m_resolve_bind_group was built
+        // against; invalid until the first record() builds the group, and
+        // reset by resize() so the group is rebuilt against the new
+        // history target.
+        gpu::texture m_bound_current{};
+        gpu::texture m_bound_velocity{};
+
+        // Allocates the rgba8 history and resolve targets at
+        // @p width x @p height and points the four target / texture
+        // members at them.
+        void create_targets(uint32_t width, uint32_t height);
+
+        // Rebuilds the resolve bind group against @p current_color and
+        // @p velocity plus the history texture and params UBO, remembering
+        // the two input handles.
+        void rebuild_resolve_bind_group(gpu::texture current_color, gpu::texture velocity);
+
+        // Rebuilds the history-store copy bind group against the current
+        // resolve texture.
+        void rebuild_copy_bind_group();
+
+        // Writes {1/width, 1/height, feedback, 0} to the resolve params UBO
+        // and remembers the feedback in @ref m_uploaded_feedback. Only
+        // called from record(), inside the frame bracket: the buffer is
+        // host-mapped on a deferred-execution backend and the previous
+        // frame may still be reading it until begin_frame waits.
+        void write_params(float feedback);
+
+        // Per-texel step (1/width, 1/height) baked at construction and
+        // rewritten by resize(). Kept so record() can rewrite the resolve
+        // params UBO — bumping only the feedback weight — without losing
+        // the step in xy.
         float m_inv_width{0.0f};
         float m_inv_height{0.0f};
 
-        // False until the first frame has populated the history target.
+        // The feedback weight the params UBO currently holds, or negative
+        // when the UBO must be rewritten whatever the weight (the texel
+        // step changed: construction, resize). record() compares the
+        // weight the frame needs against it and rewrites on mismatch.
+        float m_uploaded_feedback{-1.0f};
+
+        // True until the first frame has populated the history target.
         // While set, the resolve uses the current frame only (the history
-        // is still undefined), then the params UBO is switched to the
-        // steady-state feedback weight.
+        // is still undefined); the frame after switches the params UBO to
+        // the steady-state feedback weight. resize() sets it again.
         bool m_first_frame{true};
 
         // False when the backbuffer dimensions are degenerate (no settings,
