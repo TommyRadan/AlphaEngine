@@ -40,6 +40,7 @@
 
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -57,6 +58,35 @@ namespace rendering_engine::gpu::backend::vulkan
     // logs so the user can pinpoint a failing call without validation
     // layers.
     const char* vk_result_to_string(VkResult r);
+
+    // True for VK_SUCCESS. Anything else logs "<what> failed: <result>"
+    // at error level and returns false, so a call site reads
+    // `if (!vk_check(vkFoo(...), "vkFoo")) { bail; }` instead of
+    // discarding the result. Only for calls whose every non-success
+    // code is a failure; a call with informational codes
+    // (VK_SUBOPTIMAL_KHR, VK_INCOMPLETE) inspects its result itself.
+    bool vk_check(VkResult result, const char* what);
+
+    // The optional core features the backend asked for and was
+    // granted. Populated by create_logical_device from
+    // vkGetPhysicalDeviceFeatures: a feature is requested only when
+    // the physical device reports it, and what is missing is logged
+    // once at warning level. Consumers gate on these rather than
+    // assuming: a wireframe material falls back to filled polygons
+    // without fill_mode_non_solid, multi-draw indirect is unrolled
+    // into single draws without multi_draw_indirect, and a pipeline
+    // that attaches a stage whose feature is missing is refused.
+    struct vk_device_features
+    {
+        bool fill_mode_non_solid{false};
+        bool geometry_shader{false};
+        bool tessellation_shader{false};
+        bool multi_draw_indirect{false};
+        bool sampler_anisotropy{false};
+        // VK_KHR_portability_subset was listed by the physical device
+        // (MoltenVK and other layered implementations) and enabled.
+        bool portability_subset{false};
+    };
 
     struct vk_device : public device
     {
@@ -151,7 +181,21 @@ namespace rendering_engine::gpu::backend::vulkan
         VkQueue graphics_queue() const noexcept;
         uint32_t graphics_queue_family() const noexcept;
         VkCommandPool command_pool() const noexcept;
-        VkDescriptorPool descriptor_pool() const noexcept;
+        // See vk_device_features.
+        const vk_device_features& features() const noexcept;
+        // True once a queue operation reported VK_ERROR_DEVICE_LOST.
+        // From then on every submit, acquire and present is a no-op
+        // and the next end_frame throws, once, so the main loop's
+        // failure path tears the engine down in order rather than
+        // looping on a dead device. See mark_device_lost.
+        bool device_lost() const noexcept;
+        // The VkFormat backing @p format on this device. Depth formats
+        // come from the fallback chains resolved once at init
+        // (resolve_depth_formats, see vk_negotiate.hpp); colour formats
+        // are the fixed translation. Both the swapchain depth buffer
+        // and create_texture go through here so a target and the
+        // textures sampled from it agree on the format.
+        VkFormat vk_format_for(texture_format format) const noexcept;
         // Number of images the swapchain was created with — surfaced so
         // the Dear ImGui Vulkan backend can size its frame resources.
         uint32_t swapchain_image_count() const noexcept;
@@ -220,9 +264,32 @@ namespace rendering_engine::gpu::backend::vulkan
         // for the next begin_frame to block on.
         void acquire_swapchain_image();
 
-        // One-shot command buffer for resource uploads.
+        // One-shot command buffer for resource uploads. begin returns
+        // VK_NULL_HANDLE when the buffer could not be allocated or
+        // begun (callers skip their upload); end submits, waits the
+        // queue idle and frees the buffer, and is a no-op on a null
+        // handle or a lost device.
         VkCommandBuffer begin_one_shot();
         void end_one_shot(VkCommandBuffer cmd);
+
+        // Host-visible transfer-source buffer holding a copy of @p size
+        // bytes of @p data, for the upload paths (buffer initial data,
+        // write_buffer to device-local memory, texture uploads). Every
+        // step is checked; on failure nothing is left allocated and the
+        // function returns false. Release with destroy_staging_buffer
+        // once the copy it fed has completed.
+        bool create_staging_buffer(const void* data, size_t size, VkBuffer& out_buffer, VkDeviceMemory& out_memory);
+        void destroy_staging_buffer(VkBuffer buffer, VkDeviceMemory memory);
+
+        // Allocate one descriptor set of @p layout from the pool chain:
+        // the newest pool first, and when it is exhausted
+        // (VK_ERROR_OUT_OF_POOL_MEMORY / VK_ERROR_FRAGMENTED_POOL) a
+        // fresh, larger pool is appended and the allocation retried
+        // once. @p out_pool receives the pool the set came from, which
+        // is the only pool it may be freed back to. Returns false, with
+        // an error logged, when even the fresh pool refuses.
+        bool
+        allocate_descriptor_set(VkDescriptorSetLayout layout, VkDescriptorSet& out_set, VkDescriptorPool& out_pool);
 
         // Lazily create (and cache on the texture) the single-mip image
         // view used to bind @p tex as a storage image at @p level. Cube
@@ -287,7 +354,29 @@ namespace rendering_engine::gpu::backend::vulkan
         void pick_physical_device();
         void create_logical_device();
         void create_command_pool();
-        void create_descriptor_pool();
+        // Append one pool to the chain, sized by
+        // descriptor_pool_budget_for(chain length). Returns false with
+        // an error logged when the driver refuses.
+        bool create_descriptor_pool();
+        // Resolve the three engine depth formats against
+        // vkGetPhysicalDeviceFormatProperties through the fallback
+        // chains in vk_negotiate.hpp, log the outcome, and throw when a
+        // chain resolves to nothing (the spec mandates D32_SFLOAT, so
+        // only a broken driver gets there).
+        void resolve_depth_formats();
+        // The sampler substituted for a texture whose own sampler
+        // failed to create, so a null sampler never reaches a
+        // combined-image-sampler descriptor.
+        void create_fallback_sampler();
+        // Record a device loss reported by @p what: logs once at fatal
+        // level and flips m_device_lost. Every later submit / acquire /
+        // present is a no-op and the next end_frame throws.
+        void mark_device_lost(const char* what);
+        // Result check for the queue-level calls that can report
+        // VK_ERROR_DEVICE_LOST (submit, present, fence and idle waits):
+        // that code goes through mark_device_lost, any other failure is
+        // logged through vk_check. Returns true on VK_SUCCESS.
+        bool check_queue_result(VkResult result, const char* what);
         // Build the swapchain for @p extent plus everything hanging off
         // it (image views, the shared depth buffer, the per-image
         // render-finished semaphores). The previous swapchain, if any,
@@ -346,7 +435,26 @@ namespace rendering_engine::gpu::backend::vulkan
         uint32_t m_graphics_queue_family{0};
         uint32_t m_present_queue_family{0};
         VkCommandPool m_command_pool{VK_NULL_HANDLE};
-        VkDescriptorPool m_descriptor_pool{VK_NULL_HANDLE};
+        // Grow-on-demand descriptor pool chain; allocations come from
+        // the back, sets are freed to the pool recorded on their bind
+        // group, and the whole chain is destroyed at quit. See
+        // allocate_descriptor_set.
+        std::vector<VkDescriptorPool> m_descriptor_pools;
+        VkSampler m_fallback_sampler{VK_NULL_HANDLE};
+
+        vk_device_features m_features{};
+        // Resolved depth formats, indexed depth24 / depth32_float /
+        // depth24_stencil8; see vk_format_for.
+        std::array<VkFormat, 3> m_depth_formats{VK_FORMAT_UNDEFINED, VK_FORMAT_UNDEFINED, VK_FORMAT_UNDEFINED};
+        // The physical device lists VK_KHR_portability_subset, which
+        // the spec then requires the logical device to enable.
+        bool m_has_portability_subset{false};
+
+        // See device_lost(). m_device_lost_thrown records that
+        // end_frame has already raised the loss to the main loop, so
+        // it is thrown exactly once.
+        bool m_device_lost{false};
+        bool m_device_lost_thrown{false};
 
         VkSwapchainKHR m_swapchain{VK_NULL_HANDLE};
         VkSurfaceFormatKHR m_surface_format{};
@@ -357,6 +465,9 @@ namespace rendering_engine::gpu::backend::vulkan
         VkImage m_swapchain_depth_image{VK_NULL_HANDLE};
         VkDeviceMemory m_swapchain_depth_memory{VK_NULL_HANDLE};
         VkImageView m_swapchain_depth_view{VK_NULL_HANDLE};
+        // The engine-side format of the swapchain depth buffer; the
+        // VkFormat backing it is vk_format_for(m_swapchain_depth_format)
+        // once resolve_depth_formats has run.
         texture_format m_swapchain_depth_format{texture_format::depth32_float};
         render_target m_swapchain_target{};
 
@@ -372,8 +483,12 @@ namespace rendering_engine::gpu::backend::vulkan
         // Signaled by the frame submission in submit(); waited in
         // begin_frame before the next frame records anything and reset
         // right before the submission that signals it. Created
-        // signaled so frame 0 does not block.
+        // signaled so frame 0 does not block. m_in_flight_fence_armed
+        // is set only by a submission that succeeded, so a failed
+        // vkQueueSubmit (nothing will ever signal the fence) does not
+        // leave the next begin_frame waiting forever.
         VkFence m_in_flight_fence{VK_NULL_HANDLE};
+        bool m_in_flight_fence_armed{false};
         uint32_t m_current_image_index{0};
         bool m_have_current_image{false};
         // Set by the first acquire_swapchain_image of a frame, whatever

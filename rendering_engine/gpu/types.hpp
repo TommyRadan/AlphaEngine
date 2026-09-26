@@ -204,6 +204,25 @@ namespace rendering_engine::gpu
         compute,
     };
 
+    // Bitmask of shader stages, used by @c bind_group_layout_entry to
+    // declare which stages read a binding. Explicit-binding backends
+    // (Vulkan) bake it into the descriptor-set layout; the OpenGL
+    // backend ignores it. Combine with @c |.
+    using shader_stages = uint32_t;
+    constexpr shader_stages shader_stages_vertex = 1u << 0;
+    constexpr shader_stages shader_stages_fragment = 1u << 1;
+    constexpr shader_stages shader_stages_geometry = 1u << 2;
+    constexpr shader_stages shader_stages_tessellation_control = 1u << 3;
+    constexpr shader_stages shader_stages_tessellation_evaluation = 1u << 4;
+    constexpr shader_stages shader_stages_compute = 1u << 5;
+    // What a rasterisation pipeline's bindings default to: the vertex
+    // and fragment stages every built-in material and pass uses. A
+    // layout read by a geometry or tessellation stage widens it.
+    constexpr shader_stages shader_stages_default = shader_stages_vertex | shader_stages_fragment;
+    constexpr shader_stages shader_stages_all_graphics = shader_stages_vertex | shader_stages_fragment |
+                                                         shader_stages_geometry | shader_stages_tessellation_control |
+                                                         shader_stages_tessellation_evaluation;
+
     enum class texture_dimension
     {
         d2,
