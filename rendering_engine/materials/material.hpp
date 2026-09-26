@@ -84,7 +84,7 @@ namespace rendering_engine
         // itself contributes (its bound maps, the tangent flag). The
         // keywords the shaders were actually compiled with are
         // @c variant_key().keywords, which also carries the bits derived
-        // from the params (@c WIREFRAME).
+        // from the params (@c WIREFRAME, @c NO_FOG).
         const material_params& params() const;
         uint32_t keywords() const;
 
@@ -101,6 +101,11 @@ namespace rendering_engine
         void set_wireframe(bool wireframe);
         void set_depth_test(bool depth_test);
         void set_depth_write(bool depth_write);
+
+        // Whether the scene fog blends over this surface (on by default;
+        // three.js Material.fog). Off, a lit material rebinds to the
+        // @c NO_FOG variant of its template, which carries no fog code.
+        void set_fog(bool fog);
 
         // Layout renderables build their per-draw bind group
         // against (model matrix, per-draw textures, options).

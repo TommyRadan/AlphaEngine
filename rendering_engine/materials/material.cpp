@@ -143,6 +143,13 @@ namespace rendering_engine
         set_params(params);
     }
 
+    void material::set_fog(bool fog)
+    {
+        material_params params = m_params;
+        params.fog = fog;
+        set_params(params);
+    }
+
     gpu::bind_group_layout material::per_draw_layout() const
     {
         return m_template->per_draw_layout();
