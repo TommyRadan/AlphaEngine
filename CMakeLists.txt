@@ -233,6 +233,34 @@ target_link_libraries(AlphaEngine ${OPENGL_LIBRARIES})
 find_package(Vulkan REQUIRED)
 target_link_libraries(AlphaEngine Vulkan::Vulkan)
 
+# Vulkan Memory Allocator — header-only, fetched from upstream and
+# pinned by release tag like the other dependencies. Its CMakeLists
+# exports the GPUOpen::VulkanMemoryAllocator interface target (an
+# include directory; install is off for a non-top-level project). The
+# Vulkan backend sub-allocates every buffer and image from VMA's memory
+# blocks instead of one vkAllocateMemory per resource; the single
+# implementation TU is rendering_engine/gpu/backend/vulkan/
+# vk_allocator.cpp, and the header lives outside the format / tidy
+# scope with the rest of the fetched code.
+FetchContent_Declare(
+    vma
+    GIT_REPOSITORY https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git
+    GIT_TAG v3.4.0
+    GIT_SHALLOW TRUE
+)
+FetchContent_MakeAvailable(vma)
+target_link_libraries(AlphaEngine GPUOpen::VulkanMemoryAllocator)
+# Clang enables -Wnullability-completeness by default and VMA annotates
+# only its public API, so the implementation TU would emit some nine
+# hundred warnings per build; that one warning is silenced for that
+# one file (a vendored-code exemption, set here because source
+# properties apply to targets defined in the same directory).
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    set_source_files_properties(
+        ${CMAKE_SOURCE_DIR}/rendering_engine/gpu/backend/vulkan/vk_allocator.cpp
+        PROPERTIES COMPILE_OPTIONS "-Wno-nullability-completeness")
+endif()
+
 # Dear ImGui — fetched from source and built as a small static library
 # from the same explicit-file pattern the rest of the tree uses. ImGui
 # ships no CMakeLists, so FetchContent only populates the sources and we

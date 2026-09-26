@@ -31,10 +31,17 @@
  *
  * The backend ships with a single frame in flight, runtime SPIR-V
  * via @ref gpu::compile_glsl_to_spirv (already used by the GL
- * backend), no multi-threaded recording, no real GPU allocator.
- * Compute pipelines and storage-image bind groups are implemented
- * (the IBL convolution runs on the GPU just like OpenGL); indirect
- * and barrier methods remain focused stubs that the engine's
+ * backend) and no multi-threaded recording. Device memory comes from
+ * the Vulkan Memory Allocator (vk_allocator.hpp): every buffer and
+ * image is a sub-allocation of VMA's memory blocks rather than its own
+ * vkAllocateMemory, and host-visible buffers are persistently mapped
+ * by their allocation. Uploads go through one persistently mapped
+ * staging ring and a batched transfer command buffer that is submitted
+ * with its own fence ahead of the frame (see stage_upload); the frame
+ * command buffers live in a per-frame command pool that is reset at
+ * begin_frame. Compute pipelines and storage-image bind groups are
+ * implemented (the IBL convolution runs on the GPU just like OpenGL);
+ * indirect and barrier methods remain focused stubs that the engine's
  * existing pass set does not lean on.
  */
 
@@ -49,7 +56,9 @@
 #include <vulkan/vulkan.h>
 
 #include <rendering_engine/gpu/backend/handle_pool.hpp>
+#include <rendering_engine/gpu/backend/vulkan/vk_allocator.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_resources.hpp>
+#include <rendering_engine/gpu/backend/vulkan/vk_staging_ring.hpp>
 #include <rendering_engine/gpu/device.hpp>
 
 namespace rendering_engine::gpu::backend::vulkan
@@ -141,25 +150,30 @@ namespace rendering_engine::gpu::backend::vulkan
         texture render_target_depth_texture(render_target handle) override;
 
         std::unique_ptr<command_encoder> create_command_encoder() override;
-        // Queue the encoder's command buffer. Inside a frame that has
-        // acquired a swapchain image the submission waits the
-        // image-available semaphore, signals that image's
-        // render-finished semaphore and the in-flight fence, and
-        // leaves the present to end_frame. Outside a frame (or in a
-        // frame whose passes never reached the swapchain) the work is
-        // submitted and waited for immediately.
+        // Queue the encoder's command buffer, after flushing the open
+        // transfer batch ahead of it so every upload recorded so far
+        // lands first in queue order. Inside a frame that has acquired
+        // a swapchain image the submission waits the image-available
+        // semaphore, signals that image's render-finished semaphore
+        // and the in-flight fence, and leaves the present to
+        // end_frame. Outside a frame (or in a frame whose passes never
+        // reached the swapchain) the work is queued on the in-flight
+        // fence alone — no semaphores, no present, no idle wait — and
+        // the next begin_frame waits for it like a frame.
         void submit(std::unique_ptr<command_encoder> encoder) override;
 
         // Frame boundary. begin_frame waits the in-flight fence for
-        // the previous frame's command buffer and drains the
-        // deferred-destroy queue, so every host write the renderer
-        // makes afterwards lands in memory the GPU is done with. It
-        // does not acquire an image; while the swapchain is suspended
-        // it polls the surface and rebuilds as soon as the extent is
-        // usable again. end_frame presents the image acquired this
-        // frame (when submit queued work against it), rebuilds the
-        // swapchain if the present reported it out of date or
-        // suboptimal, and rolls the per-frame bookkeeping.
+        // the previous frame's command buffer, reclaims every transfer
+        // batch that has completed (waiting for one that has not, which
+        // only happens before the first frame), resets the frame's
+        // command pool and drains the deferred-destroy queue, so every
+        // host write the renderer makes afterwards lands in memory the
+        // GPU is done with. It does not acquire an image; while the
+        // swapchain is suspended it polls the surface and rebuilds as
+        // soon as the extent is usable again. end_frame presents the
+        // image acquired this frame (when submit queued work against
+        // it), rebuilds the swapchain if the present reported it out of
+        // date or suboptimal, and rolls the per-frame bookkeeping.
         void begin_frame() override;
         void end_frame() override;
 
@@ -180,7 +194,9 @@ namespace rendering_engine::gpu::backend::vulkan
         VkPhysicalDevice physical_device() const noexcept;
         VkQueue graphics_queue() const noexcept;
         uint32_t graphics_queue_family() const noexcept;
-        VkCommandPool command_pool() const noexcept;
+        // The memory allocator every buffer and image is allocated
+        // from; alive from create_logical_device until quit.
+        VmaAllocator allocator() const noexcept;
         // See vk_device_features.
         const vk_device_features& features() const noexcept;
         // True once a queue operation reported VK_ERROR_DEVICE_LOST.
@@ -264,22 +280,73 @@ namespace rendering_engine::gpu::backend::vulkan
         // for the next begin_frame to block on.
         void acquire_swapchain_image();
 
-        // One-shot command buffer for resource uploads. begin returns
-        // VK_NULL_HANDLE when the buffer could not be allocated or
-        // begun (callers skip their upload); end submits, waits the
-        // queue idle and frees the buffer, and is a no-op on a null
-        // handle or a lost device.
-        VkCommandBuffer begin_one_shot();
-        void end_one_shot(VkCommandBuffer cmd);
+        // -- Uploads ------------------------------------------------------
+        //
+        // Every upload (buffer initial data, write_buffer to device-local
+        // memory, texture uploads, mipmap generation, the initial layout
+        // transition of a new image) is recorded into the open transfer
+        // batch: one primary command buffer with its own fence. The
+        // batch is submitted ahead of the frame's command buffer in
+        // submit(), or earlier when the staging ring runs out of space.
+        // It opens with an all-commands -> transfer barrier, so its
+        // copies run behind whatever the queue was still executing
+        // (the previous frame, for a flush between frames), and ends
+        // with a transfer -> all-commands memory barrier, so whatever
+        // the frame reads after it in queue order sees the uploads.
+        // Nothing here waits the queue idle: the ring space and
+        // the dedicated staging buffers of a batch are reclaimed when
+        // its fence signals (begin_frame, or a ring-full wait for the
+        // oldest batch). The CPU-side image layout each vk_texture
+        // records is its layout in batch order; a compute pass moves a
+        // storage image to GENERAL inside the frame's command buffer and
+        // back before it ends, so no upload may target a texture bound
+        // by a compute pass that is still open.
 
-        // Host-visible transfer-source buffer holding a copy of @p size
-        // bytes of @p data, for the upload paths (buffer initial data,
-        // write_buffer to device-local memory, texture uploads). Every
-        // step is checked; on failure nothing is left allocated and the
-        // function returns false. Release with destroy_staging_buffer
-        // once the copy it fed has completed.
-        bool create_staging_buffer(const void* data, size_t size, VkBuffer& out_buffer, VkDeviceMemory& out_memory);
-        void destroy_staging_buffer(VkBuffer buffer, VkDeviceMemory memory);
+        // The open batch's command buffer, begun on first use. Returns
+        // VK_NULL_HANDLE (callers skip their upload, which is logged)
+        // when no batch can be begun or the device is lost.
+        VkCommandBuffer transfer_command_buffer();
+
+        // Source of a staged copy: @p offset bytes into @p buffer hold
+        // the caller's data, and @p cmd is the batch to record the copy
+        // into. Both are valid until the batch is flushed, which nothing
+        // does between stage_upload and the copy that follows it.
+        struct staged_upload
+        {
+            VkBuffer buffer{VK_NULL_HANDLE};
+            VkDeviceSize offset{0};
+            VkCommandBuffer cmd{VK_NULL_HANDLE};
+        };
+
+        // Copy @p size bytes of @p data into staging memory for the open
+        // batch: the ring when the upload fits (a full ring flushes the
+        // open batch and waits for the oldest submitted one, which is
+        // the only wait on the upload path), a dedicated host-visible
+        // buffer released with the batch when it does not. The ring
+        // offset is aligned for any vkCmdCopyBufferToImage texel block
+        // the engine's formats have. Returns false, with the reason
+        // logged, when nothing could be staged.
+        bool stage_upload(const void* data, size_t size, staged_upload& out);
+
+        // Record the copy of a staged upload into @p dst at
+        // @p dst_offset, with the transfer -> transfer barrier a second
+        // copy into the same buffer within one batch needs.
+        void record_buffer_copy(const staged_upload& source, VkBuffer dst, VkDeviceSize dst_offset, VkDeviceSize size);
+
+        // End and queue the open transfer batch on its fence; a batch
+        // that recorded nothing is returned to the pool unsubmitted.
+        // Returns false when the submission failed (the uploads it
+        // carried are lost, logged as an error) — the batch is still
+        // retired in order so the ring stays consistent.
+        bool flush_transfer_batch();
+
+        // A primary command buffer for a command encoder, from the
+        // current frame's pool. Buffers are handed out in order and
+        // reclaimed together when begin_frame resets the pool after the
+        // fence wait, so nothing is allocated or freed per frame in the
+        // steady state. Returns VK_NULL_HANDLE when the device is lost
+        // or the allocation failed (logged).
+        VkCommandBuffer acquire_frame_command_buffer();
 
         // Allocate one descriptor set of @p layout from the pool chain:
         // the newest pool first, and when it is exhausted
@@ -314,10 +381,6 @@ namespace rendering_engine::gpu::backend::vulkan
         void note_draw(uint32_t vertex_count);
         void note_draw_indexed(uint32_t index_count);
 
-        // Find a memory type matching @p type_filter and the
-        // requested @p properties.
-        uint32_t find_memory_type(uint32_t type_filter, VkMemoryPropertyFlags properties) const;
-
         // Destroy callbacks queued from @c destroy() overloads. With
         // a single frame in flight, freeing a buffer or descriptor
         // set during the frame that submitted it would land the
@@ -333,7 +396,14 @@ namespace rendering_engine::gpu::backend::vulkan
         // the open command buffer already references it), and under
         // vkDeviceWaitIdle in @c quit. Destroys enqueued outside a
         // frame — the IBL prefilter scaffold, start-up uploads —
-        // simply wait for the next of those two points.
+        // simply wait for the next of those two points; the
+        // out-of-frame submission that referenced them arms the
+        // in-flight fence, so the wait covers it too. A transfer batch
+        // may reference the resource as well — a copy into a buffer
+        // or image destroyed before the batch ran — so each entry
+        // records the newest batch id at enqueue time and a drain runs
+        // it only once every batch up to that id has retired, keeping
+        // the rest for a later drain.
         void enqueue_destroy(std::function<void()> fn);
         void drain_pending_destroys();
 
@@ -353,7 +423,21 @@ namespace rendering_engine::gpu::backend::vulkan
         void create_surface();
         void pick_physical_device();
         void create_logical_device();
-        void create_command_pool();
+        // The VMA allocator over the logical device, told the API
+        // version the instance and the physical device agree on.
+        // Throws when VMA refuses; destroyed after every allocation.
+        void create_allocator();
+        void destroy_allocator();
+        // The transfer pool the batches allocate from and the per-frame
+        // pools the encoders draw on. Throws when a pool cannot be
+        // created.
+        void create_command_pools();
+        void destroy_command_pools();
+        // The persistently mapped staging ring (k_staging_ring_bytes).
+        // Returns false, with the failure logged, when the buffer could
+        // not be allocated or mapped; init treats that as fatal.
+        bool create_staging_ring();
+        void destroy_staging_ring();
         // Append one pool to the chain, sized by
         // descriptor_pool_budget_for(chain length). Returns false with
         // an error logged when the driver refuses.
@@ -414,6 +498,73 @@ namespace rendering_engine::gpu::backend::vulkan
         void retire_render_pass_variants(vk_render_target& target, bool device_idle);
         void create_sync_objects();
         void destroy_sync_objects();
+        // Wait the in-flight fence when a submission armed it, and
+        // disarm it. Returns false when the wait failed (the device is
+        // then lost).
+        bool wait_in_flight_fence();
+        // vkResetCommandPool on the current frame's pool, after the
+        // fence wait proved every buffer from it complete, and rewind
+        // its hand-out cursor.
+        void reset_frame_command_pool();
+
+        // One transfer batch: a command buffer from the transfer pool
+        // and the fence its submission signals. A slot cycles
+        // idle -> recording -> in_flight -> idle; the ring bytes and
+        // dedicated staging buffers it holds are released when it is
+        // retired.
+        struct transfer_batch
+        {
+            enum class batch_state
+            {
+                idle,
+                recording,
+                in_flight
+            };
+            struct dedicated_staging
+            {
+                VkBuffer buffer{VK_NULL_HANDLE};
+                VmaAllocation allocation{VK_NULL_HANDLE};
+            };
+
+            VkCommandBuffer cmd{VK_NULL_HANDLE};
+            VkFence fence{VK_NULL_HANDLE};
+            uint64_t id{0};
+            batch_state state{batch_state::idle};
+            // Something was recorded (or staged) into the open batch,
+            // so flush submits it; an untouched batch goes back idle.
+            bool recorded{false};
+            // The submission reached the queue, so retiring the batch
+            // has to wait for its fence. A batch whose submit failed is
+            // retired in turn without a wait.
+            bool submitted{false};
+            std::vector<dedicated_staging> dedicated;
+            // Destination buffers already copied into by this batch;
+            // a second copy into one of them is preceded by a
+            // transfer -> transfer barrier.
+            std::vector<VkBuffer> written_buffers;
+        };
+        // The open batch, begun (or reused from an idle slot) on first
+        // use. Null when none can be begun.
+        transfer_batch* open_transfer_batch();
+        // Release a completed batch: its ring bytes, its dedicated
+        // staging buffers, and the slot.
+        void retire_transfer_batch(transfer_batch& batch);
+        // Reclaim submitted batches in submission order, polling their
+        // fences: every batch up to the first one still executing.
+        void retire_transfer_batches();
+        // Block on the oldest submitted batch and retire it. Returns
+        // false when there is none or the wait failed.
+        bool wait_oldest_transfer_batch();
+        // The submitted batch with the lowest id, or null.
+        transfer_batch* oldest_transfer_batch();
+        // True while a batch with an id up to @p batch_id is still
+        // recording or executing — the gate a deferred destroy waits
+        // behind.
+        bool transfer_batch_live_up_to(uint64_t batch_id) const;
+        // Drop every batch without a fence wait, releasing what it
+        // holds: only under vkDeviceWaitIdle or once the device is
+        // lost, when nothing executes any more (quit).
+        void discard_transfer_batches();
 
         handle_pool<vk_buffer> m_buffers;
         handle_pool<vk_texture> m_textures;
@@ -428,13 +579,60 @@ namespace rendering_engine::gpu::backend::vulkan
         VkDebugUtilsMessengerEXT m_debug_messenger{VK_NULL_HANDLE};
         VkSurfaceKHR m_surface{VK_NULL_HANDLE};
         VkPhysicalDevice m_physical_device{VK_NULL_HANDLE};
-        VkPhysicalDeviceMemoryProperties m_memory_properties{};
+        // The API version the instance was created with (what VMA is
+        // told, capped by the physical device's own version).
+        uint32_t m_api_version{VK_API_VERSION_1_1};
         VkDevice m_device{VK_NULL_HANDLE};
         VkQueue m_graphics_queue{VK_NULL_HANDLE};
         VkQueue m_present_queue{VK_NULL_HANDLE};
         uint32_t m_graphics_queue_family{0};
         uint32_t m_present_queue_family{0};
-        VkCommandPool m_command_pool{VK_NULL_HANDLE};
+        VmaAllocator m_allocator{VK_NULL_HANDLE};
+
+        // Frame command buffers. Each slot is a command pool plus the
+        // primary buffers allocated from it so far, handed out in order
+        // by acquire_frame_command_buffer and reclaimed together by a
+        // pool reset at begin_frame once the fence wait has proved them
+        // complete. One slot today (one frame in flight); the ring is
+        // sized so frames in flight (#169) can widen it and rotate
+        // m_frame_slot per frame.
+        struct frame_command_slot
+        {
+            VkCommandPool pool{VK_NULL_HANDLE};
+            std::vector<VkCommandBuffer> buffers;
+            size_t next{0};
+        };
+        static constexpr uint32_t k_frames_in_flight = 1;
+        std::array<frame_command_slot, k_frames_in_flight> m_frame_command_slots{};
+        uint32_t m_frame_slot{0};
+
+        // Transfer batches (see the upload section above). The pool
+        // allows per-buffer resets so an idle slot's buffer is reused
+        // without touching the others; slots are appended as needed and
+        // never freed before quit.
+        VkCommandPool m_transfer_command_pool{VK_NULL_HANDLE};
+        std::vector<transfer_batch> m_transfer_batches;
+        // Index into m_transfer_batches of the recording batch, or
+        // k_no_batch.
+        static constexpr size_t k_no_batch = static_cast<size_t>(-1);
+        size_t m_open_transfer_batch{k_no_batch};
+        uint64_t m_next_transfer_batch_id{1};
+
+        // The staging ring: one host-visible, host-coherent buffer,
+        // mapped for the lifetime of the device, whose bytes are
+        // handed out by m_staging_ring. Uploads larger than half of it
+        // take a dedicated buffer instead (stage_upload).
+        static constexpr VkDeviceSize k_staging_ring_bytes = 32ull * 1024ull * 1024ull;
+        VkBuffer m_staging_buffer{VK_NULL_HANDLE};
+        VmaAllocation m_staging_allocation{VK_NULL_HANDLE};
+        uint8_t* m_staging_mapped{nullptr};
+        staging_ring m_staging_ring;
+        // Offset alignment of every ring reservation: the device's
+        // optimalBufferCopyOffsetAlignment rounded up to a power of
+        // two, at least 16 so any texel block of the engine's formats
+        // (and the 4 bytes a depth copy needs) divides it.
+        VkDeviceSize m_staging_alignment{16};
+
         // Grow-on-demand descriptor pool chain; allocations come from
         // the back, sets are freed to the pool recorded on their bind
         // group, and the whole chain is destroyed at quit. See
@@ -463,7 +661,7 @@ namespace rendering_engine::gpu::backend::vulkan
         std::vector<VkImage> m_swapchain_images;
         std::vector<VkImageView> m_swapchain_image_views;
         VkImage m_swapchain_depth_image{VK_NULL_HANDLE};
-        VkDeviceMemory m_swapchain_depth_memory{VK_NULL_HANDLE};
+        VmaAllocation m_swapchain_depth_allocation{VK_NULL_HANDLE};
         VkImageView m_swapchain_depth_view{VK_NULL_HANDLE};
         // The engine-side format of the swapchain depth buffer; the
         // VkFormat backing it is vk_format_for(m_swapchain_depth_format)
@@ -523,7 +721,14 @@ namespace rendering_engine::gpu::backend::vulkan
         texture m_default_texture_2d{};
         texture m_default_texture_cube{};
 
-        std::vector<std::function<void()>> m_pending_destroys;
+        // See enqueue_destroy: the closure and the newest transfer
+        // batch id at the time it was queued (0 when none had begun).
+        struct pending_destroy
+        {
+            uint64_t transfer_batch_id{0};
+            std::function<void()> fn;
+        };
+        std::vector<pending_destroy> m_pending_destroys;
 
         // Frame-level diagnostic counters. Logged at end_frame() for
         // @c k_diagnostic_frames frames after init so the user can

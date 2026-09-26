@@ -91,6 +91,10 @@ set(ALPHAENGINE_TEST_SOURCES_UNDER_TEST
     # (the format-support query is a callback); no loader call is made, so
     # only the Vulkan headers are needed and nothing links the library.
     ${CMAKE_SOURCE_DIR}/rendering_engine/gpu/backend/vulkan/vk_negotiate.cpp
+    # vk_staging_ring — the offset / alignment / wrap / reclaim arithmetic of
+    # the backend's staging ring, over plain integers (no Vulkan header at
+    # all; the device drives it against the real buffer and fences).
+    ${CMAKE_SOURCE_DIR}/rendering_engine/gpu/backend/vulkan/vk_staging_ring.cpp
 )
 
 set(ALPHAENGINE_TEST_SOURCES
@@ -120,6 +124,7 @@ set(ALPHAENGINE_TEST_SOURCES
     rendering_engine/sdl_input_test.cpp
     rendering_engine/render_graph/frame_graph_test.cpp
     rendering_engine/gpu/vk_format_fallback_test.cpp
+    rendering_engine/gpu/vk_staging_ring_test.cpp
     rendering_engine/util/font_test.cpp
     rendering_engine/util/image_test.cpp
     external/camera_id_test.cpp

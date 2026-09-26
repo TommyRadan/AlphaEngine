@@ -257,20 +257,13 @@ namespace rendering_engine::gpu::backend::vulkan
         ii.usage = usage;
         ii.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         ii.flags = record.is_cube ? VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT : 0;
-        if (!vk_check(vkCreateImage(m_device, &ii, nullptr, &record.image), "vkCreateImage"))
+        // Image and memory come from VMA together: device-local, bound,
+        // and a sub-allocation of the allocator's blocks unless the
+        // driver prefers a dedicated allocation for this image.
+        const VmaAllocationCreateInfo alloc = device_local_allocation();
+        if (!vk_check(vmaCreateImage(m_allocator, &ii, &alloc, &record.image, &record.allocation, nullptr),
+                      "vmaCreateImage"))
         {
-            return {};
-        }
-
-        VkMemoryRequirements mr{};
-        vkGetImageMemoryRequirements(m_device, record.image, &mr);
-        VkMemoryAllocateInfo ai{};
-        ai.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-        ai.allocationSize = mr.size;
-        ai.memoryTypeIndex = find_memory_type(mr.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-        if (!vk_check(vkAllocateMemory(m_device, &ai, nullptr, &record.memory), "vkAllocateMemory (image)"))
-        {
-            vkDestroyImage(m_device, record.image, nullptr);
             return {};
         }
         // Everything past this point releases the image + memory (and
@@ -286,14 +279,8 @@ namespace rendering_engine::gpu::backend::vulkan
             {
                 vkDestroyImageView(m_device, record.view, nullptr);
             }
-            vkDestroyImage(m_device, record.image, nullptr);
-            vkFreeMemory(m_device, record.memory, nullptr);
+            vmaDestroyImage(m_allocator, record.image, record.allocation);
         };
-        if (!vk_check(vkBindImageMemory(m_device, record.image, record.memory, 0), "vkBindImageMemory"))
-        {
-            release();
-            return {};
-        }
 
         VkImageViewCreateInfo vi{};
         vi.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -330,8 +317,12 @@ namespace rendering_engine::gpu::backend::vulkan
             record.default_sampler = VK_NULL_HANDLE;
         }
 
+        // The move out of UNDEFINED is recorded into the open transfer
+        // batch, which runs ahead of the first command buffer that can
+        // attach or sample the image; the record carries the layout it
+        // will be in from then on.
         record.layout = VK_IMAGE_LAYOUT_UNDEFINED;
-        VkCommandBuffer cmd = begin_one_shot();
+        VkCommandBuffer cmd = transfer_command_buffer();
         if (cmd == VK_NULL_HANDLE)
         {
             LOG_ERR("vk_device::create_texture: no command buffer for the initial layout transition");
@@ -347,7 +338,6 @@ namespace rendering_engine::gpu::backend::vulkan
                          target,
                          record.mip_levels,
                          record.array_layers);
-        end_one_shot(cmd);
         record.layout = target;
 
         texture h{};
@@ -362,17 +352,18 @@ namespace rendering_engine::gpu::backend::vulkan
         {
             return;
         }
-        VkDevice dev = m_device;
-        VkSampler sampler = record->default_sampler;
-        VkImageView view = record->view;
+        const VkDevice dev = m_device;
+        const VmaAllocator allocator = m_allocator;
+        const VkSampler sampler = record->default_sampler;
+        const VkImageView view = record->view;
         std::vector<VkImageView> storage_views = std::move(record->storage_views);
-        VkImage image = record->external ? VK_NULL_HANDLE : record->image;
-        VkDeviceMemory memory = record->memory;
+        const VkImage image = record->external ? VK_NULL_HANDLE : record->image;
+        const VmaAllocation allocation = record->allocation;
         // Deferred for the same reason as destroy(buffer): a texture
         // sampled by an in-flight command buffer must outlive the
         // submission that referenced it.
         enqueue_destroy(
-            [dev, sampler, view, storage_views = std::move(storage_views), image, memory]
+            [dev, allocator, sampler, view, storage_views = std::move(storage_views), image, allocation]
             {
                 if (sampler != VK_NULL_HANDLE)
                 {
@@ -391,17 +382,13 @@ namespace rendering_engine::gpu::backend::vulkan
                 }
                 if (image != VK_NULL_HANDLE)
                 {
-                    vkDestroyImage(dev, image, nullptr);
-                }
-                if (memory != VK_NULL_HANDLE)
-                {
-                    vkFreeMemory(dev, memory, nullptr);
+                    vmaDestroyImage(allocator, image, allocation);
                 }
             });
         record->default_sampler = VK_NULL_HANDLE;
         record->view = VK_NULL_HANDLE;
         record->image = VK_NULL_HANDLE;
-        record->memory = VK_NULL_HANDLE;
+        record->allocation = VK_NULL_HANDLE;
         m_textures.remove(handle.id);
     }
 
@@ -456,22 +443,19 @@ namespace rendering_engine::gpu::backend::vulkan
                 source_size = padded.size();
             }
 
-            VkBuffer staging = VK_NULL_HANDLE;
-            VkDeviceMemory staging_memory = VK_NULL_HANDLE;
-            if (!device.create_staging_buffer(source, source_size, staging, staging_memory))
+            // The bytes go into the staging ring and the copy into the
+            // open transfer batch; both transitions bracket it there,
+            // in batch order, so record.layout is what the image is in
+            // once the batch has run. Nothing waits: the batch is
+            // submitted ahead of the first frame that samples the
+            // texture and its ring bytes are released by its fence.
+            vk_device::staged_upload staged{};
+            if (!device.stage_upload(source, source_size, staged))
             {
-                LOG_ERR("vk_device: texture upload of %zu bytes skipped (staging buffer failed)", source_size);
+                LOG_ERR("vk_device: texture upload of %zu bytes skipped (staging failed)", source_size);
                 return;
             }
-
-            VkCommandBuffer cmd = device.begin_one_shot();
-            if (cmd == VK_NULL_HANDLE)
-            {
-                LOG_ERR("vk_device: texture upload of %zu bytes skipped (no command buffer)", source_size);
-                device.destroy_staging_buffer(staging, staging_memory);
-                return;
-            }
-            transition_image(cmd,
+            transition_image(staged.cmd,
                              record.image,
                              record.aspect,
                              record.layout,
@@ -480,23 +464,22 @@ namespace rendering_engine::gpu::backend::vulkan
                              record.array_layers);
 
             VkBufferImageCopy region{};
+            region.bufferOffset = staged.offset;
             region.imageSubresource.aspectMask = record.aspect;
             region.imageSubresource.layerCount = 1;
             region.imageSubresource.baseArrayLayer = base_layer;
             region.imageExtent = extent;
-            vkCmdCopyBufferToImage(cmd, staging, record.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+            vkCmdCopyBufferToImage(
+                staged.cmd, staged.buffer, record.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
-            transition_image(cmd,
+            transition_image(staged.cmd,
                              record.image,
                              record.aspect,
                              VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                              VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                              record.mip_levels,
                              record.array_layers);
-            device.end_one_shot(cmd);
             record.layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-            device.destroy_staging_buffer(staging, staging_memory);
         }
     } // namespace
 
@@ -540,8 +523,11 @@ namespace rendering_engine::gpu::backend::vulkan
             return;
         }
 
+        // The blits join the open transfer batch behind the upload of
+        // level 0 that preceded them, and run ahead of the first frame
+        // that samples the chain.
         const uint32_t layers = record->array_layers;
-        VkCommandBuffer cmd = begin_one_shot();
+        VkCommandBuffer cmd = transfer_command_buffer();
         if (cmd == VK_NULL_HANDLE)
         {
             LOG_ERR("vk_device::generate_mipmaps: no command buffer; the chain keeps level 0 only");
@@ -653,7 +639,6 @@ namespace rendering_engine::gpu::backend::vulkan
                              1,
                              &barrier);
 
-        end_one_shot(cmd);
         record->layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     }
 

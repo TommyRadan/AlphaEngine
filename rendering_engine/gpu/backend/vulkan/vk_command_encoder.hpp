@@ -137,8 +137,10 @@ namespace rendering_engine::gpu::backend::vulkan
                      access_flag dst_access) override;
 
         // Hand the recorded command buffer over to @c vk_device::submit.
-        // Returns the buffer and clears the encoder's reference so the
-        // destructor leaves it in flight rather than freeing it.
+        // Returns the buffer and clears the encoder's reference. The
+        // buffer belongs to the device's frame command pool either way
+        // (see vk_device::acquire_frame_command_buffer); the encoder
+        // only records into it.
         VkCommandBuffer release_command_buffer() noexcept;
 
     private:

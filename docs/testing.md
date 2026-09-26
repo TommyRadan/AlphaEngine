@@ -71,10 +71,12 @@ shader tests — the embedded `shader_registry` library generated from
 window, or GPU backend layers is pulled in (`mesh/tangent.cpp` is pure
 geometry; the `gpu` header it includes declares types only; glslang compiles
 GLSL to SPIR-V words in memory and needs no device).
-The one Vulkan backend TU compiled, `gpu/backend/vulkan/vk_negotiate.cpp`, is a
-set of pure functions over the constants in the Vulkan headers — the
-format-support query is a callback — so it needs the SDK's include directory
-and links no loader.
+The two Vulkan backend TUs compiled are pure logic: `gpu/backend/vulkan/
+vk_negotiate.cpp` is a set of functions over the constants in the Vulkan
+headers — the format-support query is a callback — so it needs the SDK's
+include directory and links no loader, and `gpu/backend/vulkan/
+vk_staging_ring.cpp` is the staging ring's offset arithmetic over plain
+integers with no Vulkan header at all.
 
 Tests are registered with ctest via `gtest_discover_tests`, so each `TEST()`
 shows up as an individual ctest case.
@@ -222,6 +224,16 @@ All device-free:
   descriptor-pool budget growth (base sizes, doubling per pool, the cap,
   and that every pool holds a full material set per allocated set). The
   support query is a table; no loader call is made.
+- `vk_staging_ring` (`rendering_engine/gpu/backend/vulkan/vk_staging_ring.cpp`)
+  — the bookkeeping of the Vulkan backend's persistently mapped staging ring:
+  contiguous, aligned reservations (padding counts as used), refusal of a
+  zero-byte or over-capacity request, sealing the open batch and retiring
+  batches in fence order (a later id releases the earlier ones, the open
+  batch is never released), the wrap past the end of the buffer (a skipped
+  lap tail is released with the batch that skipped it, a wrap never overruns
+  the tail, offsets stay aligned across laps) and the device's
+  flush-and-wait loop making progress on a full ring. Plain integers; the
+  device binds the ring to the real buffer and fences.
 
 ### Testing the asset layer headless
 

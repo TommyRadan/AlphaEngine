@@ -228,8 +228,10 @@ namespace rendering_engine::gpu
         // frame here and rolls its per-frame bookkeeping; OpenGL
         // presents through @c window::swap_buffers and treats this as
         // a no-op. Work submitted outside a begin_frame / end_frame
-        // bracket (start-up uploads, the IBL prefilter) is executed
-        // synchronously by the backend and needs no bracket.
+        // bracket (start-up uploads, the IBL prefilter) needs no
+        // bracket: the backend queues it and the next begin_frame
+        // waits for it like a frame, so resources it referenced may be
+        // destroyed right after the submit.
         virtual void end_frame() = 0;
 
         // -- Command recording --------------------------------------------

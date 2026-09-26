@@ -364,7 +364,12 @@ namespace rendering_engine::gpu::backend::vulkan
         pick_physical_device();
         resolve_depth_formats();
         create_logical_device();
-        create_command_pool();
+        create_allocator();
+        create_command_pools();
+        if (!create_staging_ring())
+        {
+            throw std::runtime_error{"vk_device::init: staging ring allocation failed"};
+        }
         if (!create_descriptor_pool())
         {
             throw std::runtime_error{"vkCreateDescriptorPool failed"};
@@ -460,9 +465,12 @@ namespace rendering_engine::gpu::backend::vulkan
             m_default_texture_cube = {};
         }
 
-        // GPU is idle: anything queued by destroy() during the run
-        // is now safe to actually free, and the active handle pools
-        // below need to release whatever is still resident.
+        // GPU is idle (or gone): every transfer batch has run or never
+        // will, so none gates a deferred destroy any more; anything
+        // queued by destroy() during the run is now safe to actually
+        // free, and the active handle pools below need to release
+        // whatever is still resident.
+        discard_transfer_batches();
         drain_pending_destroys();
 
         m_pipelines.for_each(
@@ -538,33 +546,23 @@ namespace rendering_engine::gpu::backend::vulkan
                 t.storage_views.clear();
                 if (!t.external && t.image != VK_NULL_HANDLE)
                 {
-                    vkDestroyImage(m_device, t.image, nullptr);
-                    t.image = VK_NULL_HANDLE;
+                    vmaDestroyImage(m_allocator, t.image, t.allocation);
                 }
-                if (t.memory != VK_NULL_HANDLE)
-                {
-                    vkFreeMemory(m_device, t.memory, nullptr);
-                    t.memory = VK_NULL_HANDLE;
-                }
+                t.image = VK_NULL_HANDLE;
+                t.allocation = VK_NULL_HANDLE;
             });
         m_buffers.for_each(
             [&](vk_buffer& b)
             {
-                if (b.mapped != nullptr)
-                {
-                    vkUnmapMemory(m_device, b.memory);
-                    b.mapped = nullptr;
-                }
+                // The persistent map belongs to the allocation and goes
+                // with it.
                 if (b.object != VK_NULL_HANDLE)
                 {
-                    vkDestroyBuffer(m_device, b.object, nullptr);
-                    b.object = VK_NULL_HANDLE;
+                    vmaDestroyBuffer(m_allocator, b.object, b.allocation);
                 }
-                if (b.memory != VK_NULL_HANDLE)
-                {
-                    vkFreeMemory(m_device, b.memory, nullptr);
-                    b.memory = VK_NULL_HANDLE;
-                }
+                b.object = VK_NULL_HANDLE;
+                b.allocation = VK_NULL_HANDLE;
+                b.mapped = nullptr;
             });
         m_render_targets.for_each(
             [&](vk_render_target& rt)
@@ -615,11 +613,12 @@ namespace rendering_engine::gpu::backend::vulkan
             vkDestroySampler(m_device, m_fallback_sampler, nullptr);
             m_fallback_sampler = VK_NULL_HANDLE;
         }
-        if (m_command_pool != VK_NULL_HANDLE)
-        {
-            vkDestroyCommandPool(m_device, m_command_pool, nullptr);
-            m_command_pool = VK_NULL_HANDLE;
-        }
+        // The batches' dedicated staging buffers and the ring are VMA
+        // allocations, so both go before the allocator, which goes
+        // before the device.
+        destroy_command_pools();
+        destroy_staging_ring();
+        destroy_allocator();
         if (m_device != VK_NULL_HANDLE)
         {
             vkDestroyDevice(m_device, nullptr);
@@ -641,6 +640,8 @@ namespace rendering_engine::gpu::backend::vulkan
         m_acquire_attempted = false;
         m_present_pending = false;
         m_in_flight_fence_armed = false;
+        m_frame_slot = 0;
+        m_next_transfer_batch_id = 1;
         m_swapchain_suspended = false;
         m_device_lost = false;
         m_device_lost_thrown = false;
@@ -787,6 +788,7 @@ namespace rendering_engine::gpu::backend::vulkan
             LOG_FTL("vkCreateInstance failed: %s", vk_result_to_string(create_result));
             throw std::runtime_error{"vkCreateInstance failed"};
         }
+        m_api_version = api_version;
         LOG_INF("Vulkan instance: loader %u.%u.%u, requested api %u.%u, portability enumeration %s, validation %s",
                 VK_VERSION_MAJOR(instance_version),
                 VK_VERSION_MINOR(instance_version),
@@ -992,7 +994,19 @@ namespace rendering_engine::gpu::backend::vulkan
                 VK_VERSION_MAJOR(props.apiVersion),
                 VK_VERSION_MINOR(props.apiVersion),
                 VK_VERSION_PATCH(props.apiVersion));
-        vkGetPhysicalDeviceMemoryProperties(m_physical_device, &m_memory_properties);
+
+        // Every staging-ring reservation starts at a multiple of the
+        // device's preferred copy alignment (a power of two on every
+        // known driver; rounded up in case), never below 16 so any
+        // texel block the engine's formats have divides it, and capped
+        // so a driver that prefers page alignment does not waste a page
+        // per small upload.
+        VkDeviceSize alignment = 16;
+        while (alignment < props.limits.optimalBufferCopyOffsetAlignment && alignment < 4096)
+        {
+            alignment *= 2;
+        }
+        m_staging_alignment = alignment;
     }
 
     void vk_device::create_logical_device()
@@ -1167,17 +1181,153 @@ namespace rendering_engine::gpu::backend::vulkan
                 m_features.sampler_anisotropy ? "on" : "off");
     }
 
-    void vk_device::create_command_pool()
+    void vk_device::create_allocator()
     {
+        VkPhysicalDeviceProperties props{};
+        vkGetPhysicalDeviceProperties(m_physical_device, &props);
+        // VMA imports the entry points of the version it is told, which
+        // may be neither higher than the instance asked for nor higher
+        // than the physical device implements; only major.minor count.
+        const uint32_t api = std::min(m_api_version, props.apiVersion);
+        const uint32_t api_major_minor = VK_MAKE_VERSION(VK_VERSION_MAJOR(api), VK_VERSION_MINOR(api), 0);
+
+        VmaVulkanFunctions functions{};
+        functions.vkGetInstanceProcAddr = vkGetInstanceProcAddr;
+        functions.vkGetDeviceProcAddr = vkGetDeviceProcAddr;
+
+        VmaAllocatorCreateInfo info{};
+        info.vulkanApiVersion = api_major_minor;
+        info.instance = m_instance;
+        info.physicalDevice = m_physical_device;
+        info.device = m_device;
+        info.pVulkanFunctions = &functions;
+        if (!vk_check(vmaCreateAllocator(&info, &m_allocator), "vmaCreateAllocator"))
+        {
+            m_allocator = VK_NULL_HANDLE;
+            throw std::runtime_error{"vmaCreateAllocator failed"};
+        }
+
+        const VkPhysicalDeviceMemoryProperties* memory = nullptr;
+        vmaGetMemoryProperties(m_allocator, &memory);
+        LOG_INF("Vulkan memory allocator: VMA %u.%u.%u against api %u.%u, %u memory heaps, %u memory types",
+                VK_VERSION_MAJOR(VMA_VERSION),
+                VK_VERSION_MINOR(VMA_VERSION),
+                VK_VERSION_PATCH(VMA_VERSION),
+                VK_VERSION_MAJOR(api_major_minor),
+                VK_VERSION_MINOR(api_major_minor),
+                memory != nullptr ? memory->memoryHeapCount : 0u,
+                memory != nullptr ? memory->memoryTypeCount : 0u);
+    }
+
+    void vk_device::destroy_allocator()
+    {
+        if (m_allocator != VK_NULL_HANDLE)
+        {
+            vmaDestroyAllocator(m_allocator);
+            m_allocator = VK_NULL_HANDLE;
+        }
+    }
+
+    void vk_device::create_command_pools()
+    {
+        // Transfer batches reset their own buffer when a slot is reused
+        // (the others may be in flight), so that pool allows it; a frame
+        // pool is reset whole, which is the cheaper operation and needs
+        // no per-buffer flag. Both are transient: every buffer is
+        // recorded once and reset.
         VkCommandPoolCreateInfo info{};
         info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-        info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
         info.queueFamilyIndex = m_graphics_queue_family;
-        if (!vk_check(vkCreateCommandPool(m_device, &info, nullptr, &m_command_pool), "vkCreateCommandPool"))
+        info.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT | VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+        if (!vk_check(vkCreateCommandPool(m_device, &info, nullptr, &m_transfer_command_pool),
+                      "vkCreateCommandPool (transfer)"))
         {
-            m_command_pool = VK_NULL_HANDLE;
+            m_transfer_command_pool = VK_NULL_HANDLE;
             throw std::runtime_error{"vkCreateCommandPool failed"};
         }
+        info.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
+        for (frame_command_slot& slot : m_frame_command_slots)
+        {
+            if (!vk_check(vkCreateCommandPool(m_device, &info, nullptr, &slot.pool), "vkCreateCommandPool (frame)"))
+            {
+                slot.pool = VK_NULL_HANDLE;
+                throw std::runtime_error{"vkCreateCommandPool failed"};
+            }
+        }
+    }
+
+    void vk_device::destroy_command_pools()
+    {
+        // Under vkDeviceWaitIdle (quit), after discard_transfer_batches:
+        // no batch is executing and none holds staging memory, so the
+        // fences can go and destroying the pools frees their command
+        // buffers.
+        discard_transfer_batches();
+        for (transfer_batch& batch : m_transfer_batches)
+        {
+            if (batch.fence != VK_NULL_HANDLE)
+            {
+                vkDestroyFence(m_device, batch.fence, nullptr);
+            }
+        }
+        m_transfer_batches.clear();
+        if (m_transfer_command_pool != VK_NULL_HANDLE)
+        {
+            vkDestroyCommandPool(m_device, m_transfer_command_pool, nullptr);
+            m_transfer_command_pool = VK_NULL_HANDLE;
+        }
+        for (frame_command_slot& slot : m_frame_command_slots)
+        {
+            slot.buffers.clear();
+            slot.next = 0;
+            if (slot.pool != VK_NULL_HANDLE)
+            {
+                vkDestroyCommandPool(m_device, slot.pool, nullptr);
+                slot.pool = VK_NULL_HANDLE;
+            }
+        }
+    }
+
+    bool vk_device::create_staging_ring()
+    {
+        VkBufferCreateInfo bi{};
+        bi.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+        bi.size = k_staging_ring_bytes;
+        bi.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+        bi.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        const VmaAllocationCreateInfo ai = host_mapped_allocation(/*prefer_host=*/true);
+        VmaAllocationInfo info{};
+        if (!vk_check(vmaCreateBuffer(m_allocator, &bi, &ai, &m_staging_buffer, &m_staging_allocation, &info),
+                      "vmaCreateBuffer (staging ring)"))
+        {
+            m_staging_buffer = VK_NULL_HANDLE;
+            m_staging_allocation = VK_NULL_HANDLE;
+            return false;
+        }
+        if (info.pMappedData == nullptr)
+        {
+            LOG_ERR("vk_device::create_staging_ring: the staging ring allocation is not mapped");
+            destroy_staging_ring();
+            return false;
+        }
+        m_staging_mapped = static_cast<uint8_t*>(info.pMappedData);
+        m_staging_ring = staging_ring{k_staging_ring_bytes};
+        LOG_INF("Vulkan staging ring: %llu MiB, %llu-byte copy alignment",
+                static_cast<unsigned long long>(k_staging_ring_bytes / (1024ull * 1024ull)),
+                static_cast<unsigned long long>(m_staging_alignment));
+        return true;
+    }
+
+    void vk_device::destroy_staging_ring()
+    {
+        if (m_staging_buffer != VK_NULL_HANDLE)
+        {
+            vmaDestroyBuffer(m_allocator, m_staging_buffer, m_staging_allocation);
+        }
+        m_staging_buffer = VK_NULL_HANDLE;
+        m_staging_allocation = VK_NULL_HANDLE;
+        m_staging_mapped = nullptr;
+        m_staging_ring = staging_ring{};
     }
 
     bool vk_device::create_descriptor_pool()
@@ -1369,29 +1519,14 @@ namespace rendering_engine::gpu::backend::vulkan
         di.tiling = VK_IMAGE_TILING_OPTIMAL;
         di.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
         di.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        const VkResult depth_result = vkCreateImage(m_device, &di, nullptr, &m_swapchain_depth_image);
+        const VmaAllocationCreateInfo depth_alloc = device_local_allocation();
+        const VkResult depth_result = vmaCreateImage(
+            m_allocator, &di, &depth_alloc, &m_swapchain_depth_image, &m_swapchain_depth_allocation, nullptr);
         if (depth_result != VK_SUCCESS)
         {
-            LOG_ERR("vkCreateImage (swapchain depth) failed: %s", vk_result_to_string(depth_result));
-            destroy_swapchain();
-            return false;
-        }
-        VkMemoryRequirements mr{};
-        vkGetImageMemoryRequirements(m_device, m_swapchain_depth_image, &mr);
-        VkMemoryAllocateInfo mai{};
-        mai.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-        mai.allocationSize = mr.size;
-        mai.memoryTypeIndex = find_memory_type(mr.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-        const VkResult alloc_result = vkAllocateMemory(m_device, &mai, nullptr, &m_swapchain_depth_memory);
-        if (alloc_result != VK_SUCCESS)
-        {
-            LOG_ERR("vkAllocateMemory (swapchain depth) failed: %s", vk_result_to_string(alloc_result));
-            destroy_swapchain();
-            return false;
-        }
-        if (!vk_check(vkBindImageMemory(m_device, m_swapchain_depth_image, m_swapchain_depth_memory, 0),
-                      "vkBindImageMemory (swapchain depth)"))
-        {
+            LOG_ERR("vmaCreateImage (swapchain depth) failed: %s", vk_result_to_string(depth_result));
+            m_swapchain_depth_image = VK_NULL_HANDLE;
+            m_swapchain_depth_allocation = VK_NULL_HANDLE;
             destroy_swapchain();
             return false;
         }
@@ -1451,13 +1586,9 @@ namespace rendering_engine::gpu::backend::vulkan
         }
         if (m_swapchain_depth_image != VK_NULL_HANDLE)
         {
-            vkDestroyImage(m_device, m_swapchain_depth_image, nullptr);
+            vmaDestroyImage(m_allocator, m_swapchain_depth_image, m_swapchain_depth_allocation);
             m_swapchain_depth_image = VK_NULL_HANDLE;
-        }
-        if (m_swapchain_depth_memory != VK_NULL_HANDLE)
-        {
-            vkFreeMemory(m_device, m_swapchain_depth_memory, nullptr);
-            m_swapchain_depth_memory = VK_NULL_HANDLE;
+            m_swapchain_depth_allocation = VK_NULL_HANDLE;
         }
         for (auto v : m_swapchain_image_views)
         {
@@ -1620,8 +1751,11 @@ namespace rendering_engine::gpu::backend::vulkan
             suspend_swapchain("the device could not be waited idle before the rebuild", true);
             return false;
         }
-        // The idle wait covered the frame the fence tracks.
+        // The idle wait covered the frame the fence tracks and every
+        // submitted transfer batch; the batch still recording, if any,
+        // was never submitted and stays open.
         m_in_flight_fence_armed = false;
+        retire_transfer_batches();
 
         // The swapchain target's framebuffers point at image views that
         // are about to go, and its render passes at a format / sample
@@ -1879,59 +2013,81 @@ namespace rendering_engine::gpu::backend::vulkan
         }
         if (m_device_lost)
         {
-            // Nothing can execute any more. The encoder still owns its
-            // command buffer, so dropping it returns the buffer to the
-            // pool; end_frame raises the loss to the main loop.
+            // Nothing can execute any more; end_frame raises the loss
+            // to the main loop. The command buffer belongs to the frame
+            // pool and is reclaimed with it.
             encoder.reset();
             return;
         }
+        // The command buffer is owned by the frame pool, not the
+        // encoder, so every early return below simply leaves it for the
+        // pool reset at the next begin_frame.
         VkCommandBuffer cmd = vk_enc->release_command_buffer();
+        encoder.reset();
         if (cmd == VK_NULL_HANDLE)
         {
-            encoder.reset();
             return;
         }
         if (!vk_check(vkEndCommandBuffer(cmd), "vkEndCommandBuffer"))
         {
-            // The buffer was released from the encoder above, so it is
-            // freed here rather than leaked.
-            vkFreeCommandBuffers(m_device, m_command_pool, 1, &cmd);
-            encoder.reset();
             return;
         }
+
+        // Every upload recorded since the last flush goes first in
+        // queue order, with the batch's trailing barrier making the
+        // copies visible to this command buffer. A failed flush is
+        // logged there; the frame still runs.
+        flush_transfer_batch();
 
         if (!m_have_current_image)
         {
             // No swapchain image this frame: either work submitted
             // outside a frame bracket (the IBL prefilter at start-up)
-            // or a frame whose passes never reached the swapchain.
-            // Execute it synchronously. The fence and semaphores stay
-            // untouched, so the next begin_frame has nothing to wait
-            // for and end_frame nothing to present.
+            // or a frame whose passes never reached the swapchain. It
+            // runs on the in-flight fence like a frame submission, with
+            // no semaphores and no present: the next begin_frame waits
+            // for it before the pool reset and the deferred-destroy
+            // drain, so the command buffer is not reused and nothing it
+            // references (the IBL scaffold is destroyed right after its
+            // submit) is freed while it executes. A fence still armed by
+            // an earlier such submission is waited first — for that one
+            // submission, not the whole queue.
+            if (!wait_in_flight_fence())
+            {
+                return;
+            }
+            if (!vk_check(vkResetFences(m_device, 1, &m_in_flight_fence), "vkResetFences (no-image)"))
+            {
+                return;
+            }
             VkSubmitInfo si{};
             si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
             si.commandBufferCount = 1;
             si.pCommandBuffers = &cmd;
-            if (check_queue_result(vkQueueSubmit(m_graphics_queue, 1, &si, VK_NULL_HANDLE), "vkQueueSubmit (no-image)"))
+            if (check_queue_result(vkQueueSubmit(m_graphics_queue, 1, &si, m_in_flight_fence),
+                                   "vkQueueSubmit (no-image)"))
             {
-                check_queue_result(vkQueueWaitIdle(m_graphics_queue), "vkQueueWaitIdle (no-image)");
+                m_in_flight_fence_armed = true;
             }
-            // The queue is idle (or the device is gone), so this one-off
-            // (off-screen-only) command buffer can be returned to the
-            // pool now.
-            vkFreeCommandBuffers(m_device, m_command_pool, 1, &cmd);
-            encoder.reset();
             return;
         }
 
         // begin_frame already waited this fence for the previous
-        // frame, so it is signaled and idle. Reset it here, right
+        // frame, so it is signaled and idle unless a no-image
+        // submission armed it again this frame. Reset it here, right
         // before the one submission that signals it again, rather
         // than at acquire time: a reset at acquire left the fence
         // unsignaled whenever the acquire failed (out-of-date
         // swapchain), and the next begin_frame then blocked forever
         // (issue #206).
-        vk_check(vkResetFences(m_device, 1, &m_in_flight_fence), "vkResetFences");
+        if (!wait_in_flight_fence())
+        {
+            return;
+        }
+        if (!vk_check(vkResetFences(m_device, 1, &m_in_flight_fence), "vkResetFences"))
+        {
+            return;
+        }
 
         const VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
         VkSubmitInfo si{};
@@ -1949,36 +2105,79 @@ namespace rendering_engine::gpu::backend::vulkan
             // semaphore now: the fence stays disarmed so the next
             // begin_frame does not wait on it forever, and the frame
             // is not presented (the present would wait forever on the
-            // semaphore). The command buffer was never executed, so it
-            // can go back to the pool right away.
-            vkFreeCommandBuffers(m_device, m_command_pool, 1, &cmd);
-            encoder.reset();
+            // semaphore).
             return;
         }
         m_in_flight_fence_armed = true;
         // The present itself belongs to the frame boundary; end_frame
         // issues it once the renderer has closed the frame.
         m_present_pending = true;
-        encoder.reset();
+    }
 
-        // The command buffer is in flight until this frame's fence
-        // signals. Hand it back to the pool through the deferred queue,
-        // which the next begin_frame drains only after vkWaitForFences —
-        // so it is freed once the GPU is done, not leaked for the
-        // lifetime of the run. (Previously release_command_buffer
-        // detached it from the encoder but nothing ever freed it, so the
-        // pool grew by one command buffer per frame and teardown of the
-        // whole pile stalled shutdown for tens of seconds.)
-        const VkDevice device = m_device;
-        const VkCommandPool pool = m_command_pool;
-        enqueue_destroy([device, pool, cmd] { vkFreeCommandBuffers(device, pool, 1, &cmd); });
+    bool vk_device::wait_in_flight_fence()
+    {
+        if (!m_in_flight_fence_armed)
+        {
+            return true;
+        }
+        // Disarmed before the wait: after a failure nothing would ever
+        // signal it, and a lost device is done anyway.
+        m_in_flight_fence_armed = false;
+        return check_queue_result(vkWaitForFences(m_device, 1, &m_in_flight_fence, VK_TRUE, UINT64_MAX),
+                                  "vkWaitForFences");
+    }
+
+    void vk_device::reset_frame_command_pool()
+    {
+        frame_command_slot& slot = m_frame_command_slots[m_frame_slot];
+        if (slot.pool != VK_NULL_HANDLE)
+        {
+            vk_check(vkResetCommandPool(m_device, slot.pool, 0), "vkResetCommandPool (frame)");
+        }
+        slot.next = 0;
+    }
+
+    VkCommandBuffer vk_device::acquire_frame_command_buffer()
+    {
+        if (m_device_lost)
+        {
+            return VK_NULL_HANDLE;
+        }
+        frame_command_slot& slot = m_frame_command_slots[m_frame_slot];
+        if (slot.pool == VK_NULL_HANDLE)
+        {
+            return VK_NULL_HANDLE;
+        }
+        if (slot.next < slot.buffers.size())
+        {
+            return slot.buffers[slot.next++];
+        }
+        // The slot has handed out every buffer it owns since the last
+        // reset (one per frame in the steady state, more only when
+        // several encoders are recorded between two frames); grow it.
+        VkCommandBufferAllocateInfo ai{};
+        ai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        ai.commandPool = slot.pool;
+        ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        ai.commandBufferCount = 1;
+        VkCommandBuffer cmd = VK_NULL_HANDLE;
+        if (!vk_check(vkAllocateCommandBuffers(m_device, &ai, &cmd), "vkAllocateCommandBuffers (frame)"))
+        {
+            return VK_NULL_HANDLE;
+        }
+        slot.buffers.push_back(cmd);
+        ++slot.next;
+        return cmd;
     }
 
     void vk_device::enqueue_destroy(std::function<void()> fn)
     {
         if (fn)
         {
-            m_pending_destroys.push_back(std::move(fn));
+            // The newest batch — open, or submitted and maybe still
+            // executing — is the last one that can hold a copy into
+            // the resource; a batch begun later never sees its handle.
+            m_pending_destroys.push_back({m_next_transfer_batch_id - 1, std::move(fn)});
         }
     }
 
@@ -1986,11 +2185,18 @@ namespace rendering_engine::gpu::backend::vulkan
     {
         // Move out first so a destroy callback that itself enqueues
         // is captured into the next drain rather than running here.
-        std::vector<std::function<void()>> drain;
+        // An entry whose transfer batch has not retired yet goes back
+        // in the queue for a later drain.
+        std::vector<pending_destroy> drain;
         drain.swap(m_pending_destroys);
-        for (auto& fn : drain)
+        for (pending_destroy& entry : drain)
         {
-            fn();
+            if (transfer_batch_live_up_to(entry.transfer_batch_id))
+            {
+                m_pending_destroys.push_back(std::move(entry));
+                continue;
+            }
+            entry.fn();
         }
     }
 
@@ -2016,21 +2222,30 @@ namespace rendering_engine::gpu::backend::vulkan
         // issue #169, still open at one frame in flight.) The fence is
         // only waited when a submission armed it: after a failed
         // submit nothing would ever signal it.
-        if (m_in_flight_fence_armed)
+        if (!wait_in_flight_fence() && m_device_lost)
         {
-            m_in_flight_fence_armed = false;
-            if (!check_queue_result(vkWaitForFences(m_device, 1, &m_in_flight_fence, VK_TRUE, UINT64_MAX),
-                                    "vkWaitForFences") &&
-                m_device_lost)
-            {
-                return;
-            }
+            return;
         }
+        // Every transfer batch submitted before the frame completed
+        // ahead of that fence in queue order, so polling reclaims them
+        // (ring bytes, dedicated staging buffers); one submitted since
+        // — a ring-full flush during loading between frames — may
+        // still be executing and is left alone, as are the deferred
+        // destroys it gates.
+        retire_transfer_batches();
+        if (m_device_lost)
+        {
+            return;
+        }
+        // Nothing from the frame pool is pending any more: reclaim the
+        // command buffers for this frame's encoders.
+        reset_frame_command_pool();
         // The fence is signaled, so nothing enqueued for destruction
         // during the previous frame is still referenced by the GPU —
         // and no command buffer is open yet that could reference what
         // a material rebuilds this frame. This is the one in-frame
-        // point where freeing is safe.
+        // point where freeing is safe (entries a live transfer batch
+        // still gates stay queued).
         drain_pending_destroys();
 
         if (m_swapchain_suspended)
@@ -2110,6 +2325,9 @@ namespace rendering_engine::gpu::backend::vulkan
         }
         m_frame_stats = {};
         ++m_frame_index;
+        // One slot today, so this stays at 0; frames in flight rotate
+        // it here.
+        m_frame_slot = (m_frame_slot + 1) % k_frames_in_flight;
     }
 
     void vk_device::acquire_swapchain_image()
@@ -2154,63 +2372,172 @@ namespace rendering_engine::gpu::backend::vulkan
         }
     }
 
-    VkCommandBuffer vk_device::begin_one_shot()
+    // -- Transfer batches ----------------------------------------------
+
+    vk_device::transfer_batch* vk_device::open_transfer_batch()
     {
-        if (m_device_lost)
+        if (m_device_lost || m_transfer_command_pool == VK_NULL_HANDLE)
         {
-            return VK_NULL_HANDLE;
+            return nullptr;
         }
-        VkCommandBufferAllocateInfo ai{};
-        ai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-        ai.commandPool = m_command_pool;
-        ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-        ai.commandBufferCount = 1;
-        VkCommandBuffer cmd = VK_NULL_HANDLE;
-        if (!vk_check(vkAllocateCommandBuffers(m_device, &ai, &cmd), "vkAllocateCommandBuffers (one-shot)"))
+        if (m_open_transfer_batch != k_no_batch)
         {
-            return VK_NULL_HANDLE;
+            return &m_transfer_batches[m_open_transfer_batch];
+        }
+
+        // An idle slot, or a new one. Slots are only ever appended, so
+        // an index stays valid; a pointer does not survive the
+        // push_back below, which is why callers re-fetch after anything
+        // that may open a batch.
+        size_t index = k_no_batch;
+        for (size_t i = 0; i < m_transfer_batches.size(); ++i)
+        {
+            if (m_transfer_batches[i].state == transfer_batch::batch_state::idle)
+            {
+                index = i;
+                break;
+            }
+        }
+        if (index == k_no_batch)
+        {
+            transfer_batch batch{};
+            VkCommandBufferAllocateInfo ai{};
+            ai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+            ai.commandPool = m_transfer_command_pool;
+            ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+            ai.commandBufferCount = 1;
+            if (!vk_check(vkAllocateCommandBuffers(m_device, &ai, &batch.cmd), "vkAllocateCommandBuffers (transfer)"))
+            {
+                return nullptr;
+            }
+            VkFenceCreateInfo fi{};
+            fi.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+            if (!vk_check(vkCreateFence(m_device, &fi, nullptr, &batch.fence), "vkCreateFence (transfer)"))
+            {
+                vkFreeCommandBuffers(m_device, m_transfer_command_pool, 1, &batch.cmd);
+                return nullptr;
+            }
+            m_transfer_batches.push_back(batch);
+            index = m_transfer_batches.size() - 1;
+        }
+
+        transfer_batch& batch = m_transfer_batches[index];
+        // An idle slot's buffer has completed (its batch was retired)
+        // or was never submitted; either way it can be reset and
+        // begun again.
+        if (!vk_check(vkResetCommandBuffer(batch.cmd, 0), "vkResetCommandBuffer (transfer)"))
+        {
+            return nullptr;
         }
         VkCommandBufferBeginInfo bi{};
         bi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
         bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-        if (!vk_check(vkBeginCommandBuffer(cmd, &bi), "vkBeginCommandBuffer (one-shot)"))
+        if (!vk_check(vkBeginCommandBuffer(batch.cmd, &bi), "vkBeginCommandBuffer (transfer)"))
         {
-            vkFreeCommandBuffers(m_device, m_command_pool, 1, &cmd);
+            return nullptr;
+        }
+        // Whatever the queue is still executing when this batch reaches
+        // it — the previous frame, when a ring-full flush submits
+        // between frames — may read or write the buffers and images the
+        // batch copies into. One barrier at the top orders every
+        // transfer behind that work and makes its writes available; the
+        // per-image layout transitions add the image-specific
+        // dependencies on top of it.
+        VkMemoryBarrier mb{};
+        mb.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+        mb.srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT;
+        mb.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT;
+        vkCmdPipelineBarrier(batch.cmd,
+                             VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                             VK_PIPELINE_STAGE_TRANSFER_BIT,
+                             0,
+                             1,
+                             &mb,
+                             0,
+                             nullptr,
+                             0,
+                             nullptr);
+        batch.id = m_next_transfer_batch_id++;
+        batch.state = transfer_batch::batch_state::recording;
+        batch.recorded = false;
+        batch.submitted = false;
+        batch.written_buffers.clear();
+        m_open_transfer_batch = index;
+        return &batch;
+    }
+
+    VkCommandBuffer vk_device::transfer_command_buffer()
+    {
+        transfer_batch* batch = open_transfer_batch();
+        if (batch == nullptr)
+        {
             return VK_NULL_HANDLE;
         }
-        return cmd;
+        batch->recorded = true;
+        return batch->cmd;
     }
 
-    void vk_device::end_one_shot(VkCommandBuffer cmd)
+    bool vk_device::stage_upload(const void* data, size_t size, staged_upload& out)
     {
-        if (cmd == VK_NULL_HANDLE)
-        {
-            return;
-        }
-        if (vk_check(vkEndCommandBuffer(cmd), "vkEndCommandBuffer (one-shot)") && !m_device_lost)
-        {
-            VkSubmitInfo si{};
-            si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-            si.commandBufferCount = 1;
-            si.pCommandBuffers = &cmd;
-            if (check_queue_result(vkQueueSubmit(m_graphics_queue, 1, &si, VK_NULL_HANDLE), "vkQueueSubmit (one-shot)"))
-            {
-                check_queue_result(vkQueueWaitIdle(m_graphics_queue), "vkQueueWaitIdle (one-shot)");
-            }
-        }
-        // Either the queue is idle, the work never reached it, or the
-        // device is gone: in every case the buffer can be returned.
-        vkFreeCommandBuffers(m_device, m_command_pool, 1, &cmd);
-    }
-
-    bool
-    vk_device::create_staging_buffer(const void* data, size_t size, VkBuffer& out_buffer, VkDeviceMemory& out_memory)
-    {
-        out_buffer = VK_NULL_HANDLE;
-        out_memory = VK_NULL_HANDLE;
+        out = {};
         if (data == nullptr || size == 0)
         {
-            LOG_ERR("vk_device::create_staging_buffer: no source data (%zu bytes)", size);
+            LOG_ERR("vk_device::stage_upload: no source data (%zu bytes)", size);
+            return false;
+        }
+        if (m_device_lost || m_staging_buffer == VK_NULL_HANDLE)
+        {
+            return false;
+        }
+
+        // An upload of more than half the ring takes a dedicated buffer:
+        // it would otherwise wait for nearly every earlier upload to
+        // complete before it could even be staged, for one resource.
+        if (size <= m_staging_ring.capacity() / 2)
+        {
+            for (;;)
+            {
+                transfer_batch* batch = open_transfer_batch();
+                if (batch == nullptr)
+                {
+                    return false;
+                }
+                if (const std::optional<uint64_t> offset = m_staging_ring.allocate(size, m_staging_alignment))
+                {
+                    std::memcpy(m_staging_mapped + *offset, data, size);
+                    batch->recorded = true;
+                    out.buffer = m_staging_buffer;
+                    out.offset = *offset;
+                    out.cmd = batch->cmd;
+                    return true;
+                }
+                // The ring is full of bytes that submitted batches (or
+                // the open one) still own. Submit what is open so it
+                // can complete, then block on the oldest batch — the
+                // one wait on the upload path, for one batch rather
+                // than the whole queue — and try again with its bytes
+                // reclaimed. Each round retires at least one batch, and
+                // an empty ring fits anything up to half its capacity,
+                // so the loop ends.
+                LOG_DBG("vk_device::stage_upload: staging ring full (%llu of %llu bytes in use, %zu batches "
+                        "submitted); waiting for the oldest batch",
+                        static_cast<unsigned long long>(m_staging_ring.used()),
+                        static_cast<unsigned long long>(m_staging_ring.capacity()),
+                        m_staging_ring.sealed_count());
+                flush_transfer_batch();
+                if (!wait_oldest_transfer_batch())
+                {
+                    // Nothing was in flight (or the wait failed): the
+                    // ring cannot be freed any further, so stage this
+                    // one aside.
+                    break;
+                }
+            }
+        }
+
+        transfer_batch* batch = open_transfer_batch();
+        if (batch == nullptr)
+        {
             return false;
         }
         VkBufferCreateInfo bi{};
@@ -2218,56 +2545,242 @@ namespace rendering_engine::gpu::backend::vulkan
         bi.size = size;
         bi.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
         bi.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        if (!vk_check(vkCreateBuffer(m_device, &bi, nullptr, &out_buffer), "vkCreateBuffer (staging)"))
+        const VmaAllocationCreateInfo ai = host_mapped_allocation(/*prefer_host=*/true);
+        VmaAllocationInfo info{};
+        transfer_batch::dedicated_staging staging{};
+        if (!vk_check(vmaCreateBuffer(m_allocator, &bi, &ai, &staging.buffer, &staging.allocation, &info),
+                      "vmaCreateBuffer (dedicated staging)"))
         {
-            out_buffer = VK_NULL_HANDLE;
             return false;
         }
-        VkMemoryRequirements mr{};
-        vkGetBufferMemoryRequirements(m_device, out_buffer, &mr);
-        VkMemoryAllocateInfo ai{};
-        ai.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-        ai.allocationSize = mr.size;
-        ai.memoryTypeIndex = find_memory_type(
-            mr.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-        if (!vk_check(vkAllocateMemory(m_device, &ai, nullptr, &out_memory), "vkAllocateMemory (staging)"))
+        if (info.pMappedData == nullptr)
         {
-            out_memory = VK_NULL_HANDLE;
-            destroy_staging_buffer(out_buffer, out_memory);
-            out_buffer = VK_NULL_HANDLE;
+            LOG_ERR("vk_device::stage_upload: the dedicated staging allocation is not mapped");
+            vmaDestroyBuffer(m_allocator, staging.buffer, staging.allocation);
             return false;
         }
-        if (!vk_check(vkBindBufferMemory(m_device, out_buffer, out_memory, 0), "vkBindBufferMemory (staging)"))
-        {
-            destroy_staging_buffer(out_buffer, out_memory);
-            out_buffer = VK_NULL_HANDLE;
-            out_memory = VK_NULL_HANDLE;
-            return false;
-        }
-        void* mapped = nullptr;
-        if (!vk_check(vkMapMemory(m_device, out_memory, 0, VK_WHOLE_SIZE, 0, &mapped), "vkMapMemory (staging)") ||
-            mapped == nullptr)
-        {
-            destroy_staging_buffer(out_buffer, out_memory);
-            out_buffer = VK_NULL_HANDLE;
-            out_memory = VK_NULL_HANDLE;
-            return false;
-        }
-        std::memcpy(mapped, data, size);
-        vkUnmapMemory(m_device, out_memory);
+        std::memcpy(info.pMappedData, data, size);
+        // Released with the batch, once its fence proves the copy done.
+        batch->dedicated.push_back(staging);
+        batch->recorded = true;
+        LOG_DBG("vk_device::stage_upload: %zu bytes staged in a dedicated buffer for transfer batch %llu",
+                size,
+                static_cast<unsigned long long>(batch->id));
+        out.buffer = staging.buffer;
+        out.offset = 0;
+        out.cmd = batch->cmd;
         return true;
     }
 
-    void vk_device::destroy_staging_buffer(VkBuffer buffer, VkDeviceMemory memory)
+    void
+    vk_device::record_buffer_copy(const staged_upload& source, VkBuffer dst, VkDeviceSize dst_offset, VkDeviceSize size)
     {
-        if (buffer != VK_NULL_HANDLE)
+        if (source.cmd == VK_NULL_HANDLE)
         {
-            vkDestroyBuffer(m_device, buffer, nullptr);
+            return;
         }
-        if (memory != VK_NULL_HANDLE)
+        if (m_open_transfer_batch == k_no_batch || m_transfer_batches[m_open_transfer_batch].cmd != source.cmd)
         {
-            vkFreeMemory(m_device, memory, nullptr);
+            // stage_upload's batch is always the open one (nothing
+            // flushes in between); a staged upload from anywhere else
+            // would copy into a batch that is gone.
+            LOG_ERR("vk_device::record_buffer_copy: the staged upload's transfer batch is no longer open; %llu bytes "
+                    "not copied",
+                    static_cast<unsigned long long>(size));
+            return;
         }
+        transfer_batch& batch = m_transfer_batches[m_open_transfer_batch];
+        // Two copies into one buffer within a batch are a
+        // write-after-write hazard between transfer commands; the second
+        // waits for the first. A buffer written once needs nothing.
+        if (std::find(batch.written_buffers.begin(), batch.written_buffers.end(), dst) != batch.written_buffers.end())
+        {
+            VkMemoryBarrier mb{};
+            mb.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+            mb.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            mb.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT;
+            vkCmdPipelineBarrier(source.cmd,
+                                 VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                 VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                 0,
+                                 1,
+                                 &mb,
+                                 0,
+                                 nullptr,
+                                 0,
+                                 nullptr);
+        }
+        else
+        {
+            batch.written_buffers.push_back(dst);
+        }
+        VkBufferCopy region{};
+        region.srcOffset = source.offset;
+        region.dstOffset = dst_offset;
+        region.size = size;
+        vkCmdCopyBuffer(source.cmd, source.buffer, dst, 1, &region);
+    }
+
+    bool vk_device::flush_transfer_batch()
+    {
+        if (m_open_transfer_batch == k_no_batch)
+        {
+            return true;
+        }
+        transfer_batch& batch = m_transfer_batches[m_open_transfer_batch];
+        m_open_transfer_batch = k_no_batch;
+        batch.written_buffers.clear();
+
+        if (!batch.recorded)
+        {
+            // Begun for nothing: back to the pool, no submission. The
+            // next open resets the buffer, so the begin needs no end.
+            batch.state = transfer_batch::batch_state::idle;
+            return true;
+        }
+
+        // Every copy above is a transfer write; make all of them
+        // available to whatever follows in queue order — vertex and
+        // index fetches, uniform and storage reads, indirect reads,
+        // later copies — in one barrier per batch. Image uploads also
+        // carry their own layout transitions with the sampling stages
+        // as destination.
+        VkMemoryBarrier mb{};
+        mb.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+        mb.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        mb.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT;
+        vkCmdPipelineBarrier(batch.cmd,
+                             VK_PIPELINE_STAGE_TRANSFER_BIT,
+                             VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                             0,
+                             1,
+                             &mb,
+                             0,
+                             nullptr,
+                             0,
+                             nullptr);
+
+        // From here on the batch is in flight whether or not the
+        // submission succeeds: its ring bytes were sealed to it, and
+        // retiring it in order (without a fence wait when nothing was
+        // submitted) is what keeps the ring's FIFO consistent.
+        batch.state = transfer_batch::batch_state::in_flight;
+        m_staging_ring.seal(batch.id);
+        const bool ended = vk_check(vkEndCommandBuffer(batch.cmd), "vkEndCommandBuffer (transfer)");
+        if (!ended || m_device_lost)
+        {
+            LOG_ERR("vk_device: transfer batch %llu dropped; the uploads it carried never reach the GPU",
+                    static_cast<unsigned long long>(batch.id));
+            return false;
+        }
+        if (!vk_check(vkResetFences(m_device, 1, &batch.fence), "vkResetFences (transfer)"))
+        {
+            LOG_ERR("vk_device: transfer batch %llu dropped; the uploads it carried never reach the GPU",
+                    static_cast<unsigned long long>(batch.id));
+            return false;
+        }
+        VkSubmitInfo si{};
+        si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+        si.commandBufferCount = 1;
+        si.pCommandBuffers = &batch.cmd;
+        if (!check_queue_result(vkQueueSubmit(m_graphics_queue, 1, &si, batch.fence), "vkQueueSubmit (transfer)"))
+        {
+            LOG_ERR("vk_device: transfer batch %llu dropped; the uploads it carried never reach the GPU",
+                    static_cast<unsigned long long>(batch.id));
+            return false;
+        }
+        batch.submitted = true;
+        return true;
+    }
+
+    vk_device::transfer_batch* vk_device::oldest_transfer_batch()
+    {
+        transfer_batch* oldest = nullptr;
+        for (transfer_batch& batch : m_transfer_batches)
+        {
+            if (batch.state == transfer_batch::batch_state::in_flight && (oldest == nullptr || batch.id < oldest->id))
+            {
+                oldest = &batch;
+            }
+        }
+        return oldest;
+    }
+
+    void vk_device::retire_transfer_batch(transfer_batch& batch)
+    {
+        m_staging_ring.retire(batch.id);
+        for (const transfer_batch::dedicated_staging& staging : batch.dedicated)
+        {
+            vmaDestroyBuffer(m_allocator, staging.buffer, staging.allocation);
+        }
+        batch.dedicated.clear();
+        batch.submitted = false;
+        batch.recorded = false;
+        batch.state = transfer_batch::batch_state::idle;
+    }
+
+    void vk_device::retire_transfer_batches()
+    {
+        // Oldest first: a fence that has signaled proves every earlier
+        // submission on the queue complete, and one that has not stops
+        // the walk, since nothing after it can be done either.
+        for (transfer_batch* batch = oldest_transfer_batch(); batch != nullptr; batch = oldest_transfer_batch())
+        {
+            if (batch->submitted)
+            {
+                const VkResult status = vkGetFenceStatus(m_device, batch->fence);
+                if (status == VK_NOT_READY)
+                {
+                    return;
+                }
+                if (status != VK_SUCCESS)
+                {
+                    check_queue_result(status, "vkGetFenceStatus (transfer)");
+                    return;
+                }
+            }
+            retire_transfer_batch(*batch);
+        }
+    }
+
+    bool vk_device::transfer_batch_live_up_to(uint64_t batch_id) const
+    {
+        for (const transfer_batch& batch : m_transfer_batches)
+        {
+            if (batch.state != transfer_batch::batch_state::idle && batch.id <= batch_id)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    void vk_device::discard_transfer_batches()
+    {
+        for (transfer_batch& batch : m_transfer_batches)
+        {
+            if (batch.state != transfer_batch::batch_state::idle)
+            {
+                retire_transfer_batch(batch);
+            }
+        }
+        m_open_transfer_batch = k_no_batch;
+    }
+
+    bool vk_device::wait_oldest_transfer_batch()
+    {
+        transfer_batch* batch = oldest_transfer_batch();
+        if (batch == nullptr)
+        {
+            return false;
+        }
+        if (batch->submitted && !check_queue_result(vkWaitForFences(m_device, 1, &batch->fence, VK_TRUE, UINT64_MAX),
+                                                    "vkWaitForFences (transfer)"))
+        {
+            return false;
+        }
+        retire_transfer_batch(*batch);
+        return true;
     }
 
     void vk_device::resolve_depth_formats()
@@ -2356,19 +2869,6 @@ namespace rendering_engine::gpu::backend::vulkan
             return false;
         }
         return vk_check(result, what);
-    }
-
-    uint32_t vk_device::find_memory_type(uint32_t type_filter, VkMemoryPropertyFlags properties) const
-    {
-        for (uint32_t i = 0; i < m_memory_properties.memoryTypeCount; ++i)
-        {
-            if ((type_filter & (1u << i)) != 0u &&
-                (m_memory_properties.memoryTypes[i].propertyFlags & properties) == properties)
-            {
-                return i;
-            }
-        }
-        return 0;
     }
 
     // -- Render-pass cache ---------------------------------------------
@@ -2645,9 +3145,9 @@ namespace rendering_engine::gpu::backend::vulkan
     {
         return m_graphics_queue_family;
     }
-    VkCommandPool vk_device::command_pool() const noexcept
+    VmaAllocator vk_device::allocator() const noexcept
     {
-        return m_command_pool;
+        return m_allocator;
     }
     const vk_device_features& vk_device::features() const noexcept
     {

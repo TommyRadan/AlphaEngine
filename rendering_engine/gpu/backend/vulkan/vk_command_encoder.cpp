@@ -528,16 +528,15 @@ namespace rendering_engine::gpu::backend::vulkan
 
     vk_command_encoder::vk_command_encoder(vk_device& device) : m_device{device}
     {
-        VkCommandBufferAllocateInfo ai{};
-        ai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-        ai.commandPool = device.command_pool();
-        ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-        ai.commandBufferCount = 1;
-        const VkResult alloc_result = vkAllocateCommandBuffers(device.vk_handle(), &ai, &m_cmd);
-        if (alloc_result != VK_SUCCESS)
+        // The buffer comes from the device's frame command pool, which
+        // hands it out reset and takes it back with the pool reset at
+        // the next begin_frame: nothing is allocated or freed per frame
+        // once the pool has grown to the frame's encoder count. A null
+        // buffer (lost device, failed allocation — logged there) leaves
+        // the encoder inert: every pass it begins records nothing.
+        m_cmd = device.acquire_frame_command_buffer();
+        if (m_cmd == VK_NULL_HANDLE)
         {
-            LOG_ERR("vkAllocateCommandBuffers failed: %s", vk_result_to_string(alloc_result));
-            m_cmd = VK_NULL_HANDLE;
             return;
         }
         VkCommandBufferBeginInfo bi{};
@@ -547,7 +546,6 @@ namespace rendering_engine::gpu::backend::vulkan
         if (begin_result != VK_SUCCESS)
         {
             LOG_ERR("vkBeginCommandBuffer failed: %s", vk_result_to_string(begin_result));
-            vkFreeCommandBuffers(device.vk_handle(), device.command_pool(), 1, &m_cmd);
             m_cmd = VK_NULL_HANDLE;
             return;
         }
@@ -556,11 +554,10 @@ namespace rendering_engine::gpu::backend::vulkan
 
     vk_command_encoder::~vk_command_encoder()
     {
-        if (m_cmd != VK_NULL_HANDLE)
-        {
-            vkFreeCommandBuffers(m_device.vk_handle(), m_device.command_pool(), 1, &m_cmd);
-            m_cmd = VK_NULL_HANDLE;
-        }
+        // An encoder dropped without a submit leaves its buffer to the
+        // pool: the reset at the next begin_frame reclaims it along with
+        // the frame's submitted one.
+        m_cmd = VK_NULL_HANDLE;
     }
 
     std::unique_ptr<render_pass_encoder> vk_command_encoder::begin_render_pass(const render_pass_descriptor& descriptor)

@@ -33,6 +33,7 @@
 
 #include <vulkan/vulkan.h>
 
+#include <rendering_engine/gpu/backend/vulkan/vk_allocator.hpp>
 #include <rendering_engine/gpu/bind_group.hpp>
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/gpu/pipeline.hpp>
@@ -45,21 +46,27 @@ namespace rendering_engine::gpu::backend::vulkan
     struct vk_buffer
     {
         VkBuffer object{VK_NULL_HANDLE};
-        VkDeviceMemory memory{VK_NULL_HANDLE};
+        // The VMA allocation backing @c object; the buffer and the
+        // allocation are created and destroyed as one
+        // (vmaCreateBuffer / vmaDestroyBuffer).
+        VmaAllocation allocation{VK_NULL_HANDLE};
         size_t size{0};
         buffer_usage usage{0};
         buffer_usage_hint hint{buffer_usage_hint::static_data};
 
         // Persistent map for host-visible buffers (dynamic / stream
-        // hint). Null for device-local buffers; those are written via
-        // a staging buffer in @c vk_device::write_buffer.
+        // hint), owned by the allocation and released with it. Null for
+        // device-local buffers; those are written through the staging
+        // ring in @c vk_device::write_buffer.
         void* mapped{nullptr};
     };
 
     struct vk_texture
     {
         VkImage image{VK_NULL_HANDLE};
-        VkDeviceMemory memory{VK_NULL_HANDLE};
+        // Null for swapchain wrappers (@c external), which the device
+        // does not allocate.
+        VmaAllocation allocation{VK_NULL_HANDLE};
         VkImageView view{VK_NULL_HANDLE};
 
         // Single-mip image views used when the texture is bound as a
