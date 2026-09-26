@@ -38,7 +38,9 @@ namespace rendering_engine
     // (@ref fog_mode::none).
     enum class fog_mode
     {
-        // No fog; the lit shaders skip the blend entirely.
+        // No distance-fog term; the lit shaders skip that blend, but
+        // @ref fog_settings::height_density still applies its own
+        // analytic height-fog term regardless of mode.
         none,
 
         // Linear ramp between @ref fog_settings::near_distance (no fog)
@@ -69,5 +71,20 @@ namespace rendering_engine
 
         // Exponential fog: larger values thicken the fog faster.
         float density{0.02f};
+
+        // Analytic exponential height fog (Unreal's Exponential Height
+        // Fog). Applies independently of @ref mode, including
+        // @ref fog_mode::none — it can run standalone or layered on top
+        // of whichever distance term the mode selects. Density falls
+        // off with world-Z altitude as height_density *
+        // exp(-height_falloff * (z - reference_height)), so it reads as
+        // height_density right at reference_height and thins out above
+        // it. height_density of 0 (the default) disables the term
+        // entirely, whatever @ref mode is, keeping today's distance-only
+        // output bit-identical. The engine is +Z up, so "height" is
+        // world Z.
+        float height_density{0.0f};
+        float height_falloff{0.1f};
+        float reference_height{0.0f};
     };
 } // namespace rendering_engine
