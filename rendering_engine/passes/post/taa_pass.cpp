@@ -44,12 +44,11 @@ namespace
     // clamp below is what stops that long tail from ghosting under motion.
     constexpr float taa_feedback = 0.9f;
 
-    // The resolve and the history copy are shaders/passes/taa_resolve.frag.glsl
-    // and taa_copy.frag.glsl, drawn over the shared fullscreen triangle.
-    // u_taa.params.xy is (1/width, 1/height), the per-texel step the
-    // neighbourhood taps walk by, and params.z is the history feedback
-    // weight, baked to 0 on the first frame (history undefined) and to
-    // taa_feedback thereafter.
+    // The resolve is shaders/passes/taa_resolve.frag.glsl, drawn over the
+    // shared fullscreen triangle. u_taa.params.xy is (1/width, 1/height),
+    // the per-texel step the neighbourhood taps walk by, and params.z is
+    // the history feedback weight, baked to 0 while the history is
+    // unusable and to taa_feedback thereafter.
 
     // std140 rounds the single vec4 block up to a 16-byte allocation.
     constexpr size_t taa_ubo_size = 16;
@@ -81,11 +80,6 @@ namespace rendering_engine
             gpu::compile_library_shader("passes/taa_resolve.frag.glsl", gpu::shader_stage::fragment);
         m_resolve_shader = gpu.create_shader_module(resolve_descriptor);
 
-        gpu::shader_module_descriptor copy_descriptor{};
-        copy_descriptor.stage = gpu::shader_stage::fragment;
-        copy_descriptor.spirv = gpu::compile_library_shader("passes/taa_copy.frag.glsl", gpu::shader_stage::fragment);
-        m_copy_shader = gpu.create_shader_module(copy_descriptor);
-
         // -- Fullscreen-triangle vertex buffer ------------------------
         gpu::buffer_descriptor vb_descriptor{};
         vb_descriptor.size = fullscreen_triangle_vertices.size() * sizeof(float);
@@ -96,8 +90,8 @@ namespace rendering_engine
 
         // -- Resolve params UBO: texel step + history feedback --------
         // The feedback starts at 0 so the first frame ignores the still
-        // undefined history; record() bumps it to taa_feedback once the
-        // history target has been populated.
+        // undefined history; record() bumps it to taa_feedback once a
+        // frame of the same camera has been resolved.
         m_inv_width = 1.0f / static_cast<float>(width);
         m_inv_height = 1.0f / static_cast<float>(height);
         const std::array<float, 4> initial_params = {m_inv_width, m_inv_height, 0.0f, 0.0f};
@@ -108,7 +102,7 @@ namespace rendering_engine
         ubo_descriptor.initial_data = initial_params.data();
         m_resolve_ubo = gpu.create_buffer(ubo_descriptor);
 
-        // -- Bind-group layouts ---------------------------------------
+        // -- Bind-group layout ----------------------------------------
         gpu::bind_group_layout_descriptor resolve_layout{};
         resolve_layout.entries.push_back({0, gpu::binding_kind::texture});
         resolve_layout.entries.push_back({1, gpu::binding_kind::texture});
@@ -116,14 +110,10 @@ namespace rendering_engine
         resolve_layout.entries.push_back({3, gpu::binding_kind::uniform_buffer});
         m_resolve_layout = gpu.create_bind_group_layout(resolve_layout);
 
-        gpu::bind_group_layout_descriptor copy_layout{};
-        copy_layout.entries.push_back({0, gpu::binding_kind::texture});
-        m_copy_layout = gpu.create_bind_group_layout(copy_layout);
-
         // -- Targets --------------------------------------------------
         create_targets(width, height);
 
-        // -- Pipelines ------------------------------------------------
+        // -- Pipeline -------------------------------------------------
         gpu::vertex_buffer_layout vertex_layout{};
         vertex_layout.stride = sizeof(float) * 2;
         vertex_layout.attributes.push_back({0, 2, gpu::scalar_type::float32, 0});
@@ -141,30 +131,20 @@ namespace rendering_engine
         rasterizer.front = gpu::front_face::counter_clockwise;
         rasterizer.polygon = gpu::polygon_mode::fill;
 
-        auto make_pipeline = [&](gpu::shader_module fragment, gpu::bind_group_layout layout)
-        {
-            gpu::pipeline_descriptor descriptor{};
-            descriptor.vertex_shader = m_vertex_shader;
-            descriptor.fragment_shader = fragment;
-            descriptor.vertex_buffers.push_back(vertex_layout);
-            descriptor.depth = depth;
-            descriptor.blend = blend;
-            descriptor.rasterizer = rasterizer;
-            descriptor.bind_group_layouts.push_back(layout);
-            return gpu.create_pipeline(descriptor);
-        };
+        gpu::pipeline_descriptor pipeline_descriptor{};
+        pipeline_descriptor.vertex_shader = m_vertex_shader;
+        pipeline_descriptor.fragment_shader = m_resolve_shader;
+        pipeline_descriptor.vertex_buffers.push_back(vertex_layout);
+        pipeline_descriptor.depth = depth;
+        pipeline_descriptor.blend = blend;
+        pipeline_descriptor.rasterizer = rasterizer;
+        pipeline_descriptor.bind_group_layouts.push_back(m_resolve_layout);
+        m_resolve_pipeline = gpu.create_pipeline(pipeline_descriptor);
 
-        m_resolve_pipeline = make_pipeline(m_resolve_shader, m_resolve_layout);
-        m_copy_pipeline = make_pipeline(m_copy_shader, m_copy_layout);
-
-        // -- Bind groups ----------------------------------------------
-        // The history-store copy samples this pass's own resolve target,
-        // so its group is built here. The resolve group samples the LDR
-        // image and the motion vectors, which arrive through the frame
-        // context; record() builds it on the first frame and rebuilds it
-        // whenever either handle changes.
-        rebuild_copy_bind_group();
-
+        // The resolve bind groups sample the LDR image and the motion
+        // vectors, which arrive through the frame context; record() builds
+        // them on the first frame and rebuilds them whenever either handle
+        // changes.
         m_enabled = true;
     }
 
@@ -174,86 +154,73 @@ namespace rendering_engine
 
         // Both rgba8, no depth: the post chain runs depth-disabled and the
         // image is already tonemapped LDR at this point.
-        auto make_target = [&]()
+        for (auto& half : m_targets)
         {
             gpu::render_target_descriptor descriptor{};
             descriptor.color_format = gpu::texture_format::rgba8_unorm;
             descriptor.width = width;
             descriptor.height = height;
             descriptor.with_depth = false;
-            return gpu.create_render_target(descriptor);
-        };
-
-        m_history_target = make_target();
-        m_history_texture = gpu.render_target_color_texture(m_history_target);
-        m_resolve_target = make_target();
-        m_resolve_texture = gpu.render_target_color_texture(m_resolve_target);
+            half.target = gpu.create_render_target(descriptor);
+            half.texture = gpu.render_target_color_texture(half.target);
+        }
     }
 
-    void taa_pass::rebuild_resolve_bind_group(gpu::texture current_color, gpu::texture velocity)
+    void taa_pass::destroy_resolve_bind_groups()
+    {
+        auto& gpu = *runtime::current_engine().gpu;
+        for (auto& half : m_targets)
+        {
+            if (half.resolve_bind_group.valid())
+            {
+                gpu.destroy(half.resolve_bind_group);
+                half.resolve_bind_group = {};
+            }
+        }
+    }
+
+    void taa_pass::rebuild_resolve_bind_groups(gpu::texture current_color, gpu::texture velocity)
     {
         auto& gpu = *runtime::current_engine().gpu;
 
         // Safe mid-frame: the device defers the destroy until the command
-        // buffer that may still reference the old group has retired.
-        if (m_resolve_bind_group.valid())
+        // buffer that may still reference the old groups has retired.
+        destroy_resolve_bind_groups();
+
+        for (size_t index = 0; index < m_targets.size(); ++index)
         {
-            gpu.destroy(m_resolve_bind_group);
-            m_resolve_bind_group = {};
+            gpu::bind_group_descriptor resolve_bind_group_descriptor{};
+            resolve_bind_group_descriptor.layout = m_resolve_layout;
+
+            gpu::binding_value current_slot{};
+            current_slot.binding = 0;
+            current_slot.kind = gpu::binding_kind::texture;
+            current_slot.texture_value = current_color;
+            resolve_bind_group_descriptor.entries.push_back(current_slot);
+
+            // The half being written samples the other half as history.
+            gpu::binding_value history_slot{};
+            history_slot.binding = 1;
+            history_slot.kind = gpu::binding_kind::texture;
+            history_slot.texture_value = m_targets[1 - index].texture;
+            resolve_bind_group_descriptor.entries.push_back(history_slot);
+
+            gpu::binding_value velocity_slot{};
+            velocity_slot.binding = 2;
+            velocity_slot.kind = gpu::binding_kind::texture;
+            velocity_slot.texture_value = velocity;
+            resolve_bind_group_descriptor.entries.push_back(velocity_slot);
+
+            gpu::binding_value params_slot{};
+            params_slot.binding = 3;
+            params_slot.kind = gpu::binding_kind::uniform_buffer;
+            params_slot.buffer_value = m_resolve_ubo;
+            resolve_bind_group_descriptor.entries.push_back(params_slot);
+
+            m_targets[index].resolve_bind_group = gpu.create_bind_group(resolve_bind_group_descriptor);
         }
-
-        gpu::bind_group_descriptor resolve_bind_group_descriptor{};
-        resolve_bind_group_descriptor.layout = m_resolve_layout;
-
-        gpu::binding_value current_slot{};
-        current_slot.binding = 0;
-        current_slot.kind = gpu::binding_kind::texture;
-        current_slot.texture_value = current_color;
-        resolve_bind_group_descriptor.entries.push_back(current_slot);
-
-        gpu::binding_value history_slot{};
-        history_slot.binding = 1;
-        history_slot.kind = gpu::binding_kind::texture;
-        history_slot.texture_value = m_history_texture;
-        resolve_bind_group_descriptor.entries.push_back(history_slot);
-
-        gpu::binding_value velocity_slot{};
-        velocity_slot.binding = 2;
-        velocity_slot.kind = gpu::binding_kind::texture;
-        velocity_slot.texture_value = velocity;
-        resolve_bind_group_descriptor.entries.push_back(velocity_slot);
-
-        gpu::binding_value params_slot{};
-        params_slot.binding = 3;
-        params_slot.kind = gpu::binding_kind::uniform_buffer;
-        params_slot.buffer_value = m_resolve_ubo;
-        resolve_bind_group_descriptor.entries.push_back(params_slot);
-
-        m_resolve_bind_group = gpu.create_bind_group(resolve_bind_group_descriptor);
         m_bound_current = current_color;
         m_bound_velocity = velocity;
-    }
-
-    void taa_pass::rebuild_copy_bind_group()
-    {
-        auto& gpu = *runtime::current_engine().gpu;
-
-        if (m_copy_bind_group.valid())
-        {
-            gpu.destroy(m_copy_bind_group);
-            m_copy_bind_group = {};
-        }
-
-        gpu::bind_group_descriptor copy_bind_group_descriptor{};
-        copy_bind_group_descriptor.layout = m_copy_layout;
-
-        gpu::binding_value src_slot{};
-        src_slot.binding = 0;
-        src_slot.kind = gpu::binding_kind::texture;
-        src_slot.texture_value = m_resolve_texture;
-        copy_bind_group_descriptor.entries.push_back(src_slot);
-
-        m_copy_bind_group = gpu.create_bind_group(copy_bind_group_descriptor);
     }
 
     void taa_pass::write_params(float feedback)
@@ -280,25 +247,21 @@ namespace rendering_engine
         // runs between frames, and a deferred-execution backend retires
         // the attachments only once the last command buffer that sampled
         // them has finished.
-        const gpu::render_target old_history = m_history_target;
-        const gpu::render_target old_resolve = m_resolve_target;
+        const std::array<gpu::render_target, 2> old_targets = {m_targets[0].target, m_targets[1].target};
         create_targets(width, height);
-        if (old_resolve.valid())
+        for (const auto& old : old_targets)
         {
-            gpu.destroy(old_resolve);
-        }
-        if (old_history.valid())
-        {
-            gpu.destroy(old_history);
+            if (old.valid())
+            {
+                gpu.destroy(old);
+            }
         }
 
-        // Both bind groups reference the replaced targets: the copy group
-        // samples the resolve texture, the resolve group samples the
-        // history. Rebuild the copy group now; forget the inputs the
-        // resolve group was built with so the next record() rebuilds it
-        // against the new history (and whatever LDR / velocity handles
-        // that frame publishes).
-        rebuild_copy_bind_group();
+        // The resolve bind groups sample the replaced targets as history:
+        // drop them and forget the inputs they were built with so the next
+        // record() rebuilds them against the new pair (and whatever LDR /
+        // velocity handles that frame publishes).
+        destroy_resolve_bind_groups();
         m_bound_current = {};
         m_bound_velocity = {};
 
@@ -320,44 +283,22 @@ namespace rendering_engine
     {
         auto& gpu = *runtime::current_engine().gpu;
 
-        if (m_copy_bind_group.valid())
-        {
-            gpu.destroy(m_copy_bind_group);
-            m_copy_bind_group = {};
-        }
-        if (m_resolve_bind_group.valid())
-        {
-            gpu.destroy(m_resolve_bind_group);
-            m_resolve_bind_group = {};
-        }
+        destroy_resolve_bind_groups();
         // Each render target owns its colour attachment, so destroying the
         // target releases the texture too.
-        if (m_resolve_target.valid())
+        for (auto& half : m_targets)
         {
-            gpu.destroy(m_resolve_target);
-            m_resolve_target = {};
-            m_resolve_texture = {};
-        }
-        if (m_history_target.valid())
-        {
-            gpu.destroy(m_history_target);
-            m_history_target = {};
-            m_history_texture = {};
-        }
-        if (m_copy_pipeline.valid())
-        {
-            gpu.destroy(m_copy_pipeline);
-            m_copy_pipeline = {};
+            if (half.target.valid())
+            {
+                gpu.destroy(half.target);
+                half.target = {};
+                half.texture = {};
+            }
         }
         if (m_resolve_pipeline.valid())
         {
             gpu.destroy(m_resolve_pipeline);
             m_resolve_pipeline = {};
-        }
-        if (m_copy_layout.valid())
-        {
-            gpu.destroy(m_copy_layout);
-            m_copy_layout = {};
         }
         if (m_resolve_layout.valid())
         {
@@ -374,11 +315,6 @@ namespace rendering_engine
             gpu.destroy(m_vertex_buffer);
             m_vertex_buffer = {};
         }
-        if (m_copy_shader.valid())
-        {
-            gpu.destroy(m_copy_shader);
-            m_copy_shader = {};
-        }
         if (m_resolve_shader.valid())
         {
             gpu.destroy(m_resolve_shader);
@@ -393,7 +329,9 @@ namespace rendering_engine
 
     gpu::texture taa_pass::output_texture() const
     {
-        return m_resolve_texture;
+        // The half this frame's record() writes; record() swaps the index
+        // afterwards, so the next frame's query names the other half.
+        return m_targets[m_write_index].texture;
     }
 
     void taa_pass::record(gpu::command_encoder& encoder, const frame_context& ctx)
@@ -403,70 +341,60 @@ namespace rendering_engine
             return;
         }
 
+        // The history belongs to the camera it was accumulated from. A
+        // frame with no camera, or with a different one (attach / detach,
+        // a switch, a teleport by reattaching), restarts the accumulation
+        // so nothing ghosts against a stale image.
+        if (ctx.active_camera == nullptr || ctx.active_camera != m_history_camera)
+        {
+            m_first_frame = true;
+        }
+        m_history_camera = ctx.active_camera;
+
         // Bind this frame's LDR image and motion vectors. Both handles are
         // stable from frame to frame, but a resize recreates the targets
         // behind them (and resize() forgets the bound pair so the new
-        // history is picked up), so compare against what the group was
+        // history is picked up), so compare against what the groups were
         // built with and rebuild on change — the first frame included.
+        accumulation_target& write = m_targets[m_write_index];
         if (ctx.ldr_color_texture != m_bound_current || ctx.velocity_texture != m_bound_velocity ||
-            !m_resolve_bind_group.valid())
+            !write.resolve_bind_group.valid())
         {
-            rebuild_resolve_bind_group(ctx.ldr_color_texture, ctx.velocity_texture);
+            rebuild_resolve_bind_groups(ctx.ldr_color_texture, ctx.velocity_texture);
         }
 
-        // The first frame after construction or a resize resolves against
-        // an undefined history, so its feedback is pinned to 0 (current
-        // frame only); every later frame accumulates with the steady-state
-        // weight. Written here, before the draws and after begin_frame
-        // waited for the previous frame, so the value the GPU reads for
-        // this frame is the one this frame needs — a mismatch also covers
-        // the texel step a resize changed.
+        // While the history is unusable the feedback is pinned to 0
+        // (current frame only); every later frame accumulates with the
+        // steady-state weight. Written here, before the draw and after
+        // begin_frame waited for the previous frame, so the value the GPU
+        // reads for this frame is the one this frame needs — a mismatch
+        // also covers the texel step a resize changed.
         const float feedback = m_first_frame ? 0.0f : taa_feedback;
         if (feedback != m_uploaded_feedback)
         {
             write_params(feedback);
         }
 
-        auto draw_fullscreen =
-            [&](gpu::render_pass_encoder* pass_encoder, gpu::pipeline pipeline, gpu::bind_group bind_group)
-        {
-            pass_encoder->set_pipeline(pipeline);
-            pass_encoder->set_bind_group(0, bind_group);
-            pass_encoder->set_vertex_buffer(0, m_vertex_buffer, 0, 0);
-            pass_encoder->draw(3, 0);
-        };
+        // Resolve: blend the current LDR frame with the clamped history
+        // (the other half of the pair) into this frame's half, which the
+        // next pass (FXAA) samples and the next frame reads as history.
+        gpu::render_pass_descriptor descriptor{};
+        descriptor.target = write.target;
+        descriptor.color.load = gpu::load_op::clear;
+        descriptor.color.clear_color = {0.0f, 0.0f, 0.0f, 1.0f};
+        descriptor.use_depth = false;
 
-        // 1. Resolve: blend the current LDR frame with the clamped history
-        //    into the resolve target the next pass (FXAA) samples.
-        {
-            gpu::render_pass_descriptor descriptor{};
-            descriptor.target = m_resolve_target;
-            descriptor.color.load = gpu::load_op::clear;
-            descriptor.color.clear_color = {0.0f, 0.0f, 0.0f, 1.0f};
-            descriptor.use_depth = false;
+        auto pass_encoder = encoder.begin_render_pass(descriptor);
+        pass_encoder->set_pipeline(m_resolve_pipeline);
+        pass_encoder->set_bind_group(0, write.resolve_bind_group);
+        pass_encoder->set_vertex_buffer(0, m_vertex_buffer, 0, 0);
+        pass_encoder->draw(3, 0);
+        pass_encoder->end();
 
-            auto pass_encoder = encoder.begin_render_pass(descriptor);
-            draw_fullscreen(pass_encoder.get(), m_resolve_pipeline, m_resolve_bind_group);
-            pass_encoder->end();
-        }
-
-        // 2. Store the resolved frame into the history target for the next
-        //    frame's resolve to read.
-        {
-            gpu::render_pass_descriptor descriptor{};
-            descriptor.target = m_history_target;
-            descriptor.color.load = gpu::load_op::clear;
-            descriptor.color.clear_color = {0.0f, 0.0f, 0.0f, 1.0f};
-            descriptor.use_depth = false;
-
-            auto pass_encoder = encoder.begin_render_pass(descriptor);
-            draw_fullscreen(pass_encoder.get(), m_copy_pipeline, m_copy_bind_group);
-            pass_encoder->end();
-        }
-
-        // The history target now holds a real frame: the next record()
-        // switches to the steady-state feedback so subsequent frames
-        // accumulate.
+        // This half now holds a real frame of this camera: swap the roles
+        // so the next record() reads it as history, and switch to the
+        // steady-state feedback so subsequent frames accumulate.
+        m_write_index = 1u - m_write_index;
         m_first_frame = false;
     }
 } // namespace rendering_engine

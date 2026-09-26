@@ -113,9 +113,12 @@ namespace rendering_engine::render_graph
          * @brief Validate declared dependencies.
          *
          * Walks the passes in registration order; a read of a resource that no
-         * earlier pass wrote and that was not imported is logged as a hazard.
+         * earlier pass wrote and that was not imported is logged as an error.
          * Returns true when no hazard was found. Intended to be called once
-         * after the graph is built; it does not alter execution.
+         * after the graph is built; it does not alter execution. The engine
+         * treats a false result as a programming error: it asserts in debug
+         * builds and logs in release, since a mis-declared read is exactly the
+         * class of ordering bug the graph exists to catch.
          */
         bool compile();
 
@@ -123,16 +126,6 @@ namespace rendering_engine::render_graph
          * @brief Record every pass into @p encoder in registration order.
          */
         void execute(gpu::command_encoder& encoder, const frame_context& ctx) const;
-
-        /**
-         * @brief Record passes in the half-open range [begin, end) into
-         *        @p encoder, in registration order.
-         *
-         * Used by the parallel path, which slices the frame into contiguous
-         * ranges and records each into its own encoder. @p end is clamped to
-         * the pass count.
-         */
-        void execute_range(gpu::command_encoder& encoder, const frame_context& ctx, size_t begin, size_t end) const;
 
         /// Drop all passes and imported resources.
         void clear();

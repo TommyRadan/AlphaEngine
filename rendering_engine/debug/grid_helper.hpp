@@ -36,7 +36,9 @@ namespace rendering_engine::debug
     struct grid_helper : public line_helper
     {
         // @p size is the full edge length of the grid, @p divisions the
-        // number of cells per side. Geometry is baked once at
+        // number of cells per side. An odd count puts the origin in the
+        // middle of a cell, so a centre line is added on top of the
+        // spaced ones (see @ref grid_lines). Geometry is baked once at
         // construction.
         explicit grid_helper(float size = 10.0f,
                              int divisions = 10,

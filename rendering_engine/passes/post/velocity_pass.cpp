@@ -22,6 +22,8 @@
 
 #include <rendering_engine/passes/post/velocity_pass.hpp>
 
+#include <array>
+#include <cstring>
 #include <string>
 
 #include <core/math/math.hpp>
@@ -41,12 +43,14 @@ namespace
     // The reprojection is shaders/passes/velocity.frag.glsl, drawn over the
     // shared fullscreen triangle: each pixel's previous-frame UV is
     // reconstructed from the scene depth through the baked
-    // prevViewProj * inverse(curViewProj) matrix, and the motion vector is
-    // the UV delta the TAA resolve reads history at. The depth helpers it
-    // includes live in shaders/include/depth_utils.glsl.
+    // prevViewProj * inverse(curViewProj) matrix, after the frame's
+    // temporal-AA jitter is subtracted from its NDC position, and the
+    // motion vector is the UV delta the TAA resolve reads history at. The
+    // depth helpers it includes live in shaders/include/depth_utils.glsl.
 
-    // std140: a single mat4 occupies 64 bytes.
-    constexpr size_t reproj_ubo_size = sizeof(core::math::mat4);
+    // std140 layout of the Reprojection block: mat4 reprojection at
+    // offset 0, vec4 jitter (xy = this frame's NDC jitter) at offset 64.
+    constexpr size_t reproj_ubo_size = sizeof(core::math::mat4) + 4 * sizeof(float);
 } // namespace
 
 namespace rendering_engine
@@ -215,8 +219,8 @@ namespace rendering_engine
             gpu.destroy(old_target);
         }
         // The input bind group samples the scene depth, not this target,
-        // so it stays valid; the reprojection history is unaffected by the
-        // target size and carries across.
+        // so it stays valid; the previous view-projection lives on the
+        // frame context and is unaffected by the target size.
     }
 
     void velocity_pass::rebuild_bind_group(gpu::texture scene_depth)
@@ -261,8 +265,9 @@ namespace rendering_engine
 
         // No camera, or no scene depth to reconstruct positions from: clear
         // the motion to zero so the TAA resolve falls back to same-pixel
-        // history, and forget the previous matrix so the next camera frame
-        // starts fresh (zero motion) rather than reprojecting across the gap.
+        // history. The context drops the previous view-projection across
+        // such a frame, so the next camera frame starts fresh (zero motion)
+        // rather than reprojecting across the gap.
         if (ctx.active_camera == nullptr || !ctx.scene_depth_texture.valid())
         {
             gpu::render_pass_descriptor descriptor{};
@@ -272,21 +277,26 @@ namespace rendering_engine
             descriptor.use_depth = false;
             auto pass_encoder = encoder.begin_render_pass(descriptor);
             pass_encoder->end();
-            m_has_prev = false;
             return;
         }
 
-        // Build the current unjittered view-projection (the scene pass keeps
-        // its sub-pixel jitter local, so the camera's matrices are clean).
+        // Build the current unjittered view-projection (the camera's
+        // matrices are clean; the scene pass applies frame_context::jitter
+        // on top of them, and the shader subtracts it again).
         const core::math::mat4 view = ctx.active_camera->get_view_matrix();
         const core::math::mat4 projection = ctx.active_camera->get_projection_matrix();
         const core::math::mat4 view_proj = projection * view;
 
-        // First camera frame has no history: reproject against this frame so
-        // every pixel reports zero motion.
-        const core::math::mat4& prev_view_proj = m_has_prev ? m_prev_view_proj : view_proj;
+        // Without a usable previous matrix (first camera frame, camera
+        // switch, the frame after a no-camera frame) reproject against this
+        // frame so every pixel reports zero motion.
+        const core::math::mat4& prev_view_proj = ctx.has_prev_view_projection ? ctx.prev_view_projection : view_proj;
         const core::math::mat4 reprojection = prev_view_proj * core::math::inverse(view_proj);
-        gpu.write_buffer(m_reproj_ubo, reprojection.data(), reproj_ubo_size, 0);
+        std::array<float, 20> reproj_payload{};
+        std::memcpy(reproj_payload.data(), reprojection.data(), sizeof(core::math::mat4));
+        reproj_payload[16] = ctx.jitter.x;
+        reproj_payload[17] = ctx.jitter.y;
+        gpu.write_buffer(m_reproj_ubo, reproj_payload.data(), reproj_ubo_size, 0);
 
         // Bind this frame's scene depth. The handle is stable today, but a
         // resized scene target swaps its attachment, so compare against the
@@ -309,8 +319,5 @@ namespace rendering_engine
         pass_encoder->set_vertex_buffer(0, m_vertex_buffer, 0, 0);
         pass_encoder->draw(3, 0);
         pass_encoder->end();
-
-        m_prev_view_proj = view_proj;
-        m_has_prev = true;
     }
 } // namespace rendering_engine

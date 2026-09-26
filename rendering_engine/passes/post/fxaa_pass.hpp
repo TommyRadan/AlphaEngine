@@ -22,6 +22,10 @@
 
 #pragma once
 
+#include <array>
+#include <cstddef>
+#include <cstdint>
+
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/passes/pass.hpp>
 #include <rendering_engine/render_graph/frame_graph.hpp>
@@ -62,15 +66,21 @@ namespace rendering_engine
      * The image it samples is not a constructor input: each frame it
      * takes @ref frame_context::taa_resolve_texture when that is valid
      * (temporal AA on) and @ref frame_context::ldr_color_texture
-     * otherwise, and rebuilds its input bind group whenever the chosen
-     * handle differs from the one the group was built against — which
-     * is how a resize that recreates either target reaches it.
+     * otherwise, and binds an input bind group built against that handle.
+     * The TAA resolve alternates between two ping-pong targets from frame
+     * to frame, so the groups are kept in a two-entry cache keyed by
+     * handle: a handle seen before is rebound without work, a new one (the
+     * first frame, a resize that recreated a target) replaces the entry
+     * it displaces — which is how a resize reaches this pass.
      */
     struct fxaa_pass : pass
     {
         // @p width / @p height are the backbuffer dimensions the per-texel
-        // edge step is baked from.
-        fxaa_pass(uint32_t width, uint32_t height);
+        // edge step is baked from. @p taa_enabled says whether the context
+        // publishes a TAA resolve for this pass to sample (see
+        // @ref declare_io); the per-frame choice still follows the handle's
+        // validity.
+        fxaa_pass(uint32_t width, uint32_t height, bool taa_enabled);
         ~fxaa_pass() override;
 
         fxaa_pass(const fxaa_pass&) = delete;
@@ -83,9 +93,11 @@ namespace rendering_engine
             return "fxaa";
         }
 
+        // Declares the input the engine actually wires: the TAA resolve
+        // when temporal AA is on, else the tonemapped LDR target.
         void declare_io(render_graph::pass_io_builder& io) const override
         {
-            io.read("ldr_color");
+            io.read(m_taa_enabled ? "taa_resolve" : "ldr_color");
             io.write("swapchain");
         }
 
@@ -96,9 +108,18 @@ namespace rendering_engine
         void resize(uint32_t width, uint32_t height) override;
 
     private:
-        // Rebuild the input bind group against @p input_color and the
-        // rcp_frame UBO, remembering the handle in @ref m_bound_input.
-        void rebuild_bind_group(gpu::texture input_color);
+        // One cached input: the texture and the bind group built against
+        // it plus the rcp_frame UBO.
+        struct bound_input
+        {
+            gpu::texture texture{};
+            gpu::bind_group bind_group{};
+        };
+
+        // The bind group for @p input_color: the cached one when the handle
+        // was bound before, otherwise a new group built into the slot the
+        // cache rotates to (releasing whatever it held).
+        gpu::bind_group bind_group_for(gpu::texture input_color);
 
         // Writes {1/width, 1/height, 0, 0} to the rcp_frame UBO; a zero
         // dimension writes a zero step. Only called from record(), after
@@ -117,11 +138,15 @@ namespace rendering_engine
         gpu::buffer m_vertex_buffer{};
         gpu::buffer m_rcp_frame_ubo{};
         gpu::bind_group_layout m_input_layout{};
-        gpu::bind_group m_input_bind_group{};
         gpu::pipeline m_pipeline{};
 
-        // The texture @ref m_input_bind_group was built against; invalid
-        // until the first record() builds the group.
-        gpu::texture m_bound_input{};
+        // Two cached inputs — the two halves of the TAA ping-pong, or just
+        // the LDR target — and the slot the next miss is built into.
+        // Entries are invalid until the first record() builds one.
+        std::array<bound_input, 2> m_inputs{};
+        size_t m_next_input_slot{0};
+
+        // Whether the engine wires the TAA resolve as this pass's input.
+        bool m_taa_enabled{false};
     };
 } // namespace rendering_engine

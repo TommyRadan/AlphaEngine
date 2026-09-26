@@ -4,8 +4,12 @@ target_sources(AlphaEngine PRIVATE
     pass.hpp
     point_shadow_pass.cpp
     point_shadow_pass.hpp
+    projection_jitter.cpp
+    projection_jitter.hpp
     scene_pass.cpp
     scene_pass.hpp
+    shadow_casters.cpp
+    shadow_casters.hpp
     shadow_pass.cpp
     shadow_pass.hpp
     skybox_pass.cpp

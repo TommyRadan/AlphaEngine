@@ -22,6 +22,8 @@
 
 #pragma once
 
+#include <memory>
+
 #include <rendering_engine/debug/helper.hpp>
 #include <rendering_engine/gpu/handle.hpp>
 
@@ -46,7 +48,10 @@ namespace rendering_engine::debug
     struct infinite_grid : public helper
     {
         // @p fade_distance is the world-space radius past which the grid
-        // has fully faded.
+        // has fully faded. It is baked into the grid template's shader, so
+        // the grid builds its own material on a template for that distance
+        // through @ref context::create_grid_material (the shaders are
+        // served from the SPIR-V cache after the first compile).
         explicit infinite_grid(float fade_distance = 100.0f);
         ~infinite_grid() override;
 
@@ -54,7 +59,9 @@ namespace rendering_engine::debug
         void collect_draw_items(std::vector<draw_item>& out) final;
 
     private:
-        grid_material* m_material{nullptr};
+        // The material (and the grid template it keeps alive) at this
+        // grid's fade distance; released with the grid, before the device.
+        std::unique_ptr<grid_material> m_material;
         gpu::buffer m_vertex_buffer{};
         gpu::buffer m_draw_ubo{};
         gpu::bind_group m_draw_bind_group{};

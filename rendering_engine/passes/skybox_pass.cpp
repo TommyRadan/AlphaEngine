@@ -34,6 +34,7 @@
 #include <rendering_engine/gpu/shader.hpp>
 #include <rendering_engine/gpu/shader_compiler.hpp>
 #include <rendering_engine/passes/post/fullscreen_triangle.hpp>
+#include <rendering_engine/passes/projection_jitter.hpp>
 #include <runtime/engine.hpp>
 
 namespace
@@ -202,12 +203,17 @@ namespace rendering_engine
         // Strip the translation from the view matrix so the sky rotates
         // with the camera but never translates, then invert
         // projection * view so the vertex shader can unproject screen
-        // corners into world-space ray directions.
+        // corners into world-space ray directions. The projection carries
+        // the frame's temporal-AA jitter, exactly as the scene pass
+        // rasterised the depth this sky is tested against: the sky is then
+        // sampled a sub-pixel apart each frame like the geometry, so the
+        // TAA accumulation supersamples it too and silhouettes against it
+        // line up. A zero jitter (TAA off) leaves the matrix untouched.
         core::math::mat4 view = ctx.active_camera->get_view_matrix();
         view.data()[12] = 0.0f;
         view.data()[13] = 0.0f;
         view.data()[14] = 0.0f;
-        const core::math::mat4 projection = ctx.active_camera->get_projection_matrix();
+        const core::math::mat4 projection = jitter_projection(ctx.active_camera->get_projection_matrix(), ctx.jitter);
         const core::math::mat4 inv_view_proj = core::math::inverse(projection * view);
         gpu.write_buffer(m_sky_ubo, inv_view_proj.data(), sky_ubo_size, 0);
 

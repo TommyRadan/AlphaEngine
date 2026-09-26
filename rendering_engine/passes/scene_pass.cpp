@@ -30,7 +30,6 @@
 #include <core/event.hpp>
 #include <core/event_engine.hpp>
 #include <core/math/math.hpp>
-#include <core/settings.hpp>
 #include <rendering_engine/camera/camera.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
@@ -39,7 +38,9 @@
 #include <rendering_engine/lighting/light.hpp>
 #include <rendering_engine/lighting/lights_ubo.hpp>
 #include <rendering_engine/materials/material.hpp>
+#include <rendering_engine/materials/material_template.hpp>
 #include <rendering_engine/passes/point_shadow_pass.hpp>
+#include <rendering_engine/passes/projection_jitter.hpp>
 #include <rendering_engine/passes/shadow_pass.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
 #include <runtime/engine.hpp>
@@ -81,53 +82,16 @@ namespace rendering_engine
         // (x enabled, y bias, z caster point index). 416 bytes total.
         constexpr size_t point_shadow_ubo_size =
             point_shadow_face_count * sizeof(core::math::mat4) + 2 * 4 * sizeof(float);
-
-        // Length of the Halton sub-pixel jitter sequence the temporal-AA
-        // path cycles through. Sixteen distinct offsets give the
-        // accumulation enough sample positions to resolve cleanly without
-        // the pattern repeating often enough to be visible.
-        constexpr uint32_t taa_jitter_period = 16;
-
-        // Halton low-discrepancy sequence — the standard source of the
-        // well-spread sub-pixel offsets temporal AA jitters the projection
-        // by. @p index is 1-based (index 0 degenerates to 0); base 2 drives
-        // the x offset, base 3 the y.
-        float halton(uint32_t index, uint32_t base)
-        {
-            float result = 0.0f;
-            float fraction = 1.0f;
-            while (index > 0)
-            {
-                fraction /= static_cast<float>(base);
-                result += fraction * static_cast<float>(index % base);
-                index /= base;
-            }
-            return result;
-        }
     } // namespace
 
     scene_pass::scene_pass(std::vector<renderable*>* registry,
                            shadow_pass* shadow,
                            point_shadow_pass* point_shadow,
-                           render_stats* stats)
-        : m_registry(registry), m_shadow(shadow), m_point_shadow(point_shadow), m_stats(stats)
+                           render_stats* stats,
+                           bool taa_jitter)
+        : m_registry(registry), m_shadow(shadow), m_point_shadow(point_shadow), m_stats(stats), m_taa_jitter(taa_jitter)
     {
         auto& gpu = *runtime::current_engine().gpu;
-
-        // Enable projection jitter only when temporal AA is on and the
-        // window has a usable size; the @ref taa_pass accumulates the
-        // jittered frames. The reciprocal dimensions scale each Halton
-        // offset down to a sub-pixel NDC amount. Read up front so the
-        // bind-group setup below knows whether to build the unjittered
-        // overlay twin the debug pass binds.
-        const core::settings* config = runtime::current_engine().settings.get();
-        if (config != nullptr && config->graphics.temporal_aa && config->window.width != 0 &&
-            config->window.height != 0)
-        {
-            m_taa_jitter = true;
-            m_inv_width = 1.0f / static_cast<float>(config->window.width);
-            m_inv_height = 1.0f / static_cast<float>(config->window.height);
-        }
 
         gpu::bind_group_layout_descriptor frame_layout_descriptor{};
         frame_layout_descriptor.entries.push_back({camera_binding, gpu::binding_kind::uniform_buffer});
@@ -297,19 +261,6 @@ namespace rendering_engine
         return m_overlay_frame_bind_group.valid() ? m_overlay_frame_bind_group : m_frame_bind_group;
     }
 
-    void scene_pass::resize(uint32_t width, uint32_t height)
-    {
-        // Whether jitter runs is decided at construction (the overlay bind
-        // group only exists when it does); a resize only rescales the
-        // offsets so they stay sub-pixel in the new drawable.
-        if (!m_taa_jitter || width == 0 || height == 0)
-        {
-            return;
-        }
-        m_inv_width = 1.0f / static_cast<float>(width);
-        m_inv_height = 1.0f / static_cast<float>(height);
-    }
-
     void scene_pass::record(gpu::command_encoder& encoder, const frame_context& ctx)
     {
         auto& eng = runtime::current_engine();
@@ -379,22 +330,18 @@ namespace rendering_engine
             gpu.write_buffer(m_overlay_frame_ubo, ubo_payload.data(), per_frame_ubo_size, 0);
         }
 
-        // Temporal-AA sub-pixel jitter: offset the projection by a Halton
-        // step so this frame samples the scene a fraction of a pixel away
-        // from the last. Column-major storage puts the clip-space x/y shear
-        // terms (row 0/1 of column 2) at m[8] / m[9]; nudging them shifts
-        // the whole frame uniformly in NDC after the perspective divide.
-        // The jitter feeds the taa_pass accumulation and is otherwise
-        // invisible — culling still uses the camera's unjittered frustum,
-        // and the overlay group above keeps the unjittered matrices.
+        // Temporal-AA sub-pixel jitter: offset the projection by the
+        // Halton step the context published for this frame (already
+        // scaled to the live target size) so this frame samples the scene
+        // a fraction of a pixel away from the last. The jitter feeds the
+        // taa_pass accumulation and is otherwise invisible — culling still
+        // uses the camera's unjittered frustum, the overlay group above
+        // keeps the unjittered matrices, the skybox applies the same
+        // offset so its depth test agrees, and the velocity pass subtracts
+        // it again.
         if (m_taa_jitter)
         {
-            m_jitter_index = (m_jitter_index + 1u) % taa_jitter_period;
-            const float jitter_x = (halton(m_jitter_index + 1u, 2u) - 0.5f) * 2.0f * m_inv_width;
-            const float jitter_y = (halton(m_jitter_index + 1u, 3u) - 0.5f) * 2.0f * m_inv_height;
-            core::math::mat4 jittered = projection;
-            jittered.m[8] += jitter_x;
-            jittered.m[9] += jitter_y;
+            const core::math::mat4 jittered = jitter_projection(projection, ctx.jitter);
             std::memcpy(ubo_payload.data() + 16, jittered.data(), sizeof(core::math::mat4));
         }
         gpu.write_buffer(m_frame_ubo, ubo_payload.data(), per_frame_ubo_size, 0);
@@ -489,9 +436,11 @@ namespace rendering_engine
                          });
 
         // Tally this frame's draw statistics for the debug overlay. Each
-        // item is one draw call; triangle / vertex counts scale by the
-        // item's instance count. Indexed draws count index_count vertices
-        // (vertices fetched), non-indexed count vertex_count.
+        // item is one draw call; primitive / vertex counts scale by the
+        // item's instance count and land under the topology its
+        // material's template assembles (triangles, line segments or
+        // points). Indexed draws count index_count vertices (vertices
+        // fetched), non-indexed count vertex_count.
         if (m_stats != nullptr)
         {
             m_stats->submitted = submitted;
@@ -501,9 +450,10 @@ namespace rendering_engine
             {
                 const uint32_t instances = item.instance_count == 0 ? 1u : item.instance_count;
                 const uint32_t verts = item.index_buffer.valid() ? item.index_count : item.vertex_count;
+                const uint64_t submitted_vertices = static_cast<uint64_t>(verts) * instances;
                 m_stats->instances += instances;
-                m_stats->vertices += static_cast<uint64_t>(verts) * instances;
-                m_stats->triangles += static_cast<uint64_t>(verts / 3u) * instances;
+                m_stats->vertices += submitted_vertices;
+                tally_primitives(*m_stats, item.mat->get_template().descriptor().topology, submitted_vertices);
             }
         }
 

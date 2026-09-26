@@ -93,7 +93,12 @@ namespace rendering_engine
                 last_material = item.mat;
             }
 
-            pass_encoder->set_bind_group(item.mat->per_draw_slot(), item.per_draw_bind_group);
+            // A renderable without per-draw resources binds nothing, as
+            // in the scene pass.
+            if (item.per_draw_bind_group.valid())
+            {
+                pass_encoder->set_bind_group(item.mat->per_draw_slot(), item.per_draw_bind_group);
+            }
             pass_encoder->set_vertex_buffer(0, item.vertex_buffer, 0, item.vertex_stride);
             if (item.index_buffer.valid())
             {
