@@ -24,7 +24,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <numeric>
 #include <optional>
@@ -35,6 +37,8 @@
 #include <vector>
 
 #include <core/log.hpp>
+#include <core/platform/platform.hpp>
+#include <core/vfs/vfs.hpp>
 #include <rendering_engine/assets/asset_cache.hpp>
 #include <rendering_engine/mesh/tangent.hpp>
 #include <rendering_engine/mesh/vertex.hpp>
@@ -127,17 +131,74 @@ namespace rendering_engine
         // spellings shares one set of uploads.
         std::string file_identity(const std::filesystem::path& path)
         {
-            std::error_code error;
-            std::filesystem::path canonical = std::filesystem::weakly_canonical(path, error);
-            if (error)
+            return "gltf:" + core::default_vfs().canonical_key(path);
+        }
+
+        // cgltf's file hooks, so the .gltf / .glb itself and every external
+        // .bin it references are read through the virtual filesystem: a
+        // mount-relative model path resolves its buffers under the same
+        // mount. cgltf combines the glTF's directory with each (decoded)
+        // buffer URI before calling read, so `path` arrives fully spelled.
+        // The bytes come from the memory hooks' allocator (malloc by default)
+        // because cgltf_free releases the glTF's own file data through it.
+        cgltf_result vfs_file_read(const cgltf_memory_options* memory_options,
+                                   const cgltf_file_options* /*file_options*/,
+                                   const char* path,
+                                   cgltf_size* size,
+                                   void** data)
+        {
+            std::vector<std::byte> bytes;
+            if (!core::default_vfs().read_file(core::platform::utf8_path(path), bytes))
             {
-                canonical = std::filesystem::absolute(path, error);
+                return cgltf_result_file_not_found;
             }
-            if (error)
+            // A non-zero *size is the byte count the caller expects (a buffer's
+            // declared length); a shorter file cannot satisfy it.
+            cgltf_size wanted = size != nullptr ? *size : 0;
+            if (wanted == 0)
             {
-                canonical = path;
+                wanted = bytes.size();
             }
-            return "gltf:" + canonical.lexically_normal().generic_string();
+            else if (bytes.size() < wanted)
+            {
+                return cgltf_result_io_error;
+            }
+
+            void* (*allocate)(void*, cgltf_size) = memory_options->alloc_func;
+            void* block = allocate != nullptr ? allocate(memory_options->user_data, wanted) : std::malloc(wanted);
+            if (block == nullptr)
+            {
+                return cgltf_result_out_of_memory;
+            }
+            if (wanted > 0)
+            {
+                std::memcpy(block, bytes.data(), wanted);
+            }
+            if (size != nullptr)
+            {
+                *size = wanted;
+            }
+            if (data != nullptr)
+            {
+                *data = block;
+            }
+            return cgltf_result_success;
+        }
+
+        void vfs_file_release(const cgltf_memory_options* memory_options,
+                              const cgltf_file_options* /*file_options*/,
+                              void* data,
+                              cgltf_size /*size*/)
+        {
+            void (*release)(void*, void*) = memory_options->free_func;
+            if (release != nullptr)
+            {
+                release(memory_options->user_data, data);
+            }
+            else
+            {
+                std::free(data);
+            }
         }
 
         // Decodes a base64 payload (as found after the comma of a data URI).
@@ -927,9 +988,14 @@ namespace rendering_engine
                          gltf_material_factory& materials,
                          const gltf_import_options& options)
     {
-        const std::string path_string = path.string();
+        // Generic separators: cgltf derives the buffers' directory from this
+        // string, and the VFS reads the result whether it is mount-relative
+        // or native.
+        const std::string path_string = path.generic_string();
 
         cgltf_options parse_options{};
+        parse_options.file.read = &vfs_file_read;
+        parse_options.file.release = &vfs_file_release;
         cgltf_data* raw = nullptr;
         cgltf_result result = cgltf_parse_file(&parse_options, path_string.c_str(), &raw);
         if (result != cgltf_result_success)

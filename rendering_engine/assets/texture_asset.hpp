@@ -37,12 +37,16 @@ namespace rendering_engine
     /**
      * @brief A GPU texture decoded from an image file and uploaded once.
      *
-     * Produced by @ref asset_cache::load_texture and handed out as a
+     * Produced by @ref asset_cache::load_texture (or, resolving in the
+     * background, @ref asset_cache::load_texture_async) and handed out as a
      * @c std::shared_ptr. The destructor releases the underlying
      * @c gpu::texture, so the GPU resource lives exactly as long as the last
      * live handle — this is the RAII the bare @c gpu::texture handle does not
      * have on its own. The cache itself keeps only a @c std::weak_ptr, so an
-     * asset is freed as soon as every consumer drops it.
+     * asset is freed as soon as every consumer drops it. An asynchronous
+     * asset carries the cache's placeholder texture until its decode lands
+     * (@ref state); consumers that bind @ref texture re-read it each frame
+     * and rebuild on change, as they do for every other swapped handle.
      *
      * Non-copyable and non-movable: the GPU handle has a single owner (this
      * object) and is freed exactly once in the destructor.
@@ -69,5 +73,28 @@ namespace rendering_engine
         // Dimensions of the source image, in texels.
         uint32_t width{0};
         uint32_t height{0};
+
+        /** @brief Where an asynchronous load (@ref asset_cache::load_texture_async) stands. */
+        enum class load_state
+        {
+            ready,   /**< @ref texture is this asset's own upload. A synchronous load starts here. */
+            loading, /**< Decoding on a worker; @ref texture is the cache's shared placeholder meanwhile. */
+            failed,  /**< The decode failed (logged); @ref texture stays the placeholder for good. */
+        };
+
+        // Written by asset_cache::pump on the main thread, read by consumers on
+        // the main thread; never touched by the worker that decodes.
+        load_state state{load_state::ready};
+
+        // Whether @ref texture is owned by this asset (freed by the destructor)
+        // rather than the cache's placeholder, which the cache keeps alive for
+        // every asset standing in on it.
+        bool owns_texture{true};
+
+        /** @brief Whether @ref texture is this asset's own upload rather than the placeholder. */
+        bool is_ready() const noexcept
+        {
+            return state == load_state::ready;
+        }
     };
 } // namespace rendering_engine

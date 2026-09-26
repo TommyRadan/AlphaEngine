@@ -22,37 +22,38 @@
 
 #define STB_TRUETYPE_IMPLEMENTATION
 #include <core/log.hpp>
+#include <core/platform/platform.hpp>
+#include <core/vfs/vfs.hpp>
 #include <rendering_engine/util/font.hpp>
 
-#include <fstream>
+#include <cstddef>
+#include <cstring>
 #include <initializer_list>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 rendering_engine::util::font::font(const std::string& filename, float font_size)
 {
-    std::ifstream file(filename, std::ios::binary | std::ios::ate);
-    if (!file.is_open())
+    // The file comes through the virtual filesystem: a relative name is
+    // looked up in the mounted asset root.
+    std::vector<std::byte> bytes;
+    std::string error;
+    if (!core::default_vfs().read_file(core::platform::utf8_path(filename), bytes, &error))
     {
-        LOG_ERR("Could not open font (%s)", filename.c_str());
+        LOG_ERR("Could not open font (%s): %s", filename.c_str(), error.c_str());
         throw std::runtime_error{"Could not open font (" + filename + ")"};
     }
 
-    // tellg() reports -1 on failure; a zero-length file is no font either.
-    const std::streamoff size = file.tellg();
-    if (size <= 0)
+    // A zero-length file is no font.
+    if (bytes.empty())
     {
-        LOG_ERR("Could not read font (%s): empty file or unknown size", filename.c_str());
+        LOG_ERR("Could not read font (%s): empty file", filename.c_str());
         throw std::runtime_error{"Could not read font (" + filename + ")"};
     }
 
-    file.seekg(0, std::ios::beg);
-    m_buffer.resize(static_cast<std::size_t>(size));
-    if (!file.read(reinterpret_cast<char*>(m_buffer.data()), static_cast<std::streamsize>(size)))
-    {
-        LOG_ERR("Could not read font (%s)", filename.c_str());
-        throw std::runtime_error{"Could not read font (" + filename + ")"};
-    }
+    m_buffer.resize(bytes.size());
+    std::memcpy(m_buffer.data(), bytes.data(), bytes.size());
 
     const int offset = stbtt_GetFontOffsetForIndex(m_buffer.data(), 0);
     if (offset < 0 || stbtt_InitFont(&m_font, m_buffer.data(), offset) == 0)

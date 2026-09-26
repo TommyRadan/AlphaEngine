@@ -28,8 +28,22 @@ set(ALPHAENGINE_TEST_SOURCES_UNDER_TEST
     ${CMAKE_SOURCE_DIR}/core/event_engine.cpp
     ${CMAKE_SOURCE_DIR}/core/jobs.cpp
     ${CMAKE_SOURCE_DIR}/core/log.cpp
+    # platform — the OS services core/log, core/time and core/settings go
+    # through (clock, paths, file I/O, native log capture). platform_sdl.cpp
+    # and dynamic_library.cpp are the SDL-backed halves; nothing here brings a
+    # video subsystem up.
+    ${CMAKE_SOURCE_DIR}/core/platform/directory_watcher.cpp
+    ${CMAKE_SOURCE_DIR}/core/platform/dynamic_library.cpp
+    ${CMAKE_SOURCE_DIR}/core/platform/platform.cpp
+    ${CMAKE_SOURCE_DIR}/core/platform/platform_sdl.cpp
+    # vfs — the mount table util/image, util/font, the asset cache and the
+    # glTF importer read through; with nothing mounted every path is native,
+    # which is what the temp-file fixtures rely on.
+    ${CMAKE_SOURCE_DIR}/core/vfs/directory_mount.cpp
+    ${CMAKE_SOURCE_DIR}/core/vfs/vfs.cpp
     # settings — the parsers and layers are pure; settings.cpp only reaches
-    # SDL for the pref path inside load_settings, which the tests do not call.
+    # the platform layer for the pref path inside load_settings, which the
+    # tests do not call.
     ${CMAKE_SOURCE_DIR}/core/settings.cpp
     ${CMAKE_SOURCE_DIR}/core/settings_parse.cpp
     ${CMAKE_SOURCE_DIR}/core/subscription.cpp
@@ -183,8 +197,8 @@ target_include_directories(AlphaEngineTests PRIVATE
     ${Vulkan_INCLUDE_DIRS}
 )
 
-# glm backs core/math + transforms, SDL3 backs core/log (and the shader
-# cache's SDL_GetPrefPath) and core/settings, Threads backs core/jobs,
+# glm backs core/math + transforms, SDL3 backs core/platform (and the shader
+# cache's SDL_GetPrefPath), Threads backs core/jobs,
 # nlohmann_json backs core/settings_parse. The asset layer links no gpu
 # backend — the fake device stands in. shader_registry is the embedded
 # shaders/ tree the shader-library tests read, and glslang is the front end

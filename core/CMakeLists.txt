@@ -21,3 +21,5 @@ target_sources(AlphaEngine PRIVATE
 )
 
 add_subdirectory(math)
+add_subdirectory(platform)
+add_subdirectory(vfs)

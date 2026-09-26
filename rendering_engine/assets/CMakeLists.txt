@@ -3,6 +3,7 @@ target_sources(AlphaEngine PRIVATE
     asset_cache.hpp
     asset_device.cpp
     asset_device.hpp
+    cache_key.hpp
     font_asset.hpp
     gltf_importer.cpp
     gltf_importer.hpp

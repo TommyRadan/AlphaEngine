@@ -27,7 +27,7 @@
  * The values are resolved once at startup by @ref core::load_settings: compiled defaults, then
  * `<pref path>/settings.json`, then the `ALPHAENGINE_*` environment variables, then the command line, each
  * layer overriding the one before it (see docs/settings.md). The per-layer steps are pure functions in
- * core/settings_parse.hpp so they can be exercised without touching the process environment or SDL.
+ * core/settings_parse.hpp so they can be exercised without touching the process environment or the platform.
  */
 
 #pragma once
@@ -113,6 +113,19 @@ namespace core
         bool mouse_reversed{false};
     };
 
+    /** @brief Asset location configuration. */
+    struct asset_settings
+    {
+        /**
+         * @brief Directory the engine mounts as the root of the virtual filesystem (see core/vfs/vfs.hpp), so
+         *        relative asset paths resolve under it. Empty (the default) means "discover it": the first
+         *        @c assets directory beside the executable or in one of its parents
+         *        (@ref core::platform::asset_root). Set from @c assets.root in settings.json,
+         *        @c ALPHAENGINE_ASSET_ROOT or @c --asset-root.
+         */
+        std::string root;
+    };
+
     /**
      * @brief Engine-wide configuration, owned by @ref runtime::engine.
      *
@@ -130,6 +143,7 @@ namespace core
         graphics_settings graphics;
         camera_settings camera;
         input_settings input;
+        asset_settings assets;
     };
 
     /** @brief The lowercase name of @p mode (`windowed`, `fullscreen`, `borderless`). */
@@ -152,7 +166,7 @@ namespace core
 
     /**
      * @brief Resolves the process-wide settings: compiled defaults, then `settings.json` under
-     *        @c SDL_GetPrefPath("AlphaEngine", "AlphaEngine") (or the file named by @c --settings), then the
+     *        @c core::platform::pref_path("AlphaEngine", "AlphaEngine") (or the file named by @c --settings), then the
      *        `ALPHAENGINE_*` environment variables, then the command line. A missing or malformed file and any
      *        unrecognised value are logged and skipped, never fatal. Applies @c --log-level to
      *        @ref core::logging on the way and logs the resolved values once at INFO. Requires @c LOG_INIT to

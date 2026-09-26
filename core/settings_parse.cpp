@@ -311,6 +311,21 @@ namespace core
             }
         }
 
+        void apply_assets_section(settings& out, const json& section)
+        {
+            for (const auto& [key, value] : section.items())
+            {
+                if (key == "root")
+                {
+                    set_from_json(out.assets.root, "assets.root", value);
+                }
+                else
+                {
+                    warn_unknown_key("assets", key);
+                }
+            }
+        }
+
         void apply_camera_section(settings& out, const json& section)
         {
             for (const auto& [key, value] : section.items())
@@ -362,7 +377,8 @@ namespace core
             backend,
             vsync,
             log_level,
-            settings_path
+            settings_path,
+            asset_root
         };
 
         struct value_option_entry
@@ -378,6 +394,7 @@ namespace core
             {"--vsync", value_option::vsync},
             {"--log-level", value_option::log_level},
             {"--settings", value_option::settings_path},
+            {"--asset-root", value_option::asset_root},
         };
 
         struct mode_flag_entry
@@ -433,6 +450,7 @@ Options:
   --vsync <on|off>     wait for vertical sync
   --log-level <spec>   log level, e.g. warn or info,gpu=trace
   --settings <path>    settings file to read instead of the default
+  --asset-root <path>  directory relative asset paths resolve under
   -h, --help           print this text and exit
 
 Every option also accepts the --key=value form. Command-line values override
@@ -578,6 +596,10 @@ the ALPHAENGINE_* environment variables, which override the settings file
             {
                 apply_input_section(out, section);
             }
+            else if (name == "assets")
+            {
+                apply_assets_section(out, section);
+            }
             else
             {
                 LOG_WRN("settings: ignoring unknown section '%s'", name.c_str());
@@ -623,6 +645,10 @@ the ALPHAENGINE_* environment variables, which override the settings file
         if (const auto text = read("ALPHAENGINE_TAA"))
         {
             assign_if(out.graphics.temporal_aa, parse_bool_or_warn("ALPHAENGINE_TAA", *text));
+        }
+        if (const auto text = read("ALPHAENGINE_ASSET_ROOT"))
+        {
+            out.assets.root = std::string{trim(*text)};
         }
     }
 
@@ -704,6 +730,9 @@ the ALPHAENGINE_* environment variables, which override the settings file
             case value_option::settings_path:
                 out.settings_path = std::string{trim(*value)};
                 break;
+            case value_option::asset_root:
+                out.asset_root = std::string{trim(*value)};
+                break;
             }
         }
         return out;
@@ -716,6 +745,7 @@ the ALPHAENGINE_* environment variables, which override the settings file
         assign_if(out.window.mode, options.mode);
         assign_if(out.window.vsync, options.vsync);
         assign_if(out.graphics.backend, options.backend);
+        assign_if(out.assets.root, options.asset_root);
     }
 
     const char* command_line_usage() noexcept

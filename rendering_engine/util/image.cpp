@@ -23,14 +23,19 @@
 #include "image.hpp"
 
 #include <algorithm>
+#include <cstddef>
 #include <cstring>
 #include <limits>
 #include <stdexcept>
+#include <string>
 #include <utility>
+#include <vector>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.hpp"
 #include <core/log.hpp>
+#include <core/platform/platform.hpp>
+#include <core/vfs/vfs.hpp>
 
 namespace
 {
@@ -42,10 +47,31 @@ namespace
 
 rendering_engine::util::image::image(const std::string& filename)
 {
+    // The file comes through the virtual filesystem — a relative name is
+    // looked up in the mounted asset root — and is decoded from memory, so
+    // stb_image never opens a path of its own.
+    std::vector<std::byte> bytes;
+    std::string error;
+    if (!core::default_vfs().read_file(core::platform::utf8_path(filename), bytes, &error))
+    {
+        LOG_ERR("Could not load image (%s): %s", filename.c_str(), error.c_str());
+        throw std::runtime_error{"Could not load image (" + filename + ")"};
+    }
+    if (bytes.empty() || bytes.size() > static_cast<std::size_t>(std::numeric_limits<int>::max()))
+    {
+        LOG_ERR("Could not load image (%s): %s", filename.c_str(), bytes.empty() ? "empty file" : "too large");
+        throw std::runtime_error{"Could not load image (" + filename + ")"};
+    }
+
     int width = 0;
     int height = 0;
     int num_components = 0;
-    stbi_uc* decoded = stbi_load(filename.c_str(), &width, &height, &num_components, 4);
+    stbi_uc* decoded = stbi_load_from_memory(reinterpret_cast<const stbi_uc*>(bytes.data()),
+                                             static_cast<int>(bytes.size()),
+                                             &width,
+                                             &height,
+                                             &num_components,
+                                             4);
 
     if (decoded == nullptr)
     {
