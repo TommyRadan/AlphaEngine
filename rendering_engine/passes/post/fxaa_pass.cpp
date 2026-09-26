@@ -45,7 +45,7 @@ namespace
 
 namespace rendering_engine
 {
-    fxaa_pass::fxaa_pass(uint32_t width, uint32_t height)
+    fxaa_pass::fxaa_pass(uint32_t width, uint32_t height, bool taa_enabled) : m_taa_enabled(taa_enabled)
     {
         auto& gpu = *runtime::current_engine().gpu;
 
@@ -86,9 +86,10 @@ namespace rendering_engine
         input_layout.entries.push_back({1, gpu::binding_kind::uniform_buffer});
         m_input_layout = gpu.create_bind_group_layout(input_layout);
 
-        // The input bind group is built lazily by record(): the image it
+        // The input bind groups are built lazily by record(): the image it
         // samples (the TAA resolve or the LDR target) arrives through the
-        // frame context and is rebound whenever that handle changes.
+        // frame context and a group is built the first time a handle is
+        // seen.
 
         // Fullscreen triangle: depth disabled, blend disabled, no culling
         // so the triangle's winding is irrelevant. The vertex shader reads
@@ -130,10 +131,13 @@ namespace rendering_engine
             gpu.destroy(m_pipeline);
             m_pipeline = {};
         }
-        if (m_input_bind_group.valid())
+        for (auto& input : m_inputs)
         {
-            gpu.destroy(m_input_bind_group);
-            m_input_bind_group = {};
+            if (input.bind_group.valid())
+            {
+                gpu.destroy(input.bind_group);
+                input = {};
+            }
         }
         if (m_input_layout.valid())
         {
@@ -162,16 +166,29 @@ namespace rendering_engine
         }
     }
 
-    void fxaa_pass::rebuild_bind_group(gpu::texture input_color)
+    gpu::bind_group fxaa_pass::bind_group_for(gpu::texture input_color)
     {
+        for (const auto& input : m_inputs)
+        {
+            if (input.bind_group.valid() && input.texture == input_color)
+            {
+                return input.bind_group;
+            }
+        }
+
         auto& gpu = *runtime::current_engine().gpu;
 
-        // Safe mid-frame: the device defers the destroy until the command
-        // buffer that may still reference the old group has retired.
-        if (m_input_bind_group.valid())
+        // Miss: build into the rotating slot. Releasing what it held is
+        // safe mid-frame — the device defers the destroy until the command
+        // buffer that may still reference the old group has retired — and
+        // with two slots the TAA ping-pong pair stays resident while a
+        // resize's stale handles rotate out over two frames.
+        bound_input& slot = m_inputs[m_next_input_slot];
+        m_next_input_slot = (m_next_input_slot + 1) % m_inputs.size();
+        if (slot.bind_group.valid())
         {
-            gpu.destroy(m_input_bind_group);
-            m_input_bind_group = {};
+            gpu.destroy(slot.bind_group);
+            slot = {};
         }
 
         gpu::bind_group_descriptor input_bind_group_descriptor{};
@@ -189,8 +206,9 @@ namespace rendering_engine
         rcp_frame_slot.buffer_value = m_rcp_frame_ubo;
         input_bind_group_descriptor.entries.push_back(rcp_frame_slot);
 
-        m_input_bind_group = gpu.create_bind_group(input_bind_group_descriptor);
-        m_bound_input = input_color;
+        slot.bind_group = gpu.create_bind_group(input_bind_group_descriptor);
+        slot.texture = input_color;
+        return slot.bind_group;
     }
 
     void fxaa_pass::write_rcp_frame(uint32_t width, uint32_t height)
@@ -219,15 +237,12 @@ namespace rendering_engine
     void fxaa_pass::record(gpu::command_encoder& encoder, const frame_context& ctx)
     {
         // Sample the TAA resolve when temporal AA produced one this frame,
-        // otherwise the raw tonemap output. Either handle only changes
-        // when its target is recreated (a resize), so compare against the
-        // one the bind group was built with and rebuild on change — the
-        // first frame included.
+        // otherwise the raw tonemap output. The resolve alternates between
+        // the TAA pass's two ping-pong targets and either handle changes
+        // when its target is recreated (a resize), so look the group up by
+        // handle and build one on a miss — the first frame included.
         const gpu::texture input = ctx.taa_resolve_texture.valid() ? ctx.taa_resolve_texture : ctx.ldr_color_texture;
-        if (input != m_bound_input || !m_input_bind_group.valid())
-        {
-            rebuild_bind_group(input);
-        }
+        const gpu::bind_group input_bind_group = bind_group_for(input);
 
         // Apply the edge step a resize reported, now that begin_frame has
         // waited for the frame that may still have been reading the UBO.
@@ -247,7 +262,7 @@ namespace rendering_engine
 
         auto pass_encoder = encoder.begin_render_pass(descriptor);
         pass_encoder->set_pipeline(m_pipeline);
-        pass_encoder->set_bind_group(0, m_input_bind_group);
+        pass_encoder->set_bind_group(0, input_bind_group);
         pass_encoder->set_vertex_buffer(0, m_vertex_buffer, 0, 0);
         pass_encoder->draw(3, 0);
         pass_encoder->end();

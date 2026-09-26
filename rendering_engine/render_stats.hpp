@@ -24,6 +24,8 @@
 
 #include <cstdint>
 
+#include <rendering_engine/gpu/types.hpp>
+
 namespace rendering_engine
 {
     // Per-frame scene / draw statistics, refreshed by the @ref scene_pass
@@ -34,10 +36,11 @@ namespace rendering_engine
     // @ref renderable::world_bounds against the camera before collecting
     // its draw items, so @ref submitted + @ref culled equals
     // @ref scene_renderables and @ref draw_calls counts only what the
-    // survivors emitted. The triangle / vertex counts are the geometry
+    // survivors emitted. The primitive / vertex counts are the geometry
     // actually submitted to the pipeline this frame, multiplied through
-    // instancing. The shadow-pass counters are copied from the shadow
-    // passes that ran ahead of the scene pass in the same frame.
+    // instancing, with each draw tallied under its own topology (see
+    // @ref tally_primitives). The shadow-pass counters are copied from the
+    // shadow passes that ran ahead of the scene pass in the same frame.
     struct render_stats
     {
         // Renderables registered with the scene-renderable registry.
@@ -68,12 +71,44 @@ namespace rendering_engine
         // draw counts as one).
         uint32_t instances{0};
 
-        // Triangles submitted this frame, counting instancing.
+        // Triangles submitted this frame by triangle-topology draws,
+        // counting instancing.
         uint64_t triangles{0};
+
+        // Line segments submitted this frame by line-topology draws,
+        // counting instancing.
+        uint64_t lines{0};
+
+        // Points submitted this frame by point-topology draws, counting
+        // instancing.
+        uint64_t points{0};
 
         // Vertices submitted to the vertex stage this frame, counting
         // instancing. For indexed draws this is the index count (vertices
         // fetched), not the unique vertex-buffer size.
         uint64_t vertices{0};
     };
+
+    // Adds the primitives that @p vertices vertices assemble into under
+    // @p topology to the matching counter of @p stats: three vertices per
+    // triangle, two per line segment, one per point. Patch draws are not
+    // tallied (the per-patch vertex count lives in the pipeline). The
+    // caller multiplies instanced draws through before calling.
+    inline void tally_primitives(render_stats& stats, gpu::primitive_topology topology, uint64_t vertices)
+    {
+        switch (topology)
+        {
+        case gpu::primitive_topology::triangles:
+            stats.triangles += vertices / 3u;
+            break;
+        case gpu::primitive_topology::lines:
+            stats.lines += vertices / 2u;
+            break;
+        case gpu::primitive_topology::points:
+            stats.points += vertices;
+            break;
+        case gpu::primitive_topology::patches:
+            break;
+        }
+    }
 } // namespace rendering_engine

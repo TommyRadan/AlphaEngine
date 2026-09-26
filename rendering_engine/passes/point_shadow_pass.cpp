@@ -41,16 +41,27 @@ namespace
 {
     namespace math = core::math;
 
-    // Per-face resolution. Smaller than the 2048 directional map because six
+    // Per-face resolution. Smaller than the 4096 directional map because six
     // faces are kept resident; 1024 is plenty for the demo's small bodies.
     constexpr uint32_t shadow_map_size = 1024;
 
     // Perspective frustum per face: 90 degrees covers exactly one cube face.
-    // Near/far bracket the bodies around the light; a tight far keeps the
-    // perspective depth precise enough to avoid acne.
+    // The near plane hugs the light; the far plane is the caster's
+    // point_light::range — nothing beyond it receives the light, so nothing
+    // beyond it needs a shadow — which keeps the perspective depth precise
+    // enough to avoid acne. A light with no cutoff (range 0) falls back to
+    // the fixed default.
     constexpr float light_near = 0.1f;
-    constexpr float light_far = 20.0f;
+    constexpr float default_light_far = 20.0f;
     constexpr float shadow_bias = 0.0025f;
+
+    // The face far plane for a caster: its range, or the default when it
+    // has no cutoff. Never closer than the near plane.
+    float face_far_plane(const rendering_engine::point_light& caster)
+    {
+        const float far_plane = caster.range > 0.0f ? caster.range : default_light_far;
+        return far_plane > light_near ? far_plane : default_light_far;
+    }
 
     constexpr uint32_t light_frame_binding = 0;
     constexpr uint32_t draw_model_binding = 1;
@@ -162,11 +173,16 @@ namespace rendering_engine
         pipeline_descriptor.bind_group_layouts.push_back(m_light_layout);
         pipeline_descriptor.bind_group_layouts.push_back(m_draw_layout);
         m_pipeline = gpu.create_pipeline(pipeline_descriptor);
+
+        // Instanced casters rasterize with the same state (back-face culling
+        // included) through the pipeline that reads their transform stream.
+        m_instanced = create_instanced_shadow_pipeline(m_fragment_shader, m_light_layout, depth, blend, rasterizer);
     }
 
     point_shadow_pass::~point_shadow_pass()
     {
         auto& gpu = *runtime::current_engine().gpu;
+        destroy_instanced_shadow_pipeline(m_instanced);
         if (m_pipeline.valid())
         {
             gpu.destroy(m_pipeline);
@@ -256,6 +272,10 @@ namespace rendering_engine
 
     void point_shadow_pass::record(gpu::command_encoder& encoder, const frame_context& /*ctx*/)
     {
+        // Nothing in the frame context shapes an omni map: the six faces
+        // are fixed 90-degree views from the light, independent of the
+        // camera, so the pass reads only the light registry and the
+        // renderable registry.
         auto& gpu = *runtime::current_engine().gpu;
         m_culled = 0;
 
@@ -285,14 +305,17 @@ namespace rendering_engine
         }
 
         m_has_shadow = caster != nullptr;
+
+        // 90-degree vertical FOV (pi/2), square aspect: exactly one cube face.
+        // The far plane follows the caster's range; the matrix is only used
+        // (and the position only read) when there is a caster.
+        constexpr float face_fov_y = 1.57079633f;
+        math::mat4 projection{};
         if (m_has_shadow)
         {
             m_light_position = caster->position;
+            projection = math::perspective(face_fov_y, 1.0f, light_near, face_far_plane(*caster));
         }
-
-        // 90-degree vertical FOV (pi/2), square aspect: exactly one cube face.
-        constexpr float face_fov_y = 1.57079633f;
-        const math::mat4 projection = math::perspective(face_fov_y, 1.0f, light_near, light_far);
 
         // Walk the registry once per frame, not once per face: every caster
         // builds its draw items (and writes its per-draw UBO) exactly once,
@@ -349,12 +372,12 @@ namespace rendering_engine
                 continue;
             }
 
-            pass_encoder->set_pipeline(m_pipeline);
-            pass_encoder->set_bind_group(0, m_light_bind_groups[face]);
-
             // Only casters whose bounds touch this face's 90-degree frustum
             // can rasterize into its map; the rest are skipped here without
-            // touching their items.
+            // touching their items. The dispatch picks the single-draw or
+            // instanced pipeline per item and binds this face's light group
+            // with it.
+            shadow_caster_dispatch dispatch(*pass_encoder, m_pipeline, m_instanced.pipeline, m_light_bind_groups[face]);
             const math::frustum face_frustum = math::frustum::from_view_projection(m_light_view_projections[face]);
             for (const auto& caster : m_casters)
             {
@@ -366,27 +389,7 @@ namespace rendering_engine
 
                 for (std::size_t i = caster.first; i < caster.first + caster.count; ++i)
                 {
-                    const draw_item& item = m_items[i];
-
-                    // Instanced renderables keep their transforms in a per-draw
-                    // storage buffer the depth-only pipeline can't read, so they
-                    // don't cast omni shadows yet — skip them rather than emit a
-                    // single garbage caster from the unbound model UBO.
-                    if (item.indirect_buffer.valid())
-                    {
-                        continue;
-                    }
-                    pass_encoder->set_bind_group(1, item.per_draw_bind_group);
-                    pass_encoder->set_vertex_buffer(0, item.vertex_buffer, 0, item.vertex_stride);
-                    if (item.index_buffer.valid())
-                    {
-                        pass_encoder->set_index_buffer(item.index_buffer, item.index_format);
-                        pass_encoder->draw_indexed(item.index_count, 0);
-                    }
-                    else
-                    {
-                        pass_encoder->draw(item.vertex_count, 0);
-                    }
+                    dispatch.draw(m_items[i]);
                 }
             }
 

@@ -250,6 +250,9 @@ namespace rendering_engine::debug_ui
                 ImGui::Text("Draw calls: %u", stats.draw_calls);
                 ImGui::Text("Instances: %u", stats.instances);
                 ImGui::Text("Triangles: %llu", static_cast<unsigned long long>(stats.triangles));
+                ImGui::Text("Lines: %llu  Points: %llu",
+                            static_cast<unsigned long long>(stats.lines),
+                            static_cast<unsigned long long>(stats.points));
                 ImGui::Text("Vertices: %llu", static_cast<unsigned long long>(stats.vertices));
 
                 ImGui::SeparatorText("Lights");

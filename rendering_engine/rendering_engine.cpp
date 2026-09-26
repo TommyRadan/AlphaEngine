@@ -52,6 +52,7 @@
 #include <rendering_engine/passes/post/taa_pass.hpp>
 #include <rendering_engine/passes/post/tonemap_pass.hpp>
 #include <rendering_engine/passes/post/velocity_pass.hpp>
+#include <rendering_engine/passes/projection_jitter.hpp>
 #include <rendering_engine/passes/scene_pass.hpp>
 #include <rendering_engine/passes/shadow_pass.hpp>
 #include <rendering_engine/passes/skybox_pass.hpp>
@@ -106,6 +107,14 @@ void rendering_engine::context::init()
     // at the current backbuffer size (on_resize recreates them later).
     create_color_targets(width, height);
 
+    // Temporal AA is decided once, up front: it gates the projection jitter
+    // the scene pass applies (and the unjittered overlay group it builds
+    // for the debug pass), the velocity and TAA passes below, and which
+    // input FXAA declares. Off when the setting is off or the drawable is
+    // degenerate, in which case the LDR target flows straight into FXAA.
+    const bool taa_enabled =
+        (eng.settings != nullptr) && eng.settings->graphics.temporal_aa && width != 0 && height != 0;
+
     // Construct the built-in passes first — each pass owns the
     // per-frame bind-group layout its matching material reads at
     // pipeline-create time. The shadow pass is built before the scene
@@ -117,7 +126,8 @@ void rendering_engine::context::init()
     // point light; like the directional shadow it runs before the scene pass so
     // its maps are ready for the per-frame bind group.
     auto point_shadow = std::make_unique<point_shadow_pass>(&m_scene_renderables);
-    auto scene = std::make_unique<scene_pass>(&m_scene_renderables, shadow.get(), point_shadow.get(), &m_render_stats);
+    auto scene = std::make_unique<scene_pass>(
+        &m_scene_renderables, shadow.get(), point_shadow.get(), &m_render_stats, taa_enabled);
     // The material templates below are built against the same per-frame
     // layout the scene pass binds at slot 0.
     const gpu::bind_group_layout scene_frame_layout = scene->frame_bind_group_layout();
@@ -135,20 +145,18 @@ void rendering_engine::context::init()
     // without re-plumbing.
     auto bloom = std::make_unique<bloom_pass>(width, height);
     auto post = std::make_unique<tonemap_pass>();
+    m_tonemap = post.get();
     // Temporal AA optionally slots in between tonemap and FXAA: it
     // accumulates the projection-jittered frames the scene pass produces
-    // (Halton sub-pixel offsets, applied only while this is enabled) into a
-    // stable, supersampled LDR image, then FXAA cleans up whatever spatial
-    // edges remain. Gated on the temporal_aa setting; when off the LDR
-    // target flows straight into FXAA exactly as before. The TAA resolve
+    // (Halton sub-pixel offsets from frame_context::jitter, published only
+    // while this is enabled) into a stable, supersampled LDR image, then
+    // FXAA cleans up whatever spatial edges remain. The TAA resolve
     // becomes FXAA's input so the swapchain still receives a single
     // anti-aliased image. The textures the passes hand each other (scene
     // depth, motion vectors, the resolve) travel through frame_context
     // rather than constructor arguments: render() publishes them from the
     // owning pass each frame and the consumer rebinds when the handle
     // changes.
-    const bool taa_enabled =
-        (eng.settings != nullptr) && eng.settings->graphics.temporal_aa && width != 0 && height != 0;
     std::unique_ptr<velocity_pass> velocity;
     std::unique_ptr<taa_pass> taa;
     if (taa_enabled)
@@ -164,8 +172,9 @@ void rendering_engine::context::init()
     }
     // FXAA closes the post chain: it samples the TAA resolve when one is
     // published (else the LDR target) and writes the anti-aliased image to
-    // the swapchain.
-    auto fxaa = std::make_unique<fxaa_pass>(width, height);
+    // the swapchain. It declares whichever of the two it will actually
+    // read so the frame graph checks the real wiring.
+    auto fxaa = std::make_unique<fxaa_pass>(width, height, taa_enabled);
     auto ui = std::make_unique<ui_pass>(&m_ui_renderables);
 #if _DEBUG
     // The debug pass binds the scene pass's per-frame camera group at
@@ -257,13 +266,17 @@ void rendering_engine::context::init()
 #endif
 
     // Build the frame graph over the now-final pass list. The swapchain image
-    // and the TAA history are valid at frame start without an in-frame
-    // producer, so import them as external; every other resource is produced
-    // by a pass. Each pass declares its reads/writes (those that override
-    // declare_io) and the graph validates the ordering. Execution order is the
-    // m_passes order, so this does not change what is rendered.
+    // and, with temporal AA on, the TAA history are valid at frame start
+    // without an in-frame producer, so import them as external; every other
+    // resource is produced by a pass. Each pass declares its reads/writes
+    // (those that override declare_io) and the graph validates the ordering.
+    // Execution order is the m_passes order, so this does not change what is
+    // rendered.
     m_frame_graph.import_external("swapchain");
-    m_frame_graph.import_external("taa_history");
+    if (taa)
+    {
+        m_frame_graph.import_external("taa_history");
+    }
     for (auto& p : m_passes)
     {
         render_graph::pass_io_builder io;
@@ -273,7 +286,17 @@ void rendering_engine::context::init()
                                [raw = p.get()](gpu::command_encoder& encoder, const frame_context& frame)
                                { raw->record(encoder, frame); });
     }
-    m_frame_graph.compile();
+    // A hazard is a pass reading a resource nothing before it produced: a
+    // mis-ordered or mis-declared pass list, i.e. a programming error. It
+    // stops a debug build here; a release build logs it (the graph already
+    // reported each offending read) and renders in the declared order.
+    const bool hazard_free = m_frame_graph.compile();
+    assert(hazard_free && "frame graph: a pass reads a resource before any pass produces it");
+    if (!hazard_free)
+    {
+        LOG_ERR("Rendering Engine: the frame graph compiled with hazards; the pass list is mis-declared or "
+                "mis-ordered (see the frame_graph errors above)");
+    }
 
     // Bring the ImGui debug overlay up now that the window, GL context
     // and passes are live. No-op in release builds.
@@ -323,8 +346,11 @@ void rendering_engine::context::quit()
     // bind-group layouts referenced by the materials' pipelines.
     m_passes.clear();
     m_skybox = nullptr;
+    m_tonemap = nullptr;
     m_velocity = nullptr;
     m_taa = nullptr;
+    m_prev_camera = nullptr;
+    m_has_prev_view_projection = false;
 
     // Then materials, which own pipelines that reference the device.
     // Release them before the device tears its pools down.
@@ -375,6 +401,21 @@ void rendering_engine::context::render()
     frame_context ctx{};
     ctx.swapchain_target = gpu.swapchain_target();
     ctx.active_camera = active_camera();
+    ctx.viewport_width = m_target_width;
+    ctx.viewport_height = m_target_height;
+    ctx.frame_index = m_frame_index;
+    // The temporal-AA jitter is computed here from the live target size
+    // (so a resize rescales it without any pass being told) and published
+    // to every pass: the scene and skybox passes offset their projection
+    // by it, the velocity pass subtracts it. Zero while TAA is off.
+    ctx.jitter = (m_taa != nullptr) ? taa_jitter_ndc(m_frame_index, m_target_width, m_target_height)
+                                    : core::math::vec2{0.0f, 0.0f};
+    ctx.prev_jitter = m_prev_jitter;
+    // The previous frame's unjittered view-projection is only meaningful
+    // if that frame was drawn by this same camera.
+    ctx.has_prev_view_projection =
+        m_has_prev_view_projection && ctx.active_camera != nullptr && ctx.active_camera == m_prev_camera;
+    ctx.prev_view_projection = ctx.has_prev_view_projection ? m_prev_view_projection : core::math::mat4{};
     ctx.scene_color_target = m_scene_color_target;
     ctx.scene_color_texture = m_scene_color_texture;
     // The depth attachment is looked up from the target every frame rather
@@ -394,6 +435,23 @@ void rendering_engine::context::render()
     auto encoder = gpu.create_command_encoder();
     m_frame_graph.execute(*encoder, ctx);
     gpu.submit(std::move(encoder));
+
+    // Carry this frame's camera state over for the next frame's
+    // reprojection: the unjittered view-projection (the scene pass applies
+    // the jitter on top of the camera's own matrices) and the camera it
+    // came from. A no-camera frame leaves nothing to reproject against.
+    if (ctx.active_camera != nullptr)
+    {
+        m_prev_view_projection = ctx.active_camera->get_projection_matrix() * ctx.active_camera->get_view_matrix();
+        m_has_prev_view_projection = true;
+    }
+    else
+    {
+        m_has_prev_view_projection = false;
+    }
+    m_prev_camera = ctx.active_camera;
+    m_prev_jitter = ctx.jitter;
+    ++m_frame_index;
 
     // Close the frame. Vulkan presents the swapchain image it acquired
     // for this frame here; OpenGL presents when the main loop calls
@@ -447,9 +505,10 @@ void rendering_engine::context::on_resize(uint32_t pixel_width, uint32_t pixel_h
     }
 
     // Let every pass follow: the bloom pyramid, the velocity target, the
-    // TAA history / resolve (+ texel step, history reset), the FXAA edge
-    // step and the scene pass's jitter amplitude. Fixed-size passes
-    // (shadow maps, UI, debug) keep the default no-op.
+    // TAA history / resolve (+ texel step, history reset) and the FXAA
+    // edge step. Fixed-size passes (shadow maps, UI, debug) keep the
+    // default no-op, and the scene pass needs nothing: the jitter it
+    // applies is computed by render() from the size recorded above.
     for (auto& p : m_passes)
     {
         p->resize(pixel_width, pixel_height);
@@ -598,9 +657,26 @@ rendering_engine::grid_material& rendering_engine::context::get_grid_material()
     return *m_grid_material;
 }
 
+std::unique_ptr<rendering_engine::grid_material> rendering_engine::context::create_grid_material(float fade_distance)
+{
+    // The fade distance is a define baked into the template's shaders, so
+    // the new instance gets a template of its own, built on the device and
+    // against the scene per-frame layout the built-in grid template uses.
+    assert(m_grid_material != nullptr && "context::create_grid_material is only valid between init and quit");
+    const material_template& builtin = m_grid_material->get_template();
+    return std::make_unique<grid_material>(
+        grid_material::create_template(builtin.device(), builtin.descriptor().frame_layout, fade_distance));
+}
+
 rendering_engine::ui_material& rendering_engine::context::get_ui_material()
 {
     return *m_ui_material;
+}
+
+rendering_engine::tonemap_pass& rendering_engine::context::tonemap()
+{
+    assert(m_tonemap != nullptr && "context::tonemap is only valid between init and quit");
+    return *m_tonemap;
 }
 
 const rendering_engine::render_stats& rendering_engine::context::get_render_stats() const

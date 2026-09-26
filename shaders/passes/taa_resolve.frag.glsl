@@ -13,10 +13,13 @@
 // is pulled back in; history that reprojects outside the frame is
 // dropped entirely in favour of the current sample.
 //
-// u_taa.params.xy is (1/width, 1/height), the per-texel step the
-// neighbourhood taps walk by, and params.z is the history feedback
-// weight, baked to 0 on the first frame (history undefined) and to
-// taa_feedback thereafter.
+// historyColor is the other half of the pass's ping-pong pair (last
+// frame's resolve); this frame's resolve becomes the next frame's history
+// without a copy. u_taa.params.xy is (1/width, 1/height), the per-texel
+// step the neighbourhood taps walk by, and params.z is the history
+// feedback weight, 0 while the history is unusable (the first frame, a
+// resize, a camera change or a no-camera frame) and taa_feedback
+// otherwise.
 
 layout(location = 0) in vec2 texCoord;
 layout(location = 0) out vec4 fragColor;

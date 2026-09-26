@@ -10,6 +10,7 @@ target_sources(AlphaEngine PRIVATE
     directional_light_helper.hpp
     grid_helper.cpp
     grid_helper.hpp
+    grid_lines.hpp
     helper.cpp
     helper.hpp
     infinite_grid.cpp

@@ -27,6 +27,9 @@
 
 #pragma once
 
+#include <cstdint>
+
+#include <core/math/math.hpp>
 #include <rendering_engine/fog.hpp>
 #include <rendering_engine/gpu/command_encoder.hpp>
 #include <rendering_engine/gpu/handle.hpp>
@@ -61,6 +64,36 @@ namespace rendering_engine
         // need a camera read it from here, never from the registry, and
         // early-return when it is null.
         camera* active_camera{nullptr};
+
+        // Pixel size of the off-screen scene / LDR targets (and so of
+        // the swapchain they resolve into) this frame.
+        uint32_t viewport_width{0};
+        uint32_t viewport_height{0};
+
+        // Frames rendered before this one since the context came up.
+        // Drives the temporal-AA jitter sequence.
+        uint64_t frame_index{0};
+
+        // Temporal-AA sub-pixel jitter for this frame, in NDC units
+        // (see @ref taa_jitter_ndc), and the previous frame's. Zero
+        // while temporal AA is off. The scene pass rasterises with the
+        // projection offset by @c jitter (@ref jitter_projection) and the
+        // skybox unprojects with the same offset so the two agree; the
+        // velocity pass subtracts it to recover each pixel's unjittered
+        // position. @c prev_jitter is the offset the history was
+        // rasterised with, for consumers that relate two jittered frames.
+        core::math::vec2 jitter{0.0f, 0.0f};
+        core::math::vec2 prev_jitter{0.0f, 0.0f};
+
+        // The previous frame's unjittered view-projection of
+        // @ref active_camera, valid when @ref has_prev_view_projection
+        // is set: false on the first camera frame, after a no-camera
+        // frame and when a different camera won the arbitration, since a
+        // matrix from a different camera (or none) is meaningless to
+        // reproject against. The velocity pass builds its reprojection
+        // from it.
+        core::math::mat4 prev_view_projection{};
+        bool has_prev_view_projection{false};
 
         // Off-screen HDR colour target the scene pass renders into.
         // Owned by @ref context; surfaced here so passes share the

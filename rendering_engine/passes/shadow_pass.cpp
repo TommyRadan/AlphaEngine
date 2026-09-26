@@ -259,11 +259,16 @@ namespace rendering_engine
         pipeline_descriptor.bind_group_layouts.push_back(m_light_layout);
         pipeline_descriptor.bind_group_layouts.push_back(m_draw_layout);
         m_pipeline = gpu.create_pipeline(pipeline_descriptor);
+
+        // Instanced casters rasterize with the same state through the
+        // pipeline that reads their per-instance transform stream.
+        m_instanced = create_instanced_shadow_pipeline(m_fragment_shader, m_light_layout, depth, blend, rasterizer);
     }
 
     shadow_pass::~shadow_pass()
     {
         auto& gpu = *runtime::current_engine().gpu;
+        destroy_instanced_shadow_pipeline(m_instanced);
         if (m_pipeline.valid())
         {
             gpu.destroy(m_pipeline);
@@ -419,12 +424,10 @@ namespace rendering_engine
 
         gpu.write_buffer(m_light_ubo, m_light_view_projection.data(), sizeof(math::mat4), 0);
 
-        pass_encoder->set_pipeline(m_pipeline);
-        pass_encoder->set_bind_group(0, m_light_bind_group);
-
         // Every scene renderable casts. Reuse the per-draw model-matrix
-        // bind group each renderable already built; the depth-only
-        // pipeline reads only position so the differing vertex strides
+        // bind group each renderable already built (or, for an instanced
+        // batch, its per-instance transform stream); the depth-only
+        // pipelines read only position so the differing vertex strides
         // are absorbed by the per-draw stride override. Casters whose
         // bounds lie outside the light's orthographic box could never
         // rasterize into the map, so they are skipped before their items
@@ -446,27 +449,10 @@ namespace rendering_engine
             r->collect_draw_items(m_items);
         }
 
+        shadow_caster_dispatch dispatch(*pass_encoder, m_pipeline, m_instanced.pipeline, m_light_bind_group);
         for (const auto& item : m_items)
         {
-            // Instanced renderables carry their transforms in a per-draw
-            // storage buffer the depth-only pipeline can't consume, so
-            // they don't cast shadows yet — skip them rather than emit a
-            // single garbage caster from the unbound model UBO.
-            if (item.indirect_buffer.valid())
-            {
-                continue;
-            }
-            pass_encoder->set_bind_group(1, item.per_draw_bind_group);
-            pass_encoder->set_vertex_buffer(0, item.vertex_buffer, 0, item.vertex_stride);
-            if (item.index_buffer.valid())
-            {
-                pass_encoder->set_index_buffer(item.index_buffer, item.index_format);
-                pass_encoder->draw_indexed(item.index_count, 0);
-            }
-            else
-            {
-                pass_encoder->draw(item.vertex_count, 0);
-            }
+            dispatch.draw(item);
         }
 
         pass_encoder->end();

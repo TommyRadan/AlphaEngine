@@ -1,10 +1,11 @@
 // Unit tests for render_graph::frame_graph: pass_io_builder bookkeeping,
 // compile()'s produced-before-read validation (imported resources, in-order
 // writes, same-pass read+write, reads ahead of their producer), execution in
-// registration order with execute_range clamping, clear(), and a mirror of the
-// engine's built-in pass declarations that must compile hazard-free so a
-// mis-declared read (the velocity pass once declared "scene_color" while
-// sampling the depth attachment) is caught headless.
+// registration order, clear(), and a mirror of the engine's built-in pass
+// declarations — with temporal AA on and off — that must compile hazard-free
+// so a mis-declared read (the velocity pass once declared "scene_color" while
+// sampling the depth attachment; FXAA once declared "ldr_color" while sampling
+// the TAA resolve) is caught headless.
 
 #include <gtest/gtest.h>
 
@@ -75,22 +76,35 @@ namespace
     }
 
     // The engine's built-in pass list as rendering_engine::context::init
-    // registers it (TAA enabled, debug build), with each pass's declare_io
-    // transcribed. Kept in step by hand: a pass whose declaration changes
-    // should update this mirror too.
-    void add_engine_passes(frame_graph& graph)
+    // registers it (debug build), with each pass's declare_io transcribed.
+    // With temporal AA on the velocity and TAA passes are present, the TAA
+    // history is imported, and FXAA reads the TAA resolve; with it off
+    // neither pass exists and FXAA reads the tonemapped LDR target. Kept in
+    // step by hand: a pass whose declaration changes should update this
+    // mirror too.
+    void add_engine_passes(frame_graph& graph, bool taa_enabled)
     {
         graph.import_external("swapchain");
-        graph.import_external("taa_history");
+        if (taa_enabled)
+        {
+            graph.import_external("taa_history");
+        }
         graph.add_pass("shadow", io_of({}, {"shadow_map"}), {});
         graph.add_pass("point_shadow", io_of({}, {"point_shadow"}), {});
         graph.add_pass("scene", io_of({"shadow_map", "point_shadow"}, {"scene_color", "scene_depth"}), {});
         graph.add_pass("skybox", io_of({"scene_color", "scene_depth"}, {"scene_color", "scene_depth"}), {});
-        graph.add_pass("velocity", io_of({"scene_depth"}, {"velocity"}), {});
+        if (taa_enabled)
+        {
+            graph.add_pass("velocity", io_of({"scene_depth"}, {"velocity"}), {});
+        }
         graph.add_pass("bloom", io_of({"scene_color"}, {"scene_color"}), {});
         graph.add_pass("tonemap", io_of({"scene_color"}, {"ldr_color"}), {});
-        graph.add_pass("taa", io_of({"ldr_color", "velocity", "taa_history"}, {"taa_resolve", "taa_history"}), {});
-        graph.add_pass("fxaa", io_of({"ldr_color"}, {"swapchain"}), {});
+        if (taa_enabled)
+        {
+            graph.add_pass(
+                "taa", io_of({"ldr_color", "velocity", "taa_history"}, {"taa_resolve", "taa_history"}), {});
+        }
+        graph.add_pass("fxaa", io_of({taa_enabled ? "taa_resolve" : "ldr_color"}, {"swapchain"}), {});
         graph.add_pass("ui", io_of({"swapchain"}, {"swapchain"}), {});
         graph.add_pass("debug", io_of({"swapchain"}, {"swapchain"}), {});
     }
@@ -261,49 +275,6 @@ TEST(frame_graph, execute_skips_passes_without_a_callback)
     EXPECT_EQ(log, (std::vector<std::string>{"first", "last"}));
 }
 
-TEST(frame_graph, execute_range_runs_the_half_open_range)
-{
-    std::vector<std::string> log;
-    frame_graph graph;
-    graph.add_pass("a", pass_io_builder{}, trace(log, "a"));
-    graph.add_pass("b", pass_io_builder{}, trace(log, "b"));
-    graph.add_pass("c", pass_io_builder{}, trace(log, "c"));
-    graph.add_pass("d", pass_io_builder{}, trace(log, "d"));
-
-    null_encoder encoder;
-    frame_context ctx{};
-    graph.execute_range(encoder, ctx, 1, 3);
-    EXPECT_EQ(log, (std::vector<std::string>{"b", "c"}));
-}
-
-TEST(frame_graph, execute_range_clamps_end_to_the_pass_count)
-{
-    std::vector<std::string> log;
-    frame_graph graph;
-    graph.add_pass("a", pass_io_builder{}, trace(log, "a"));
-    graph.add_pass("b", pass_io_builder{}, trace(log, "b"));
-
-    null_encoder encoder;
-    frame_context ctx{};
-    graph.execute_range(encoder, ctx, 1, 100);
-    EXPECT_EQ(log, (std::vector<std::string>{"b"}));
-}
-
-TEST(frame_graph, execute_range_with_an_empty_or_inverted_range_runs_nothing)
-{
-    std::vector<std::string> log;
-    frame_graph graph;
-    graph.add_pass("a", pass_io_builder{}, trace(log, "a"));
-    graph.add_pass("b", pass_io_builder{}, trace(log, "b"));
-
-    null_encoder encoder;
-    frame_context ctx{};
-    graph.execute_range(encoder, ctx, 1, 1);
-    graph.execute_range(encoder, ctx, 2, 1);
-    graph.execute_range(encoder, ctx, 5, 9);
-    EXPECT_TRUE(log.empty());
-}
-
 // --- clear ------------------------------------------------------------------
 
 TEST(frame_graph, clear_drops_passes_and_imports)
@@ -330,12 +301,32 @@ TEST(frame_graph, clear_drops_passes_and_imports)
 
 // --- the engine's pass list -------------------------------------------------
 
-TEST(frame_graph, engine_pass_declarations_compile_hazard_free)
+TEST(frame_graph, engine_pass_declarations_compile_hazard_free_with_taa)
 {
     frame_graph graph;
-    add_engine_passes(graph);
+    add_engine_passes(graph, /*taa_enabled=*/true);
     EXPECT_EQ(graph.pass_count(), 11u);
     EXPECT_TRUE(graph.compile());
+}
+
+TEST(frame_graph, engine_pass_declarations_compile_hazard_free_without_taa)
+{
+    frame_graph graph;
+    add_engine_passes(graph, /*taa_enabled=*/false);
+    EXPECT_EQ(graph.pass_count(), 9u);
+    EXPECT_TRUE(graph.compile());
+}
+
+TEST(frame_graph, fxaa_reading_the_taa_resolve_without_a_taa_pass_is_a_hazard)
+{
+    // The TAA-off list with FXAA still declaring the TAA input: the
+    // resolve is never produced, so the mis-declared read flags.
+    frame_graph graph;
+    graph.import_external("swapchain");
+    graph.add_pass("scene", io_of({}, {"scene_color", "scene_depth"}), {});
+    graph.add_pass("tonemap", io_of({"scene_color"}, {"ldr_color"}), {});
+    graph.add_pass("fxaa", io_of({"taa_resolve"}, {"swapchain"}), {});
+    EXPECT_FALSE(graph.compile());
 }
 
 TEST(frame_graph, scene_depth_must_be_produced_before_the_skybox_and_velocity_read_it)

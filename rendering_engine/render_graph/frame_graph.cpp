@@ -22,7 +22,6 @@
 
 #include <rendering_engine/render_graph/frame_graph.hpp>
 
-#include <algorithm>
 #include <unordered_set>
 #include <utility>
 
@@ -65,7 +64,7 @@ namespace rendering_engine::render_graph
             {
                 if (produced.find(r) == produced.end())
                 {
-                    LOG_WRN("frame_graph: pass '%s' reads resource '%s' before any pass produces it",
+                    LOG_ERR("frame_graph: pass '%s' reads resource '%s' before any pass produces it",
                             n.name.c_str(),
                             r.c_str());
                     hazard_free = false;
@@ -78,24 +77,17 @@ namespace rendering_engine::render_graph
         }
         LOG_INF("frame_graph: compiled %zu passes (%s)",
                 m_nodes.size(),
-                hazard_free ? "no hazards" : "hazards found — see warnings");
+                hazard_free ? "no hazards" : "hazards found — see errors");
         return hazard_free;
     }
 
     void frame_graph::execute(gpu::command_encoder& encoder, const frame_context& ctx) const
     {
-        execute_range(encoder, ctx, 0, m_nodes.size());
-    }
-
-    void
-    frame_graph::execute_range(gpu::command_encoder& encoder, const frame_context& ctx, size_t begin, size_t end) const
-    {
-        const size_t last = std::min(end, m_nodes.size());
-        for (size_t i = begin; i < last; ++i)
+        for (const auto& n : m_nodes)
         {
-            if (m_nodes[i].execute)
+            if (n.execute)
             {
-                m_nodes[i].execute(encoder, ctx);
+                n.execute(encoder, ctx);
             }
         }
     }

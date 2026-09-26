@@ -46,10 +46,18 @@ namespace rendering_engine
      * the previous frame's view-projection gives where it sat on screen
      * last frame, and the difference is the motion vector. One
      * @c reprojection matrix (@c prevViewProj * inverse(curViewProj),
-     * both unjittered) folds the whole chain into a single transform
-     * uploaded per frame. This captures camera motion for the static world;
-     * independently animated objects need their own previous-frame
-     * transforms (a multi-target geometry pass) and remain future work.
+     * both unjittered — the previous one is
+     * @ref frame_context::prev_view_projection) folds the whole chain into
+     * a single transform uploaded per frame. The depth was rasterised with
+     * the projection offset by @ref frame_context::jitter, so the shader
+     * first subtracts that jitter from the pixel's NDC position: the
+     * reconstructed point is then the surface actually under the pixel and
+     * both ends of the vector sit on the unjittered pixel grid the history
+     * accumulates on, so a static camera yields exactly zero motion and a
+     * moving one no Halton-indexed sub-pixel bias. This captures camera
+     * motion for the static world; independently animated objects need
+     * their own previous-frame transforms (a multi-target geometry pass)
+     * and remain future work.
      *
      * Runs after the scene/skybox passes (so the depth buffer is final) and
      * before @ref taa_pass. The result is an @c rgba16f target with the
@@ -57,7 +65,8 @@ namespace rendering_engine
      * the TAA resolve can sample it. Pipeline state mirrors the other
      * fullscreen-triangle passes (depth off, blend off, no culling). A
      * degenerate backbuffer leaves the pass disabled; a frame with no
-     * camera clears the target to zero (no motion).
+     * camera, or without a usable previous view-projection (the first
+     * camera frame, a camera switch), reports zero motion.
      */
     struct velocity_pass : pass
     {
@@ -124,13 +133,6 @@ namespace rendering_engine
         // The scene depth texture @ref m_bind_group was built against;
         // invalid until the first camera frame builds the group.
         gpu::texture m_bound_depth{};
-
-        // Previous frame's unjittered view-projection, kept so this frame
-        // can build the reprojection matrix. @c m_has_prev is false until
-        // the first camera frame has run, so that frame reports zero motion
-        // instead of reprojecting against an undefined matrix.
-        core::math::mat4 m_prev_view_proj{};
-        bool m_has_prev{false};
 
         // False when the backbuffer dimensions are degenerate (no settings,
         // zero-sized window); record() then no-ops and velocity_texture()

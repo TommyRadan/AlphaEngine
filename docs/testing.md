@@ -240,10 +240,27 @@ All device-free:
   header constants are used; no video subsystem is initialised.
 - `render_graph::frame_graph` — `pass_io_builder` bookkeeping, `compile()`'s
   produced-before-read check (imported resources, in-order writes, same-pass
-  read+write, reads ahead of their producer), execution in registration order
-  with `execute_range` clamping, `clear()`, and a hand-kept mirror of the
-  engine's built-in pass declarations (including `scene_depth`) that must
-  compile hazard-free. The encoder the graph forwards is driven by a stub.
+  read+write, reads ahead of their producer), execution in registration order,
+  `clear()`, and a hand-kept mirror of the engine's built-in pass declarations
+  (including `scene_depth`, with temporal AA on — FXAA reading `taa_resolve` —
+  and off — FXAA reading `ldr_color`) that must compile hazard-free. The
+  encoder the graph forwards is driven by a stub.
+- `projection_jitter` (`rendering_engine/passes/projection_jitter.cpp`) — the
+  Halton sequence, the temporal-AA jitter (sub-pixel for the live target size,
+  zero for a degenerate one, periodic, scaling with a resize) and
+  `jitter_projection`: every projected point shifts by exactly the jitter in
+  NDC for perspective and orthographic projections, subtracting it again
+  recovers the point rasterised at a pixel, and a static camera reprojects to
+  zero motion — the maths the scene, skybox and velocity passes share.
+- `render_stats::tally_primitives` — per-topology primitive accounting
+  (three vertices per triangle, two per line segment, one per point, patches
+  not tallied, incomplete primitives dropped, accumulation across draws).
+  Header-only.
+- `debug::grid_lines` — the finite `grid_helper`'s line layout: an even
+  division count accents the spaced line through the origin (hit exactly, by
+  index), an odd count inserts a centre line at 0 in ascending order, a
+  single cell has its edges plus the centre, counts below one clamp.
+  Header-only.
 - `vk_negotiate` (`rendering_engine/gpu/backend/vulkan/vk_negotiate.cpp`) —
   the Vulkan depth-format fallback chains (`depth24` prefers the packed
   24-bit format, falls back to `D32_SFLOAT` and reaches the stencil formats

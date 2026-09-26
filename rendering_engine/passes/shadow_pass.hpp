@@ -27,6 +27,7 @@
 #include <core/math/math.hpp>
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/passes/pass.hpp>
+#include <rendering_engine/passes/shadow_casters.hpp>
 #include <rendering_engine/render_graph/frame_graph.hpp>
 #include <rendering_engine/renderables/draw_item.hpp>
 
@@ -46,20 +47,23 @@ namespace rendering_engine
      * to occlude that light's contribution.
      *
      * The light's view is an orthographic box oriented along the light
-     * direction. When a camera is attached the box is auto-fitted to the
-     * camera's view frustum each frame (capped to a fixed shadow
-     * distance, enclosed in its bounding sphere, and texel-snapped for
-     * stability) so the shadow map's texels concentrate on what the
-     * viewer sees; with no camera it falls back to a fixed box centred on
-     * the world origin. When no directional light has @c cast_shadow set
-     * the pass still clears the map and reports @ref has_shadow as false
-     * so the lit shaders fall back to unshadowed lighting.
+     * direction. When a camera is attached (@ref frame_context::active_camera)
+     * the box is auto-fitted to the camera's view frustum each frame
+     * (capped to a fixed shadow distance, enclosed in its bounding sphere,
+     * and texel-snapped for stability) so the shadow map's texels
+     * concentrate on what the viewer sees; with no camera it falls back to
+     * a fixed box centred on the world origin. When no directional light
+     * has @c cast_shadow set the pass still clears the map and reports
+     * @ref has_shadow as false so the lit shaders fall back to unshadowed
+     * lighting.
      *
      * The pass reuses the same scene-renderable registry as the
      * @ref scene_pass and the per-draw model-matrix bind group each
      * renderable already builds (binding 1), so every scene renderable
      * casts without any per-renderable wiring; only the depth-only
-     * pipeline and the light-space matrix differ.
+     * pipeline and the light-space matrix differ. Instanced batches cast
+     * through the instanced twin of that pipeline, which reads their
+     * per-instance transform stream (see @ref shadow_caster_dispatch).
      */
     struct shadow_pass : pass
     {
@@ -122,6 +126,11 @@ namespace rendering_engine
         gpu::shader_module m_vertex_shader{};
         gpu::shader_module m_fragment_shader{};
         gpu::pipeline m_pipeline{};
+
+        // The instanced twin of @ref m_pipeline for instanced casters;
+        // shares the fragment stage, the light layout and the
+        // fixed-function state.
+        instanced_shadow_pipeline m_instanced{};
 
         // Per-light bind group (slot 0): the light-space view-projection
         // matrix at binding 0. The per-draw model matrix (binding 1)

@@ -25,6 +25,7 @@
 #include <vector>
 
 #include <core/math/math.hpp>
+#include <rendering_engine/debug/grid_lines.hpp>
 
 namespace rendering_engine::debug
 {
@@ -33,40 +34,35 @@ namespace rendering_engine::debug
     {
         namespace math = core::math;
 
-        if (divisions < 1)
-        {
-            divisions = 1;
-        }
-
         const float half = size * 0.5f;
-        const float step = size / static_cast<float>(divisions);
         const math::vec3 line_rgb = to_rgb(color);
         const math::vec3 center_rgb = to_rgb(center_color);
 
+        // The grid lies on the X/Y plane (z = 0) because the engine is
+        // Z-up. grid_lines places the spaced lines and flags the one
+        // through the origin (adding it when an odd division count puts
+        // the origin mid-cell) so both the X- and Y-aligned spans through
+        // the origin get the accent colour.
+        const std::vector<grid_line> lines = grid_lines(size, divisions);
+
         std::vector<math::vec3> positions;
         std::vector<math::vec3> colors;
-        positions.reserve(static_cast<size_t>(divisions + 1) * 4);
-        colors.reserve(static_cast<size_t>(divisions + 1) * 4);
+        positions.reserve(lines.size() * 4);
+        colors.reserve(lines.size() * 4);
 
-        // The grid lies on the X/Y plane (z = 0) because the engine is
-        // Z-up. The middle index lands on the centre lines; flag it so
-        // both the X- and Y-aligned spans through the origin get the
-        // accent colour.
-        const int center_index = divisions / 2;
-        for (int i = 0; i <= divisions; ++i)
+        for (const grid_line& line : lines)
         {
-            const float coord = -half + step * static_cast<float>(i);
-            const math::vec3& rgb = (i == center_index) ? center_rgb : line_rgb;
+            const math::vec3& rgb = line.center ? center_rgb : line_rgb;
 
             // Span parallel to X at this Y.
-            positions.push_back(math::vec3{-half, coord, 0.0f});
-            positions.push_back(math::vec3{half, coord, 0.0f});
+            positions.push_back(math::vec3{-half, line.coord, 0.0f});
+            positions.push_back(math::vec3{half, line.coord, 0.0f});
             colors.push_back(rgb);
             colors.push_back(rgb);
 
             // Span parallel to Y at this X.
-            positions.push_back(math::vec3{coord, -half, 0.0f});
-            positions.push_back(math::vec3{coord, half, 0.0f});
+            positions.push_back(math::vec3{line.coord, -half, 0.0f});
+            positions.push_back(math::vec3{line.coord, half, 0.0f});
             colors.push_back(rgb);
             colors.push_back(rgb);
         }

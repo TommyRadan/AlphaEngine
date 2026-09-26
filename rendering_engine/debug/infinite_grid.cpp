@@ -36,9 +36,9 @@
 
 namespace rendering_engine::debug
 {
-    infinite_grid::infinite_grid(float /*fade_distance*/)
+    infinite_grid::infinite_grid(float fade_distance)
         : helper("Grid (infinite)", helper_layer::scene),
-          m_material(&runtime::current_engine().renderer->get_grid_material())
+          m_material(runtime::current_engine().renderer->create_grid_material(fade_distance))
     {
         upload();
     }
@@ -61,6 +61,10 @@ namespace rendering_engine::debug
             gpu.destroy(m_vertex_buffer);
             m_vertex_buffer = {};
         }
+        // The material (and with it its template's layouts and pipeline)
+        // goes after the bind group that was built against its per-draw
+        // layout.
+        m_material.reset();
     }
 
     void infinite_grid::upload()
@@ -103,7 +107,7 @@ namespace rendering_engine::debug
         }
 
         draw_item item{};
-        item.mat = m_material;
+        item.mat = m_material.get();
         item.vertex_buffer = m_vertex_buffer;
         item.per_draw_bind_group = m_draw_bind_group;
         item.vertex_stride = sizeof(core::math::vec3);

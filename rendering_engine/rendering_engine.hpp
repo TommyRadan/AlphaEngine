@@ -27,9 +27,11 @@
 
 #pragma once
 
+#include <cstdint>
 #include <memory>
 #include <vector>
 
+#include <core/math/math.hpp>
 #include <core/subscription.hpp>
 #include <rendering_engine/fog.hpp>
 #include <rendering_engine/gpu/handle.hpp>
@@ -38,9 +40,11 @@
 
 namespace rendering_engine
 {
+    struct camera;
     struct pass;
     struct renderable;
     struct skybox_pass;
+    struct tonemap_pass;
     struct velocity_pass;
     struct taa_pass;
     struct environment;
@@ -92,13 +96,19 @@ namespace rendering_engine
          *
          * Walks the ordered pass list registered in @ref init,
          * giving each pass the same per-frame @ref frame_context
-         * (active camera + swapchain target) so they cannot
-         * disagree mid-frame. The active camera is the camera
-         * registry's arbitration result (@ref active_camera: the
-         * highest-priority attached, enabled camera) evaluated once
-         * here, so a camera destroyed or disabled since the last
-         * frame is replaced by the runner-up without any owner
-         * bookkeeping. The built-in scene and UI passes
+         * (active camera, swapchain and off-screen targets, viewport,
+         * frame index, this frame's and the previous frame's
+         * temporal-AA jitter, and the previous frame's unjittered
+         * view-projection) so they cannot disagree mid-frame. The
+         * active camera is the camera registry's arbitration result
+         * (@ref active_camera: the highest-priority attached, enabled
+         * camera) evaluated once here, so a camera destroyed or
+         * disabled since the last frame is replaced by the runner-up
+         * without any owner bookkeeping. The context is the only
+         * place that advances the frame index, the jitter sequence
+         * and the previous-frame matrix, and it drops the latter
+         * across a no-camera frame or a change of arbitrated camera.
+         * The built-in scene and UI passes
          * each broadcast their matching event
          * (@ref core::render_scene / @ref core::render_ui)
          * after the registry walk so debug / gizmo callers can
@@ -134,7 +144,9 @@ namespace rendering_engine
          * to cameras attached later, so the projection matches the new
          * drawable. Passes that sample a texture owned by
          * the context or another pass rebind on the next frame through
-         * the handle comparison they make in @c record. Shadow maps are
+         * the handle comparison they make in @c record, and the
+         * temporal-AA jitter is derived from the recorded size on every
+         * @ref render, so it needs no notification. Shadow maps are
          * fixed-size by design and unaffected.
          *
          * Releasing the old targets is safe here on both backends: the
@@ -241,15 +253,40 @@ namespace rendering_engine
 
         /**
          * @brief Built-in analytic infinite-grid material (the CAD-style
-         *        ground grid). Constructed in @ref init.
+         *        ground grid) at the default fade distance. Constructed
+         *        in @ref init.
          *
-         * Shares the scene per-frame layout (camera at slot 0) and is
-         * fronted by the @ref debug::infinite_grid scene renderable.
+         * Shares the scene per-frame layout (camera at slot 0). The
+         * @ref debug::infinite_grid renderable builds its own material
+         * through @ref create_grid_material so its fade distance is
+         * honoured; this shared one serves callers that want the default.
          */
         grid_material& get_grid_material();
 
+        /**
+         * @brief Creates a @ref grid_material bound to the scene pass's
+         *        per-frame layout that fades out @p fade_distance world
+         *        units from the camera, owned by the caller.
+         *
+         * The fade distance is baked into the grid template's fragment
+         * shader as a define, so the material comes with a grid
+         * template of its own (@ref grid_material::create_template),
+         * which it keeps alive; repeat compiles of a distance are served
+         * from the SPIR-V cache. Valid between @ref init and @ref quit;
+         * the returned material must not outlive the rendering context.
+         */
+        std::unique_ptr<grid_material> create_grid_material(float fade_distance);
+
         /** @brief Built-in 2D overlay material. Constructed in @ref init. */
         ui_material& get_ui_material();
+
+        /**
+         * @brief The tonemap post pass, for live tuning of its exposure
+         *        and operator (@ref tonemap_pass::set_exposure /
+         *        @ref tonemap_pass::set_operator). Constructed in
+         *        @ref init; valid between @ref init and @ref quit.
+         */
+        tonemap_pass& tonemap();
 
         /**
          * @brief This frame's scene / draw statistics (renderable count,
@@ -316,6 +353,11 @@ namespace rendering_engine
         // map after construction. Null until @ref init runs.
         skybox_pass* m_skybox{nullptr};
 
+        // Non-owning back-pointer to the tonemap pass owned by
+        // @ref m_passes, surfaced through @ref tonemap so its exposure
+        // and operator can be tuned live. Null until @ref init runs.
+        tonemap_pass* m_tonemap{nullptr};
+
         // Non-owning back-pointers to the optional temporal-AA passes
         // owned by @ref m_passes, null when temporal AA is off. Kept so
         // @ref render can publish the textures they own (motion vectors,
@@ -365,7 +407,9 @@ namespace rendering_engine
         std::unique_ptr<line_material> m_line_material;
         // Depth-disabled line material the debug gizmos draw through.
         std::unique_ptr<line_material> m_debug_line_material;
-        // Analytic infinite-grid material fronted by debug::infinite_grid.
+        // Analytic infinite-grid material at the default fade distance.
+        // debug::infinite_grid builds its own through
+        // create_grid_material, on a template made like this one's.
         std::unique_ptr<grid_material> m_grid_material;
         std::unique_ptr<ui_material> m_ui_material;
 
@@ -395,6 +439,21 @@ namespace rendering_engine
         // Set for the duration of @ref render so @ref on_resize can assert
         // it is not recreating targets while a frame is being recorded.
         bool m_in_frame{false};
+
+        // Frames rendered so far; published as frame_context::frame_index
+        // and drives the temporal-AA jitter sequence.
+        uint64_t m_frame_index{0};
+
+        // Temporal-AA bookkeeping carried from one @ref render to the
+        // next: the jitter the last frame was rasterised with, the last
+        // camera frame's unjittered view-projection and the camera it
+        // belonged to. The matrix is published as
+        // frame_context::prev_view_projection only when the next frame is
+        // drawn by that same camera; a no-camera frame clears it.
+        core::math::vec2 m_prev_jitter{0.0f, 0.0f};
+        core::math::mat4 m_prev_view_projection{};
+        bool m_has_prev_view_projection{false};
+        const camera* m_prev_camera{nullptr};
 
         // Allocates the HDR scene-colour target (+ depth) and the LDR
         // target at @p width x @p height, pointing the four members above

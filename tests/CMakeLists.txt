@@ -105,6 +105,9 @@ set(ALPHAENGINE_TEST_SOURCES_UNDER_TEST
     # the tests drive it with a stub, no backend is linked.
     ${CMAKE_SOURCE_DIR}/rendering_engine/render_graph/frame_graph.cpp
     ${CMAKE_SOURCE_DIR}/rendering_engine/gpu/command_encoder.cpp
+    # passes/projection_jitter — the temporal-AA jitter sequence and the
+    # clip-space shift it applies to a projection (math only).
+    ${CMAKE_SOURCE_DIR}/rendering_engine/passes/projection_jitter.cpp
     # gpu/shader_library + gpu/shader_compiler — the embedded shader
     # registry (linked below as the shader_registry library generated from
     # shaders/) and the glslang front end behind every pipeline. Compiling
@@ -170,7 +173,10 @@ set(ALPHAENGINE_TEST_SOURCES
     rendering_engine/mesh/tangent_test.cpp
     rendering_engine/mesh/vertex_format_test.cpp
     rendering_engine/sdl_input_test.cpp
+    rendering_engine/debug/grid_lines_test.cpp
+    rendering_engine/passes/projection_jitter_test.cpp
     rendering_engine/render_graph/frame_graph_test.cpp
+    rendering_engine/render_stats_test.cpp
     rendering_engine/renderables/per_draw_ubo_test.cpp
     rendering_engine/gpu/vk_format_fallback_test.cpp
     rendering_engine/gpu/vk_staging_ring_test.cpp

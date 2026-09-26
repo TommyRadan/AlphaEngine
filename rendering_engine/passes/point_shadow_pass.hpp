@@ -30,6 +30,7 @@
 #include <core/math/math.hpp>
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/passes/pass.hpp>
+#include <rendering_engine/passes/shadow_casters.hpp>
 #include <rendering_engine/render_graph/frame_graph.hpp>
 #include <rendering_engine/renderables/draw_item.hpp>
 
@@ -55,10 +56,15 @@ namespace rendering_engine
      * light's contribution.
      *
      * Like @ref shadow_pass it reuses the scene-renderable registry and each
-     * renderable's existing per-draw model-matrix bind group, so every scene
-     * renderable casts with no per-renderable wiring. When no point light has
-     * @c cast_shadow set the pass still clears the maps and reports
-     * @ref has_shadow false so the lit shader falls back to unshadowed lighting.
+     * renderable's existing per-draw model-matrix bind group (or, for an
+     * instanced batch, its per-instance transform stream through the
+     * instanced pipeline twin), so every scene renderable casts with no
+     * per-renderable wiring. The faces' far plane follows the caster's
+     * @ref point_light::range (a fixed default when the range is 0, "no
+     * cutoff"), so the depth precision is spent on the volume the light can
+     * actually reach. When no point light has @c cast_shadow set the pass
+     * still clears the maps and reports @ref has_shadow false so the lit
+     * shader falls back to unshadowed lighting.
      */
     struct point_shadow_pass : pass
     {
@@ -129,6 +135,9 @@ namespace rendering_engine
         gpu::shader_module m_vertex_shader{};
         gpu::shader_module m_fragment_shader{};
         gpu::pipeline m_pipeline{};
+
+        // The instanced twin of @ref m_pipeline for instanced casters.
+        instanced_shadow_pipeline m_instanced{};
 
         gpu::bind_group_layout m_light_layout{};
         gpu::bind_group_layout m_draw_layout{};
