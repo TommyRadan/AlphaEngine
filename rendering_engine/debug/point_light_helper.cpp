@@ -64,14 +64,15 @@ namespace rendering_engine::debug
         m_built = true;
 
         const float r = m_size;
-        // Octahedron: a +Y / -Y apex pair over a four-vertex equator ring
-        // in the X/Z plane, all offset to the light position.
-        const math::vec3 top = position + math::vec3{0.0f, r, 0.0f};
-        const math::vec3 bottom = position - math::vec3{0.0f, r, 0.0f};
+        // Octahedron: an apex pair along the engine up axis (+Z / -Z) over a
+        // four-vertex equator ring in the horizontal X/Y plane, all offset
+        // to the light position.
+        const math::vec3 top = position + math::world_up * r;
+        const math::vec3 bottom = position - math::world_up * r;
         const std::array<math::vec3, 4> ring{position + math::vec3{r, 0.0f, 0.0f},
-                                             position + math::vec3{0.0f, 0.0f, r},
+                                             position + math::vec3{0.0f, r, 0.0f},
                                              position - math::vec3{r, 0.0f, 0.0f},
-                                             position - math::vec3{0.0f, 0.0f, r}};
+                                             position - math::vec3{0.0f, r, 0.0f}};
 
         std::vector<math::vec3> positions;
         positions.reserve(24);

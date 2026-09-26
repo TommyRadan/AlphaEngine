@@ -37,8 +37,9 @@
 
 namespace
 {
-    // The engine's up axis: the camera yaws about it and pitch is measured against it.
-    constexpr core::math::vec3 up_vector{0.0f, 0.0f, 1.0f};
+    // The engine's up axis (core/math/math.hpp): the camera yaws about it and
+    // pitch is measured against it.
+    constexpr core::math::vec3 up_vector = core::math::world_up;
 
     // A forward vector whose |z| exceeds this is too close to the vertical
     // for a stable right axis, so mouse-look refuses to pitch past it.
@@ -106,11 +107,10 @@ static void on_engine_start(const core::engine_start& event)
     attach_camera(g_camera_id);
 
     set_camera_pos(g_camera_id, -5.0f, 0.0f, 0.0f);
-    // Give the camera a sensible initial forward (+X, toward the origin
-    // where the demos place their geometry). Without it the forward is the
-    // zero vector and the view matrix is degenerate, so nothing is visible
-    // until the first mouse move.
-    set_camera_rot(g_camera_id, 1.0f, 0.0f, 0.0f);
+    // Face +X, toward the origin where the demos place their geometry. A
+    // fresh camera already faces the engine forward (+X); this spells the
+    // starting view out rather than relying on that default.
+    set_camera_forward(g_camera_id, 1.0f, 0.0f, 0.0f);
 }
 
 static void on_engine_stop(const core::engine_stop& event)
@@ -153,16 +153,15 @@ static void on_render_update(const core::render_update& event)
     }
 
     core::math::vec3 position;
-    core::math::vec3 rotation;
+    core::math::vec3 forward;
     if (!get_camera_pos(g_camera_id, &position.x, &position.y, &position.z) ||
-        !get_camera_rot(g_camera_id, &rotation.x, &rotation.y, &rotation.z))
+        !get_camera_forward(g_camera_id, &forward.x, &forward.y, &forward.z))
     {
         return;
     }
 
-    // The stored rotation is the forward direction but not necessarily unit
-    // length; move along the unit vectors so the speed does not depend on it.
-    const core::math::vec3 forward = safe_normalize(rotation);
+    // The forward is unit length; the right is zero only while looking
+    // straight along the up axis, which the mouse-look pitch clamp prevents.
     const core::math::vec3 right = safe_normalize(core::math::cross(forward, up_vector));
 
     float speed = 3.0f;
@@ -224,17 +223,16 @@ static void on_mouse_move(const core::mouse_move& event)
         return;
     }
 
-    core::math::vec3 rotation;
-    if (!get_camera_rot(g_camera_id, &rotation.x, &rotation.y, &rotation.z))
+    core::math::vec3 forward;
+    if (!get_camera_forward(g_camera_id, &forward.x, &forward.y, &forward.z))
     {
         return;
     }
 
-    const core::math::vec3 forward = safe_normalize(rotation);
     const core::math::vec3 right = safe_normalize(core::math::cross(forward, up_vector));
     if (core::math::length(right) <= 0.0f)
     {
-        // No forward, or a forward along the up axis: there is no frame to rotate in.
+        // A forward along the up axis: there is no frame to rotate in.
         return;
     }
 
@@ -271,7 +269,7 @@ static void on_mouse_move(const core::mouse_move& event)
         new_forward = core::math::vec3{yawed.x, yawed.y, yawed.z};
     }
 
-    set_camera_rot(g_camera_id, new_forward.x, new_forward.y, new_forward.z);
+    set_camera_forward(g_camera_id, new_forward.x, new_forward.y, new_forward.z);
 }
 
 GAME_MODULE()

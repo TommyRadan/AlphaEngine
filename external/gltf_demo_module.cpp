@@ -44,6 +44,7 @@
 #include <core/math/math.hpp>
 #include <rendering_engine/assets/gltf_importer.hpp>
 #include <rendering_engine/camera/camera.hpp>
+#include <rendering_engine/camera/camera_registry.hpp>
 #include <rendering_engine/lighting/ambient_light.hpp>
 #include <rendering_engine/lighting/directional_light.hpp>
 #include <runtime/engine.hpp>
@@ -190,7 +191,7 @@ namespace
         }
         // camera_module creates and attaches the camera in its own
         // on_engine_start, which may run after ours; wait for it.
-        rendering_engine::camera* camera = rendering_engine::camera::get_current_camera();
+        rendering_engine::camera* camera = rendering_engine::active_camera();
         if (camera == nullptr)
         {
             return;

@@ -126,11 +126,12 @@ namespace runtime
         void set_world_position(const core::math::vec3& world_position);
 
         /**
-         * @brief Orients the node so its forward axis points at @p target in
-         *        world space. Exact when ancestors are unrotated/unscaled; under
-         *        a rotated parent the @p up handling is approximate.
+         * @brief Orients the node so its forward (+X) axis points at @p target
+         *        in world space, with @p up (the engine's +Z by default) as the
+         *        reference up. Exact when ancestors are unrotated/unscaled;
+         *        under a rotated parent the @p up handling is approximate.
          */
-        void look_at(const core::math::vec3& target, const core::math::vec3& up = core::math::vec3{0.0f, 0.0f, 1.0f});
+        void look_at(const core::math::vec3& target, const core::math::vec3& up = core::math::world_up);
 
         // --- Active / visible state ----------------------------------------
 

@@ -25,7 +25,7 @@
 #include <core/event_engine.hpp>
 #include <core/log.hpp>
 #include <core/settings.hpp>
-#include <rendering_engine/camera/camera.hpp>
+#include <rendering_engine/camera/camera_registry.hpp>
 #include <rendering_engine/camera/perspective_camera.hpp>
 #include <rendering_engine/debug/axes_helper.hpp>
 #include <rendering_engine/debug/helper.hpp>
@@ -83,6 +83,12 @@ void rendering_engine::context::init()
     const uint32_t width = drawable.width;
     const uint32_t height = drawable.height;
     eng.gpu->resize_swapchain(width, height);
+
+    // Report the drawable's aspect to the camera registry: every attached
+    // camera takes it now and any camera attached later takes it on
+    // attach, so the projection always matches the drawable. The settings'
+    // logical size stands in while the window has no drawable.
+    set_drawable_aspect(drawable_aspect_ratio(width, height, eng.settings->window.aspect_ratio()));
 
     // Keep the swapchain extent, the off-screen targets and the passes in
     // step with the drawable as the window is resized, maximised, restored
@@ -293,8 +299,10 @@ void rendering_engine::context::quit()
     auto& eng = runtime::current_engine();
 
     // Stop tracking window resizes before the device the listener
-    // resizes goes away.
+    // resizes goes away, and withdraw the drawable aspect the registry
+    // hands to attaching cameras: there is no drawable to match now.
     m_window_resized_subscription.reset();
+    set_drawable_aspect(0.0f);
 
     // Tear the ImGui overlay down first, while the window and GL context
     // it bound to are still alive. No-op in release builds.
@@ -361,10 +369,12 @@ void rendering_engine::context::render()
 
     // Capture per-frame state once so passes cannot disagree about
     // which camera or backbuffer is active mid-frame, and so they
-    // do not have to re-query the camera singleton on every entry.
+    // do not have to re-run the camera arbitration on every entry.
+    // active_camera() is the registry's pick for this frame: the
+    // highest-priority attached, enabled camera.
     frame_context ctx{};
     ctx.swapchain_target = gpu.swapchain_target();
-    ctx.active_camera = camera::get_current_camera();
+    ctx.active_camera = active_camera();
     ctx.scene_color_target = m_scene_color_target;
     ctx.scene_color_texture = m_scene_color_texture;
     // The depth attachment is looked up from the target every frame rather
@@ -445,13 +455,11 @@ void rendering_engine::context::on_resize(uint32_t pixel_width, uint32_t pixel_h
         p->resize(pixel_width, pixel_height);
     }
 
-    // The projection follows the drawable so the image is not stretched.
-    // A camera attached later reads the window's aspect when it is
-    // constructed (see perspective_camera).
-    if (camera* active = camera::get_current_camera(); active != nullptr)
-    {
-        active->set_aspect_ratio(drawable_aspect_ratio(pixel_width, pixel_height, 1.0f));
-    }
+    // The projection follows the drawable so the image is not stretched:
+    // the registry forwards the aspect to every attached camera and hands
+    // it to any camera attached later. Both dimensions are non-zero here,
+    // so the fallback is never used.
+    set_drawable_aspect(drawable_aspect_ratio(pixel_width, pixel_height, 1.0f));
 
     LOG_INF("Rendering Engine: render targets resized to %ux%u", pixel_width, pixel_height);
 }

@@ -23,7 +23,6 @@
 #include <rendering_engine/debug/directional_light_helper.hpp>
 
 #include <algorithm>
-#include <cmath>
 #include <vector>
 
 #include <core/math/math.hpp>
@@ -67,11 +66,11 @@ namespace rendering_engine::debug
         m_built = true;
 
         const math::vec3 dir = math::normalize(direction);
-        // Build an orthonormal basis around the travel direction; pick a
-        // world up that is not parallel to it so the cross product is
+        // Build an orthonormal basis around the travel direction on the
+        // engine up axis (+Z); reference_up swaps in a horizontal axis when
+        // the light points straight up or down so the cross product is
         // stable.
-        const math::vec3 world_up =
-            std::abs(dir.y) < 0.99f ? math::vec3{0.0f, 1.0f, 0.0f} : math::vec3{1.0f, 0.0f, 0.0f};
+        const math::vec3 world_up = math::reference_up(dir);
         const math::vec3 right = math::normalize(math::cross(world_up, dir));
         const math::vec3 up = math::normalize(math::cross(dir, right));
 

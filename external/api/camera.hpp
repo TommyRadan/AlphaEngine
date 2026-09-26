@@ -76,8 +76,9 @@ camera_id create_camera(camera_type type);
 /**
  * @brief Destroys the camera named by @p id.
  *
- * If it is the attached camera it is detached first, so the renderer never
- * observes a dangling current camera.
+ * A destroyed camera leaves the renderer's camera registry on its way out,
+ * so the renderer never observes a dangling camera; if it was rendering,
+ * the next candidate takes over.
  */
 void destroy_camera(camera_id id);
 
@@ -88,21 +89,39 @@ camera_type get_camera_type(camera_id id);
 // id does not name a live camera. The getters report that through their
 // return value: true with the out-params filled on success, false with the
 // out-params left untouched otherwise. Out-params must not be null.
-//
-// The rotation is the camera's forward direction vector (it looks at
-// position + rotation); it need not be unit length.
 
 void set_camera_pos(camera_id id, float px, float py, float pz);
 bool get_camera_pos(camera_id id, float* px, float* py, float* pz);
 
-void set_camera_rot(camera_id id, float rx, float ry, float rz);
-bool get_camera_rot(camera_id id, float* rx, float* ry, float* rz);
+/**
+ * @brief Orients the camera to look along the world-space direction
+ *        (@p fx, @p fy, @p fz), keeping the engine's up axis (+Z) up.
+ *
+ * The vector need not be unit length; a zero vector is rejected with a
+ * warning. Pointing straight up or down the up axis is allowed (the camera
+ * picks a horizontal reference up).
+ */
+void set_camera_forward(camera_id id, float fx, float fy, float fz);
 
-/** @brief Destroys every camera this facade owns, detaching the attached one. */
+/** @brief The unit world-space direction the camera faces. */
+bool get_camera_forward(camera_id id, float* fx, float* fy, float* fz);
+
+/** @brief Destroys every camera this facade owns; each leaves the registry as it goes. */
 void destroy_all_cameras();
 std::size_t get_number_of_cameras();
 
+/**
+ * @brief Attaches the camera to the renderer's camera registry, where it
+ *        competes for the active camera by priority; among the facade's
+ *        cameras (all priority 0) the most recently attached one renders.
+ */
 void attach_camera(camera_id id);
+
+/** @brief Detaches every camera this facade owns; cameras of other owners are untouched. */
 void detach_camera();
+
+/** @brief True when the camera named by @p id is attached to the registry. */
 bool is_camera_attached(camera_id id);
+
+/** @brief True when any camera, whoever owns it, is attached to the registry. */
 bool is_any_camera_attached();

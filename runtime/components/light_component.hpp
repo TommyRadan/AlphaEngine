@@ -48,8 +48,12 @@ namespace runtime
      *
      * @ref on_update keeps the light's spatial fields in step with the node: a
      * point light's position follows the node's world translation, and a
-     * directional light's direction follows the node's world forward (-Z). An
-     * ambient light has no spatial term and is left untouched.
+     * directional light's direction follows the node's world forward — the
+     * +X axis of the engine convention (core/math/math.hpp), so an
+     * identity-oriented node shines horizontally and @c node::look_at aims it.
+     * A node whose scale collapses the axis to zero keeps the light's last
+     * direction rather than writing a NaN. An ambient light has no spatial
+     * term and is left untouched.
      *
      * @ref on_active_changed enables / disables the light with its node, so a
      * disabled subtree stops lighting (and shadowing) the scene as well as

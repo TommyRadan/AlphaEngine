@@ -77,10 +77,27 @@ namespace core::math
         return vec3{result.x, result.y, result.z};
     }
 
+    quat quat_from_basis(const vec3& x_axis, const vec3& y_axis, const vec3& z_axis) noexcept
+    {
+        // glm::mat3's column constructor: each axis is where the matching
+        // local axis lands, which is exactly the rotation matrix wanted.
+        const glm::mat3 basis{glm::vec3{x_axis.x, x_axis.y, x_axis.z},
+                              glm::vec3{y_axis.x, y_axis.y, y_axis.z},
+                              glm::vec3{z_axis.x, z_axis.y, z_axis.z}};
+        return from_glm(glm::normalize(glm::quat_cast(basis)));
+    }
+
     quat quat_look_at(const vec3& direction, const vec3& up) noexcept
     {
-        return from_glm(glm::quatLookAt(glm::normalize(glm::vec3{direction.x, direction.y, direction.z}),
-                                        glm::vec3{up.x, up.y, up.z}));
+        // Engine frame (see math.hpp): forward is +X, up is +Z, and the
+        // right-hand side is forward x up (= -Y at identity). The local +Y
+        // axis therefore maps onto the left, i.e. minus the right vector.
+        const glm::vec3 forward = glm::normalize(glm::vec3{direction.x, direction.y, direction.z});
+        const glm::vec3 right = glm::normalize(glm::cross(forward, glm::vec3{up.x, up.y, up.z}));
+        const glm::vec3 true_up = glm::cross(right, forward);
+        return quat_from_basis(vec3{forward.x, forward.y, forward.z},
+                               vec3{-right.x, -right.y, -right.z},
+                               vec3{true_up.x, true_up.y, true_up.z});
     }
 
     mat4 to_mat4(const quat& q) noexcept

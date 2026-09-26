@@ -93,7 +93,12 @@ namespace rendering_engine
          * Walks the ordered pass list registered in @ref init,
          * giving each pass the same per-frame @ref frame_context
          * (active camera + swapchain target) so they cannot
-         * disagree mid-frame. The built-in scene and UI passes
+         * disagree mid-frame. The active camera is the camera
+         * registry's arbitration result (@ref active_camera: the
+         * highest-priority attached, enabled camera) evaluated once
+         * here, so a camera destroyed or disabled since the last
+         * frame is replaced by the runner-up without any owner
+         * bookkeeping. The built-in scene and UI passes
          * each broadcast their matching event
          * (@ref core::render_scene / @ref core::render_ui)
          * after the registry walk so debug / gizmo callers can
@@ -123,9 +128,11 @@ namespace rendering_engine
          * first, then the old ones are released, so every handle the
          * passes compare against changes — calls @ref pass::resize on
          * every pass in order so they rebuild their own full-resolution
-         * targets and size-dependent UBOs, and sets the attached camera's
-         * aspect ratio (@ref camera::set_aspect_ratio) so the projection
-         * matches the new drawable. Passes that sample a texture owned by
+         * targets and size-dependent UBOs, and reports the new aspect to
+         * the camera registry (@ref set_drawable_aspect), which forwards
+         * it to every attached camera's @ref camera::set_aspect_ratio and
+         * to cameras attached later, so the projection matches the new
+         * drawable. Passes that sample a texture owned by
          * the context or another pass rebind on the next frame through
          * the handle comparison they make in @c record. Shadow maps are
          * fixed-size by design and unaffected.

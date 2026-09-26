@@ -27,6 +27,13 @@
 #include <rendering_engine/lighting/point_light.hpp>
 #include <runtime/node.hpp>
 
+namespace
+{
+    // A forward axis shorter than this carries no direction (a zero-scale
+    // node); the light keeps the direction it already has.
+    constexpr float degenerate_length = 1e-6f;
+} // namespace
+
 runtime::light_component::light_component(std::unique_ptr<rendering_engine::light> light) : m_light{std::move(light)} {}
 
 void runtime::light_component::on_active_changed(node& owner, bool active)
@@ -56,10 +63,17 @@ void runtime::light_component::on_update(node& owner)
         break;
     case rendering_engine::light_type::directional:
     {
-        // Travel along the node's world forward (-Z), matching the forward
-        // convention of util::transform. Column 2 is the node's world +Z axis.
-        const core::math::vec3 forward{-world.m[8], -world.m[9], -world.m[10]};
-        static_cast<rendering_engine::directional_light&>(*m_light).direction = core::math::normalize(forward);
+        // Travel along the node's world forward: +X in the engine convention
+        // (core/math/math.hpp), matching util::transform::get_forward. Column
+        // 0 is the node's world +X axis; its length is the node's x scale, so
+        // a zero-scale node yields no direction and the light keeps its last
+        // one instead of taking a NaN into the lights UBO.
+        const core::math::vec3 forward{world.m[0], world.m[1], world.m[2]};
+        const float forward_length = core::math::length(forward);
+        if (forward_length > degenerate_length)
+        {
+            static_cast<rendering_engine::directional_light&>(*m_light).direction = forward / forward_length;
+        }
         break;
     }
     case rendering_engine::light_type::ambient:

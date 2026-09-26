@@ -51,7 +51,21 @@ namespace core::math
     quat quat_from_euler(const vec3& euler_radians) noexcept;
     /** @brief Extracts intrinsic Tait-Bryan euler angles (radians) from @p q. */
     vec3 euler_from_quat(const quat& q) noexcept;
-    /** @brief Orientation whose forward (-Z) axis points along @p direction, with @p up as the reference up. */
+    /**
+     * @brief Orientation that maps the local X, Y and Z axes onto @p x_axis,
+     *        @p y_axis and @p z_axis, which must form a right-handed
+     *        orthonormal basis.
+     */
+    quat quat_from_basis(const vec3& x_axis, const vec3& y_axis, const vec3& z_axis) noexcept;
+    /**
+     * @brief Orientation whose forward (+X) axis points along @p direction
+     *        and whose up (+Z) axis lies in the plane of @p direction and
+     *        @p up, in the engine's world convention (see math.hpp).
+     *
+     * @p direction must be non-zero and not parallel to @p up; callers
+     * that cannot guarantee that pass their up through @ref reference_up
+     * first. Neither argument needs to be unit length.
+     */
     quat quat_look_at(const vec3& direction, const vec3& up) noexcept;
     /** @brief Rotation matrix equivalent to @p q. */
     mat4 to_mat4(const quat& q) noexcept;
