@@ -108,11 +108,11 @@ namespace rendering_engine
          * place that advances the frame index, the jitter sequence
          * and the previous-frame matrix, and it drops the latter
          * across a no-camera frame or a change of arbitrated camera.
-         * The built-in scene and UI passes
-         * each broadcast their matching event
-         * (@ref core::render_scene / @ref core::render_ui)
-         * after the registry walk so debug / gizmo callers can
-         * still subscribe. The walk is bracketed by
+         * Every draw a pass records comes from its renderable
+         * registry (plus, for the debug pass, the ImGui draw data
+         * built before the walk); no event is broadcast while a pass
+         * is recording, so debug / gizmo callers register a
+         * renderable rather than subscribe. The walk is bracketed by
          * @c gpu::device::begin_frame / @c end_frame: the Vulkan
          * backend waits for the previous frame before any pass
          * writes its per-frame buffers and presents inside

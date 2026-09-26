@@ -35,9 +35,10 @@ namespace rendering_engine
     /**
      * @brief 2D overlay pass. Loads the previous colour, disables
      *        depth, collects draw items from the UI-renderable
-     *        registry, sorts them by pipeline, and dispatches them;
-     *        broadcasts @ref core::render_ui as the
-     *        documented escape hatch for ImGui-style overlays.
+     *        registry, sorts them by pipeline, and dispatches them.
+     *        Every overlay reaches the pass as a registered
+     *        renderable's @ref draw_item; @ref record runs no event
+     *        listener.
      *
      * The matching @c ui_material has no per-frame bind group, so this
      * pass owns no per-frame state of its own.

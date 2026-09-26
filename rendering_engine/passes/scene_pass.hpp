@@ -40,9 +40,9 @@ namespace rendering_engine
      * @brief 3D scene pass. Clears the swapchain colour and depth,
      *        frustum-culls the scene-renderable registry against the
      *        camera, collects draw items from the survivors, sorts them
-     *        by pipeline, and dispatches them; broadcasts
-     *        @ref core::render_scene as the documented escape
-     *        hatch for debug / gizmo callers.
+     *        by pipeline, and dispatches them. Every draw reaches the
+     *        pass as a registered renderable's @ref draw_item;
+     *        @ref record runs no event listener.
      *
      * Culling asks each renderable for its @ref renderable::world_bounds
      * before @ref renderable::collect_draw_items and skips those that

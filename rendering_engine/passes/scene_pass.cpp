@@ -27,8 +27,6 @@
 #include <cstring>
 #include <functional>
 
-#include <core/event.hpp>
-#include <core/event_engine.hpp>
 #include <core/math/math.hpp>
 #include <rendering_engine/camera/camera.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
@@ -534,7 +532,6 @@ namespace rendering_engine
             }
         }
 
-        eng.events->emit<core::render_scene>(pass_encoder.get());
         pass_encoder->end();
     }
 } // namespace rendering_engine

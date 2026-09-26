@@ -62,8 +62,6 @@ namespace
         install(bus, info.on_engine_stop);
         install(bus, info.on_frame);
         install(bus, info.on_render_update);
-        install(bus, info.on_render_scene);
-        install(bus, info.on_render_ui);
         install(bus, info.on_key_down);
         install(bus, info.on_key_up);
         install(bus, info.on_mouse_key_down);

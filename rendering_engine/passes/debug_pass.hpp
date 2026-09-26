@@ -36,10 +36,15 @@ namespace rendering_engine
      * @brief Debug-overlay pass. Loads the previous colour, disables
      *        depth, collects draw items from the debug-renderable
      *        registry, sorts them by pipeline, and dispatches them;
-     *        broadcasts @ref core::render_debug as the
-     *        documented escape hatch for debug-line / gizmo / frustum
-     *        / bounds visualisations whose cadence does not match the
-     *        registry walk.
+     *        then records the Dear ImGui overlay's draw data into the
+     *        same open pass through @ref debug_ui::record_draw_data.
+     *
+     * Everything the pass records is either a registered renderable's
+     * @ref draw_item or ImGui draw data built earlier in the frame, so
+     * @ref record runs no event listener and does not depend on the
+     * main-thread event bus. Debug-line / gizmo / frustum / bounds
+     * visualisations reach it through
+     * @ref context::register_debug_renderable.
      *
      * Only appended to the engine's pass list in debug builds — the
      * `#if _DEBUG` gate at the construction site in

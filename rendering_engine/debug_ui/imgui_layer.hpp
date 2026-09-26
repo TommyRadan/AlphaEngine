@@ -31,26 +31,33 @@
  * release every function below collapses to an empty no-op and ImGui is
  * not linked at all. None of these declarations expose an ImGui or SDL
  * type, so callers in the always-compiled engine core (window, rendering
- * context) can include this header unconditionally.
+ * context, debug pass) can include this header unconditionally.
  *
  * ImGui renders through the OpenGL3 or the Vulkan backend, matching the
- * GPU backend the engine brought up. Either way the draw data is recorded
- * into the swapchain-targeted debug pass: the layer subscribes to
- * @ref core::render_debug in @ref init and records there, inside
- * the still-open render pass, so the same injection point works for both
- * the immediate-mode OpenGL backend and Vulkan's recorded command buffer.
+ * GPU backend the engine brought up. The frame is split in two: building
+ * the panels (@ref begin_frame) runs on the main thread before the passes
+ * and ends in @c ImGui::Render, which leaves CPU-side draw data behind;
+ * recording that draw data (@ref record_draw_data) is pure GPU work the
+ * debug pass performs itself, inside its still-open swapchain render
+ * pass, without going through the event bus. The same injection point
+ * works for both the immediate-mode OpenGL backend and Vulkan's recorded
+ * command buffer.
  */
 
 #pragma once
+
+namespace rendering_engine::gpu
+{
+    struct render_pass_encoder;
+}
 
 namespace rendering_engine::debug_ui
 {
     /**
      * @brief Brings ImGui and its SDL3 + OpenGL3 / Vulkan backends up
-     *        against the live window and GPU device, and subscribes to
-     *        @ref core::render_debug so the overlay is recorded
-     *        into the debug pass. Call once after the window, GPU device
-     *        and passes are initialised. No-op in release.
+     *        against the live window and GPU device. Call once after the
+     *        window, GPU device and passes are initialised. No-op in
+     *        release.
      */
     void init();
 
@@ -71,9 +78,27 @@ namespace rendering_engine::debug_ui
      * frame-time profiler, settings inspector) and calls @c ImGui::Render
      * so the draw data is ready. Must be called once per frame *before*
      * the rendering passes run, since the draw data is consumed inside the
-     * debug pass via @ref core::render_debug. No-op in release.
+     * debug pass by @ref record_draw_data. No-op in release.
      */
     void begin_frame();
+
+    /**
+     * @brief Records the draw data built by the last @ref begin_frame
+     *        into @p encoder, the debug pass's still-open swapchain
+     *        render pass.
+     *
+     * Called by @c debug_pass::record after its registry walk. On OpenGL
+     * the draw data is issued straight into the framebuffer the pass left
+     * bound; on Vulkan it is recorded into the encoder's native command
+     * buffer, after rebuilding ImGui's pipeline if the swapchain was
+     * rebuilt since the pipeline was last built. Records nothing when no
+     * frame was built, when the pass failed to open (no swapchain image
+     * this frame, so the native command buffer is null), or in release.
+     * Runs no event listener: it only replays draw data that already
+     * exists, which is what keeps the pass free of the main-thread event
+     * bus while it records.
+     */
+    void record_draw_data(gpu::render_pass_encoder& encoder);
 
     /** @brief True when a focused panel is capturing keyboard input. */
     bool wants_keyboard();

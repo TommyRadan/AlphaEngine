@@ -35,11 +35,6 @@
 #include <cstdint>
 #include <string>
 
-namespace rendering_engine::gpu
-{
-    struct render_pass_encoder;
-}
-
 namespace core
 {
     /**
@@ -282,38 +277,6 @@ namespace core
     {
         /** @brief Time since the previous render frame, in milliseconds. */
         float m_delta_time;
-    };
-
-    /**
-     * @brief Broadcast while the 3D scene pass is active; renderables should
-     *        record draw calls against the carried pass encoder.
-     */
-    struct render_scene
-    {
-        rendering_engine::gpu::render_pass_encoder* encoder{nullptr};
-    };
-
-    /**
-     * @brief Broadcast while the 2D overlay/UI pass is active. Renderables
-     *        record draws against the carried pass encoder.
-     */
-    struct render_ui
-    {
-        rendering_engine::gpu::render_pass_encoder* encoder{nullptr};
-    };
-
-    /**
-     * @brief Broadcast while the debug-overlay pass is active. Documented
-     *        escape hatch for debug-line, gizmo, frustum and bounds
-     *        visualisations whose draw cadence does not match the
-     *        debug-renderable registry walk.
-     *
-     * The debug pass is only appended to the pass list in debug builds,
-     * so subscribers will not see this event in release configurations.
-     */
-    struct render_debug
-    {
-        rendering_engine::gpu::render_pass_encoder* encoder{nullptr};
     };
 
     /**

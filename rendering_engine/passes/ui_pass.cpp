@@ -25,12 +25,9 @@
 #include <algorithm>
 #include <functional>
 
-#include <core/event.hpp>
-#include <core/event_engine.hpp>
 #include <rendering_engine/gpu/render_target.hpp>
 #include <rendering_engine/materials/material.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
-#include <runtime/engine.hpp>
 
 namespace rendering_engine
 {
@@ -47,8 +44,6 @@ namespace rendering_engine
         // the overlay always wins.
         descriptor.color.load = gpu::load_op::load;
         descriptor.use_depth = false;
-
-        auto& eng = runtime::current_engine();
 
         auto pass_encoder = encoder.begin_render_pass(descriptor);
 
@@ -111,7 +106,6 @@ namespace rendering_engine
             }
         }
 
-        eng.events->emit<core::render_ui>(pass_encoder.get());
         pass_encoder->end();
     }
 } // namespace rendering_engine
