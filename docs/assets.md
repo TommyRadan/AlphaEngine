@@ -38,16 +38,21 @@ them.
 **Materials and textures.** Each glTF material maps onto `standard_material`:
 `baseColorFactor`, `metallicFactor`, `roughnessFactor`, `emissiveFactor`
 (times `KHR_materials_emissive_strength`) and the base colour, normal,
-metallic-roughness and emissive maps. glTF stores roughness in the **G** and
-metalness in the **B** channel of one packed texture, whereas
-`standard_material` samples `.r` of two separate maps, so the importer splits
-the packed image on the CPU into a metallic map and a roughness map (each
-channel replicated into RGB). This is the interim arrangement until the
-material takes a packed ORM map (issue #210); the occlusion channel is
-dropped for the same reason. Base-colour and emissive images upload as sRGB
+metallic-roughness, occlusion and emissive maps. glTF packs roughness in the
+**G** and metalness in the **B** channel of one texture, with occlusion
+conventionally in **R** — exactly the packed ORM layout
+`standard_material::set_orm_map` takes — so the decoded
+`metallicRoughnessTexture` binds as-is and nothing is split on the CPU. When
+the `occlusionTexture` is that same image its R channel is the occlusion
+source and `occlusionTexture.strength` becomes the material's occlusion
+strength; when it is a separate image it binds through `set_occlusion_map`
+and overrides the packed R; and when the material has a packed map but no
+occlusion texture at all the factory sets the occlusion strength to 0, so
+whatever the author left in R cannot darken the surface (no copy with R
+forced to white is made). Base-colour and emissive images upload as sRGB
 (`gpu::color_space::srgb`, overridable for base colour through
-`gltf_import_options::base_color_space`) and normal / metallic-roughness
-images as linear, both into the material's own textures (via the
+`gltf_import_options::base_color_space`) and normal / metallic-roughness /
+occlusion images as linear, both into the material's own textures (via the
 `set_*_map(image, space)` setters) and into the cache's `gltf_model::textures`
 (keyed by file path for image files, by `"gltf:<path>#image<i>"` for embedded
 ones), so a texture shared by several models or materials decodes once per

@@ -30,6 +30,7 @@
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/materials/grid_material.hpp>
 #include <rendering_engine/renderables/draw_item.hpp>
+#include <rendering_engine/renderables/per_draw_ubo.hpp>
 #include <rendering_engine/rendering_engine.hpp>
 #include <runtime/engine.hpp>
 
@@ -80,24 +81,18 @@ namespace rendering_engine::debug
         vertex_descriptor.initial_data = vertices.data();
         m_vertex_buffer = gpu.create_buffer(vertex_descriptor);
 
-        // Per-draw model matrix (identity for the origin grid); the
-        // shader references it when reconstructing depth.
-        const auto model = core::math::mat4{};
+        // Per-draw block (identity model for the origin grid, see
+        // per_draw_ubo.hpp); the shader references the model matrix when
+        // reconstructing depth. Static: the grid never moves.
+        const per_draw_payload payload = make_per_draw_payload(core::math::mat4{});
         gpu::buffer_descriptor ubo_descriptor{};
-        ubo_descriptor.size = sizeof(core::math::mat4);
+        ubo_descriptor.size = per_draw_ubo_size;
         ubo_descriptor.usage = gpu::buffer_usage_uniform | gpu::buffer_usage_copy_dst;
         ubo_descriptor.hint = gpu::buffer_usage_hint::static_data;
-        ubo_descriptor.initial_data = model.data();
+        ubo_descriptor.initial_data = &payload;
         m_draw_ubo = gpu.create_buffer(ubo_descriptor);
 
-        gpu::bind_group_descriptor bg_descriptor{};
-        bg_descriptor.layout = m_material->per_draw_layout();
-        gpu::binding_value model_slot{};
-        model_slot.binding = 1;
-        model_slot.kind = gpu::binding_kind::uniform_buffer;
-        model_slot.buffer_value = m_draw_ubo;
-        bg_descriptor.entries.push_back(model_slot);
-        m_draw_bind_group = gpu.create_bind_group(bg_descriptor);
+        m_draw_bind_group = create_per_draw_bind_group(gpu, m_material->per_draw_layout(), m_draw_ubo);
     }
 
     void infinite_grid::collect_draw_items(std::vector<draw_item>& out)

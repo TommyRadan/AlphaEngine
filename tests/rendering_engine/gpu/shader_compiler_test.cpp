@@ -17,6 +17,7 @@
 
 #include <rendering_engine/gpu/shader_compiler.hpp>
 #include <rendering_engine/gpu/shader_library.hpp>
+#include <rendering_engine/materials/pipeline_variant.hpp>
 
 namespace gpu = rendering_engine::gpu;
 
@@ -245,6 +246,52 @@ TEST_F(shader_compiler, every_embedded_shader_compiles)
     }
     // Eight materials x two stages plus the passes and the IBL kernels.
     EXPECT_GE(compiled, 16u + 16u);
+}
+
+TEST_F(shader_compiler, standard_material_keyword_variants_compile)
+{
+    using rendering_engine::keyword_bit;
+    using rendering_engine::keyword_defines;
+    using rendering_engine::material_keyword;
+
+    // A representative spread of the keyword sets standard_material's
+    // template can compile: none, each map alone (with and without the
+    // tangent frame), the packed ORM map, wireframe, and everything at
+    // once. A bad #ifdef in either stage fails here, headless.
+    const uint32_t tangents = keyword_bit(material_keyword::has_tangents);
+    std::vector<uint32_t> masks = {0u, tangents};
+    for (const material_keyword keyword : rendering_engine::all_material_keywords)
+    {
+        masks.push_back(keyword_bit(keyword));
+        masks.push_back(keyword_bit(keyword) | tangents);
+    }
+    const uint32_t every_map =
+        keyword_bit(material_keyword::use_albedo_map) | keyword_bit(material_keyword::use_normal_map) |
+        keyword_bit(material_keyword::use_metallic_map) | keyword_bit(material_keyword::use_roughness_map) |
+        keyword_bit(material_keyword::use_emissive_map) | keyword_bit(material_keyword::use_occlusion_map);
+    masks.push_back(every_map | tangents);
+    masks.push_back(every_map | keyword_bit(material_keyword::use_orm_map) | tangents);
+    masks.push_back(every_map | keyword_bit(material_keyword::wireframe) | tangents);
+    uint32_t everything = 0;
+    for (const material_keyword keyword : rendering_engine::all_material_keywords)
+    {
+        everything |= keyword_bit(keyword);
+    }
+    masks.push_back(everything);
+
+    for (const uint32_t mask : masks)
+    {
+        SCOPED_TRACE("keywords 0x" + std::to_string(mask));
+        gpu::shader_variant vertex{"materials/standard.vert.glsl"};
+        vertex.defines = keyword_defines(mask);
+        gpu::shader_variant fragment{"materials/standard.frag.glsl"};
+        fragment.defines = keyword_defines(mask);
+        std::vector<uint32_t> spirv;
+        ASSERT_NO_THROW(spirv = gpu::compile_library_shader(vertex, gpu::shader_stage::vertex));
+        EXPECT_EQ(spirv.front(), spirv_magic);
+        ASSERT_NO_THROW(spirv = gpu::compile_library_shader(fragment, gpu::shader_stage::fragment));
+        EXPECT_EQ(spirv.front(), spirv_magic);
+    }
 }
 
 TEST_F(shader_compiler, disk_cache_serves_the_second_compile)

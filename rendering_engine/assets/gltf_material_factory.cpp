@@ -75,17 +75,37 @@ namespace rendering_engine
         {
             material->set_normal_map(*description.normal_map, gpu::color_space::linear);
         }
-        if (description.metallic_map != nullptr)
-        {
-            material->set_metalness_map(*description.metallic_map, gpu::color_space::linear);
-        }
-        if (description.roughness_map != nullptr)
-        {
-            material->set_roughness_map(*description.roughness_map, gpu::color_space::linear);
-        }
         if (description.emissive_map != nullptr)
         {
             material->set_emissive_map(*description.emissive_map, gpu::color_space::srgb);
+        }
+
+        // glTF's packed R occlusion / G roughness / B metallic layout is the
+        // material's ORM convention, so the decoded image binds as-is. A
+        // separate occlusion texture binds beside it and overrides the
+        // packed R; one that is the very same image needs no second upload,
+        // the packed R already is the occlusion source.
+        const bool has_packed = description.metallic_roughness_map != nullptr;
+        const bool has_occlusion = description.occlusion_map != nullptr;
+        if (has_packed)
+        {
+            material->set_orm_map(*description.metallic_roughness_map, gpu::color_space::linear);
+        }
+        if (has_occlusion && description.occlusion_map != description.metallic_roughness_map)
+        {
+            material->set_occlusion_map(*description.occlusion_map, gpu::color_space::linear);
+        }
+        // Without an occlusion texture the packed map's R channel holds
+        // whatever the author left there (often, not always, white), so
+        // mute the occlusion term rather than copy the image with R forced
+        // to 1. A material with no packed map keeps the default strength.
+        if (has_occlusion)
+        {
+            material->set_occlusion_strength(std::clamp(description.occlusion_strength, 0.0f, 1.0f));
+        }
+        else if (has_packed)
+        {
+            material->set_occlusion_strength(0.0f);
         }
         return material;
     }

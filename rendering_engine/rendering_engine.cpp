@@ -39,6 +39,7 @@
 #include <rendering_engine/materials/grid_material.hpp>
 #include <rendering_engine/materials/instanced_material.hpp>
 #include <rendering_engine/materials/line_material.hpp>
+#include <rendering_engine/materials/material_template.hpp>
 #include <rendering_engine/materials/phong_material.hpp>
 #include <rendering_engine/materials/points_material.hpp>
 #include <rendering_engine/materials/standard_material.hpp>
@@ -111,10 +112,9 @@ void rendering_engine::context::init()
     // its maps are ready for the per-frame bind group.
     auto point_shadow = std::make_unique<point_shadow_pass>(&m_scene_renderables);
     auto scene = std::make_unique<scene_pass>(&m_scene_renderables, shadow.get(), point_shadow.get(), &m_render_stats);
+    // The material templates below are built against the same per-frame
+    // layout the scene pass binds at slot 0.
     const gpu::bind_group_layout scene_frame_layout = scene->frame_bind_group_layout();
-    // Kept so create_standard_material can build extra materials against
-    // the same per-frame layout the scene pass binds at slot 0.
-    m_scene_frame_layout = scene_frame_layout;
     // The skybox pass runs after the scene pass and composites the cube-map
     // background into the HDR target where no geometry was drawn. It stays
     // dormant until set_environment supplies a cube map.
@@ -170,22 +170,30 @@ void rendering_engine::context::init()
     auto debug = std::make_unique<debug_pass>(&m_debug_renderables, scene->overlay_frame_bind_group());
 #endif
 
-    // Construct the built-in materials against the per-frame layouts
-    // exposed by the passes. The basic material's pipeline reserves
-    // slot 0 for the scene_pass's per-frame group; the ui material
-    // has no per-frame group.
-    m_basic_material = std::make_unique<basic_material>(scene_frame_layout);
-    m_instanced_material = std::make_unique<instanced_material>(scene_frame_layout);
-    m_phong_material = std::make_unique<phong_material>(scene_frame_layout);
-    m_standard_material = std::make_unique<standard_material>(scene_frame_layout);
-    m_points_material = std::make_unique<points_material>(scene_frame_layout);
-    m_line_material = std::make_unique<line_material>(scene_frame_layout);
-    // Depth-disabled line variant for the debug gizmos so they always
-    // read on top in the depth-less debug pass.
-    m_debug_line_material = std::make_unique<line_material>(scene_frame_layout, /*depth_tested=*/false);
+    // Construct the built-in materials: one template per type (shaders,
+    // layouts, the pipeline-variant cache) against the per-frame layouts
+    // exposed by the passes, and the built-in instance of each. The 3D
+    // templates reserve slot 0 for the scene_pass's per-frame group; the
+    // ui template has no per-frame group. Each instance keeps its
+    // template alive; the standard template is also held here so
+    // create_standard_material hands every extra instance the same one.
+    gpu::device& device = *eng.gpu;
+    m_basic_material = std::make_unique<basic_material>(basic_material::create_template(device, scene_frame_layout));
+    m_instanced_material =
+        std::make_unique<instanced_material>(instanced_material::create_template(device, scene_frame_layout));
+    m_phong_material = std::make_unique<phong_material>(phong_material::create_template(device, scene_frame_layout));
+    m_standard_template = standard_material::create_template(device, scene_frame_layout);
+    m_standard_material = std::make_unique<standard_material>(m_standard_template);
+    m_points_material = std::make_unique<points_material>(points_material::create_template(device, scene_frame_layout));
+    // The scene lines and the depth-disabled debug-gizmo lines (which
+    // always read on top in the depth-less debug pass) are two instances
+    // of one line template, bound to two pipeline variants.
+    const std::shared_ptr<material_template> line_template = line_material::create_template(device, scene_frame_layout);
+    m_line_material = std::make_unique<line_material>(line_template);
+    m_debug_line_material = std::make_unique<line_material>(line_template, /*depth_tested=*/false);
     // Analytic infinite-grid material; shares the scene per-frame layout.
-    m_grid_material = std::make_unique<grid_material>(scene_frame_layout);
-    m_ui_material = std::make_unique<ui_material>();
+    m_grid_material = std::make_unique<grid_material>(grid_material::create_template(device, scene_frame_layout));
+    m_ui_material = std::make_unique<ui_material>(ui_material::create_template(device));
     LOG_INF("Rendering Engine: basic_material, instanced_material, phong_material, standard_material, points_material, "
             "line_material and ui_material constructed");
 
@@ -321,6 +329,9 @@ void rendering_engine::context::quit()
     m_phong_material.reset();
     m_instanced_material.reset();
     m_basic_material.reset();
+    // The other templates went with their last instance above; the
+    // standard one is held here too and must go before the device.
+    m_standard_template.reset();
 
     // Release the off-screen HDR and LDR targets before the device tears
     // its pools down. The colour and depth attachments are owned by the
@@ -591,7 +602,7 @@ const rendering_engine::render_stats& rendering_engine::context::get_render_stat
 
 std::unique_ptr<rendering_engine::standard_material> rendering_engine::context::create_standard_material()
 {
-    auto material = std::make_unique<standard_material>(m_scene_frame_layout);
+    auto material = std::make_unique<standard_material>(m_standard_template);
     if (m_environment != nullptr)
     {
         material->set_environment(*m_environment);
@@ -599,26 +610,43 @@ std::unique_ptr<rendering_engine::standard_material> rendering_engine::context::
     return material;
 }
 
+const std::shared_ptr<rendering_engine::material_template>&
+rendering_engine::context::get_standard_material_template() const
+{
+    return m_standard_template;
+}
+
 void rendering_engine::context::set_environment(const environment* env)
 {
     m_environment = env;
 
     // Point the skybox pass at the cube map (or clear it) and mirror the
-    // choice onto the built-in standard material so its surfaces pick up
-    // the matching image-based ambient.
+    // choice onto every live standard material — the built-in one and
+    // each instance create_standard_material handed out, whenever it was
+    // made — so all their surfaces pick up the matching image-based
+    // ambient. Every instance of the standard template is a
+    // standard_material: that is the only type constructed over it.
     if (m_skybox != nullptr)
     {
         m_skybox->set_cubemap(env != nullptr ? env->skybox() : gpu::texture{});
     }
-    if (m_standard_material != nullptr)
+    if (m_standard_template == nullptr)
     {
+        return;
+    }
+    // Copy the list: set_environment rebuilds the instance's bind group
+    // but never registers or drops an instance, so this is only caution.
+    const std::vector<material*> instances = m_standard_template->instances();
+    for (material* instance : instances)
+    {
+        auto* standard = static_cast<standard_material*>(instance);
         if (env != nullptr)
         {
-            m_standard_material->set_environment(*env);
+            standard->set_environment(*env);
         }
         else
         {
-            m_standard_material->clear_environment();
+            standard->clear_environment();
         }
     }
 }

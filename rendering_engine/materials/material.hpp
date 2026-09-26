@@ -23,72 +23,42 @@
 #pragma once
 
 #include <cstdint>
-#include <string>
-#include <vector>
+#include <memory>
 
 #include <rendering_engine/gpu/bind_group.hpp>
 #include <rendering_engine/gpu/handle.hpp>
-#include <rendering_engine/gpu/pipeline.hpp>
-#include <rendering_engine/gpu/shader.hpp>
-#include <rendering_engine/gpu/shader_compiler.hpp>
+#include <rendering_engine/gpu/types.hpp>
+#include <rendering_engine/materials/pipeline_variant.hpp>
 #include <rendering_engine/mesh/vertex.hpp>
+#include <rendering_engine/util/image.hpp>
 
 namespace rendering_engine
 {
-    // Named blend equation presets. @c normal is straight alpha
-    // compositing; the rest map onto the matching source/destination
-    // factors. @c none leaves blending disabled regardless of
-    // @c transparent.
-    enum class blend_mode
+    namespace gpu
     {
-        none,
-        normal,
-        additive,
-        subtractive,
-        multiply,
-    };
+        struct device;
+    }
 
-    // The shared parameter surface every material inherits. These are
-    // data-only knobs; the base translates them onto the @c gpu::depth_state /
-    // @c gpu::blend_state / @c gpu::rasterizer_state baked into the
-    // pipeline (see @ref material::construct_pipeline). @c opacity is
-    // stored for materials whose shaders consume it; the fixed-function
-    // mapping does not read it on its own.
-    struct material_params
-    {
-        // Whether the surface participates in alpha blending. When
-        // false the pipeline blend stage stays disabled (the object
-        // is opaque) no matter what @c blending selects.
-        bool transparent{false};
+    struct material_template;
 
-        // Surface opacity in [0, 1]. Pure data — consumed by shaders
-        // that read it, not by the blend state.
-        float opacity{1.0f};
-
-        // Disable back-face culling so both faces rasterize. Maps to
-        // @c cull_mode::none; otherwise back faces are culled.
-        bool double_sided{false};
-
-        // Blend equation preset applied when @c transparent is set.
-        blend_mode blending{blend_mode::normal};
-
-        // Rasterize edges only. Maps to @c polygon_mode::line.
-        bool wireframe{false};
-
-        // Depth comparison against the existing buffer. When off the
-        // surface always passes the depth test.
-        bool depth_test{true};
-
-        // Whether passing fragments write their depth back.
-        bool depth_write{true};
-    };
-
-    // A material owns a @ref gpu::pipeline (shader + fixed-function
-    // state + bind-group layouts) and the per-draw bind-group layout
-    // that renderables build their @ref draw_item against. The
-    // optional per-material bind group is reserved for shared
-    // resources (textures, parameter UBOs) that don't change between
-    // draws — none of the built-in materials use it yet.
+    // A material *instance*: the thing a @ref draw_item points at. It
+    // owns the per-instance state — the shared @ref material_params
+    // surface, the keyword set its maps imply, its parameter UBO and
+    // the per-material bind group — and shares everything else
+    // (shaders, layouts, the pipeline variants) with every other
+    // instance of its @ref material_template.
+    //
+    // The instance is bound to one variant of the template at a time:
+    // the pipeline for the key @ref make_pipeline_variant_key derives
+    // from its params and keywords. Every setter that changes the key
+    // rebinds through the template's cache, so a parameter change is a
+    // hash lookup (or, the first time a key is seen anywhere, one
+    // pipeline build) rather than a new material.
+    //
+    // A draw whose model matrix mirrors (negative determinant) reverses
+    // every triangle's winding; the passes ask for @ref pipeline(true)
+    // for such items, which is the same variant with the front face
+    // flipped to clockwise, resolved lazily on first use.
     struct material
     {
         virtual ~material();
@@ -96,162 +66,118 @@ namespace rendering_engine
         material(const material&) = delete;
         material& operator=(const material&) = delete;
 
+        material_template& get_template() const;
+
+        // The pipeline bound for the current params and keywords, with
+        // the engine's counter-clockwise front face.
         gpu::pipeline pipeline() const;
 
-        // The shared base parameters this material was built with.
-        // Reflects whatever @ref construct_pipeline baked; mutating
-        // it does not re-bake the pipeline.
+        // The pipeline for a draw whose model matrix does (@p mirrored)
+        // or does not flip handedness. The mirrored variant is looked
+        // up or built on first request and cached until the key changes.
+        gpu::pipeline pipeline(bool mirrored);
+
+        // The variant key the instance is currently bound to.
+        const pipeline_variant_key& variant_key() const;
+
+        // The shared base parameters, and the keyword set the instance
+        // itself contributes (its bound maps, the tangent flag). The
+        // keywords the shaders were actually compiled with are
+        // @c variant_key().keywords, which also carries the bits derived
+        // from the params (@c WIREFRAME).
         const material_params& params() const;
+        uint32_t keywords() const;
+
+        // Replace the whole parameter surface. Rebinds the pipeline when
+        // the resulting key differs from the current one; always lets the
+        // subclass push the parameters its shader reads (opacity).
+        void set_params(const material_params& params);
+
+        // Field-wise setters over @ref set_params.
+        void set_transparent(bool transparent);
+        void set_opacity(float opacity);
+        void set_double_sided(bool double_sided);
+        void set_blending(blend_mode blending);
+        void set_wireframe(bool wireframe);
+        void set_depth_test(bool depth_test);
+        void set_depth_write(bool depth_write);
 
         // Layout renderables build their per-draw bind group
         // against (model matrix, per-draw textures, options).
         gpu::bind_group_layout per_draw_layout() const;
 
-        // Slot index used for the per-draw bind group. Computed
-        // from whether the material's pipeline reserves slot 0
-        // for a per-frame bind group (1 if so, 0 otherwise).
+        // Slot index used for the per-draw bind group: 1 when the
+        // template reserves slot 0 for a per-frame bind group, else 0.
         uint32_t per_draw_slot() const;
 
-        // The vertex record layout this material's pipeline reads from
-        // vertex slot 0, declared by each material alongside its
-        // attribute layout. Renderables check the mesh they draw against
-        // it (see @ref vertex_format_compatible) before emitting a
-        // @c draw_item; @c custom means the material declared none and
-        // only the stride can be checked.
+        // Slot index for the per-material bind group: the one after the
+        // per-draw slot. Meaningful only when @ref per_material_bind_group
+        // is valid.
+        uint32_t per_material_slot() const;
+
+        // Optional per-material bind group; invalid when the template
+        // declares no per-material resources. The dispatch loop binds it
+        // whenever the material changes between draws.
+        gpu::bind_group per_material_bind_group() const;
+
+        // The vertex record layout the bound variant reads from vertex
+        // slot 0. Renderables check the mesh they draw against it (see
+        // @ref vertex_format_compatible) before emitting a @c draw_item;
+        // @c custom means the template declared none and only the
+        // stride can be checked.
         vertex_format required_vertex_format() const;
 
         // Smallest vertex stride slot 0 can be bound with: the byte
-        // extent of the pipeline's furthest-reaching slot-0 attribute.
-        // Binding a narrower record would fetch that attribute past the
-        // end of every vertex, so renderables refuse to draw meshes whose
-        // stride falls short of this.
+        // extent of the bound variant's furthest-reaching slot-0
+        // attribute.
         uint32_t min_vertex_stride() const;
 
-        // Optional per-material bind group; invalid when the
-        // material has no shared per-material resources. Bound
-        // by the dispatch loop after @c set_pipeline whenever the
-        // pipeline changes.
-        gpu::bind_group per_material_bind_group() const;
-
-        // Slot index for the per-material bind group. Materials
-        // that occupy slot 0 (no per-frame layout) and have a
-        // per-material group typically place it at slot 1; with
-        // a per-frame layout it would be slot 2. The default
-        // implementation returns @ref per_draw_slot to keep an
-        // unused per-material binding from accidentally clobbering
-        // another slot.
-        virtual uint32_t per_material_slot() const;
-
     protected:
-        material() = default;
+        // Binds the instance to @p tmpl's variant for @p params and
+        // @p keywords (built on demand). The template must outlive the
+        // instance's use; the shared handle keeps it alive.
+        material(std::shared_ptr<material_template> tmpl, const material_params& params, uint32_t keywords = 0);
 
-        // Build the pipeline + per-draw layout from the shared
-        // @ref material_params surface. The params are stored (see
-        // @ref params) and translated onto the fixed-function depth /
-        // blend / rasterizer state before delegating to the explicit
-        // overload below. Prefer this entry point for new materials.
-        //
-        // @p vertex_shader / @p fragment_shader name the two stages by
-        // shader-library path (see shaders/materials/) plus the
-        // preprocessor definitions the variant is compiled with; the
-        // base compiles them through @ref gpu::compile_library_shader,
-        // so both come back from the SPIR-V cache on a warm launch.
-        //
-        // When @p material_layout has entries the pipeline reserves an
-        // additional descriptor set for the optional per-material bind
-        // group (see @ref m_per_material_layout); the layout is created,
-        // stored, and exposed to the subclass so it can build its
-        // @ref m_per_material_bind_group against it. Leave it empty for
-        // materials with no shared per-material resources.
-        //
-        // @p topology selects the primitive assembly mode baked into
-        // the pipeline; it defaults to @c triangles so existing
-        // materials need no changes. Point-list materials pass
-        // @c primitive_topology::points.
-        void construct_pipeline(const gpu::shader_variant& vertex_shader,
-                                const gpu::shader_variant& fragment_shader,
-                                const gpu::vertex_buffer_layout& vertex_layout,
-                                const gpu::bind_group_layout_descriptor& draw_layout,
-                                gpu::bind_group_layout frame_layout,
-                                const material_params& params,
-                                const gpu::bind_group_layout_descriptor& material_layout = {},
-                                gpu::primitive_topology topology = gpu::primitive_topology::triangles);
+        gpu::device& device() const;
 
-        // Multi-stream variant: each entry of @p vertex_layouts becomes a
-        // vertex buffer slot in declaration order, so a material can mix a
-        // per-vertex geometry stream with a per-instance stream (see
-        // @ref instanced_material). Otherwise identical to the single-layout
-        // overload above.
-        void construct_pipeline(const gpu::shader_variant& vertex_shader,
-                                const gpu::shader_variant& fragment_shader,
-                                const std::vector<gpu::vertex_buffer_layout>& vertex_layouts,
-                                const gpu::bind_group_layout_descriptor& draw_layout,
-                                gpu::bind_group_layout frame_layout,
-                                const material_params& params,
-                                const gpu::bind_group_layout_descriptor& material_layout = {},
-                                gpu::primitive_topology topology = gpu::primitive_topology::triangles);
+        // Set or clear one keyword (or replace the whole set) and rebind
+        // the variant if that changed the key.
+        void set_keyword(material_keyword keyword, bool enabled);
+        void set_keywords(uint32_t keywords);
 
-        // Build the pipeline + per-draw layout from the two stage
-        // variants with explicit fixed-function state. When
-        // @p frame_layout is valid, slot 0 is reserved for a
-        // per-frame bind group owned by the corresponding pass and
-        // @ref per_draw_slot returns 1; otherwise the per-draw
-        // group occupies slot 0. When @p material_layout has entries
-        // it becomes the trailing descriptor set (per-material).
-        // @p topology bakes the primitive assembly mode into the
-        // pipeline (defaults to @c triangles).
-        void construct_pipeline(const gpu::shader_variant& vertex_shader,
-                                const gpu::shader_variant& fragment_shader,
-                                const gpu::vertex_buffer_layout& vertex_layout,
-                                const gpu::bind_group_layout_descriptor& draw_layout,
-                                gpu::bind_group_layout frame_layout,
-                                const gpu::depth_state& depth,
-                                const gpu::blend_state& blend,
-                                const gpu::rasterizer_state& rasterizer,
-                                const gpu::bind_group_layout_descriptor& material_layout = {},
-                                gpu::primitive_topology topology = gpu::primitive_topology::triangles);
+        // Hook for subclasses whose parameter block mirrors part of the
+        // base params (opacity): called after every params change, once
+        // the variant has been rebound.
+        virtual void on_params_changed() {}
 
-        // Multi-stream variant of the explicit-state overload; see the
-        // multi-stream @ref construct_pipeline above.
-        void construct_pipeline(const gpu::shader_variant& vertex_shader,
-                                const gpu::shader_variant& fragment_shader,
-                                const std::vector<gpu::vertex_buffer_layout>& vertex_layouts,
-                                const gpu::bind_group_layout_descriptor& draw_layout,
-                                gpu::bind_group_layout frame_layout,
-                                const gpu::depth_state& depth,
-                                const gpu::blend_state& blend,
-                                const gpu::rasterizer_state& rasterizer,
-                                const gpu::bind_group_layout_descriptor& material_layout = {},
-                                gpu::primitive_topology topology = gpu::primitive_topology::triangles);
+        // Destroy @ref m_per_material_bind_group if valid and null it.
+        void release_per_material_bind_group();
 
-        void destruct_pipeline();
+        // Upload an RGBA8 image to a fresh mipmapped, linearly filtered
+        // 2D texture in the RGBA8 format for @p space, addressed with
+        // @p address on every axis. Shared by every set_*_map.
+        gpu::texture upload_map(const util::image& image,
+                                gpu::color_space space,
+                                gpu::address_mode address = gpu::address_mode::repeat) const;
 
+        // Destroy @p map if valid and null it. Shared by every
+        // clear_*_map and set_*_map (which replaces the previous map).
+        void release_map(gpu::texture& map) const;
+
+        std::shared_ptr<material_template> m_template;
         material_params m_params{};
+        uint32_t m_keywords{0};
 
-        // Declared by each material next to the slot-0 attribute layout
-        // it hands @ref construct_pipeline; see @ref required_vertex_format.
-        vertex_format m_vertex_format{vertex_format::custom};
-
-        gpu::shader_module m_vertex_shader{};
-        gpu::shader_module m_fragment_shader{};
-        gpu::pipeline m_pipeline{};
-        gpu::bind_group_layout m_per_draw_layout{};
-
-        // Optional trailing descriptor-set layout for shared
-        // per-material resources. Valid only when @ref construct_pipeline
-        // was handed a non-empty material layout; subclasses build
-        // @ref m_per_material_bind_group against it. Released in
-        // @ref destruct_pipeline.
-        gpu::bind_group_layout m_per_material_layout{};
+        // Built by subclasses against the template's per-material layout.
         gpu::bind_group m_per_material_bind_group{};
 
-        // Whether the pipeline reserves slot 0 for a per-frame
-        // bind group. Stored so @ref per_draw_slot stays correct
-        // after @ref destruct_pipeline drops the layout handles.
-        bool m_has_frame_layout{false};
+    private:
+        // Recompute the key from params + keywords and refresh the bound
+        // pipeline; the mirrored twin is dropped and resolved lazily.
+        void rebind_variant();
 
-        // Computed by @ref construct_pipeline from the slot-0 vertex
-        // layout; see @ref min_vertex_stride.
-        uint32_t m_min_vertex_stride{0};
+        pipeline_variant_key m_key{};
+        gpu::pipeline m_pipeline{};
+        gpu::pipeline m_mirrored_pipeline{};
     };
 } // namespace rendering_engine

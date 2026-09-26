@@ -109,9 +109,10 @@ namespace rendering_engine
      *
      * The factors are glTF's (linear, unquantised). The map pointers are
      * non-owning and valid only for the duration of the factory call: the
-     * importer decodes each image once, splits the packed metallic-roughness
-     * texture into the two single-channel maps @ref standard_material reads,
-     * and frees everything when the load returns.
+     * importer decodes each image once and frees everything when the load
+     * returns. The packed metallic-roughness texture passes through as
+     * decoded — glTF's R occlusion / G roughness / B metallic layout is the
+     * ORM map @ref standard_material takes — so nothing is split.
      */
     struct gltf_material_description
     {
@@ -129,14 +130,23 @@ namespace rendering_engine
         // options); the other maps' spaces are fixed by the glTF spec.
         gpu::color_space base_color_space{gpu::color_space::srgb};
 
-        // Decoded maps, or nullptr when the material has none. The metallic
-        // and roughness maps carry the glTF texture's B and G channels
-        // respectively, replicated into R (the channel the material samples).
+        // Decoded maps, or nullptr when the material has none.
         const util::image* base_color_map{nullptr};
         const util::image* normal_map{nullptr};
-        const util::image* metallic_map{nullptr};
-        const util::image* roughness_map{nullptr};
+
+        // The packed metallicRoughnessTexture: G roughness, B metallic. Its
+        // R channel is occlusion only when @ref occlusion_map points at the
+        // same image (glTF's usual ORM packing).
+        const util::image* metallic_roughness_map{nullptr};
+
+        // The occlusionTexture (R channel), which may be the very image
+        // @ref metallic_roughness_map names; nullptr without one.
+        const util::image* occlusion_map{nullptr};
+
         const util::image* emissive_map{nullptr};
+
+        // occlusionTexture.strength; 1 when @ref occlusion_map is null.
+        float occlusion_strength{1.0f};
     };
 
     /**

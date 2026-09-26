@@ -19,14 +19,10 @@ void main()
 {
     vec4 world = u_draw.modelMatrix * vec4(position, 1.0);
     worldPosition = world.xyz;
-    // Inverse-transpose of the upper-left 3x3 so non-uniform
-    // scale does not skew the shading normal.
-    mat3 normalMatrix = transpose(inverse(mat3(u_draw.modelMatrix)));
-    worldNormal = normalMatrix * normal;
+    // The per-draw normal matrix is the inverse-transpose of the
+    // model's 3x3, so non-uniform scale does not skew the normal.
+    worldNormal = mat3(u_draw.normalMatrix) * normal;
     texCoord = uv;
-    // Camera world position is the translation column of the
-    // inverse view matrix; derived here so the shared per-frame
-    // UBO need not carry it.
-    cameraPosition = inverse(u_frame.viewMatrix)[3].xyz;
+    cameraPosition = camera_position();
     gl_Position = u_frame.projectionMatrix * u_frame.viewMatrix * world;
 }

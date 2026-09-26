@@ -121,10 +121,12 @@ All device-free:
   that `#include`s from the library compiles (nested and repeated includes
   included), `#define`s are injected, a parse failure or unknown include
   throws with the shader name and glslang's log, `GRID_FADE_DISTANCE` works
-  as a define variant, the on-disk SPIR-V cache misses once then hits (keyed
-  apart by defines, off when disabled, recompiling a truncated blob), and
-  **every embedded material, pass and compute shader compiles** — the check
-  that catches an include or binding mistake before a GPU sees it.
+  as a define variant, a representative spread of the standard material's
+  keyword sets compiles in both stages, the on-disk SPIR-V cache misses once
+  then hits (keyed apart by defines, off when disabled, recompiling a
+  truncated blob), and **every embedded material, pass and compute shader
+  compiles** — the check that catches an include or binding mistake before a
+  GPU sees it.
 - `core::settings` — the value parsers (`parse_bool`, `parse_unsigned`,
   `parse_float`, the window-mode and backend names), the compiled defaults,
   and the three pure layers: `apply_json` (every documented key, partial
@@ -136,6 +138,31 @@ All device-free:
   layering order defaults < file < environment < command line. Bad input is
   checked to surface as warnings, never errors. `load_settings` itself (the
   pref path and the real environment) is not exercised.
+- `pipeline_variant` (`rendering_engine/materials/pipeline_variant.hpp`) —
+  every material keyword has a distinct bit and define, `keyword_defines`
+  emits flags in bit order after a template's base defines, the variant key
+  folds `material_params` onto blend / cull / polygon / depth (opacity is
+  not part of it, `WIREFRAME` follows the param), `pack()` keeps every field
+  apart, depth is encoded once, and each blend preset maps onto its factors
+  (`subtractive` is `reverse_subtract` with `src_alpha` / `one`).
+- `material_template` + `material` over the fake device (the standard,
+  line and ui facades; the standard shaders compile through the real
+  glslang) — a template creates layouts but no pipeline up front, N
+  instances with the same keywords share exactly one pipeline and one
+  SPIR-V pair, a params change builds a variant once and then hits the
+  cache (opacity never rebinds), a mirrored draw resolves the clockwise
+  twin lazily and drops it on a key change, binding a map compiles a
+  keyword variant and clearing it returns to the cached one, the packed ORM
+  map replaces the metallic / roughness keywords while a separate occlusion
+  map still overrides its R, `set_tangents(false)` removes the tangent
+  attribute from the pipeline's layout and reports the tangent-less record,
+  two line instances with different depth params are two variants of one
+  template, and the ui template puts the per-draw group at slot 0.
+- `per_draw_ubo` (`rendering_engine/renderables/per_draw_ubo.hpp`) — the
+  block is two std140 mat4s, the normal matrix is the inverse-transpose of
+  the model's 3x3 (rotation is its own, translation is ignored, a singular
+  scale never yields NaN), a negative determinant flags a mirrored draw, and
+  the device helpers allocate and bind the block on the fake device.
 - `runtime::node` — parent/child links and re-parenting, cached world matrices,
   `world_position` / `set_world_position`, `find`, active / effective-active
   flags, and the component-store attach/get/remove path.
@@ -174,7 +201,9 @@ All device-free:
   same file sharing the cached upload), the node tree (TRS and matrix poses,
   parent / child links, scene roots, multi-primitive meshes), materials
   through a recording `gltf_material_factory` (factors, maps, the default
-  material, the metallic / roughness split of the packed texture), textures
+  material, the packed metallic-roughness texture passed through as the ORM
+  map, the occlusion texture whether it shares that image or is separate,
+  and its strength), textures
   through the cache in the colour space their slot implies, and the three
   container forms (data URIs, external files, GLB). The `.gltf` / `.glb`
   files are written to the temp directory; the fake device records each

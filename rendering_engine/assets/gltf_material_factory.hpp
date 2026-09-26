@@ -41,9 +41,16 @@ namespace rendering_engine
      *
      * Factors are quantised to the material's 8-bit colours; the base
      * colour map uploads in the description's colour space, the emissive
-     * map as sRGB and the normal / metallic / roughness maps as linear.
-     * Needs a live renderer (it reaches @ref runtime::current_engine), which
-     * is why it lives in its own translation unit apart from the importer.
+     * map as sRGB and the normal / metallic-roughness / occlusion maps as
+     * linear. The packed metallic-roughness image binds through
+     * @ref standard_material::set_orm_map; an occlusion texture that is a
+     * different image binds through @c set_occlusion_map, one that is the
+     * same image is read from the packed R, and a material with a packed
+     * map but no occlusion texture gets occlusion strength 0 so its R
+     * channel is ignored. Every instance shares the renderer's standard
+     * template (@ref context::create_standard_material). Needs a live
+     * renderer (it reaches @ref runtime::current_engine), which is why it
+     * lives in its own translation unit apart from the importer.
      */
     struct gltf_standard_material_factory final : gltf_material_factory
     {

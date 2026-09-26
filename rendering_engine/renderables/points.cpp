@@ -28,6 +28,7 @@
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/materials/material.hpp>
+#include <rendering_engine/renderables/per_draw_ubo.hpp>
 #include <runtime/engine.hpp>
 
 rendering_engine::points::points(material* mat) : m_material{mat} {}
@@ -141,30 +142,18 @@ void rendering_engine::points::collect_draw_items(std::vector<draw_item>& out)
 
     if (!m_draw_ubo.valid())
     {
-        // Per-draw UBO matches the @c PerDraw block in the
-        // points_material vertex shader: a single mat4 modelMatrix
-        // packed std140 (64 bytes, no padding).
-        gpu::buffer_descriptor ubo_descriptor{};
-        ubo_descriptor.size = sizeof(core::math::mat4);
-        ubo_descriptor.usage = gpu::buffer_usage_uniform | gpu::buffer_usage_copy_dst;
-        ubo_descriptor.hint = gpu::buffer_usage_hint::dynamic_data;
-        m_draw_ubo = gpu.create_buffer(ubo_descriptor);
+        // The PerDraw block: model + normal matrix (see per_draw_ubo.hpp).
+        m_draw_ubo = create_per_draw_ubo(gpu);
     }
 
     if (!m_draw_bind_group.valid())
     {
-        gpu::bind_group_descriptor bg_descriptor{};
-        bg_descriptor.layout = m_material->per_draw_layout();
-        gpu::binding_value model_slot{};
-        model_slot.binding = 1;
-        model_slot.kind = gpu::binding_kind::uniform_buffer;
-        model_slot.buffer_value = m_draw_ubo;
-        bg_descriptor.entries.push_back(model_slot);
-        m_draw_bind_group = gpu.create_bind_group(bg_descriptor);
+        m_draw_bind_group = create_per_draw_bind_group(gpu, m_material->per_draw_layout(), m_draw_ubo);
     }
 
-    const auto model_matrix = transform.get_world_matrix();
-    gpu.write_buffer(m_draw_ubo, model_matrix.data(), sizeof(core::math::mat4), 0);
+    // Upload the model + normal matrix; a mirroring transform flags the
+    // item so the pass draws it with the clockwise-front-face variant.
+    const bool mirrored = write_per_draw_ubo(gpu, m_draw_ubo, transform.get_world_matrix());
 
     // Non-indexed point-list draw: an invalid index buffer tells the
     // pass to call draw(vertex_count). The point topology is baked into
@@ -173,6 +162,7 @@ void rendering_engine::points::collect_draw_items(std::vector<draw_item>& out)
     item.mat = m_material;
     item.vertex_buffer = m_vertex_buffer;
     item.per_draw_bind_group = m_draw_bind_group;
+    item.mirrored = mirrored;
     item.vertex_count = static_cast<uint32_t>(m_vertex_count);
     item.vertex_stride = m_vertex_stride;
     out.push_back(item);

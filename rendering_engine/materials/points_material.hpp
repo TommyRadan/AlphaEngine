@@ -22,9 +22,12 @@
 
 #pragma once
 
+#include <memory>
+
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/gpu/types.hpp>
 #include <rendering_engine/materials/material.hpp>
+#include <rendering_engine/materials/material_template.hpp>
 #include <rendering_engine/util/color.hpp>
 #include <rendering_engine/util/image.hpp>
 
@@ -41,21 +44,25 @@ namespace rendering_engine
     //
     // Slot layout mirrors @ref basic_material: the per-frame group at
     // slot 0 (camera, owned by the @ref scene_pass), the per-draw group
-    // at slot 1 (@c modelMatrix, built by the renderable), and the
-    // tint / size / sprite in the per-material group at slot 2 owned by
-    // this material.
+    // at slot 1 (model + normal matrix, built by the renderable), and
+    // the tint / size / sprite in the per-material group at slot 2
+    // owned by each instance.
     struct points_material : public material
     {
-        // @p frame_layout is the per-frame bind-group layout owned by
-        // the @ref scene_pass; it must match the layout the pass binds
-        // at slot 0 every frame so the pipeline and the runtime bind
-        // group agree on slot shape.
-        explicit points_material(gpu::bind_group_layout frame_layout);
+        // @p tmpl is the shared points template (see @ref create_template).
+        explicit points_material(std::shared_ptr<material_template> tmpl);
         ~points_material() override;
+
+        // The template every points_material shares. @p frame_layout is
+        // the per-frame bind-group layout owned by the @ref scene_pass;
+        // it must match the layout the pass binds at slot 0 every frame
+        // so the pipelines and the runtime bind group agree on slot shape.
+        static std::shared_ptr<material_template> create_template(gpu::device& device,
+                                                                  gpu::bind_group_layout frame_layout);
 
         // Tint multiplied into every point's colour (white leaves the
         // per-point colour unchanged). Alpha participates when the
-        // material is constructed transparent.
+        // material is transparent.
         void set_color(const util::color& color);
 
         // Point size. When @ref set_size_attenuation is off this is the
@@ -79,10 +86,6 @@ namespace rendering_engine
         // Drop the sprite texture; points fall back to flat square
         // sprites tinted by their colour. No-op when no sprite is set.
         void clear_sprite();
-
-        // The per-material group trails the per-frame and per-draw
-        // groups, so it occupies slot 2 (per-frame at 0, per-draw at 1).
-        uint32_t per_material_slot() const override;
 
     private:
         // (Re)create the per-material bind group against the current

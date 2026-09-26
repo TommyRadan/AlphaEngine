@@ -44,6 +44,7 @@ namespace rendering_engine
     struct velocity_pass;
     struct taa_pass;
     struct environment;
+    struct material_template;
     struct basic_material;
     struct instanced_material;
     struct phong_material;
@@ -187,17 +188,31 @@ namespace rendering_engine
         standard_material& get_standard_material();
 
         /**
-         * @brief Creates a fresh @ref standard_material bound to the scene
-         *        pass's per-frame layout, owned by the caller.
+         * @brief Creates a fresh @ref standard_material instance of the
+         *        shared standard template, owned by the caller.
          *
          * Use this when a scene needs several PBR surfaces with different
          * parameters (a material grid, distinct objects) rather than the
-         * single shared @ref get_standard_material. If a scene environment
-         * is set (see @ref set_environment) it is applied to the new
-         * material so it picks up image-based ambient immediately. The
-         * returned material must not outlive the rendering context.
+         * single shared @ref get_standard_material. Every instance shares
+         * the one template (see @ref get_standard_material_template):
+         * N materials cost one set of shaders and layouts, and only
+         * instances whose keywords or base params differ draw through a
+         * different pipeline variant. If a scene environment is set (see
+         * @ref set_environment) it is applied to the new material so it
+         * picks up image-based ambient immediately. The returned material
+         * must not outlive the rendering context.
          */
         std::unique_ptr<standard_material> create_standard_material();
+
+        /**
+         * @brief The template every @ref standard_material shares, built
+         *        in @ref init over the scene pass's per-frame layout.
+         *
+         * Exposed so game code can construct instances directly; prefer
+         * @ref create_standard_material, which also applies the current
+         * environment.
+         */
+        const std::shared_ptr<material_template>& get_standard_material_template() const;
 
         /** @brief Built-in unlit point-cloud material (point topology). Constructed in @ref init. */
         points_material& get_points_material();
@@ -243,11 +258,13 @@ namespace rendering_engine
          *        environment plus background.
          *
          * Points the skybox pass at @p env's cube map so it draws as the
-         * background, and attaches the same environment to the built-in
-         * @ref standard_material so its surfaces pick up image-based
-         * ambient. Pass @c nullptr to drop the skybox and revert the
-         * material to flat ambient. The @ref environment is non-owning and
-         * must outlive the scene (or be cleared first).
+         * background, and attaches the same environment to every live
+         * @ref standard_material instance — the built-in one and each
+         * one made by @ref create_standard_material, whenever it was
+         * created — so their surfaces pick up image-based ambient. Pass
+         * @c nullptr to drop the skybox and revert the materials to flat
+         * ambient. The @ref environment is non-owning and must outlive
+         * the scene (or be cleared first).
          */
         void set_environment(const environment* env);
 
@@ -301,10 +318,15 @@ namespace rendering_engine
         velocity_pass* m_velocity{nullptr};
         taa_pass* m_taa{nullptr};
 
-        // The scene pass's per-frame bind-group layout, captured in
-        // @ref init so @ref create_standard_material can build additional
-        // materials against the same slot 0.
-        gpu::bind_group_layout m_scene_frame_layout{};
+        // The standard material's shared template: shaders, layouts and
+        // the pipeline-variant cache every @ref standard_material
+        // instance draws through. Kept here so
+        // @ref create_standard_material can hand new instances the same
+        // one and @ref set_environment can reach every live instance.
+        // The other built-in types' templates are held only by their
+        // single built-in instance. Released after the materials in
+        // @ref quit.
+        std::shared_ptr<material_template> m_standard_template;
 
         // This frame's draw statistics, filled by the scene pass (which
         // holds a pointer to it) and surfaced via @ref get_render_stats.

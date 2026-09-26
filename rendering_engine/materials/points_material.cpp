@@ -23,12 +23,11 @@
 #include <rendering_engine/materials/points_material.hpp>
 
 #include <array>
-#include <string>
+#include <utility>
 
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/gpu/shader_bindings.hpp>
-#include <runtime/engine.hpp>
 
 namespace
 {
@@ -36,17 +35,19 @@ namespace
     // offset 0, then float size, sizeAttenuation, useTexture at
     // offsets 16/20/24. The struct rounds up to 32 bytes.
     constexpr size_t material_ubo_size = 32;
-
-    // This material's stages, by shader-library path (see shaders/materials/).
-    // The sprite map takes the shared albedo-map binding.
-    const rendering_engine::gpu::shader_variant vertex_shader{"materials/points.vert.glsl"};
-    const rendering_engine::gpu::shader_variant fragment_shader{"materials/points.frag.glsl"};
 } // namespace
 
 namespace rendering_engine
 {
-    points_material::points_material(gpu::bind_group_layout frame_layout)
+    std::shared_ptr<material_template> points_material::create_template(gpu::device& device,
+                                                                        gpu::bind_group_layout frame_layout)
     {
+        material_template_descriptor descriptor{};
+        descriptor.name = "points";
+        // The sprite map takes the shared albedo-map binding.
+        descriptor.vertex_shader = gpu::shader_variant{"materials/points.vert.glsl"};
+        descriptor.fragment_shader = gpu::shader_variant{"materials/points.frag.glsl"};
+
         gpu::vertex_buffer_layout vertex_layout{};
         // Stride = 0 — the per-point stride is supplied at
         // set_vertex_buffer time by the renderable. Position sits at
@@ -54,72 +55,52 @@ namespace rendering_engine
         vertex_layout.stride = 0;
         vertex_layout.attributes.push_back({0, 3, gpu::scalar_type::float32, 0});
         vertex_layout.attributes.push_back({1, 3, gpu::scalar_type::float32, sizeof(float) * 3});
-        m_vertex_format = vertex_format::position_color;
+        descriptor.vertex_layouts.push_back(vertex_layout);
+        descriptor.required_vertex_format = vertex_format::position_color;
+        descriptor.vertex_format_without_tangents = vertex_format::position_color;
 
-        // Per-draw layout (slot 1): the model matrix UBO at binding 1,
-        // matching the points renderable's bind group.
-        gpu::bind_group_layout_descriptor draw_layout{};
-        draw_layout.entries.push_back({gpu::shader_bindings::per_draw_model, gpu::binding_kind::uniform_buffer});
+        // Per-draw layout (slot 1): the model + normal matrix UBO at
+        // binding 1, matching the points renderable's bind group.
+        descriptor.draw_layout.entries.push_back(
+            {gpu::shader_bindings::per_draw_model, gpu::binding_kind::uniform_buffer});
+        descriptor.frame_layout = frame_layout;
 
         // Per-material layout (slot 2): the params UBO plus the sprite
-        // sampler, both owned by this material.
-        gpu::bind_group_layout_descriptor material_layout{};
-        material_layout.entries.push_back({gpu::shader_bindings::material_params, gpu::binding_kind::uniform_buffer});
-        material_layout.entries.push_back({gpu::shader_bindings::material_albedo_map, gpu::binding_kind::texture});
+        // sampler, both owned by each instance.
+        descriptor.material_layout.entries.push_back(
+            {gpu::shader_bindings::material_params, gpu::binding_kind::uniform_buffer});
+        descriptor.material_layout.entries.push_back(
+            {gpu::shader_bindings::material_albedo_map, gpu::binding_kind::texture});
 
+        descriptor.topology = gpu::primitive_topology::points;
+        return std::make_shared<material_template>(device, std::move(descriptor));
+    }
+
+    points_material::points_material(std::shared_ptr<material_template> tmpl)
         // Opaque unlit sprites: depth tested and written, no blending.
-        // Particle-style additive blends are opt-in via set_color's
-        // alpha plus a transparent material in future callers.
-        material_params params{};
-        params.transparent = false;
-        params.depth_test = true;
-        params.depth_write = true;
-
-        construct_pipeline(vertex_shader,
-                           fragment_shader,
-                           vertex_layout,
-                           draw_layout,
-                           frame_layout,
-                           params,
-                           material_layout,
-                           gpu::primitive_topology::points);
-
+        // Particle-style additive blends are opt-in through
+        // set_transparent / set_blending.
+        : material(std::move(tmpl), material_params{})
+    {
         gpu::buffer_descriptor ubo_descriptor{};
         ubo_descriptor.size = material_ubo_size;
         ubo_descriptor.usage = gpu::buffer_usage_uniform | gpu::buffer_usage_copy_dst;
         ubo_descriptor.hint = gpu::buffer_usage_hint::dynamic_data;
-        auto& gpu = *runtime::current_engine().gpu;
-        m_material_ubo = gpu.create_buffer(ubo_descriptor);
+        m_material_ubo = device().create_buffer(ubo_descriptor);
 
         rebuild_bind_group();
     }
 
     points_material::~points_material()
     {
-        // Drop the bind group before the buffers / texture it
-        // references, then null it so the base destructor's
-        // destruct_pipeline does not double-free.
-        auto& gpu = *runtime::current_engine().gpu;
-        if (m_per_material_bind_group.valid())
-        {
-            gpu.destroy(m_per_material_bind_group);
-            m_per_material_bind_group = {};
-        }
-        if (m_sprite.valid())
-        {
-            gpu.destroy(m_sprite);
-            m_sprite = {};
-        }
+        // Drop the bind group before the buffer / texture it references.
+        release_per_material_bind_group();
+        release_map(m_sprite);
         if (m_material_ubo.valid())
         {
-            gpu.destroy(m_material_ubo);
+            device().destroy(m_material_ubo);
             m_material_ubo = {};
         }
-    }
-
-    uint32_t points_material::per_material_slot() const
-    {
-        return per_draw_slot() + 1u;
     }
 
     void points_material::set_color(const util::color& color)
@@ -142,31 +123,8 @@ namespace rendering_engine
 
     void points_material::set_sprite(const util::image& image, gpu::color_space space)
     {
-        auto& gpu = *runtime::current_engine().gpu;
-        if (m_sprite.valid())
-        {
-            gpu.destroy(m_sprite);
-            m_sprite = {};
-        }
-
-        gpu::texture_descriptor descriptor{};
-        descriptor.dimension = gpu::texture_dimension::d2;
-        descriptor.format = gpu::rgba8_format(space);
-        descriptor.width = image.get_width();
-        descriptor.height = image.get_height();
-        descriptor.mipmaps = true;
-        descriptor.min_filter = gpu::filter_mode::linear;
-        descriptor.mag_filter = gpu::filter_mode::linear;
-        descriptor.address_u = gpu::address_mode::clamp_edge;
-        descriptor.address_v = gpu::address_mode::clamp_edge;
-        descriptor.address_w = gpu::address_mode::clamp_edge;
-        m_sprite = gpu.create_texture(descriptor);
-
-        const size_t pixel_bytes =
-            static_cast<size_t>(image.get_width()) * static_cast<size_t>(image.get_height()) * sizeof(util::color);
-        gpu.write_texture(m_sprite, image.get_pixels(), pixel_bytes);
-        gpu.generate_mipmaps(m_sprite);
-
+        release_map(m_sprite);
+        m_sprite = upload_map(image, space, gpu::address_mode::clamp_edge);
         rebuild_bind_group();
     }
 
@@ -176,23 +134,16 @@ namespace rendering_engine
         {
             return;
         }
-        auto& gpu = *runtime::current_engine().gpu;
-        gpu.destroy(m_sprite);
-        m_sprite = {};
+        release_map(m_sprite);
         rebuild_bind_group();
     }
 
     void points_material::rebuild_bind_group()
     {
-        auto& gpu = *runtime::current_engine().gpu;
-        if (m_per_material_bind_group.valid())
-        {
-            gpu.destroy(m_per_material_bind_group);
-            m_per_material_bind_group = {};
-        }
+        release_per_material_bind_group();
 
         gpu::bind_group_descriptor bg_descriptor{};
-        bg_descriptor.layout = m_per_material_layout;
+        bg_descriptor.layout = get_template().per_material_layout();
 
         gpu::binding_value ubo_slot{};
         ubo_slot.binding = gpu::shader_bindings::material_params;
@@ -206,7 +157,7 @@ namespace rendering_engine
         sprite_slot.texture_value = m_sprite;
         bg_descriptor.entries.push_back(sprite_slot);
 
-        m_per_material_bind_group = gpu.create_bind_group(bg_descriptor);
+        m_per_material_bind_group = device().create_bind_group(bg_descriptor);
 
         upload_params();
     }
@@ -222,7 +173,6 @@ namespace rendering_engine
         payload[5] = m_size_attenuation ? 1.0f : 0.0f;
         payload[6] = m_sprite.valid() ? 1.0f : 0.0f;
 
-        auto& gpu = *runtime::current_engine().gpu;
-        gpu.write_buffer(m_material_ubo, payload.data(), material_ubo_size, 0);
+        device().write_buffer(m_material_ubo, payload.data(), material_ubo_size, 0);
     }
 } // namespace rendering_engine

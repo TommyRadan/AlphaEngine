@@ -22,7 +22,10 @@
 
 #pragma once
 
+#include <memory>
+
 #include <rendering_engine/materials/material.hpp>
+#include <rendering_engine/materials/material_template.hpp>
 
 namespace rendering_engine
 {
@@ -34,7 +37,11 @@ namespace rendering_engine
     // @c tex.
     struct ui_material : public material
     {
-        ui_material();
+        // @p tmpl is the ui template (see @ref create_template).
+        explicit ui_material(std::shared_ptr<material_template> tmpl);
         ~ui_material() override = default;
+
+        // The template every ui_material shares.
+        static std::shared_ptr<material_template> create_template(gpu::device& device);
     };
 } // namespace rendering_engine

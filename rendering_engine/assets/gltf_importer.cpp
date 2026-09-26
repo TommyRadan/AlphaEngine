@@ -31,7 +31,6 @@
 #include <stdexcept>
 #include <string>
 #include <system_error>
-#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -420,8 +419,8 @@ namespace rendering_engine
         }
 
         // Per-load state shared by the import stages: the parsed file, where
-        // its relative URIs resolve, the decoded images (lazily, at most once
-        // each) and the metallic / roughness maps split off them.
+        // its relative URIs resolve, and the decoded images (lazily, at most
+        // once each).
         struct import_context
         {
             const cgltf_data& data;
@@ -437,13 +436,6 @@ namespace rendering_engine
             // cannot be.
             std::vector<std::optional<util::image>> images;
             std::vector<bool> image_failed;
-
-            struct split_maps
-            {
-                util::image metallic;
-                util::image roughness;
-            };
-            std::unordered_map<std::size_t, split_maps> orm_splits;
 
             import_context(const cgltf_data& in_data,
                            const std::filesystem::path& in_path,
@@ -545,41 +537,6 @@ namespace rendering_engine
                     LOG_WRN("gltf: %s of '%s' uses KHR_texture_transform, which is ignored", slot, path_name());
                 }
                 return decoded_image(cgltf_image_index(&data, view.texture->image));
-            }
-
-            // glTF packs roughness in G and metalness in B of one texture;
-            // standard_material samples .r of two separate maps, so split the
-            // packed image into two single-channel-in-R images (each channel
-            // replicated across RGB so the maps read sensibly on their own).
-            // Cached per image so materials sharing one ORM texture split it
-            // once. Interim until the material takes a packed ORM map.
-            const split_maps* orm_maps(const cgltf_texture_view& view)
-            {
-                const util::image* packed = map_image(view, "metallicRoughnessTexture");
-                if (packed == nullptr)
-                {
-                    return nullptr;
-                }
-                const std::size_t index = cgltf_image_index(&data, view.texture->image);
-                if (auto it = orm_splits.find(index); it != orm_splits.end())
-                {
-                    return &it->second;
-                }
-
-                const uint32_t width = packed->get_width();
-                const uint32_t height = packed->get_height();
-                split_maps split{util::image{width, height, util::color{0, 0, 0, 255}},
-                                 util::image{width, height, util::color{0, 0, 0, 255}}};
-                for (uint32_t y = 0; y < height; ++y)
-                {
-                    for (uint32_t x = 0; x < width; ++x)
-                    {
-                        const util::color texel = packed->get_pixel(x, y);
-                        split.metallic.set_pixel(x, y, util::color{texel.b, texel.b, texel.b, 255});
-                        split.roughness.set_pixel(x, y, util::color{texel.g, texel.g, texel.g, 255});
-                    }
-                }
-                return &orm_splits.emplace(index, std::move(split)).first->second;
             }
         };
 
@@ -756,12 +713,10 @@ namespace rendering_engine
                 description.metallic_factor = pbr.metallic_factor;
                 description.roughness_factor = pbr.roughness_factor;
                 description.base_color_map = ctx.map_image(pbr.base_color_texture, "baseColorTexture");
-                if (const import_context::split_maps* split = ctx.orm_maps(pbr.metallic_roughness_texture);
-                    split != nullptr)
-                {
-                    description.metallic_map = &split->metallic;
-                    description.roughness_map = &split->roughness;
-                }
+                // Passed through packed: G roughness, B metallic, the ORM
+                // layout the material samples directly.
+                description.metallic_roughness_map =
+                    ctx.map_image(pbr.metallic_roughness_texture, "metallicRoughnessTexture");
             }
             else if (material.has_pbr_specular_glossiness)
             {
@@ -779,16 +734,17 @@ namespace rendering_engine
             }
             description.normal_map = ctx.map_image(material.normal_texture, "normalTexture");
             description.emissive_map = ctx.map_image(material.emissive_texture, "emissiveTexture");
+            // The occlusion texture is usually the metallic-roughness image
+            // itself (R channel); the factory tells the two cases apart by
+            // comparing the pointers. cgltf stores strength in scale.
+            description.occlusion_map = ctx.map_image(material.occlusion_texture, "occlusionTexture");
+            if (description.occlusion_map != nullptr)
+            {
+                description.occlusion_strength = material.occlusion_texture.scale;
+            }
 
             // What standard_material cannot take yet, named once per material
             // so a dull-looking import is not a mystery.
-            if (material.occlusion_texture.texture != nullptr)
-            {
-                LOG_WRN(
-                    "gltf: material '%s' of '%s' has an occlusion map; standard_material has no occlusion input yet",
-                    description.name.c_str(),
-                    ctx.path_name());
-            }
             if (material.alpha_mode != cgltf_alpha_mode_opaque)
             {
                 LOG_WRN("gltf: material '%s' of '%s' is not opaque; alpha blending / masking is not imported",

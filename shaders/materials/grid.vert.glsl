@@ -29,7 +29,7 @@ void main()
     // GL-convention clip space: near plane at z = -1, far at z = 1.
     nearPoint = unproject(ndc, -1.0, inverseViewProj);
     farPoint = unproject(ndc, 1.0, inverseViewProj);
-    cameraPoint = inverse(u_frame.viewMatrix)[3].xyz;
+    cameraPoint = camera_position();
 
     gl_Position = vec4(ndc, 0.0, 1.0);
 }

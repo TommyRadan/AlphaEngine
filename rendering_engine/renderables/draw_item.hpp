@@ -33,10 +33,17 @@ namespace rendering_engine
 
     // One draw the pass can dispatch. Renderables fill this struct in
     // @ref renderable::collect_draw_items; the pass then sorts the
-    // collected items by @c mat->pipeline().id and walks them, issuing
-    // @c set_pipeline only when the pipeline changes. An invalid
-    // @ref index_buffer means non-indexed draw — the pass calls
-    // @c draw(vertex_count) instead of @c draw_indexed(index_count).
+    // collected items by (pipeline id, material instance) and walks
+    // them, issuing @c set_pipeline only when the pipeline changes and
+    // rebinding the per-material group only when the instance changes.
+    // An invalid @ref index_buffer means non-indexed draw — the pass
+    // calls @c draw(vertex_count) instead of @c draw_indexed(index_count).
+    //
+    // @ref mirrored is set by the renderable when its model matrix has a
+    // negative determinant (see @ref is_mirrored): the transform
+    // reverses every triangle's winding, so the pass draws the item with
+    // @c mat->pipeline(true), the same variant with a clockwise front
+    // face, and the mesh's outside stays visible.
     //
     // A valid @ref indirect_buffer turns the indexed draw into an
     // indexed *indirect* draw: the pass binds the index buffer and
@@ -68,5 +75,7 @@ namespace rendering_engine
         // render-stats accounting matches what the GPU draws.
         uint32_t instance_count{1};
         gpu::index_format index_format{gpu::index_format::uint32};
+        // Whether the model matrix flips handedness; see above.
+        bool mirrored{false};
     };
 } // namespace rendering_engine

@@ -25,6 +25,7 @@
 #include <algorithm>
 #include <array>
 #include <cstring>
+#include <functional>
 
 #include <core/event.hpp>
 #include <core/event_engine.hpp>
@@ -469,10 +470,23 @@ namespace rendering_engine
             ++submitted;
             r->collect_draw_items(m_items);
         }
+        // Sort key: the pipeline the item draws with (its material's
+        // variant, or the clockwise twin for a mirrored transform), then
+        // the material instance, so instances sharing one template
+        // pipeline sit together and the per-material group is rebound
+        // only when the instance changes.
         std::stable_sort(m_items.begin(),
                          m_items.end(),
                          [](const draw_item& a, const draw_item& b)
-                         { return a.mat->pipeline().id < b.mat->pipeline().id; });
+                         {
+                             const uint64_t pipeline_a = a.mat->pipeline(a.mirrored).id;
+                             const uint64_t pipeline_b = b.mat->pipeline(b.mirrored).id;
+                             if (pipeline_a != pipeline_b)
+                             {
+                                 return pipeline_a < pipeline_b;
+                             }
+                             return std::less<const material*>{}(a.mat, b.mat);
+                         });
 
         // Tally this frame's draw statistics for the debug overlay. Each
         // item is one draw call; triangle / vertex counts scale by the
@@ -494,13 +508,14 @@ namespace rendering_engine
         }
 
         uint64_t last_pipeline_id = 0;
+        const material* last_material = nullptr;
         bool first_iter = true;
         for (const auto& item : m_items)
         {
-            const uint64_t pid = item.mat->pipeline().id;
-            if (pid != last_pipeline_id)
+            const gpu::pipeline pipeline = item.mat->pipeline(item.mirrored);
+            if (pipeline.id != last_pipeline_id)
             {
-                pass_encoder->set_pipeline(item.mat->pipeline());
+                pass_encoder->set_pipeline(pipeline);
 
                 // Per-frame bind group bound once per frame after
                 // the first pipeline change; the binding sticks
@@ -511,12 +526,22 @@ namespace rendering_engine
                     pass_encoder->set_bind_group(0, m_frame_bind_group);
                     first_iter = false;
                 }
+                last_pipeline_id = pipeline.id;
+                // A new pipeline invalidates the per-material binding
+                // even when the instance is unchanged.
+                last_material = nullptr;
+            }
 
+            // The per-material group follows the instance, not the
+            // pipeline: several instances of one template share a
+            // pipeline but each carries its own parameter block.
+            if (item.mat != last_material)
+            {
                 if (item.mat->per_material_bind_group().valid())
                 {
                     pass_encoder->set_bind_group(item.mat->per_material_slot(), item.mat->per_material_bind_group());
                 }
-                last_pipeline_id = pid;
+                last_material = item.mat;
             }
 
             // Instanced renderables keep their per-instance data in a

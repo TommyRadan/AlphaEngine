@@ -86,6 +86,22 @@ set(ALPHAENGINE_TEST_SOURCES_UNDER_TEST
     # binding mistake before a GPU sees it; no backend is linked.
     ${CMAKE_SOURCE_DIR}/rendering_engine/gpu/shader_compiler.cpp
     ${CMAKE_SOURCE_DIR}/rendering_engine/gpu/shader_library.cpp
+    # materials — the variant key / keyword mapping (pure), the template
+    # with its pipeline-variant cache and the instance base, plus the
+    # standard, line and ui facades. They take their gpu::device from the
+    # template (never the engine global), so the tests build them over the
+    # fake device and compile the real standard shaders through glslang to
+    # prove N instances share one pipeline. environment's texture getters
+    # are inline, so standard_material links without the IBL builder.
+    ${CMAKE_SOURCE_DIR}/rendering_engine/materials/material.cpp
+    ${CMAKE_SOURCE_DIR}/rendering_engine/materials/material_template.cpp
+    ${CMAKE_SOURCE_DIR}/rendering_engine/materials/pipeline_variant.cpp
+    ${CMAKE_SOURCE_DIR}/rendering_engine/materials/standard_material.cpp
+    ${CMAKE_SOURCE_DIR}/rendering_engine/materials/line_material.cpp
+    ${CMAKE_SOURCE_DIR}/rendering_engine/materials/ui_material.cpp
+    # renderables/per_draw_ubo — the PerDraw block (model + normal matrix,
+    # mirror detection) over core/math and the abstract device.
+    ${CMAKE_SOURCE_DIR}/rendering_engine/renderables/per_draw_ubo.cpp
     # vk_negotiate — the Vulkan backend's depth-format fallback chains and
     # descriptor-pool budgets. Pure functions over Vulkan's header constants
     # (the format-support query is a callback); no loader call is made, so
@@ -118,11 +134,14 @@ set(ALPHAENGINE_TEST_SOURCES
     rendering_engine/gpu/handle_pool_test.cpp
     rendering_engine/gpu/shader_compiler_test.cpp
     rendering_engine/gpu/shader_library_test.cpp
+    rendering_engine/materials/material_template_test.cpp
+    rendering_engine/materials/pipeline_variant_test.cpp
     rendering_engine/mesh/mesh_test.cpp
     rendering_engine/mesh/tangent_test.cpp
     rendering_engine/mesh/vertex_format_test.cpp
     rendering_engine/sdl_input_test.cpp
     rendering_engine/render_graph/frame_graph_test.cpp
+    rendering_engine/renderables/per_draw_ubo_test.cpp
     rendering_engine/gpu/vk_format_fallback_test.cpp
     rendering_engine/gpu/vk_staging_ring_test.cpp
     rendering_engine/util/font_test.cpp

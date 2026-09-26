@@ -89,4 +89,9 @@ namespace rendering_engine::gpu::shader_bindings
     constexpr uint32_t material_irradiance_map = 11;
     constexpr uint32_t material_prefiltered_map = 12;
     constexpr uint32_t material_brdf_lut = 13;
+
+    // Set 2: the ambient-occlusion map, which doubles as the packed
+    // occlusion / roughness / metallic (ORM) map. 14-20 are the omni
+    // shadow resources above, so this is the next free number.
+    constexpr uint32_t material_occlusion_map = 21;
 } // namespace rendering_engine::gpu::shader_bindings

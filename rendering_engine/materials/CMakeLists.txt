@@ -9,8 +9,12 @@ target_sources(AlphaEngine PRIVATE
     line_material.hpp
     material.cpp
     material.hpp
+    material_template.cpp
+    material_template.hpp
     phong_material.cpp
     phong_material.hpp
+    pipeline_variant.cpp
+    pipeline_variant.hpp
     points_material.cpp
     points_material.hpp
     standard_material.cpp
