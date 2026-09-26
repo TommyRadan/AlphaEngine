@@ -47,6 +47,12 @@ namespace rendering_engine::gpu::backend::vulkan
         void set_vertex_buffer(uint32_t slot, buffer buffer_handle, size_t offset, uint32_t stride_override) override;
         void set_index_buffer(buffer buffer_handle, index_format format) override;
         void set_bind_group(uint32_t group, bind_group bind_group_handle) override;
+        // @p x / @p y are the rectangle's bottom-left corner in
+        // window (OpenGL) convention, matching the GL backend's
+        // glViewport / glScissor. A swapchain pass renders through a
+        // negative-height viewport, so both the viewport and the
+        // scissor are flipped into Vulkan's top-left framebuffer
+        // space here; off-screen passes keep Vulkan's orientation.
         void set_viewport(int x, int y, int width, int height) override;
         void draw(uint32_t vertex_count, uint32_t first_vertex) override;
         void draw_indexed(uint32_t index_count, uint32_t first_index) override;
@@ -84,6 +90,10 @@ namespace rendering_engine::gpu::backend::vulkan
         // so a downstream sampler (tonemap) sees its texels at the
         // texCoord origin the OpenGL-style shader expects.
         bool m_y_flipped{false};
+        // Bind-group handles set_bind_group has already reported as
+        // not live, so a broken handle logs once per pass rather than
+        // once per draw.
+        std::vector<uint64_t> m_reported_bind_groups;
     };
 
     struct vk_compute_pass_encoder : public compute_pass_encoder
@@ -108,6 +118,8 @@ namespace rendering_engine::gpu::backend::vulkan
         // actually transitioned), even when bound across several
         // dispatches.
         std::vector<texture> m_storage_textures;
+        // See vk_render_pass_encoder::m_reported_bind_groups.
+        std::vector<uint64_t> m_reported_bind_groups;
     };
 
     struct vk_command_encoder : public command_encoder

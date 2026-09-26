@@ -49,6 +49,7 @@
 #include <core/log.hpp>
 #include <core/settings.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_command_encoder.hpp>
+#include <rendering_engine/gpu/backend/vulkan/vk_negotiate.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_translate.hpp>
 #include <rendering_engine/window.hpp>
 #include <runtime/engine.hpp>
@@ -114,16 +115,43 @@ namespace rendering_engine::gpu::backend::vulkan
         }
     }
 
+    bool vk_check(VkResult result, const char* what)
+    {
+        if (result == VK_SUCCESS)
+        {
+            return true;
+        }
+        LOG_ERR("%s failed: %s", what, vk_result_to_string(result));
+        return false;
+    }
+
     namespace
     {
         constexpr const char* k_validation_layer = "VK_LAYER_KHRONOS_validation";
 
+        // Spelled out rather than taken from the header so the build
+        // does not depend on a Vulkan SDK new enough to define them:
+        // VK_KHR_portability_enumeration arrived in header 1.3.216 and
+        // VK_KHR_portability_subset sits behind VK_ENABLE_BETA_EXTENSIONS.
+        // The flag value is VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR.
+        constexpr const char* k_portability_enumeration_extension = "VK_KHR_portability_enumeration";
+        constexpr VkInstanceCreateFlags k_enumerate_portability_flag = 0x00000001;
+        constexpr const char* k_portability_subset_extension = "VK_KHR_portability_subset";
+
         bool layer_available(const char* name)
         {
             uint32_t count = 0;
-            vkEnumerateInstanceLayerProperties(&count, nullptr);
+            if (!vk_check(vkEnumerateInstanceLayerProperties(&count, nullptr), "vkEnumerateInstanceLayerProperties"))
+            {
+                return false;
+            }
             std::vector<VkLayerProperties> layers(count);
-            vkEnumerateInstanceLayerProperties(&count, layers.data());
+            const VkResult r = vkEnumerateInstanceLayerProperties(&count, layers.data());
+            if (r != VK_SUCCESS && r != VK_INCOMPLETE)
+            {
+                vk_check(r, "vkEnumerateInstanceLayerProperties");
+                return false;
+            }
             for (const auto& layer : layers)
             {
                 if (std::strcmp(layer.layerName, name) == 0)
@@ -132,6 +160,76 @@ namespace rendering_engine::gpu::backend::vulkan
                 }
             }
             return false;
+        }
+
+        // Whether the instance (or, with @p layer, that layer) exposes
+        // the extension @p name. Every instance extension the backend
+        // asks for beyond SDL's mandatory set goes through here first,
+        // so vkCreateInstance never fails on an optional one.
+        bool instance_extension_available(const char* name, const char* layer = nullptr)
+        {
+            uint32_t count = 0;
+            if (!vk_check(vkEnumerateInstanceExtensionProperties(layer, &count, nullptr),
+                          "vkEnumerateInstanceExtensionProperties"))
+            {
+                return false;
+            }
+            std::vector<VkExtensionProperties> extensions(count);
+            const VkResult r = vkEnumerateInstanceExtensionProperties(layer, &count, extensions.data());
+            if (r != VK_SUCCESS && r != VK_INCOMPLETE)
+            {
+                vk_check(r, "vkEnumerateInstanceExtensionProperties");
+                return false;
+            }
+            for (const auto& extension : extensions)
+            {
+                if (std::strcmp(extension.extensionName, name) == 0)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // The highest instance-level API version the loader supports.
+        // vkEnumerateInstanceVersion is a 1.1 entry point: a 1.0 loader
+        // has no symbol for it, so it is resolved through
+        // vkGetInstanceProcAddr and its absence means 1.0.
+        uint32_t probe_instance_version()
+        {
+            auto enumerate = reinterpret_cast<PFN_vkEnumerateInstanceVersion>(
+                vkGetInstanceProcAddr(nullptr, "vkEnumerateInstanceVersion"));
+            if (enumerate == nullptr)
+            {
+                return VK_API_VERSION_1_0;
+            }
+            uint32_t version = VK_API_VERSION_1_0;
+            if (enumerate(&version) != VK_SUCCESS)
+            {
+                return VK_API_VERSION_1_0;
+            }
+            return version;
+        }
+
+        const char* depth_format_name(VkFormat format)
+        {
+            switch (format)
+            {
+            case VK_FORMAT_D16_UNORM:
+                return "D16_UNORM";
+            case VK_FORMAT_X8_D24_UNORM_PACK32:
+                return "X8_D24_UNORM_PACK32";
+            case VK_FORMAT_D32_SFLOAT:
+                return "D32_SFLOAT";
+            case VK_FORMAT_D16_UNORM_S8_UINT:
+                return "D16_UNORM_S8_UINT";
+            case VK_FORMAT_D24_UNORM_S8_UINT:
+                return "D24_UNORM_S8_UINT";
+            case VK_FORMAT_D32_SFLOAT_S8_UINT:
+                return "D32_SFLOAT_S8_UINT";
+            default:
+                return "<not a depth format>";
+            }
         }
 
         VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(VkDebugUtilsMessageSeverityFlagBitsEXT severity,
@@ -264,9 +362,14 @@ namespace rendering_engine::gpu::backend::vulkan
         create_debug_messenger();
         create_surface();
         pick_physical_device();
+        resolve_depth_formats();
         create_logical_device();
         create_command_pool();
-        create_descriptor_pool();
+        if (!create_descriptor_pool())
+        {
+            throw std::runtime_error{"vkCreateDescriptorPool failed"};
+        }
+        create_fallback_sampler();
 
         // Bring-up builds the swapchain strictly: a surface that has no
         // usable extent yet (a window created minimised) or a failed
@@ -339,9 +442,11 @@ namespace rendering_engine::gpu::backend::vulkan
         {
             return;
         }
-        if (m_device != VK_NULL_HANDLE)
+        if (m_device != VK_NULL_HANDLE && !m_device_lost)
         {
-            vkDeviceWaitIdle(m_device);
+            // A lost device has nothing left to wait for; its objects
+            // may still be destroyed, which is all that follows.
+            check_queue_result(vkDeviceWaitIdle(m_device), "vkDeviceWaitIdle (quit)");
         }
 
         if (m_default_texture_2d.valid())
@@ -423,6 +528,14 @@ namespace rendering_engine::gpu::backend::vulkan
                     vkDestroyImageView(m_device, t.view, nullptr);
                     t.view = VK_NULL_HANDLE;
                 }
+                for (VkImageView storage_view : t.storage_views)
+                {
+                    if (storage_view != VK_NULL_HANDLE)
+                    {
+                        vkDestroyImageView(m_device, storage_view, nullptr);
+                    }
+                }
+                t.storage_views.clear();
                 if (!t.external && t.image != VK_NULL_HANDLE)
                 {
                     vkDestroyImage(m_device, t.image, nullptr);
@@ -487,10 +600,20 @@ namespace rendering_engine::gpu::backend::vulkan
         destroy_sync_objects();
         destroy_swapchain();
 
-        if (m_descriptor_pool != VK_NULL_HANDLE)
+        // Every descriptor set was freed above (or belongs to a leaked
+        // bind group), so the whole chain goes at once.
+        for (VkDescriptorPool pool : m_descriptor_pools)
         {
-            vkDestroyDescriptorPool(m_device, m_descriptor_pool, nullptr);
-            m_descriptor_pool = VK_NULL_HANDLE;
+            if (pool != VK_NULL_HANDLE)
+            {
+                vkDestroyDescriptorPool(m_device, pool, nullptr);
+            }
+        }
+        m_descriptor_pools.clear();
+        if (m_fallback_sampler != VK_NULL_HANDLE)
+        {
+            vkDestroySampler(m_device, m_fallback_sampler, nullptr);
+            m_fallback_sampler = VK_NULL_HANDLE;
         }
         if (m_command_pool != VK_NULL_HANDLE)
         {
@@ -517,7 +640,13 @@ namespace rendering_engine::gpu::backend::vulkan
         m_have_current_image = false;
         m_acquire_attempted = false;
         m_present_pending = false;
+        m_in_flight_fence_armed = false;
         m_swapchain_suspended = false;
+        m_device_lost = false;
+        m_device_lost_thrown = false;
+        m_has_portability_subset = false;
+        m_features = {};
+        m_depth_formats.fill(VK_FORMAT_UNDEFINED);
         m_initialised = false;
         LOG_INF("Quit gpu::backend::vulkan::vk_device");
     }
@@ -569,13 +698,30 @@ namespace rendering_engine::gpu::backend::vulkan
     {
         publish_layer_path_if_bundled();
 
+        // The backend needs the 1.1 core feature queries
+        // (vkGetPhysicalDeviceFeatures2) and asks for up to 1.2, which
+        // is what it was written against; a newer loader is asked for
+        // 1.2 (it accepts any version it supports), an older one for
+        // exactly what it has, and a 1.0 loader is refused outright
+        // rather than failing later inside vkCreateInstance.
+        const uint32_t instance_version = probe_instance_version();
+        if (instance_version < VK_API_VERSION_1_1)
+        {
+            LOG_FTL("Vulkan loader supports API %u.%u only; the Vulkan backend needs 1.1 or newer "
+                    "(update the graphics driver / Vulkan runtime, or run with ALPHAENGINE_GRAPHICS_BACKEND=opengl)",
+                    VK_VERSION_MAJOR(instance_version),
+                    VK_VERSION_MINOR(instance_version));
+            throw std::runtime_error{"Vulkan 1.1 or newer is required"};
+        }
+        const uint32_t api_version = std::min<uint32_t>(instance_version, VK_API_VERSION_1_2);
+
         VkApplicationInfo app{};
         app.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
         app.pApplicationName = "AlphaEngine";
         app.applicationVersion = VK_MAKE_VERSION(0, 0, 1);
         app.pEngineName = "AlphaEngine";
         app.engineVersion = VK_MAKE_VERSION(0, 0, 1);
-        app.apiVersion = VK_API_VERSION_1_2;
+        app.apiVersion = api_version;
 
         uint32_t sdl_ext_count = 0;
         const char* const* sdl_extensions = SDL_Vulkan_GetInstanceExtensions(&sdl_ext_count);
@@ -587,13 +733,39 @@ namespace rendering_engine::gpu::backend::vulkan
                 extensions.push_back(sdl_extensions[i]);
             }
         }
+        VkInstanceCreateFlags flags = 0;
+        // A layered implementation (MoltenVK on macOS / iOS) only
+        // enumerates its non-conformant physical devices when the
+        // application opts in with the portability extension + flag;
+        // without them vkEnumeratePhysicalDevices finds nothing.
+        const bool portability_enumeration = instance_extension_available(k_portability_enumeration_extension);
+        if (portability_enumeration)
+        {
+            extensions.push_back(k_portability_enumeration_extension);
+            flags |= k_enumerate_portability_flag;
+        }
         std::vector<const char*> layers;
 #ifdef _DEBUG
         if (layer_available(k_validation_layer))
         {
-            layers.push_back(k_validation_layer);
-            extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-            m_validation_enabled = true;
+            // The debug-utils extension is what routes the layer's
+            // messages into the log. The loader provides it on every
+            // SDK install, but it is confirmed (from the instance and
+            // from the layer itself) before it is requested so a
+            // missing extension degrades to an unvalidated run instead
+            // of a failed vkCreateInstance.
+            if (instance_extension_available(VK_EXT_DEBUG_UTILS_EXTENSION_NAME) ||
+                instance_extension_available(VK_EXT_DEBUG_UTILS_EXTENSION_NAME, k_validation_layer))
+            {
+                layers.push_back(k_validation_layer);
+                extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+                m_validation_enabled = true;
+            }
+            else
+            {
+                LOG_WRN("Vulkan validation layer is available but VK_EXT_debug_utils is not; "
+                        "debug-build run will not be validated");
+            }
         }
         else
         {
@@ -603,16 +775,26 @@ namespace rendering_engine::gpu::backend::vulkan
 
         VkInstanceCreateInfo info{};
         info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+        info.flags = flags;
         info.pApplicationInfo = &app;
         info.enabledLayerCount = static_cast<uint32_t>(layers.size());
         info.ppEnabledLayerNames = layers.data();
         info.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
         info.ppEnabledExtensionNames = extensions.data();
-        if (vkCreateInstance(&info, nullptr, &m_instance) != VK_SUCCESS)
+        const VkResult create_result = vkCreateInstance(&info, nullptr, &m_instance);
+        if (create_result != VK_SUCCESS)
         {
-            LOG_FTL("vkCreateInstance failed");
+            LOG_FTL("vkCreateInstance failed: %s", vk_result_to_string(create_result));
             throw std::runtime_error{"vkCreateInstance failed"};
         }
+        LOG_INF("Vulkan instance: loader %u.%u.%u, requested api %u.%u, portability enumeration %s, validation %s",
+                VK_VERSION_MAJOR(instance_version),
+                VK_VERSION_MINOR(instance_version),
+                VK_VERSION_PATCH(instance_version),
+                VK_VERSION_MAJOR(api_version),
+                VK_VERSION_MINOR(api_version),
+                portability_enumeration ? "on" : "off",
+                m_validation_enabled ? "on" : "off");
     }
 
     void vk_device::create_debug_messenger()
@@ -676,13 +858,18 @@ namespace rendering_engine::gpu::backend::vulkan
     void vk_device::pick_physical_device()
     {
         uint32_t count = 0;
-        vkEnumeratePhysicalDevices(m_instance, &count, nullptr);
-        if (count == 0)
+        if (!vk_check(vkEnumeratePhysicalDevices(m_instance, &count, nullptr), "vkEnumeratePhysicalDevices") ||
+            count == 0)
         {
             throw std::runtime_error{"no Vulkan-capable GPUs"};
         }
         std::vector<VkPhysicalDevice> gpus(count);
-        vkEnumeratePhysicalDevices(m_instance, &count, gpus.data());
+        const VkResult enumerate_result = vkEnumeratePhysicalDevices(m_instance, &count, gpus.data());
+        if (enumerate_result != VK_SUCCESS && enumerate_result != VK_INCOMPLETE)
+        {
+            vk_check(enumerate_result, "vkEnumeratePhysicalDevices");
+            throw std::runtime_error{"vkEnumeratePhysicalDevices failed"};
+        }
 
         VkPhysicalDevice best = VK_NULL_HANDLE;
         bool best_discrete = false;
@@ -693,6 +880,18 @@ namespace rendering_engine::gpu::backend::vulkan
         {
             VkPhysicalDeviceProperties props{};
             vkGetPhysicalDeviceProperties(gpu, &props);
+            // The device-level 1.1 functionality the backend relies on
+            // (vkGetPhysicalDeviceFeatures2 against this device) is
+            // gated by the physical device's own version, not the
+            // instance's.
+            if (props.apiVersion < VK_API_VERSION_1_1)
+            {
+                LOG_WRN("Vulkan GPU %s skipped: api %u.%u, the backend needs 1.1",
+                        props.deviceName,
+                        VK_VERSION_MAJOR(props.apiVersion),
+                        VK_VERSION_MINOR(props.apiVersion));
+                continue;
+            }
 
             uint32_t qf_count = 0;
             vkGetPhysicalDeviceQueueFamilyProperties(gpu, &qf_count, nullptr);
@@ -707,7 +906,11 @@ namespace rendering_engine::gpu::backend::vulkan
                     graphics_family = i;
                 }
                 VkBool32 present_supported = VK_FALSE;
-                vkGetPhysicalDeviceSurfaceSupportKHR(gpu, i, m_surface, &present_supported);
+                if (!vk_check(vkGetPhysicalDeviceSurfaceSupportKHR(gpu, i, m_surface, &present_supported),
+                              "vkGetPhysicalDeviceSurfaceSupportKHR"))
+                {
+                    present_supported = VK_FALSE;
+                }
                 if (present_supported == VK_TRUE && !present_family.has_value())
                 {
                     present_family = i;
@@ -719,12 +922,22 @@ namespace rendering_engine::gpu::backend::vulkan
             }
 
             uint32_t ext_count = 0;
-            vkEnumerateDeviceExtensionProperties(gpu, nullptr, &ext_count, nullptr);
+            if (!vk_check(vkEnumerateDeviceExtensionProperties(gpu, nullptr, &ext_count, nullptr),
+                          "vkEnumerateDeviceExtensionProperties"))
+            {
+                continue;
+            }
             std::vector<VkExtensionProperties> exts(ext_count);
-            vkEnumerateDeviceExtensionProperties(gpu, nullptr, &ext_count, exts.data());
+            const VkResult ext_result = vkEnumerateDeviceExtensionProperties(gpu, nullptr, &ext_count, exts.data());
+            if (ext_result != VK_SUCCESS && ext_result != VK_INCOMPLETE)
+            {
+                vk_check(ext_result, "vkEnumerateDeviceExtensionProperties");
+                continue;
+            }
             bool has_swap = false;
             bool has_depth_clip_control = false;
             bool has_extended_dynamic_state = false;
+            bool has_portability_subset = false;
             for (const auto& e : exts)
             {
                 if (std::strcmp(e.extensionName, VK_KHR_SWAPCHAIN_EXTENSION_NAME) == 0)
@@ -738,6 +951,10 @@ namespace rendering_engine::gpu::backend::vulkan
                 else if (std::strcmp(e.extensionName, VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME) == 0)
                 {
                     has_extended_dynamic_state = true;
+                }
+                else if (std::strcmp(e.extensionName, k_portability_subset_extension) == 0)
+                {
+                    has_portability_subset = true;
                 }
             }
             if (!has_swap)
@@ -754,10 +971,13 @@ namespace rendering_engine::gpu::backend::vulkan
                 best_present = *present_family;
                 m_depth_clip_control_enabled = has_depth_clip_control;
                 m_extended_dynamic_state_enabled = has_extended_dynamic_state;
+                m_has_portability_subset = has_portability_subset;
             }
         }
         if (best == VK_NULL_HANDLE)
         {
+            LOG_FTL("No suitable Vulkan GPU: needs api 1.1, a graphics queue that can present to the window, "
+                    "and VK_KHR_swapchain");
             throw std::runtime_error{"no suitable Vulkan GPU"};
         }
 
@@ -827,10 +1047,45 @@ namespace rendering_engine::gpu::backend::vulkan
                     "vertex_layout.stride==0 will collapse meshes to a point");
         }
 
+        // Core features are requested only when the device reports
+        // them: vkCreateDevice fails with VK_ERROR_FEATURE_NOT_PRESENT
+        // for any unsupported feature that is asked for, and none of
+        // these is universal (MoltenVK has no geometry shaders or
+        // fillModeNonSolid, much mobile hardware no tessellation). What
+        // was granted is recorded in m_features for the consumers to
+        // gate on, and every gap is logged once here.
+        VkPhysicalDeviceFeatures supported{};
+        vkGetPhysicalDeviceFeatures(m_physical_device, &supported);
         VkPhysicalDeviceFeatures features{};
-        features.fillModeNonSolid = VK_TRUE;
-        features.tessellationShader = VK_TRUE;
-        features.multiDrawIndirect = VK_TRUE;
+        const auto request = [](VkBool32 available, VkBool32& requested, bool& granted, const char* consequence)
+        {
+            granted = available == VK_TRUE;
+            requested = granted ? VK_TRUE : VK_FALSE;
+            if (!granted)
+            {
+                LOG_WRN("Vulkan feature unavailable on this device: %s", consequence);
+            }
+        };
+        request(supported.fillModeNonSolid,
+                features.fillModeNonSolid,
+                m_features.fill_mode_non_solid,
+                "fillModeNonSolid (wireframe / point materials rasterise filled)");
+        request(supported.geometryShader,
+                features.geometryShader,
+                m_features.geometry_shader,
+                "geometryShader (pipelines with a geometry stage are refused)");
+        request(supported.tessellationShader,
+                features.tessellationShader,
+                m_features.tessellation_shader,
+                "tessellationShader (pipelines with tessellation stages are refused)");
+        request(supported.multiDrawIndirect,
+                features.multiDrawIndirect,
+                m_features.multi_draw_indirect,
+                "multiDrawIndirect (multi-draw indirect is issued as one draw per record)");
+        request(supported.samplerAnisotropy,
+                features.samplerAnisotropy,
+                m_features.sampler_anisotropy,
+                "samplerAnisotropy (anisotropic filtering is unavailable)");
 
         std::vector<const char*> device_extensions{VK_KHR_SWAPCHAIN_EXTENSION_NAME};
         if (m_depth_clip_control_enabled)
@@ -840,6 +1095,14 @@ namespace rendering_engine::gpu::backend::vulkan
         if (m_extended_dynamic_state_enabled)
         {
             device_extensions.push_back(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
+        }
+        if (m_has_portability_subset)
+        {
+            // A device that lists the portability subset is a layered
+            // implementation, and the spec requires the extension to
+            // be enabled on it.
+            device_extensions.push_back(k_portability_subset_extension);
+            m_features.portability_subset = true;
         }
 
         VkPhysicalDeviceDepthClipControlFeaturesEXT dcc_feature{};
@@ -871,8 +1134,9 @@ namespace rendering_engine::gpu::backend::vulkan
         info.pEnabledFeatures = nullptr;
         info.enabledExtensionCount = static_cast<uint32_t>(device_extensions.size());
         info.ppEnabledExtensionNames = device_extensions.data();
-        if (vkCreateDevice(m_physical_device, &info, nullptr, &m_device) != VK_SUCCESS)
+        if (!vk_check(vkCreateDevice(m_physical_device, &info, nullptr, &m_device), "vkCreateDevice"))
         {
+            m_device = VK_NULL_HANDLE;
             throw std::runtime_error{"vkCreateDevice failed"};
         }
         vkGetDeviceQueue(m_device, m_graphics_queue_family, 0, &m_graphics_queue);
@@ -890,9 +1154,17 @@ namespace rendering_engine::gpu::backend::vulkan
             }
         }
 
-        LOG_INF("Vulkan logical device created (depth_clip_control: %s, extended_dynamic_state: %s)",
+        LOG_INF("Vulkan logical device created (depth_clip_control: %s, extended_dynamic_state: %s, "
+                "portability_subset: %s; features: fillModeNonSolid %s, geometryShader %s, tessellationShader %s, "
+                "multiDrawIndirect %s, samplerAnisotropy %s)",
                 m_depth_clip_control_enabled ? "on" : "off",
-                m_extended_dynamic_state_enabled ? "on" : "off");
+                m_extended_dynamic_state_enabled ? "on" : "off",
+                m_features.portability_subset ? "on" : "off",
+                m_features.fill_mode_non_solid ? "on" : "off",
+                m_features.geometry_shader ? "on" : "off",
+                m_features.tessellation_shader ? "on" : "off",
+                m_features.multi_draw_indirect ? "on" : "off",
+                m_features.sampler_anisotropy ? "on" : "off");
     }
 
     void vk_device::create_command_pool()
@@ -901,35 +1173,90 @@ namespace rendering_engine::gpu::backend::vulkan
         info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
         info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
         info.queueFamilyIndex = m_graphics_queue_family;
-        if (vkCreateCommandPool(m_device, &info, nullptr, &m_command_pool) != VK_SUCCESS)
+        if (!vk_check(vkCreateCommandPool(m_device, &info, nullptr, &m_command_pool), "vkCreateCommandPool"))
         {
+            m_command_pool = VK_NULL_HANDLE;
             throw std::runtime_error{"vkCreateCommandPool failed"};
         }
     }
 
-    void vk_device::create_descriptor_pool()
+    bool vk_device::create_descriptor_pool()
     {
-        const uint32_t max_sets = 256;
+        const uint32_t index = static_cast<uint32_t>(m_descriptor_pools.size());
+        const descriptor_pool_budget budget = descriptor_pool_budget_for(index);
         std::array<VkDescriptorPoolSize, 4> sizes{};
         sizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        sizes[0].descriptorCount = 256;
+        sizes[0].descriptorCount = budget.uniform_buffers;
         sizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        sizes[1].descriptorCount = 256;
+        sizes[1].descriptorCount = budget.combined_image_samplers;
         sizes[2].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-        sizes[2].descriptorCount = 64;
+        sizes[2].descriptorCount = budget.storage_buffers;
         sizes[3].type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-        sizes[3].descriptorCount = 64;
+        sizes[3].descriptorCount = budget.storage_images;
 
         VkDescriptorPoolCreateInfo info{};
         info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
         info.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
-        info.maxSets = max_sets;
+        info.maxSets = budget.max_sets;
         info.poolSizeCount = static_cast<uint32_t>(sizes.size());
         info.pPoolSizes = sizes.data();
-        if (vkCreateDescriptorPool(m_device, &info, nullptr, &m_descriptor_pool) != VK_SUCCESS)
+        VkDescriptorPool pool = VK_NULL_HANDLE;
+        if (!vk_check(vkCreateDescriptorPool(m_device, &info, nullptr, &pool), "vkCreateDescriptorPool"))
         {
-            throw std::runtime_error{"vkCreateDescriptorPool failed"};
+            return false;
         }
+        m_descriptor_pools.push_back(pool);
+        LOG_INF("Vulkan descriptor pool %u: %u sets (%u uniform buffers, %u combined image samplers, "
+                "%u storage buffers, %u storage images)",
+                index,
+                budget.max_sets,
+                budget.uniform_buffers,
+                budget.combined_image_samplers,
+                budget.storage_buffers,
+                budget.storage_images);
+        return true;
+    }
+
+    bool vk_device::allocate_descriptor_set(VkDescriptorSetLayout layout,
+                                            VkDescriptorSet& out_set,
+                                            VkDescriptorPool& out_pool)
+    {
+        out_set = VK_NULL_HANDLE;
+        out_pool = VK_NULL_HANDLE;
+        if (m_descriptor_pools.empty() && !create_descriptor_pool())
+        {
+            return false;
+        }
+        for (int attempt = 0; attempt < 2; ++attempt)
+        {
+            VkDescriptorSetAllocateInfo ai{};
+            ai.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+            ai.descriptorPool = m_descriptor_pools.back();
+            ai.descriptorSetCount = 1;
+            ai.pSetLayouts = &layout;
+            const VkResult r = vkAllocateDescriptorSets(m_device, &ai, &out_set);
+            if (r == VK_SUCCESS)
+            {
+                out_pool = m_descriptor_pools.back();
+                return true;
+            }
+            out_set = VK_NULL_HANDLE;
+            // Out-of-pool-memory and fragmentation are the two "this
+            // pool is full" answers; anything else is a real failure.
+            // The fresh pool is larger than the one that ran out, so a
+            // second refusal from it is not retried.
+            const bool exhausted = r == VK_ERROR_OUT_OF_POOL_MEMORY || r == VK_ERROR_FRAGMENTED_POOL;
+            if (!exhausted || attempt == 1)
+            {
+                vk_check(r, "vkAllocateDescriptorSets");
+                return false;
+            }
+            if (!create_descriptor_pool())
+            {
+                return false;
+            }
+        }
+        return false;
     }
 
     // -- Swapchain ------------------------------------------------------
@@ -992,9 +1319,18 @@ namespace rendering_engine::gpu::backend::vulkan
         m_swapchain_extent = extent;
 
         uint32_t actual = 0;
-        vkGetSwapchainImagesKHR(m_device, m_swapchain, &actual, nullptr);
+        if (!vk_check(vkGetSwapchainImagesKHR(m_device, m_swapchain, &actual, nullptr), "vkGetSwapchainImagesKHR"))
+        {
+            destroy_swapchain();
+            return false;
+        }
         m_swapchain_images.resize(actual);
-        vkGetSwapchainImagesKHR(m_device, m_swapchain, &actual, m_swapchain_images.data());
+        if (!vk_check(vkGetSwapchainImagesKHR(m_device, m_swapchain, &actual, m_swapchain_images.data()),
+                      "vkGetSwapchainImagesKHR"))
+        {
+            destroy_swapchain();
+            return false;
+        }
 
         // Every failure below releases the partially built swapchain
         // through destroy_swapchain, which skips null handles, so the
@@ -1019,7 +1355,9 @@ namespace rendering_engine::gpu::backend::vulkan
             }
         }
 
-        const VkFormat depth_fmt = to_vk_format(m_swapchain_depth_format);
+        // The depth format resolved against this device at init (see
+        // resolve_depth_formats), not the nominal translation.
+        const VkFormat depth_fmt = vk_format_for(m_swapchain_depth_format);
         VkImageCreateInfo di{};
         di.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
         di.imageType = VK_IMAGE_TYPE_2D;
@@ -1051,13 +1389,20 @@ namespace rendering_engine::gpu::backend::vulkan
             destroy_swapchain();
             return false;
         }
-        vkBindImageMemory(m_device, m_swapchain_depth_image, m_swapchain_depth_memory, 0);
+        if (!vk_check(vkBindImageMemory(m_device, m_swapchain_depth_image, m_swapchain_depth_memory, 0),
+                      "vkBindImageMemory (swapchain depth)"))
+        {
+            destroy_swapchain();
+            return false;
+        }
         VkImageViewCreateInfo dvi{};
         dvi.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
         dvi.image = m_swapchain_depth_image;
         dvi.viewType = VK_IMAGE_VIEW_TYPE_2D;
         dvi.format = depth_fmt;
-        dvi.subresourceRange.aspectMask = aspect_for_format(m_swapchain_depth_format);
+        // The swapchain depth is never sampled, so the view carries
+        // every aspect the resolved format has.
+        dvi.subresourceRange.aspectMask = aspect_for_vk_format(depth_fmt);
         dvi.subresourceRange.levelCount = 1;
         dvi.subresourceRange.layerCount = 1;
         const VkResult depth_view_result = vkCreateImageView(m_device, &dvi, nullptr, &m_swapchain_depth_view);
@@ -1148,11 +1493,13 @@ namespace rendering_engine::gpu::backend::vulkan
         // The render-finished semaphores live with the swapchain (one per
         // image); only the image-available semaphore and the in-flight fence
         // are owned here.
-        if (vkCreateSemaphore(m_device, &si, nullptr, &m_image_available) != VK_SUCCESS ||
-            vkCreateFence(m_device, &fi, nullptr, &m_in_flight_fence) != VK_SUCCESS)
+        if (!vk_check(vkCreateSemaphore(m_device, &si, nullptr, &m_image_available),
+                      "vkCreateSemaphore (image-available)") ||
+            !vk_check(vkCreateFence(m_device, &fi, nullptr, &m_in_flight_fence), "vkCreateFence (in-flight)"))
         {
             throw std::runtime_error{"vk sync objects"};
         }
+        m_in_flight_fence_armed = false;
     }
 
     void vk_device::destroy_sync_objects()
@@ -1237,7 +1584,7 @@ namespace rendering_engine::gpu::backend::vulkan
 
     bool vk_device::recreate_swapchain()
     {
-        if (m_device == VK_NULL_HANDLE || m_surface == VK_NULL_HANDLE)
+        if (m_device == VK_NULL_HANDLE || m_surface == VK_NULL_HANDLE || m_device_lost)
         {
             return false;
         }
@@ -1268,7 +1615,13 @@ namespace rendering_engine::gpu::backend::vulkan
         // the previous frame's command buffer, and the present that may
         // still be reading the image it was handed. One frame in
         // flight makes this cheap, and a rebuild is rare.
-        vkDeviceWaitIdle(m_device);
+        if (!check_queue_result(vkDeviceWaitIdle(m_device), "vkDeviceWaitIdle (swapchain rebuild)"))
+        {
+            suspend_swapchain("the device could not be waited idle before the rebuild", true);
+            return false;
+        }
+        // The idle wait covered the frame the fence tracks.
+        m_in_flight_fence_armed = false;
 
         // The swapchain target's framebuffers point at image views that
         // are about to go, and its render passes at a format / sample
@@ -1524,16 +1877,25 @@ namespace rendering_engine::gpu::backend::vulkan
             encoder.reset();
             return;
         }
+        if (m_device_lost)
+        {
+            // Nothing can execute any more. The encoder still owns its
+            // command buffer, so dropping it returns the buffer to the
+            // pool; end_frame raises the loss to the main loop.
+            encoder.reset();
+            return;
+        }
         VkCommandBuffer cmd = vk_enc->release_command_buffer();
         if (cmd == VK_NULL_HANDLE)
         {
             encoder.reset();
             return;
         }
-        const VkResult end_result = vkEndCommandBuffer(cmd);
-        if (end_result != VK_SUCCESS)
+        if (!vk_check(vkEndCommandBuffer(cmd), "vkEndCommandBuffer"))
         {
-            LOG_ERR("vkEndCommandBuffer failed: %s", vk_result_to_string(end_result));
+            // The buffer was released from the encoder above, so it is
+            // freed here rather than leaked.
+            vkFreeCommandBuffers(m_device, m_command_pool, 1, &cmd);
             encoder.reset();
             return;
         }
@@ -1550,14 +1912,13 @@ namespace rendering_engine::gpu::backend::vulkan
             si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
             si.commandBufferCount = 1;
             si.pCommandBuffers = &cmd;
-            const VkResult submit_result = vkQueueSubmit(m_graphics_queue, 1, &si, VK_NULL_HANDLE);
-            if (submit_result != VK_SUCCESS)
+            if (check_queue_result(vkQueueSubmit(m_graphics_queue, 1, &si, VK_NULL_HANDLE), "vkQueueSubmit (no-image)"))
             {
-                LOG_ERR("vkQueueSubmit (no-image) failed: %s", vk_result_to_string(submit_result));
+                check_queue_result(vkQueueWaitIdle(m_graphics_queue), "vkQueueWaitIdle (no-image)");
             }
-            vkQueueWaitIdle(m_graphics_queue);
-            // The queue is idle, so this one-off (off-screen-only) command
-            // buffer is finished and can be returned to the pool now.
+            // The queue is idle (or the device is gone), so this one-off
+            // (off-screen-only) command buffer can be returned to the
+            // pool now.
             vkFreeCommandBuffers(m_device, m_command_pool, 1, &cmd);
             encoder.reset();
             return;
@@ -1570,7 +1931,7 @@ namespace rendering_engine::gpu::backend::vulkan
         // unsignaled whenever the acquire failed (out-of-date
         // swapchain), and the next begin_frame then blocked forever
         // (issue #206).
-        vkResetFences(m_device, 1, &m_in_flight_fence);
+        vk_check(vkResetFences(m_device, 1, &m_in_flight_fence), "vkResetFences");
 
         const VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
         VkSubmitInfo si{};
@@ -1582,11 +1943,19 @@ namespace rendering_engine::gpu::backend::vulkan
         si.pCommandBuffers = &cmd;
         si.signalSemaphoreCount = 1;
         si.pSignalSemaphores = &m_render_finished[m_current_image_index];
-        const VkResult submit_result = vkQueueSubmit(m_graphics_queue, 1, &si, m_in_flight_fence);
-        if (submit_result != VK_SUCCESS)
+        if (!check_queue_result(vkQueueSubmit(m_graphics_queue, 1, &si, m_in_flight_fence), "vkQueueSubmit"))
         {
-            LOG_ERR("vkQueueSubmit failed: %s", vk_result_to_string(submit_result));
+            // Nothing signals the fence or the render-finished
+            // semaphore now: the fence stays disarmed so the next
+            // begin_frame does not wait on it forever, and the frame
+            // is not presented (the present would wait forever on the
+            // semaphore). The command buffer was never executed, so it
+            // can go back to the pool right away.
+            vkFreeCommandBuffers(m_device, m_command_pool, 1, &cmd);
+            encoder.reset();
+            return;
         }
+        m_in_flight_fence_armed = true;
         // The present itself belongs to the frame boundary; end_frame
         // issues it once the renderer has closed the frame.
         m_present_pending = true;
@@ -1629,8 +1998,11 @@ namespace rendering_engine::gpu::backend::vulkan
 
     void vk_device::begin_frame()
     {
-        if (!m_initialised)
+        if (!m_initialised || m_device_lost)
         {
+            // A lost device has no frame to wait for; the renderer's
+            // recording is dropped by submit and end_frame raises the
+            // loss.
             return;
         }
         // Block until the previous frame's command buffer has finished
@@ -1641,8 +2013,19 @@ namespace rendering_engine::gpu::backend::vulkan
         // longer reading. (The wait used to run lazily at the first
         // swapchain pass, after every off-screen pass had already
         // written its UBOs: the host-write / device-read race of
-        // issue #169, still open at one frame in flight.)
-        vkWaitForFences(m_device, 1, &m_in_flight_fence, VK_TRUE, UINT64_MAX);
+        // issue #169, still open at one frame in flight.) The fence is
+        // only waited when a submission armed it: after a failed
+        // submit nothing would ever signal it.
+        if (m_in_flight_fence_armed)
+        {
+            m_in_flight_fence_armed = false;
+            if (!check_queue_result(vkWaitForFences(m_device, 1, &m_in_flight_fence, VK_TRUE, UINT64_MAX),
+                                    "vkWaitForFences") &&
+                m_device_lost)
+            {
+                return;
+            }
+        }
         // The fence is signaled, so nothing enqueued for destruction
         // during the previous frame is still referenced by the GPU —
         // and no command buffer is open yet that could reference what
@@ -1670,7 +2053,7 @@ namespace rendering_engine::gpu::backend::vulkan
         {
             return;
         }
-        if (m_have_current_image && m_present_pending)
+        if (m_have_current_image && m_present_pending && !m_device_lost)
         {
             VkPresentInfoKHR pi{};
             pi.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -1690,9 +2073,9 @@ namespace rendering_engine::gpu::backend::vulkan
                 // buffer submitted a moment ago.
                 recreate_swapchain();
             }
-            else if (r != VK_SUCCESS)
+            else
             {
-                LOG_ERR("vkQueuePresentKHR failed: %s", vk_result_to_string(r));
+                check_queue_result(r, "vkQueuePresentKHR");
             }
         }
         // An image acquired without a submission (the encoder failed to
@@ -1701,6 +2084,18 @@ namespace rendering_engine::gpu::backend::vulkan
         m_have_current_image = false;
         m_acquire_attempted = false;
         m_present_pending = false;
+
+        if (m_device_lost && !m_device_lost_thrown)
+        {
+            // Raised exactly once, from the frame boundary, so the main
+            // loop's failure path shows the message and tears the
+            // engine down in order. A transparent re-initialisation
+            // would need every GPU resource the renderer holds to be
+            // re-creatable; the per-frame bookkeeping above is left
+            // consistent for quit(). Later frames are no-ops.
+            m_device_lost_thrown = true;
+            throw std::runtime_error{"Vulkan device lost"};
+        }
 
         if (m_frame_index < k_diagnostic_frames)
         {
@@ -1724,7 +2119,7 @@ namespace rendering_engine::gpu::backend::vulkan
             return;
         }
         m_acquire_attempted = true;
-        if (m_swapchain_suspended || m_swapchain == VK_NULL_HANDLE)
+        if (m_swapchain_suspended || m_swapchain == VK_NULL_HANDLE || m_device_lost)
         {
             return;
         }
@@ -1754,27 +2149,35 @@ namespace rendering_engine::gpu::backend::vulkan
                 }
                 return;
             }
-            LOG_ERR("vkAcquireNextImageKHR failed: %s", vk_result_to_string(r));
+            check_queue_result(r, "vkAcquireNextImageKHR");
             return;
         }
     }
 
     VkCommandBuffer vk_device::begin_one_shot()
     {
+        if (m_device_lost)
+        {
+            return VK_NULL_HANDLE;
+        }
         VkCommandBufferAllocateInfo ai{};
         ai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
         ai.commandPool = m_command_pool;
         ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
         ai.commandBufferCount = 1;
         VkCommandBuffer cmd = VK_NULL_HANDLE;
-        if (vkAllocateCommandBuffers(m_device, &ai, &cmd) != VK_SUCCESS)
+        if (!vk_check(vkAllocateCommandBuffers(m_device, &ai, &cmd), "vkAllocateCommandBuffers (one-shot)"))
         {
             return VK_NULL_HANDLE;
         }
         VkCommandBufferBeginInfo bi{};
         bi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
         bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-        vkBeginCommandBuffer(cmd, &bi);
+        if (!vk_check(vkBeginCommandBuffer(cmd, &bi), "vkBeginCommandBuffer (one-shot)"))
+        {
+            vkFreeCommandBuffers(m_device, m_command_pool, 1, &cmd);
+            return VK_NULL_HANDLE;
+        }
         return cmd;
     }
 
@@ -1784,14 +2187,175 @@ namespace rendering_engine::gpu::backend::vulkan
         {
             return;
         }
-        vkEndCommandBuffer(cmd);
-        VkSubmitInfo si{};
-        si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-        si.commandBufferCount = 1;
-        si.pCommandBuffers = &cmd;
-        vkQueueSubmit(m_graphics_queue, 1, &si, VK_NULL_HANDLE);
-        vkQueueWaitIdle(m_graphics_queue);
+        if (vk_check(vkEndCommandBuffer(cmd), "vkEndCommandBuffer (one-shot)") && !m_device_lost)
+        {
+            VkSubmitInfo si{};
+            si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+            si.commandBufferCount = 1;
+            si.pCommandBuffers = &cmd;
+            if (check_queue_result(vkQueueSubmit(m_graphics_queue, 1, &si, VK_NULL_HANDLE), "vkQueueSubmit (one-shot)"))
+            {
+                check_queue_result(vkQueueWaitIdle(m_graphics_queue), "vkQueueWaitIdle (one-shot)");
+            }
+        }
+        // Either the queue is idle, the work never reached it, or the
+        // device is gone: in every case the buffer can be returned.
         vkFreeCommandBuffers(m_device, m_command_pool, 1, &cmd);
+    }
+
+    bool
+    vk_device::create_staging_buffer(const void* data, size_t size, VkBuffer& out_buffer, VkDeviceMemory& out_memory)
+    {
+        out_buffer = VK_NULL_HANDLE;
+        out_memory = VK_NULL_HANDLE;
+        if (data == nullptr || size == 0)
+        {
+            LOG_ERR("vk_device::create_staging_buffer: no source data (%zu bytes)", size);
+            return false;
+        }
+        VkBufferCreateInfo bi{};
+        bi.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+        bi.size = size;
+        bi.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+        bi.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        if (!vk_check(vkCreateBuffer(m_device, &bi, nullptr, &out_buffer), "vkCreateBuffer (staging)"))
+        {
+            out_buffer = VK_NULL_HANDLE;
+            return false;
+        }
+        VkMemoryRequirements mr{};
+        vkGetBufferMemoryRequirements(m_device, out_buffer, &mr);
+        VkMemoryAllocateInfo ai{};
+        ai.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+        ai.allocationSize = mr.size;
+        ai.memoryTypeIndex = find_memory_type(
+            mr.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        if (!vk_check(vkAllocateMemory(m_device, &ai, nullptr, &out_memory), "vkAllocateMemory (staging)"))
+        {
+            out_memory = VK_NULL_HANDLE;
+            destroy_staging_buffer(out_buffer, out_memory);
+            out_buffer = VK_NULL_HANDLE;
+            return false;
+        }
+        if (!vk_check(vkBindBufferMemory(m_device, out_buffer, out_memory, 0), "vkBindBufferMemory (staging)"))
+        {
+            destroy_staging_buffer(out_buffer, out_memory);
+            out_buffer = VK_NULL_HANDLE;
+            out_memory = VK_NULL_HANDLE;
+            return false;
+        }
+        void* mapped = nullptr;
+        if (!vk_check(vkMapMemory(m_device, out_memory, 0, VK_WHOLE_SIZE, 0, &mapped), "vkMapMemory (staging)") ||
+            mapped == nullptr)
+        {
+            destroy_staging_buffer(out_buffer, out_memory);
+            out_buffer = VK_NULL_HANDLE;
+            out_memory = VK_NULL_HANDLE;
+            return false;
+        }
+        std::memcpy(mapped, data, size);
+        vkUnmapMemory(m_device, out_memory);
+        return true;
+    }
+
+    void vk_device::destroy_staging_buffer(VkBuffer buffer, VkDeviceMemory memory)
+    {
+        if (buffer != VK_NULL_HANDLE)
+        {
+            vkDestroyBuffer(m_device, buffer, nullptr);
+        }
+        if (memory != VK_NULL_HANDLE)
+        {
+            vkFreeMemory(m_device, memory, nullptr);
+        }
+    }
+
+    void vk_device::resolve_depth_formats()
+    {
+        const auto supports_depth_attachment = [this](VkFormat format)
+        {
+            VkFormatProperties props{};
+            vkGetPhysicalDeviceFormatProperties(m_physical_device, format, &props);
+            return (props.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0;
+        };
+        struct slot
+        {
+            texture_format format;
+            const char* name;
+            size_t index;
+        };
+        const std::array<slot, 3> slots{{{texture_format::depth24, "depth24", 0},
+                                         {texture_format::depth32_float, "depth32_float", 1},
+                                         {texture_format::depth24_stencil8, "depth24_stencil8", 2}}};
+        for (const slot& s : slots)
+        {
+            const VkFormat preferred = to_vk_format(s.format);
+            const VkFormat chosen = select_depth_format(s.format, supports_depth_attachment);
+            if (chosen == VK_FORMAT_UNDEFINED)
+            {
+                LOG_FTL("Vulkan: no depth attachment format available for %s (the spec mandates D32_SFLOAT)", s.name);
+                throw std::runtime_error{"no Vulkan depth attachment format"};
+            }
+            m_depth_formats[s.index] = chosen;
+            if (chosen == preferred)
+            {
+                LOG_INF("Vulkan depth format %s: %s", s.name, depth_format_name(chosen));
+            }
+            else
+            {
+                LOG_INF("Vulkan depth format %s: %s (%s is not a depth attachment format on this device)",
+                        s.name,
+                        depth_format_name(chosen),
+                        depth_format_name(preferred));
+            }
+        }
+    }
+
+    void vk_device::create_fallback_sampler()
+    {
+        VkSamplerCreateInfo si{};
+        si.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+        si.minFilter = VK_FILTER_LINEAR;
+        si.magFilter = VK_FILTER_LINEAR;
+        si.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+        si.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        si.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        si.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        si.minLod = 0.0f;
+        si.maxLod = VK_LOD_CLAMP_NONE;
+        si.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK;
+        si.maxAnisotropy = 1.0f;
+        if (!vk_check(vkCreateSampler(m_device, &si, nullptr, &m_fallback_sampler), "vkCreateSampler (fallback)"))
+        {
+            m_fallback_sampler = VK_NULL_HANDLE;
+            throw std::runtime_error{"vkCreateSampler (fallback) failed"};
+        }
+    }
+
+    void vk_device::mark_device_lost(const char* what)
+    {
+        if (m_device_lost)
+        {
+            return;
+        }
+        m_device_lost = true;
+        LOG_FTL("%s reported VK_ERROR_DEVICE_LOST: the Vulkan device is gone. No further work is submitted or "
+                "presented; the engine shuts down at the end of this frame",
+                what);
+    }
+
+    bool vk_device::check_queue_result(VkResult result, const char* what)
+    {
+        if (result == VK_SUCCESS)
+        {
+            return true;
+        }
+        if (result == VK_ERROR_DEVICE_LOST)
+        {
+            mark_device_lost(what);
+            return false;
+        }
+        return vk_check(result, what);
     }
 
     uint32_t vk_device::find_memory_type(uint32_t type_filter, VkMemoryPropertyFlags properties) const
@@ -1863,7 +2427,7 @@ namespace rendering_engine::gpu::backend::vulkan
             attachments[1] = {};
             if (target.is_swapchain)
             {
-                attachments[1].format = to_vk_format(m_swapchain_depth_format);
+                attachments[1].format = vk_format_for(m_swapchain_depth_format);
             }
             else if (auto* depth_tex = m_textures.lookup(target.depth_attachment.id))
             {
@@ -2085,9 +2649,34 @@ namespace rendering_engine::gpu::backend::vulkan
     {
         return m_command_pool;
     }
-    VkDescriptorPool vk_device::descriptor_pool() const noexcept
+    const vk_device_features& vk_device::features() const noexcept
     {
-        return m_descriptor_pool;
+        return m_features;
+    }
+    bool vk_device::device_lost() const noexcept
+    {
+        return m_device_lost;
+    }
+    VkFormat vk_device::vk_format_for(texture_format format) const noexcept
+    {
+        VkFormat resolved = VK_FORMAT_UNDEFINED;
+        switch (format)
+        {
+        case texture_format::depth24:
+            resolved = m_depth_formats[0];
+            break;
+        case texture_format::depth32_float:
+            resolved = m_depth_formats[1];
+            break;
+        case texture_format::depth24_stencil8:
+            resolved = m_depth_formats[2];
+            break;
+        default:
+            break;
+        }
+        // Before resolve_depth_formats has run (or for a colour
+        // format) the nominal translation stands.
+        return resolved != VK_FORMAT_UNDEFINED ? resolved : to_vk_format(format);
     }
     uint64_t vk_device::swapchain_generation() const noexcept
     {

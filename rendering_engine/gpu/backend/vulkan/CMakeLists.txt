@@ -8,6 +8,8 @@ target_sources(AlphaEngine PRIVATE
     vk_device_shader.cpp
     vk_device_texture.cpp
     vk_factory.cpp
+    vk_negotiate.cpp
+    vk_negotiate.hpp
     vk_resources.hpp
     vk_translate.cpp
     vk_translate.hpp
