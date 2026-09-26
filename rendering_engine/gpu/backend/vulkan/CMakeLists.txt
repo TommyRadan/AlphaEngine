@@ -1,4 +1,6 @@
 target_sources(AlphaEngine PRIVATE
+    vk_allocator.cpp
+    vk_allocator.hpp
     vk_command_encoder.cpp
     vk_command_encoder.hpp
     vk_device.cpp
@@ -11,6 +13,8 @@ target_sources(AlphaEngine PRIVATE
     vk_negotiate.cpp
     vk_negotiate.hpp
     vk_resources.hpp
+    vk_staging_ring.cpp
+    vk_staging_ring.hpp
     vk_translate.cpp
     vk_translate.hpp
 )

@@ -78,45 +78,30 @@ namespace rendering_engine::gpu::backend::vulkan
         info.size = descriptor.size;
         info.usage = translate_usage(descriptor.usage);
         info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        if (!vk_check(vkCreateBuffer(m_device, &info, nullptr, &record.object), "vkCreateBuffer"))
+
+        // Static data lives in device-local memory and is filled through
+        // the staging ring; anything rewritten from the host (dynamic /
+        // stream) is host-visible, host-coherent and mapped for its
+        // whole lifetime by its allocation. VMA sub-allocates both from
+        // its memory blocks, so a buffer is not a vkAllocateMemory of
+        // its own.
+        const bool host_visible = descriptor.hint != buffer_usage_hint::static_data;
+        const VmaAllocationCreateInfo alloc = host_visible ? host_mapped_allocation(false) : device_local_allocation();
+        VmaAllocationInfo alloc_info{};
+        if (!vk_check(vmaCreateBuffer(m_allocator, &info, &alloc, &record.object, &record.allocation, &alloc_info),
+                      "vmaCreateBuffer"))
         {
             return {};
         }
-
-        VkMemoryRequirements mem_req{};
-        vkGetBufferMemoryRequirements(m_device, record.object, &mem_req);
-
-        const VkMemoryPropertyFlags want =
-            (descriptor.hint == buffer_usage_hint::static_data)
-                ? VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-                : (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-
-        VkMemoryAllocateInfo ai{};
-        ai.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-        ai.allocationSize = mem_req.size;
-        ai.memoryTypeIndex = find_memory_type(mem_req.memoryTypeBits, want);
-        if (!vk_check(vkAllocateMemory(m_device, &ai, nullptr, &record.memory), "vkAllocateMemory (buffer)"))
+        if (host_visible)
         {
-            vkDestroyBuffer(m_device, record.object, nullptr);
-            return {};
-        }
-        if (!vk_check(vkBindBufferMemory(m_device, record.object, record.memory, 0), "vkBindBufferMemory"))
-        {
-            vkDestroyBuffer(m_device, record.object, nullptr);
-            vkFreeMemory(m_device, record.memory, nullptr);
-            return {};
-        }
-
-        if (descriptor.hint != buffer_usage_hint::static_data)
-        {
-            // A host-visible buffer that cannot be mapped would drop
-            // every later write_buffer, so it is not handed out.
-            if (!vk_check(vkMapMemory(m_device, record.memory, 0, VK_WHOLE_SIZE, 0, &record.mapped),
-                          "vkMapMemory (buffer)") ||
-                record.mapped == nullptr)
+            // A host-visible buffer that is not mapped would drop every
+            // later write_buffer, so it is not handed out.
+            record.mapped = alloc_info.pMappedData;
+            if (record.mapped == nullptr)
             {
-                vkDestroyBuffer(m_device, record.object, nullptr);
-                vkFreeMemory(m_device, record.memory, nullptr);
+                LOG_ERR("vk_device::create_buffer: host-visible buffer allocation is not mapped");
+                vmaDestroyBuffer(m_allocator, record.object, record.allocation);
                 return {};
             }
         }
@@ -129,30 +114,18 @@ namespace rendering_engine::gpu::backend::vulkan
             }
             else
             {
-                // Device-local: stage the data and copy it across. A
-                // failed staging step or one-shot leaves the buffer
-                // allocated but unfilled, with the failure logged.
-                VkBuffer staging = VK_NULL_HANDLE;
-                VkDeviceMemory staging_mem = VK_NULL_HANDLE;
-                if (create_staging_buffer(descriptor.initial_data, descriptor.size, staging, staging_mem))
+                // Device-local: stage the data and record the copy into
+                // the open transfer batch. A failed staging step leaves
+                // the buffer allocated but unfilled, with the failure
+                // logged.
+                staged_upload source{};
+                if (stage_upload(descriptor.initial_data, descriptor.size, source))
                 {
-                    VkCommandBuffer cmd = begin_one_shot();
-                    if (cmd != VK_NULL_HANDLE)
-                    {
-                        VkBufferCopy region{};
-                        region.size = descriptor.size;
-                        vkCmdCopyBuffer(cmd, staging, record.object, 1, &region);
-                        end_one_shot(cmd);
-                    }
-                    else
-                    {
-                        LOG_ERR("vk_device::create_buffer: initial data not uploaded (no command buffer)");
-                    }
-                    destroy_staging_buffer(staging, staging_mem);
+                    record_buffer_copy(source, record.object, 0, descriptor.size);
                 }
                 else
                 {
-                    LOG_ERR("vk_device::create_buffer: initial data not uploaded (staging buffer failed)");
+                    LOG_ERR("vk_device::create_buffer: initial data not uploaded (staging failed)");
                 }
             }
         }
@@ -169,31 +142,24 @@ namespace rendering_engine::gpu::backend::vulkan
         {
             return;
         }
-        // Defer the actual vkDestroy* until the GPU has finished the
-        // frame that referenced this buffer. The handle pool slot is
-        // freed immediately so the engine can recycle handle ids.
-        VkDevice dev = m_device;
-        VkBuffer obj = record->object;
-        VkDeviceMemory mem = record->memory;
-        void* mapped = record->mapped;
+        // Defer the actual destruction until the GPU has finished the
+        // frame (and the transfer batch) that referenced this buffer.
+        // The handle pool slot is freed immediately so the engine can
+        // recycle handle ids. The persistent map goes with the
+        // allocation.
+        const VmaAllocator allocator = m_allocator;
+        const VkBuffer obj = record->object;
+        const VmaAllocation allocation = record->allocation;
         enqueue_destroy(
-            [dev, obj, mem, mapped]
+            [allocator, obj, allocation]
             {
-                if (mapped != nullptr && mem != VK_NULL_HANDLE)
-                {
-                    vkUnmapMemory(dev, mem);
-                }
                 if (obj != VK_NULL_HANDLE)
                 {
-                    vkDestroyBuffer(dev, obj, nullptr);
-                }
-                if (mem != VK_NULL_HANDLE)
-                {
-                    vkFreeMemory(dev, mem, nullptr);
+                    vmaDestroyBuffer(allocator, obj, allocation);
                 }
             });
         record->object = VK_NULL_HANDLE;
-        record->memory = VK_NULL_HANDLE;
+        record->allocation = VK_NULL_HANDLE;
         record->mapped = nullptr;
         m_buffers.remove(handle.id);
     }
@@ -214,26 +180,15 @@ namespace rendering_engine::gpu::backend::vulkan
         {
             return;
         }
-        VkBuffer staging = VK_NULL_HANDLE;
-        VkDeviceMemory staging_mem = VK_NULL_HANDLE;
-        if (!create_staging_buffer(data, size, staging, staging_mem))
+        // Device-local: through the staging ring into the open transfer
+        // batch, which submit() queues ahead of the frame that reads
+        // the buffer.
+        staged_upload source{};
+        if (!stage_upload(data, size, source))
         {
-            LOG_ERR("vk_device::write_buffer: %zu bytes not written (staging buffer failed)", size);
+            LOG_ERR("vk_device::write_buffer: %zu bytes not written (staging failed)", size);
             return;
         }
-        VkCommandBuffer cmd = begin_one_shot();
-        if (cmd != VK_NULL_HANDLE)
-        {
-            VkBufferCopy region{};
-            region.dstOffset = offset;
-            region.size = size;
-            vkCmdCopyBuffer(cmd, staging, record->object, 1, &region);
-            end_one_shot(cmd);
-        }
-        else
-        {
-            LOG_ERR("vk_device::write_buffer: %zu bytes not written (no command buffer)", size);
-        }
-        destroy_staging_buffer(staging, staging_mem);
+        record_buffer_copy(source, record->object, offset, size);
     }
 } // namespace rendering_engine::gpu::backend::vulkan
