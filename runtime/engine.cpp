@@ -264,9 +264,10 @@ namespace runtime
         if (!window->is_minimized())
         {
             // Build the ImGui debug overlay before the passes run; its draw
-            // data is recorded inside the swapchain-targeted debug pass (via
-            // the render_debug event) so it composites on top of the frame on
-            // both the OpenGL and Vulkan backends. No-op in release builds.
+            // data is recorded inside the swapchain-targeted debug pass
+            // (debug_ui::record_draw_data) so it composites on top of the
+            // frame on both the OpenGL and Vulkan backends. No-op in release
+            // builds.
             rendering_engine::debug_ui::begin_frame();
             renderer->render();
             window->swap_buffers();

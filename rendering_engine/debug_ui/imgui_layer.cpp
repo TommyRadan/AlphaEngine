@@ -35,11 +35,8 @@
 #include <imgui_impl_sdl3.h>
 #include <imgui_impl_vulkan.h>
 
-#include <core/event.hpp>
-#include <core/event_engine.hpp>
 #include <core/log.hpp>
 #include <core/settings.hpp>
-#include <core/subscription.hpp>
 #include <core/time.hpp>
 #include <rendering_engine/debug/helper.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_device.hpp>
@@ -74,16 +71,11 @@ namespace rendering_engine::debug_ui
         // pass. Guards against recording a half-built frame.
         bool g_frame_ready = false;
 
-        // The render_debug listener that records the overlay's draw data.
-        // Held from init() to shutdown() so the overlay stops receiving the
-        // event as soon as its backend is torn down.
-        core::subscription g_render_debug_subscription;
-
         // The vk_device::swapchain_generation() the ImGui Vulkan
         // pipeline was last built for. The device rebuilds the
         // swapchain on resize, minimise / restore and any out-of-date
         // surface, retiring the render pass ImGui baked into its
-        // pipeline; on_render_debug compares this before recording and
+        // pipeline; record_draw_data compares this before recording and
         // rebuilds the pipeline when the generation moved.
         uint64_t g_vulkan_swapchain_generation = 0;
 
@@ -425,41 +417,6 @@ namespace rendering_engine::debug_ui
             return true;
         }
 
-        // Record the built draw data into the swapchain-targeted debug
-        // pass. Fired from the @ref core::render_debug listener
-        // while the render pass is still open.
-        void on_render_debug(const core::render_debug& event)
-        {
-            if (g_backend == backend_mode::none || !g_frame_ready)
-            {
-                return;
-            }
-            ImDrawData* draw_data = ImGui::GetDrawData();
-            if (draw_data == nullptr)
-            {
-                return;
-            }
-
-            if (g_backend == backend_mode::opengl)
-            {
-                // The debug pass left the swapchain framebuffer bound;
-                // the immediate-mode GL backend draws straight into it.
-                ImGui_ImplOpenGL3_RenderDrawData(draw_data);
-            }
-            else if (g_backend == backend_mode::vulkan && event.encoder != nullptr)
-            {
-                // Null while the debug pass is not open — no swapchain
-                // image this frame (minimised) — so nothing is recorded
-                // outside a render pass.
-                auto* cmd = static_cast<VkCommandBuffer>(event.encoder->native_command_buffer());
-                if (cmd != VK_NULL_HANDLE && refresh_vulkan_pipeline())
-                {
-                    ImGui_ImplVulkan_RenderDrawData(draw_data, cmd);
-                }
-            }
-            g_frame_ready = false;
-        }
-
         bool init_vulkan(runtime::engine& eng)
         {
             auto* device = static_cast<gpu::backend::vulkan::vk_device*>(eng.gpu.get());
@@ -567,11 +524,6 @@ namespace rendering_engine::debug_ui
             return;
         }
 
-        // Record the overlay into the swapchain-targeted debug pass. The
-        // debug pass emits render_debug while its render pass is open, so
-        // both backends land their draws on top of the composited frame.
-        g_render_debug_subscription = eng.events->subscribe<core::render_debug>(on_render_debug);
-
         LOG_INF("debug_ui: ImGui overlay initialised (SDL3 + %s)", core::graphics_backend_name(backend));
     }
 
@@ -581,9 +533,6 @@ namespace rendering_engine::debug_ui
         {
             return;
         }
-        // Stop listening before the backend goes so no render_debug can reach
-        // a torn-down renderer.
-        g_render_debug_subscription.reset();
         if (g_backend == backend_mode::vulkan)
         {
             // The render queue must be idle before tearing the backend's
@@ -636,6 +585,38 @@ namespace rendering_engine::debug_ui
         g_frame_ready = true;
     }
 
+    void record_draw_data(gpu::render_pass_encoder& encoder)
+    {
+        if (g_backend == backend_mode::none || !g_frame_ready)
+        {
+            return;
+        }
+        ImDrawData* draw_data = ImGui::GetDrawData();
+        if (draw_data == nullptr)
+        {
+            return;
+        }
+
+        if (g_backend == backend_mode::opengl)
+        {
+            // The debug pass left the swapchain framebuffer bound;
+            // the immediate-mode GL backend draws straight into it.
+            ImGui_ImplOpenGL3_RenderDrawData(draw_data);
+        }
+        else if (g_backend == backend_mode::vulkan)
+        {
+            // Null while the debug pass is not open — no swapchain
+            // image this frame (minimised) — so nothing is recorded
+            // outside a render pass.
+            auto* cmd = static_cast<VkCommandBuffer>(encoder.native_command_buffer());
+            if (cmd != VK_NULL_HANDLE && refresh_vulkan_pipeline())
+            {
+                ImGui_ImplVulkan_RenderDrawData(draw_data, cmd);
+            }
+        }
+        g_frame_ready = false;
+    }
+
     bool wants_keyboard()
     {
         return g_backend != backend_mode::none && ImGui::GetIO().WantCaptureKeyboard;
@@ -657,6 +638,7 @@ namespace rendering_engine::debug_ui
     void shutdown() {}
     void process_event(const void*) {}
     void begin_frame() {}
+    void record_draw_data(gpu::render_pass_encoder&) {}
 
     bool wants_keyboard()
     {
