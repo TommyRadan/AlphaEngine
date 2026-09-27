@@ -38,6 +38,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include <core/settings.hpp>
 
@@ -55,6 +56,24 @@ namespace core
     inline constexpr float k_max_shadow_distance = 10000.0f;
     inline constexpr float k_max_shadow_bias = 0.1f;
     inline constexpr float k_max_shadow_slope_bias = 16.0f;
+    inline constexpr float k_max_exposure = 64.0f;
+    inline constexpr float k_max_bloom_threshold = 64.0f;
+    inline constexpr float k_max_bloom_strength = 8.0f;
+    inline constexpr float k_max_taa_feedback = 0.99f;
+    inline constexpr float k_max_volumetric_fog_density_scale = 64.0f;
+    inline constexpr float k_max_volumetric_fog_anisotropy = 0.99f;
+    inline constexpr float k_max_volumetric_fog_distance = 10000.0f;
+    inline constexpr unsigned int k_max_volumetric_fog_steps = 128;
+    inline constexpr float k_max_volumetric_fog_intensity = 64.0f;
+    inline constexpr float k_max_motion_blur_intensity = 2.0f;
+    inline constexpr unsigned int k_min_motion_blur_samples = 2;
+    inline constexpr unsigned int k_max_motion_blur_samples = 32;
+    inline constexpr float k_min_motion_blur_radius = 1.0f;
+    inline constexpr float k_max_motion_blur_radius = 256.0f;
+    inline constexpr float k_min_exposure_ev = -16.0f;
+    inline constexpr float k_max_exposure_ev = 32.0f;
+    inline constexpr float k_max_exposure_speed = 100.0f;
+    inline constexpr float k_max_exposure_compensation = 16.0f;
 
     /** @brief Parses `true` / `false`, `1` / `0`, `yes` / `no`, `on` / `off`; trimmed, case-insensitive. */
     std::optional<bool> parse_bool(std::string_view text);
@@ -71,6 +90,9 @@ namespace core
     /** @brief Parses `opengl` or `vulkan`; trimmed, case-insensitive. */
     std::optional<graphics_backend> parse_graphics_backend(std::string_view text);
 
+    /** @brief Parses `none`, `reinhard` or `aces`; trimmed, case-insensitive. */
+    std::optional<tonemap_curve> parse_tonemap_curve(std::string_view text);
+
     /**
      * @brief Applies a `settings.json` document (schema in docs/settings.md) on top of @p out. Only the keys
      *        present are applied; an unknown key, a value of the wrong JSON type or one outside its range is
@@ -85,11 +107,22 @@ namespace core
     /**
      * @brief Applies the `ALPHAENGINE_WIDTH`, `_HEIGHT`, `_WINDOW_MODE`, `_VSYNC`, `_GRAPHICS_BACKEND`, `_TAA`,
      *        `_FRAMES_IN_FLIGHT`, `_SHADOW_RESOLUTION`, `_SHADOW_DISTANCE`, `_SHADOW_CASCADES`, `_SHADOW_BIAS`,
-     *        `_SHADOW_SLOPE_BIAS`, `_SHADOW_PCF_KERNEL` and `_ASSET_ROOT` variables on top of @p out. An unset or
-     *        empty variable leaves its setting as it is. (`ALPHAENGINE_LOG_LEVEL` belongs to
-     *        @ref core::logging::init.)
+     *        `_SHADOW_SLOPE_BIAS`, `_SHADOW_PCF_KERNEL` and `_ASSET_ROOT` variables on top of @p out, plus one
+     *        variable per @ref post_process_settings field: `ALPHAENGINE_` followed by its `post` key in upper
+     *        case (`ALPHAENGINE_EXPOSURE`, `_TONEMAP`, `_BLOOM`, `_BLOOM_THRESHOLD`, ..., `_GRADING_LUT`,
+     *        `_MOTION_BLUR`, `_AUTO_EXPOSURE`, `_AUTO_EXPOSURE_MIN_EV`, ...). An unset or empty variable leaves its
+     *        setting as it is. (`ALPHAENGINE_LOG_LEVEL` belongs to @ref core::logging::init.)
      */
     void apply_environment(settings& out, const environment_getter& get);
+
+    /** @brief One validated post-processing option, recorded by @ref parse_command_line. */
+    struct post_option_value
+    {
+        /** @brief The `post` key the option sets (`bloom_threshold` for `--bloom-threshold`). */
+        std::string key;
+        /** @brief The option's trimmed value; it parsed when it was recorded. */
+        std::string value;
+    };
 
     /** @brief What @ref parse_command_line recognised; an empty optional was not on the command line. */
     struct command_line_options
@@ -110,6 +143,13 @@ namespace core
         std::optional<float> shadow_slope_bias;
         std::optional<unsigned int> shadow_pcf_kernel;
 
+        /**
+         * @brief The post-processing overrides of @ref post_process_settings (`--exposure`, `--bloom-threshold`,
+         *        `--grading-lut`, `--motion-blur`, `--auto-exposure`, ...: `--` followed by the `post` key with
+         *        dashes for underscores), in command-line order so the last valid occurrence of each wins.
+         */
+        std::vector<post_option_value> post;
+
         /** @brief The `--log-level` specification, for @ref core::logging::configure_levels. */
         std::optional<std::string> log_level;
 
@@ -129,7 +169,7 @@ namespace core
      */
     command_line_options parse_command_line(std::span<const char* const> args);
 
-    /** @brief Applies the window / graphics / shadow / asset options present in @p options on top of @p out. */
+    /** @brief Applies the window / graphics / shadow / post / asset options present in @p options on top of @p out. */
     void apply_command_line(settings& out, const command_line_options& options);
 
     /** @brief The `--help` text. */

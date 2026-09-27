@@ -54,7 +54,11 @@ namespace rendering_engine
      *
      * Because the composite writes straight into the scene-colour target
      * the subsequent @ref tonemap_pass needs no changes: it maps the
-     * bloomed HDR result to LDR exactly as before. Every pass uses the
+     * bloomed HDR result to LDR exactly as before. While
+     * @ref motion_blur_pass runs, "the scene colour" is its blurred copy:
+     * the pass reads and composites into
+     * @ref frame_context::hdr_color_texture / @c hdr_color_target, which
+     * name whichever of the two the frame uses. Every pass uses the
      * shared fullscreen-triangle pattern (depth off, no culling, no
      * vertex buffers beyond the @ref fullscreen_triangle_vertices).
      *
@@ -73,12 +77,13 @@ namespace rendering_engine
     struct bloom_pass : pass
     {
         // @p width / @p height are the backbuffer dimensions the mip
-        // pyramid is sized against. The HDR scene colour the bright-pass
-        // samples is not a constructor input: it arrives every frame as
-        // @ref frame_context::scene_color_texture, and the threshold bind
+        // pyramid is sized against. The HDR image the bright-pass samples
+        // is not a constructor input: it arrives every frame as
+        // @ref frame_context::hdr_color_texture (the scene colour, or
+        // motion blur's output while that runs), and the threshold bind
         // group is (re)built whenever that handle differs from the one it
-        // was last built against. The composite target is taken from
-        // @ref frame_context::scene_color_target each frame.
+        // was last built against. The composite target is taken from the
+        // matching @ref frame_context::hdr_color_target each frame.
         bloom_pass(uint32_t width, uint32_t height);
         ~bloom_pass() override;
 
@@ -153,8 +158,8 @@ namespace rendering_engine
         gpu::buffer m_threshold_ubo{};
         gpu::bind_group m_threshold_bind_group{};
 
-        // The scene-colour texture @ref m_threshold_bind_group was built
-        // against; invalid until the first record() builds the group.
+        // The HDR texture @ref m_threshold_bind_group was built against;
+        // invalid until the first record() builds the group.
         gpu::texture m_bound_scene_color{};
 
         std::vector<bloom_level> m_levels;
@@ -175,8 +180,9 @@ namespace rendering_engine
         // Releases everything create_pyramid built, bind groups first.
         void release_pyramid();
 
-        // Rebuild the threshold bind group against @p scene_color and the
-        // threshold UBO, remembering the handle in @ref m_bound_scene_color.
+        // Rebuild the threshold bind group against @p scene_color (this
+        // frame's HDR image) and the threshold UBO, remembering the handle
+        // in @ref m_bound_scene_color.
         void rebuild_threshold_bind_group(gpu::texture scene_color);
 
         // The bloom_settings currently baked into m_threshold_ubo and every

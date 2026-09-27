@@ -162,6 +162,18 @@ namespace core
             return parsed;
         }
 
+        std::optional<tonemap_curve> parse_tonemap_curve_or_warn(const char* source, std::string_view text)
+        {
+            const auto parsed = parse_tonemap_curve(text);
+            if (!parsed.has_value())
+            {
+                LOG_WRN("settings: %s='%s' is not one of none|reinhard|aces; ignoring it",
+                        source,
+                        std::string{text}.c_str());
+            }
+            return parsed;
+        }
+
         // -- JSON -------------------------------------------------------------
         //
         // One setter per field type. Each checks the JSON type and the range
@@ -265,6 +277,26 @@ namespace core
                         key,
                         text.c_str(),
                         graphics_backend_name(target));
+                return;
+            }
+            target = *parsed;
+        }
+
+        void set_from_json(tonemap_curve& target, const char* key, const json& value)
+        {
+            if (!value.is_string())
+            {
+                LOG_WRN("settings: %s must be a string; keeping %s", key, tonemap_curve_name(target));
+                return;
+            }
+            const auto& text = value.get_ref<const std::string&>();
+            const auto parsed = parse_tonemap_curve(text);
+            if (!parsed.has_value())
+            {
+                LOG_WRN("settings: %s='%s' is not one of none|reinhard|aces; keeping %s",
+                        key,
+                        text.c_str(),
+                        tonemap_curve_name(target));
                 return;
             }
             target = *parsed;
@@ -472,6 +504,263 @@ namespace core
             }
         }
 
+        // -- Post-processing --------------------------------------------------
+        //
+        // post_process_settings is flat, and each field is reachable from all
+        // three layers under one name: its key in the settings.json `post`
+        // section, the ALPHAENGINE_<KEY> environment variable and the --<key>
+        // option (dashes for underscores). One table row per field keeps the
+        // three layers in step; the value parsing, ranges and warnings are the
+        // same helpers every other section uses.
+
+        enum class post_value_kind
+        {
+            flag,
+            number,
+            count,
+            curve,
+            path,
+        };
+
+        struct post_field
+        {
+            std::string_view key;
+            post_value_kind kind;
+            bool post_process_settings::*flag{nullptr};
+            float post_process_settings::*number{nullptr};
+            unsigned int post_process_settings::*count{nullptr};
+            tonemap_curve post_process_settings::*curve{nullptr};
+            std::string post_process_settings::*path{nullptr};
+            float number_min{0.0f};
+            float number_max{0.0f};
+            unsigned int count_min{0};
+            unsigned int count_max{0};
+        };
+
+        constexpr post_field flag_field(std::string_view key, bool post_process_settings::*member)
+        {
+            post_field field{key, post_value_kind::flag};
+            field.flag = member;
+            return field;
+        }
+
+        constexpr post_field
+        number_field(std::string_view key, float post_process_settings::*member, float min, float max)
+        {
+            post_field field{key, post_value_kind::number};
+            field.number = member;
+            field.number_min = min;
+            field.number_max = max;
+            return field;
+        }
+
+        constexpr post_field count_field(std::string_view key,
+                                         unsigned int post_process_settings::*member,
+                                         unsigned int min,
+                                         unsigned int max)
+        {
+            post_field field{key, post_value_kind::count};
+            field.count = member;
+            field.count_min = min;
+            field.count_max = max;
+            return field;
+        }
+
+        constexpr post_field curve_field(std::string_view key, tonemap_curve post_process_settings::*member)
+        {
+            post_field field{key, post_value_kind::curve};
+            field.curve = member;
+            return field;
+        }
+
+        constexpr post_field path_field(std::string_view key, std::string post_process_settings::*member)
+        {
+            post_field field{key, post_value_kind::path};
+            field.path = member;
+            return field;
+        }
+
+        using post_values = post_process_settings;
+
+        constexpr post_field k_post_fields[] = {
+            number_field("exposure", &post_values::exposure, 0.0f, k_max_exposure),
+            curve_field("tonemap", &post_values::tonemap),
+            flag_field("bloom", &post_values::bloom),
+            number_field("bloom_threshold", &post_values::bloom_threshold, 0.0f, k_max_bloom_threshold),
+            number_field("bloom_knee", &post_values::bloom_knee, 0.0f, 1.0f),
+            number_field("bloom_strength", &post_values::bloom_strength, 0.0f, k_max_bloom_strength),
+            number_field("taa_feedback", &post_values::taa_feedback, 0.0f, k_max_taa_feedback),
+            flag_field("fxaa", &post_values::fxaa),
+            flag_field("volumetric_fog", &post_values::volumetric_fog),
+            number_field("volumetric_fog_density_scale",
+                         &post_values::volumetric_fog_density_scale,
+                         0.0f,
+                         k_max_volumetric_fog_density_scale),
+            number_field("volumetric_fog_anisotropy",
+                         &post_values::volumetric_fog_anisotropy,
+                         -k_max_volumetric_fog_anisotropy,
+                         k_max_volumetric_fog_anisotropy),
+            number_field("volumetric_fog_max_distance",
+                         &post_values::volumetric_fog_max_distance,
+                         0.0f,
+                         k_max_volumetric_fog_distance),
+            count_field("volumetric_fog_steps", &post_values::volumetric_fog_steps, 1, k_max_volumetric_fog_steps),
+            number_field("volumetric_fog_intensity",
+                         &post_values::volumetric_fog_intensity,
+                         0.0f,
+                         k_max_volumetric_fog_intensity),
+            path_field("grading_lut", &post_values::grading_lut),
+            number_field("grading_intensity", &post_values::grading_intensity, 0.0f, 1.0f),
+            flag_field("motion_blur", &post_values::motion_blur),
+            number_field(
+                "motion_blur_intensity", &post_values::motion_blur_intensity, 0.0f, k_max_motion_blur_intensity),
+            count_field("motion_blur_samples",
+                        &post_values::motion_blur_samples,
+                        k_min_motion_blur_samples,
+                        k_max_motion_blur_samples),
+            number_field("motion_blur_max_radius",
+                         &post_values::motion_blur_max_radius,
+                         k_min_motion_blur_radius,
+                         k_max_motion_blur_radius),
+            flag_field("auto_exposure", &post_values::auto_exposure),
+            number_field(
+                "auto_exposure_min_ev", &post_values::auto_exposure_min_ev, k_min_exposure_ev, k_max_exposure_ev),
+            number_field(
+                "auto_exposure_max_ev", &post_values::auto_exposure_max_ev, k_min_exposure_ev, k_max_exposure_ev),
+            number_field("auto_exposure_speed_up", &post_values::auto_exposure_speed_up, 0.0f, k_max_exposure_speed),
+            number_field(
+                "auto_exposure_speed_down", &post_values::auto_exposure_speed_down, 0.0f, k_max_exposure_speed),
+            number_field("auto_exposure_compensation",
+                         &post_values::auto_exposure_compensation,
+                         -k_max_exposure_compensation,
+                         k_max_exposure_compensation),
+        };
+
+        // ALPHAENGINE_<KEY>: the field's environment variable.
+        std::string post_variable_name(const post_field& field)
+        {
+            std::string name{"ALPHAENGINE_"};
+            for (const char c : field.key)
+            {
+                name.push_back(static_cast<char>(std::toupper(static_cast<unsigned char>(c))));
+            }
+            return name;
+        }
+
+        // --<key> with dashes for underscores: the field's command-line option.
+        std::string post_option_name(const post_field& field)
+        {
+            std::string name{"--"};
+            for (const char c : field.key)
+            {
+                name.push_back(c == '_' ? '-' : c);
+            }
+            return name;
+        }
+
+        const post_field* find_post_field_by_key(std::string_view key)
+        {
+            for (const auto& field : k_post_fields)
+            {
+                if (field.key == key)
+                {
+                    return &field;
+                }
+            }
+            return nullptr;
+        }
+
+        const post_field* find_post_field_by_option(std::string_view option)
+        {
+            for (const auto& field : k_post_fields)
+            {
+                if (post_option_name(field) == option)
+                {
+                    return &field;
+                }
+            }
+            return nullptr;
+        }
+
+        void set_post_from_json(post_process_settings& out, const post_field& field, const json& value)
+        {
+            const std::string key = "post." + std::string{field.key};
+            switch (field.kind)
+            {
+            case post_value_kind::flag:
+                set_from_json(out.*field.flag, key.c_str(), value);
+                break;
+            case post_value_kind::number:
+                set_from_json(out.*field.number, key.c_str(), value, field.number_min, field.number_max);
+                break;
+            case post_value_kind::count:
+                set_from_json(out.*field.count, key.c_str(), value, field.count_min, field.count_max);
+                break;
+            case post_value_kind::curve:
+                set_from_json(out.*field.curve, key.c_str(), value);
+                break;
+            case post_value_kind::path:
+                set_from_json(out.*field.path, key.c_str(), value);
+                break;
+            }
+        }
+
+        // Parses @p text as @p field's value, warning under @p source (the
+        // variable or option) when it does not parse, and stores it. Returns
+        // whether it parsed. A path is taken as-is, trimmed.
+        bool set_post_from_text(post_process_settings& out,
+                                const post_field& field,
+                                std::string_view text,
+                                const char* source)
+        {
+            switch (field.kind)
+            {
+            case post_value_kind::flag:
+            {
+                const auto parsed = parse_bool_or_warn(source, text);
+                assign_if(out.*field.flag, parsed);
+                return parsed.has_value();
+            }
+            case post_value_kind::number:
+            {
+                const auto parsed = parse_float_or_warn(source, text, field.number_min, field.number_max);
+                assign_if(out.*field.number, parsed);
+                return parsed.has_value();
+            }
+            case post_value_kind::count:
+            {
+                const auto parsed = parse_unsigned_or_warn(source, text, field.count_min, field.count_max);
+                assign_if(out.*field.count, parsed);
+                return parsed.has_value();
+            }
+            case post_value_kind::curve:
+            {
+                const auto parsed = parse_tonemap_curve_or_warn(source, text);
+                assign_if(out.*field.curve, parsed);
+                return parsed.has_value();
+            }
+            case post_value_kind::path:
+                out.*field.path = std::string{trim(text)};
+                return true;
+            }
+            return false;
+        }
+
+        void apply_post_section(settings& out, const json& section)
+        {
+            for (const auto& [key, value] : section.items())
+            {
+                if (const post_field* field = find_post_field_by_key(key))
+                {
+                    set_post_from_json(out.post, *field, value);
+                }
+                else
+                {
+                    warn_unknown_key("post", key);
+                }
+            }
+        }
+
         // -- Command line -----------------------------------------------------
 
         enum class value_option
@@ -578,6 +867,36 @@ Options:
   --asset-root <path>      directory relative asset paths resolve under
   -h, --help               print this text and exit
 
+Post-processing options (settings.json "post" section; each key is also the
+ALPHAENGINE_<KEY> variable, e.g. --bloom-threshold, post.bloom_threshold and
+ALPHAENGINE_BLOOM_THRESHOLD):
+  --exposure <e>                        manual exposure scale
+  --tonemap <curve>                     tonemap curve: none, reinhard or aces
+  --bloom <on|off>                      hdr bloom glow
+  --bloom-threshold <t>                 luminance above which pixels bloom
+  --bloom-knee <k>                      bloom soft knee, 0 to 1
+  --bloom-strength <s>                  bloom glow strength
+  --taa-feedback <f>                    temporal-aa history weight, 0 to 0.99
+  --fxaa <on|off>                       fast approximate anti-aliasing
+  --volumetric-fog <on|off>             raymarched height fog
+  --volumetric-fog-density-scale <d>    volumetric fog density multiplier
+  --volumetric-fog-anisotropy <g>       volumetric phase anisotropy, -0.99 to 0.99
+  --volumetric-fog-max-distance <d>     distance the volumetric march stops at
+  --volumetric-fog-steps <n>            volumetric march steps, 1 to 128
+  --volumetric-fog-intensity <i>        volumetric in-scattering scale
+  --grading-lut <path>                  colour-grading strip lut (n*n x n)
+  --grading-intensity <i>               colour-grading blend, 0 to 1
+  --motion-blur <on|off>                motion blur from the velocity buffer
+  --motion-blur-intensity <s>           shutter scale, 0 to 2
+  --motion-blur-samples <n>             taps per pixel, 2 to 32
+  --motion-blur-max-radius <px>         longest blur in pixels, 1 to 256
+  --auto-exposure <on|off>              eye adaptation instead of --exposure
+  --auto-exposure-min-ev <ev>           lowest metered brightness, in ev100
+  --auto-exposure-max-ev <ev>           highest metered brightness, in ev100
+  --auto-exposure-speed-up <r>          adaptation rate toward brighter
+  --auto-exposure-speed-down <r>        adaptation rate toward darker
+  --auto-exposure-compensation <stops>  stops added to the adapted exposure
+
 Every option also accepts the --key=value form. Command-line values override
 the ALPHAENGINE_* environment variables, which override the settings file
 (see docs/settings.md).
@@ -683,6 +1002,20 @@ the ALPHAENGINE_* environment variables, which override the settings file
         return std::nullopt;
     }
 
+    std::optional<tonemap_curve> parse_tonemap_curve(std::string_view text)
+    {
+        text = trim(text);
+        constexpr tonemap_curve k_all_curves[] = {tonemap_curve::none, tonemap_curve::reinhard, tonemap_curve::aces};
+        for (const tonemap_curve curve : k_all_curves)
+        {
+            if (equals_ignoring_case(text, tonemap_curve_name(curve)))
+            {
+                return curve;
+            }
+        }
+        return std::nullopt;
+    }
+
     bool apply_json(settings& out, std::string_view text)
     {
         // Exceptions off: a bad document comes back as a discarded value.
@@ -724,6 +1057,10 @@ the ALPHAENGINE_* environment variables, which override the settings file
             else if (name == "shadows")
             {
                 apply_shadows_section(out, section);
+            }
+            else if (name == "post")
+            {
+                apply_post_section(out, section);
             }
             else if (name == "assets")
             {
@@ -814,6 +1151,14 @@ the ALPHAENGINE_* environment variables, which override the settings file
                 out.shadows.pcf_kernel,
                 parse_unsigned_or_warn("ALPHAENGINE_SHADOW_PCF_KERNEL", *text, 1, shadow_settings::max_pcf_kernel));
         }
+        for (const auto& field : k_post_fields)
+        {
+            const std::string variable = post_variable_name(field);
+            if (const auto text = read(variable.c_str()))
+            {
+                set_post_from_text(out.post, field, *text, variable.c_str());
+            }
+        }
         if (const auto text = read("ALPHAENGINE_ASSET_ROOT"))
         {
             out.assets.root = std::string{trim(*text)};
@@ -862,7 +1207,8 @@ the ALPHAENGINE_* environment variables, which override the settings file
             }
 
             const auto option = find_value_option(name);
-            if (!option.has_value())
+            const post_field* post_option = option.has_value() ? nullptr : find_post_field_by_option(name);
+            if (!option.has_value() && post_option == nullptr)
             {
                 LOG_WRN("settings: ignoring unknown option '%s'", name.c_str());
                 continue;
@@ -875,6 +1221,20 @@ the ALPHAENGINE_* environment variables, which override the settings file
             if (!value.has_value() || trim(*value).empty())
             {
                 LOG_WRN("settings: %s needs a value; ignoring it", name.c_str());
+                continue;
+            }
+
+            // A post-processing option is validated against a scratch copy
+            // (warning here, like every other option) and recorded in order,
+            // so apply_command_line replays only values that parse and the
+            // last valid occurrence wins.
+            if (post_option != nullptr)
+            {
+                post_process_settings scratch;
+                if (set_post_from_text(scratch, *post_option, *value, name.c_str()))
+                {
+                    out.post.push_back({std::string{post_option->key}, std::string{trim(*value)}});
+                }
                 continue;
             }
 
@@ -948,6 +1308,13 @@ the ALPHAENGINE_* environment variables, which override the settings file
         assign_if(out.shadows.bias, options.shadow_bias);
         assign_if(out.shadows.slope_bias, options.shadow_slope_bias);
         assign_if(out.shadows.pcf_kernel, options.shadow_pcf_kernel);
+        for (const post_option_value& option : options.post)
+        {
+            if (const post_field* field = find_post_field_by_key(option.key))
+            {
+                set_post_from_text(out.post, *field, option.value, option.key.c_str());
+            }
+        }
         assign_if(out.assets.root, options.asset_root);
     }
 

@@ -34,7 +34,8 @@ namespace rendering_engine
      *
      * Writes, for every pixel, the UV-space displacement of the surface
      * under it since the previous frame: @c velocity = thisFrameUV -
-     * lastFrameUV. The @ref taa_pass samples this to reproject its colour
+     * lastFrameUV. @ref motion_blur_pass smears the HDR image along it, and
+     * @ref taa_pass samples it to reproject its colour
      * history along the motion, so a moving camera keeps a sharp,
      * supersampled image instead of relying on the neighbourhood clamp to
      * hide the misalignment.
@@ -60,9 +61,12 @@ namespace rendering_engine
      * and remain future work.
      *
      * Runs after the scene/skybox passes (so the depth buffer is final) and
-     * before @ref taa_pass. The result is an @c rgba16f target with the
-     * signed motion in @c xy; it is exposed via @ref velocity_texture so
-     * the TAA resolve can sample it. Pipeline state mirrors the other
+     * before its consumers, @ref motion_blur_pass and @ref taa_pass. The
+     * result is an @c rgba16f target with the signed motion in @c xy; it
+     * is exposed via @ref velocity_texture so they can sample it. The pass
+     * is always in the chain, but @ref record draws only while one of them
+     * runs (temporal AA is on or @ref motion_blur_active holds), so with
+     * both off it costs nothing. Pipeline state mirrors the other
      * fullscreen-triangle passes (depth off, blend off, no culling). A
      * degenerate backbuffer leaves the pass disabled; a frame with no
      * camera, or without a usable previous view-projection (the first
@@ -98,11 +102,12 @@ namespace rendering_engine
         // Recreates the velocity target at the new drawable size. The new
         // target is created before the old one is released so the handle
         // published through frame_context::velocity_texture changes and the
-        // TAA resolve rebinds. No-op while the pass is disabled.
+        // TAA resolve and motion blur rebind. No-op while the pass is
+        // disabled.
         void resize(uint32_t width, uint32_t height) override;
 
-        // The motion-vector texture the TAA resolve samples (signed UV
-        // displacement in xy). The engine publishes it every frame as
+        // The motion-vector texture the TAA resolve and motion blur sample
+        // (signed UV displacement in xy). The engine publishes it every frame as
         // @ref frame_context::velocity_texture; it changes on @ref resize.
         // Invalid when the pass is disabled (degenerate backbuffer).
         gpu::texture velocity_texture() const;

@@ -130,6 +130,12 @@ namespace rendering_engine::debug_ui
         std::array<float, k_frame_history> g_frame_times{};
         int g_frame_cursor = 0;
 
+        // Edit buffer of the Post panel's colour-grading LUT path. It
+        // mirrors the live path while the field is not being edited, and
+        // an edit is applied when committed with Enter.
+        std::array<char, 512> g_grading_lut_input{};
+        bool g_grading_lut_editing = false;
+
         // Degree <-> radian conversion for the transform / camera / spot
         // light angle fields, which the engine stores in radians but are
         // far more legible to edit in degrees.
@@ -1351,14 +1357,17 @@ namespace rendering_engine::debug_ui
         }
 
         // Runtime tuning for the post-processing chain: tonemap
-        // exposure/operator, volumetric fog, bloom, temporal AA feedback
-        // and FXAA. Every edit is written back through
-        // context::set_post_settings, the same path any other caller would
-        // use, so it takes effect on the next recorded frame (tonemap
-        // immediately, since its setters rewrite their UBO on the spot).
-        // TAA's own enabled checkbox is shown disabled: the pass is only
-        // ever brought up once, at init, from graphics.temporal_aa (see
-        // post_settings::taa's doc comment).
+        // exposure/operator, auto exposure, colour grading, volumetric fog,
+        // motion blur, bloom, temporal AA feedback and FXAA. Every edit is
+        // written back through context::set_post_settings, the same path
+        // any other caller would use, so it takes effect on the next
+        // recorded frame (tonemap immediately, since its setters rewrite
+        // their UBO on the spot). TAA's own enabled checkbox is shown
+        // disabled: the pass is only ever brought up once, at init, from
+        // graphics.temporal_aa (see post_settings::taa's doc comment).
+        // The panel edits the live settings only: core::settings has no
+        // save path, so the startup values stay whatever settings.json,
+        // the environment and the command line resolved.
         void draw_post_window()
         {
             if (!g_show_post)
@@ -1374,13 +1383,59 @@ namespace rendering_engine::debug_ui
             if (ImGui::Begin("Post", &g_show_post))
             {
                 ImGui::SeparatorText("Tonemap");
+                ImGui::BeginDisabled(settings.auto_exposure.enabled);
                 changed |= ImGui::SliderFloat("Exposure", &settings.exposure, 0.0f, 8.0f);
+                ImGui::EndDisabled();
+                if (settings.auto_exposure.enabled && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                {
+                    ImGui::SetTooltip("Driven by auto exposure; tune its compensation instead");
+                }
                 static constexpr std::array<const char*, 3> operator_names = {"None", "Reinhard", "ACES"};
                 int op = static_cast<int>(settings.tonemap_op);
                 if (ImGui::Combo("Operator", &op, operator_names.data(), static_cast<int>(operator_names.size())))
                 {
                     settings.tonemap_op = static_cast<rendering_engine::tonemap_operator>(op);
                     changed = true;
+                }
+
+                ImGui::SeparatorText("Auto exposure");
+                changed |= ImGui::Checkbox("Enabled##auto_exposure", &settings.auto_exposure.enabled);
+                changed |= ImGui::SliderFloat("Min EV100", &settings.auto_exposure.min_ev, -16.0f, 32.0f);
+                changed |= ImGui::SliderFloat("Max EV100", &settings.auto_exposure.max_ev, -16.0f, 32.0f);
+                changed |= ImGui::SliderFloat("Speed up", &settings.auto_exposure.speed_up, 0.0f, 10.0f);
+                changed |= ImGui::SliderFloat("Speed down", &settings.auto_exposure.speed_down, 0.0f, 10.0f);
+                changed |= ImGui::SliderFloat("Compensation", &settings.auto_exposure.compensation, -8.0f, 8.0f);
+
+                ImGui::SeparatorText("Colour grading");
+                // Mirror the live path unless the field is being edited, so
+                // a path set elsewhere shows up and a half-typed one is not
+                // clobbered; the edit applies once committed with Enter.
+                if (!g_grading_lut_editing)
+                {
+                    std::snprintf(
+                        g_grading_lut_input.data(), g_grading_lut_input.size(), "%s", settings.grading.lut.c_str());
+                }
+                if (ImGui::InputText("LUT",
+                                     g_grading_lut_input.data(),
+                                     g_grading_lut_input.size(),
+                                     ImGuiInputTextFlags_EnterReturnsTrue))
+                {
+                    settings.grading.lut = g_grading_lut_input.data();
+                    changed = true;
+                }
+                g_grading_lut_editing = ImGui::IsItemActive();
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("N*N x N strip LUT image; empty turns grading off (Enter applies)");
+                }
+                changed |= ImGui::SliderFloat("Intensity##grading", &settings.grading.intensity, 0.0f, 1.0f);
+                if (settings.grading.lut.empty())
+                {
+                    ImGui::TextDisabled("No LUT: grading off");
+                }
+                else if (!renderer.grading_lut_loaded())
+                {
+                    ImGui::TextDisabled("LUT not loaded (see the log)");
                 }
 
                 ImGui::SeparatorText("Volumetric fog");
@@ -1394,6 +1449,13 @@ namespace rendering_engine::debug_ui
                 changed |= ImGui::SliderFloat("Max distance", &settings.volumetric.max_distance, 1.0f, 256.0f);
                 changed |= ImGui::SliderInt("Steps", &settings.volumetric.steps, 4, 128);
                 changed |= ImGui::SliderFloat("Intensity", &settings.volumetric.intensity, 0.0f, 8.0f);
+
+                ImGui::SeparatorText("Motion blur");
+                changed |= ImGui::Checkbox("Enabled##motion_blur", &settings.motion_blur.enabled);
+                changed |= ImGui::SliderFloat("Shutter##motion_blur", &settings.motion_blur.intensity, 0.0f, 2.0f);
+                changed |= ImGui::SliderInt("Samples##motion_blur", &settings.motion_blur.samples, 2, 32);
+                changed |=
+                    ImGui::SliderFloat("Max radius (px)##motion_blur", &settings.motion_blur.max_radius, 1.0f, 128.0f);
 
                 ImGui::SeparatorText("Bloom");
                 changed |= ImGui::Checkbox("Enabled##bloom", &settings.bloom.enabled);
