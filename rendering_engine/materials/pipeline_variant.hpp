@@ -93,7 +93,11 @@ namespace rendering_engine
         // surface always passes the depth test.
         bool depth_test{true};
 
-        // Whether passing fragments write their depth back.
+        // Whether passing fragments write their depth back. Ignored when
+        // @c transparent is set: @ref make_pipeline_variant_key forces the
+        // pipeline's depth write off for the transparent queue regardless
+        // of this value, so a caller that sets one without the other still
+        // gets correct back-to-front blending.
         bool depth_write{true};
 
         // Whether the scene fog blends over the surface (three.js
@@ -231,11 +235,12 @@ namespace rendering_engine
 
     // Builds the key for @p params and the instance's @p keywords, drawing
     // with @p front as the front-facing winding. Folds @c transparent
-    // into @c blending (opaque reads as @c none), @c double_sided into the
-    // cull mode, @c wireframe into both the polygon mode and the
-    // @c WIREFRAME keyword, and a cleared @c fog into the @c NO_FOG
-    // keyword. @c opacity does not take part: it lives in the parameter
-    // block, not the pipeline.
+    // into @c blending (opaque reads as @c none) and forces @c depth_write
+    // off regardless of the param, @c double_sided into the cull mode,
+    // @c wireframe into both the polygon mode and the @c WIREFRAME
+    // keyword, and a cleared @c fog into the @c NO_FOG keyword. @c opacity
+    // does not take part: it lives in the parameter block, not the
+    // pipeline.
     pipeline_variant_key make_pipeline_variant_key(const material_params& params,
                                                    uint32_t keywords,
                                                    gpu::front_face front = gpu::front_face::counter_clockwise);

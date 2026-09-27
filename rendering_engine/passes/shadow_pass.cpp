@@ -554,6 +554,16 @@ namespace rendering_engine
         return m_culled;
     }
 
+    void shadow_pass::set_caster_mask(uint32_t mask) noexcept
+    {
+        m_caster_mask = mask;
+    }
+
+    uint32_t shadow_pass::caster_mask() const noexcept
+    {
+        return m_caster_mask;
+    }
+
     void shadow_pass::record(gpu::command_encoder& encoder, const frame_context& ctx)
     {
         auto& gpu = *runtime::current_engine().gpu;
@@ -644,7 +654,7 @@ namespace rendering_engine
             const uint32_t all_cascades = (1u << static_cast<uint32_t>(m_active_cascades)) - 1u;
             for (auto* r : *m_registry)
             {
-                if (!r->casts_shadow())
+                if (!r->casts_shadow() || (r->layer_mask & m_caster_mask) == 0)
                 {
                     continue;
                 }

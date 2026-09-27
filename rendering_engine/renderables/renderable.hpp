@@ -29,6 +29,26 @@
 
 namespace rendering_engine
 {
+    // Bit 0: the layer every renderable is on by default (@ref
+    // renderable::layer_mask). A pass or camera that does not care about
+    // layers filters with @ref layer_all, which includes this bit, so
+    // nothing is excluded until a caller narrows either side.
+    constexpr uint32_t layer_default = 1u << 0;
+
+    // Editor-only geometry: the debug helpers registered as scene
+    // renderables (e.g. the infinite ground grid) carry this bit instead
+    // of @ref layer_default. It is included in @ref layer_all, so a fresh
+    // camera still renders it and nothing changes visually by default; a
+    // game builds a camera whose @ref camera::set_culling_mask clears this
+    // bit to hide editor gizmos from gameplay views while an editor
+    // viewport (the default mask) keeps seeing them.
+    constexpr uint32_t layer_editor = 1u << 31;
+
+    // Every layer bit set: the default @ref camera::culling_mask and the
+    // default shadow-pass caster mask, so nothing is excluded by layer
+    // until a caller narrows one of them.
+    constexpr uint32_t layer_all = ~0u;
+
     // Anything that can contribute draws to a render pass. @ref upload
     // allocates GPU resources (buffers, bind groups) once GL is alive;
     // @ref collect_draw_items appends one or more @ref draw_item values
@@ -46,6 +66,14 @@ namespace rendering_engine
         virtual ~renderable() = default;
         virtual void upload() = 0;
         virtual void collect_draw_items(std::vector<draw_item>& out) = 0;
+
+        // Layer bits this renderable belongs to (see @ref layer_default /
+        // @ref layer_editor / @ref layer_all). A pass or camera that
+        // filters by layer skips it whenever
+        // @c (layer_mask & filter_mask) == 0, the same way a frustum cull
+        // does; the default puts every renderable on the default layer,
+        // which every default filter mask includes.
+        uint32_t layer_mask{layer_default};
 
         // Whether this renderable contributes occluders to the shadow
         // passes. Defaults to true; non-physical geometry (debug

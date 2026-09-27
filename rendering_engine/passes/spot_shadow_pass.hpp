@@ -31,6 +31,7 @@
 #include <rendering_engine/passes/shadow_casters.hpp>
 #include <rendering_engine/render_graph/frame_graph.hpp>
 #include <rendering_engine/renderables/draw_item.hpp>
+#include <rendering_engine/renderables/renderable.hpp>
 
 namespace rendering_engine
 {
@@ -61,7 +62,9 @@ namespace rendering_engine
      * against acne) and the light-space matrix differ. When no spot light
      * has @c cast_shadow set the pass still clears the map and reports
      * @ref has_shadow as false so the lit shaders fall back to unshadowed
-     * lighting.
+     * lighting. A renderable also needs @ref renderable::casts_shadow and
+     * a @ref renderable::layer_mask that overlaps @ref caster_mask to
+     * reach the map; both default to "every renderable casts".
      */
     struct spot_shadow_pass : pass
     {
@@ -113,6 +116,14 @@ namespace rendering_engine
         // no-caster frames.
         uint32_t culled_count() const;
 
+        // Layer bits this pass accepts casters from, on top of the
+        // existing @ref renderable::casts_shadow filter: a renderable
+        // whose layer_mask shares no bit with this mask casts no shadow
+        // through it. Defaults to @ref layer_all, so nothing changes until
+        // a caller narrows it.
+        void set_caster_mask(uint32_t mask) noexcept;
+        uint32_t caster_mask() const noexcept;
+
     private:
         // Non-owning back-pointer to the engine context's
         // scene-renderable registry — the same one the scene and other
@@ -147,5 +158,6 @@ namespace rendering_engine
         bool m_has_shadow{false};
         int m_shadow_spot_index{-1};
         uint32_t m_culled{0};
+        uint32_t m_caster_mask{layer_all};
     };
 } // namespace rendering_engine

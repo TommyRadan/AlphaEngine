@@ -22,7 +22,10 @@
 
 #pragma once
 
+#include <cstdint>
+
 #include <core/math/math.hpp>
+#include <rendering_engine/renderables/renderable.hpp>
 #include <rendering_engine/util/transform.hpp>
 
 namespace rendering_engine
@@ -131,6 +134,18 @@ namespace rendering_engine
         void set_main(bool main) noexcept;
         bool is_main() const noexcept;
 
+        /**
+         * @brief Layer bits this camera renders. The scene pass skips a
+         *        renderable whenever @c (renderable::layer_mask &
+         *        culling_mask()) == 0, the same way it skips one wholly
+         *        outside the frustum. Defaults to @ref layer_all, so a
+         *        fresh camera renders every layer, including the editor
+         *        one (@ref layer_editor) the debug helpers use; clear that
+         *        bit to hide them from a gameplay camera.
+         */
+        void set_culling_mask(uint32_t mask) noexcept;
+        uint32_t culling_mask() const noexcept;
+
     protected:
         mutable core::math::mat4 m_projection;
         mutable bool m_is_projection_matrix_dirty;
@@ -139,5 +154,6 @@ namespace rendering_engine
         bool m_enabled{true};
         bool m_main{false};
         int m_priority{0};
+        uint32_t m_culling_mask{layer_all};
     };
 } // namespace rendering_engine

@@ -46,6 +46,12 @@ namespace rendering_engine::debug
     {
         helper_registry().push_back(this);
 
+        // Debug gizmos are editor-only geometry: they stay on the default
+        // camera mask (layer_all includes layer_editor) so nothing changes
+        // visually, but a game can build a camera that clears the editor
+        // bit to hide them from gameplay views.
+        layer_mask = layer_editor;
+
         auto& renderer = *runtime::current_engine().renderer;
         if (m_layer == helper_layer::scene)
         {

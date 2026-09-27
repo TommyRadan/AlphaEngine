@@ -139,3 +139,13 @@ bool rendering_engine::camera::is_main() const noexcept
 {
     return m_main;
 }
+
+void rendering_engine::camera::set_culling_mask(uint32_t mask) noexcept
+{
+    m_culling_mask = mask;
+}
+
+uint32_t rendering_engine::camera::culling_mask() const noexcept
+{
+    return m_culling_mask;
+}

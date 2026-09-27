@@ -22,6 +22,7 @@
 
 #pragma once
 
+#include <bit>
 #include <cstdint>
 #include <span>
 
@@ -32,13 +33,53 @@ namespace rendering_engine
 {
     struct material;
 
+    // The render queue a draw item's @ref draw_item::sort_key buckets it
+    // into: opaque draws sort front-to-back so the depth test rejects
+    // hidden fragments early, transparent draws sort back-to-front so
+    // blending composites in the right order. The values occupy the top
+    // byte of the sort key, leaving room to add more queues later (e.g. a
+    // screen-space overlay queue that always draws last) without
+    // reshuffling the two that exist.
+    enum class render_queue : uint8_t
+    {
+        opaque = 0,
+        transparent = 1,
+    };
+
+    // Packs @p queue, the item's @p view_depth (view-space depth — camera-
+    // forward positive — to its world bounds centre, or 0 for a renderable
+    // that reports no bounds) and @p pipeline_id into the 64-bit key a
+    // pass sorts draw_item by: [63:56] the queue, [55:24] a monotonic
+    // 32-bit encoding of the depth, [23:0] the pipeline id. A negative
+    // depth (behind the camera) is clamped to 0 first, so the encoding —
+    // the depth float's raw bit pattern, which orders the same as the
+    // float for every non-negative value — stays order-preserving. The
+    // transparent queue's depth bits are then bitwise complemented, so a
+    // plain ascending sort over the whole key still gives each queue the
+    // order it wants: opaque's bits rise with depth (nearest first),
+    // transparent's complemented bits fall with depth (farthest first).
+    inline uint64_t make_sort_key(render_queue queue, float view_depth, uint64_t pipeline_id) noexcept
+    {
+        const float clamped_depth = view_depth > 0.0f ? view_depth : 0.0f;
+        uint32_t depth_bits = std::bit_cast<uint32_t>(clamped_depth);
+        if (queue == render_queue::transparent)
+        {
+            depth_bits = ~depth_bits;
+        }
+        return (uint64_t{static_cast<uint8_t>(queue)} << 56) | (uint64_t{depth_bits} << 24) | (pipeline_id & 0xFFFFFFu);
+    }
+
     // One draw the pass can dispatch. Renderables fill this struct in
-    // @ref renderable::collect_draw_items; the pass then sorts the
-    // collected items by (pipeline id, material instance) and walks
-    // them, issuing @c set_pipeline only when the pipeline changes and
-    // rebinding the per-material group only when the instance changes.
-    // An invalid @ref index_buffer means non-indexed draw — the pass
-    // calls @c draw(vertex_count) instead of @c draw_indexed(index_count).
+    // @ref renderable::collect_draw_items; a pass that cares about draw
+    // order (the scene pass) fills @ref sort_key from it afterwards and
+    // sorts the collected items by that key, falling back to the material
+    // instance on a tie, then walks them, issuing @c set_pipeline only
+    // when the pipeline changes and rebinding the per-material group only
+    // when the instance changes; a pass that does not build a sort key
+    // (the ui and debug passes) sorts by (pipeline id, material instance)
+    // directly instead. An invalid @ref index_buffer means non-indexed
+    // draw — the pass calls @c draw(vertex_count) instead of
+    // @c draw_indexed(index_count).
     //
     // @ref mirrored is set by the renderable when its model matrix has a
     // negative determinant (see @ref is_mirrored): the transform
@@ -102,6 +143,15 @@ namespace rendering_engine
         bool per_draw_dynamic{false};
         // Whether the model matrix flips handedness; see above.
         bool mirrored{false};
+
+        // Sort key a pass computes for this item with @ref make_sort_key
+        // once every field above is filled: the render queue, a depth term
+        // and the pipeline id packed into one 64-bit word so a single
+        // ascending @c std::stable_sort orders a frame's items. Zero — the
+        // opaque queue at zero depth — until such a pass fills it; the ui
+        // and debug passes leave it at that and sort by pipeline and
+        // material instance directly instead.
+        uint64_t sort_key{0};
 
         // The dynamic offsets to bind @ref per_draw_bind_group with: the
         // one per-draw offset for a group over the per-draw ring, none

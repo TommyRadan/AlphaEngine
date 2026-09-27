@@ -49,7 +49,11 @@ namespace rendering_engine::debug
     // the process-wide helper registry the debug UI walks to toggle
     // visibility, and into one of the engine's renderable registries
     // (chosen by @ref helper_layer) so the matching pass draws it.
-    // Destroying it unregisters from both.
+    // Destroying it unregisters from both. Every helper's
+    // @ref renderable::layer_mask is set to @ref layer_editor, so a
+    // scene-layer helper (@ref infinite_grid) can be hidden from a
+    // gameplay camera by clearing that bit from its culling mask, without
+    // affecting anything by default.
     //
     // The geometry itself lives in the subclasses: @ref line_helper for
     // the line-based overlay gizmos, @ref infinite_grid for the

@@ -81,7 +81,14 @@ namespace rendering_engine
         key.front = front;
         key.polygon = params.wireframe ? gpu::polygon_mode::line : gpu::polygon_mode::fill;
         key.depth_test = params.depth_test;
-        key.depth_write = params.depth_write;
+        // Transparent surfaces never write depth, whatever the param says:
+        // forcing it here — rather than trusting a caller to also flip
+        // @c depth_write whenever it flips @c transparent — means the
+        // transparent queue's back-to-front draws always blend against
+        // what is already in the depth buffer instead of occluding one
+        // another as they draw, even for a material a caller only set
+        // @c transparent on.
+        key.depth_write = params.transparent ? false : params.depth_write;
         return key;
     }
 

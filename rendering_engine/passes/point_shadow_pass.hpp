@@ -34,6 +34,7 @@
 #include <rendering_engine/passes/shadow_casters.hpp>
 #include <rendering_engine/render_graph/frame_graph.hpp>
 #include <rendering_engine/renderables/draw_item.hpp>
+#include <rendering_engine/renderables/renderable.hpp>
 
 namespace rendering_engine
 {
@@ -67,7 +68,10 @@ namespace rendering_engine
      * cutoff"), so the depth precision is spent on the volume the light can
      * actually reach. When no point light has @c cast_shadow set the pass
      * still clears the faces and reports @ref has_shadow false so the lit
-     * shader falls back to unshadowed lighting.
+     * shader falls back to unshadowed lighting. A renderable also needs
+     * @ref renderable::casts_shadow and a @ref renderable::layer_mask that
+     * overlaps @ref caster_mask to reach the map; both default to "every
+     * renderable casts".
      */
     struct point_shadow_pass : pass
     {
@@ -125,6 +129,14 @@ namespace rendering_engine
         // outside every face counts six times). Zero on no-caster frames.
         uint32_t culled_count() const;
 
+        // Layer bits this pass accepts casters from, on top of the
+        // existing @ref renderable::casts_shadow filter: a renderable
+        // whose layer_mask shares no bit with this mask casts no shadow
+        // through it. Defaults to @ref layer_all, so nothing changes until
+        // a caller narrows it.
+        void set_caster_mask(uint32_t mask) noexcept;
+        uint32_t caster_mask() const noexcept;
+
     private:
         // One shadow caster's slice of @ref m_items plus the world bounds it
         // reported, recorded once per frame so each face culls against its
@@ -172,5 +184,6 @@ namespace rendering_engine
         bool m_has_shadow{false};
         int m_shadow_point_index{-1};
         uint32_t m_culled{0};
+        uint32_t m_caster_mask{layer_all};
     };
 } // namespace rendering_engine

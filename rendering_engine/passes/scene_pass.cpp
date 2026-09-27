@@ -459,47 +459,80 @@ namespace rendering_engine
         }
         gpu.write_buffer(m_spot_shadow_ubo, spot_shadow_payload.data(), spot_shadow_ubo_size, 0);
 
-        // Frustum-cull, then collect. A renderable that reports world
-        // bounds is tested against the camera frustum first and skipped
-        // outright when it lies wholly outside, so it never builds a draw
-        // item or writes its per-draw UBO; one with no bounds (fullscreen
-        // effects, gizmos) is always collected. The frustum is the camera's
-        // unjittered one — the TAA offset is a sub-pixel shift that no
-        // plane test could tell apart. The survivors' items go into a
-        // single per-frame list, sorted by pipeline id so the dispatch loop
-        // only calls @c set_pipeline when the active material changes. The
-        // sort is stable so submission order is preserved within a
-        // material — important for any future renderable that relies on
-        // back-to-front draw order.
+        // Layer-filter, frustum-cull, then collect. A renderable whose
+        // layer_mask shares no bit with the camera's culling mask is
+        // skipped outright, the same as a frustum cull below it, so an
+        // editor-only helper never reaches a gameplay camera that has
+        // narrowed its mask. A renderable that reports world bounds is
+        // then tested against the camera frustum and skipped when it lies
+        // wholly outside, so it never builds a draw item or writes its
+        // per-draw UBO; one with no bounds (fullscreen effects, gizmos) is
+        // always collected. The frustum is the camera's unjittered one —
+        // the TAA offset is a sub-pixel shift that no plane test could
+        // tell apart.
+        //
+        // Every survivor's items get a sort key from @ref make_sort_key
+        // right after they are collected: the queue from the item's
+        // material (opaque or transparent), the view-space depth to the
+        // renderable's world bounds centre (0 for a renderable with no
+        // bounds), and the item's own pipeline id. The single per-frame
+        // list is then sorted by that key ascending, which — by
+        // construction of the key — sorts opaque items front-to-back for
+        // early-Z rejection and transparent ones back-to-front so blending
+        // composites correctly, with the pipeline id as a further
+        // tie-break within equal depth; the material instance breaks any
+        // remaining tie so a run of identical keys still shares one
+        // bind-group rebind. The sort is stable, so within equal keys
+        // submission order still applies.
         const core::math::frustum view_frustum = ctx.active_camera->get_frustum();
+        const core::math::mat4 view_matrix = ctx.active_camera->get_view_matrix();
+        const uint32_t camera_mask = ctx.active_camera->culling_mask();
         uint32_t submitted = 0;
         uint32_t culled = 0;
         m_items.clear();
         for (auto* r : *m_registry)
         {
+            if ((r->layer_mask & camera_mask) == 0)
+            {
+                ++culled;
+                continue;
+            }
             core::math::aabb bounds;
-            if (r->world_bounds(bounds) && !view_frustum.intersects(bounds))
+            const bool has_bounds = r->world_bounds(bounds);
+            if (has_bounds && !view_frustum.intersects(bounds))
             {
                 ++culled;
                 continue;
             }
             ++submitted;
+            const std::size_t first_item = m_items.size();
             r->collect_draw_items(m_items);
+
+            float view_depth = 0.0f;
+            if (has_bounds)
+            {
+                const core::math::vec3 centre = bounds.center();
+                // View space looks down -z (the GL convention
+                // core::math::look_at builds), so forward depth is
+                // -(view * p).z — the same convention shadow_pass uses to
+                // fit its cascades.
+                view_depth = -(view_matrix * core::math::vec4{centre, 1.0f}).z;
+            }
+            for (std::size_t i = first_item; i < m_items.size(); ++i)
+            {
+                draw_item& item = m_items[i];
+                const render_queue queue =
+                    item.mat->params().transparent ? render_queue::transparent : render_queue::opaque;
+                item.sort_key = make_sort_key(queue, view_depth, item.mat->pipeline(item.mirrored).id);
+            }
         }
-        // Sort key: the pipeline the item draws with (its material's
-        // variant, or the clockwise twin for a mirrored transform), then
-        // the material instance, so instances sharing one template
-        // pipeline sit together and the per-material group is rebound
-        // only when the instance changes.
         std::stable_sort(m_items.begin(),
                          m_items.end(),
                          [](const draw_item& a, const draw_item& b)
                          {
-                             const uint64_t pipeline_a = a.mat->pipeline(a.mirrored).id;
-                             const uint64_t pipeline_b = b.mat->pipeline(b.mirrored).id;
-                             if (pipeline_a != pipeline_b)
+                             if (a.sort_key != b.sort_key)
                              {
-                                 return pipeline_a < pipeline_b;
+                                 return a.sort_key < b.sort_key;
                              }
                              return std::less<const material*>{}(a.mat, b.mat);
                          });
