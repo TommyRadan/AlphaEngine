@@ -72,7 +72,7 @@ namespace core
     /** @brief Parses `windowed`, `fullscreen` or `borderless`; trimmed, case-insensitive. */
     std::optional<window_mode> parse_window_mode(std::string_view text);
 
-    /** @brief Parses `opengl` or `vulkan`; trimmed, case-insensitive. */
+    /** @brief Parses `vulkan`; trimmed, case-insensitive. */
     std::optional<graphics_backend> parse_graphics_backend(std::string_view text);
 
     /** @brief Parses `none`, `reinhard` or `aces`; trimmed, case-insensitive. */

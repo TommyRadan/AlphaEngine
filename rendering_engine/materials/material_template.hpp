@@ -93,15 +93,15 @@ namespace rendering_engine
         uint32_t tangent_location{no_tangent_location};
 
         // Per-draw bind-group layout (the slot after the per-frame group,
-        // if any); may be empty for materials that carry their per-draw
-        // data in a vertex stream.
+        // if any); empty for materials whose per-draw data is pushed
+        // (the PerDraw block) or carried in a vertex stream.
         gpu::bind_group_layout_descriptor draw_layout;
 
         // Skinning support. A template that can skin lists the slot-0
         // attributes a variant with @ref material_keyword::skinned appends
         // (the joint indices and weights), the record that variant reads,
         // and the per-draw layout it binds in place of @ref draw_layout
-        // (the same entries plus the joint-matrix storage buffer). Leave
+        // (the joint-matrix storage buffer). Leave
         // @ref skin_attributes empty for a template that cannot skin: the
         // keyword then changes nothing but the shader defines.
         std::vector<gpu::vertex_attribute> skin_attributes;

@@ -32,10 +32,10 @@
 
 namespace rendering_engine::gpu
 {
-    // The most colour attachments one target may carry. OpenGL 4.6 and
-    // every Vulkan device guarantee at least this many;
-    // @c device_limits::max_color_attachments reports the device's own
-    // count and the backends validate against it at create time.
+    // The most colour attachments one target may carry.
+    // @c device_limits::max_color_attachments reports how many the
+    // device takes (Vulkan guarantees 4, desktop hardware offers 8) and
+    // the backend validates against it at create time.
     constexpr uint32_t max_color_attachments = 8;
 
     // One attachment of a render target.
@@ -263,9 +263,7 @@ namespace rendering_engine::gpu
         // @c execute_secondary) rather than from calls on the encoder
         // @c begin_render_pass returns, which then only opens and closes
         // the pass and splices the secondaries in; a draw recorded on it
-        // directly is reported and dropped. Needs
-        // @c device_features::parallel_recording; a backend without it
-        // ignores the flag and records every call inline.
+        // directly is reported and dropped.
         bool parallel{false};
     };
 } // namespace rendering_engine::gpu

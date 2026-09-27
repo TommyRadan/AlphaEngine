@@ -48,7 +48,7 @@ namespace
 
     // The direction a cube-map texel faces, given a face index in
     // @c gpu::cube_face order and face-local UV in [0, 1]. The inverse of
-    // @ref select_face, using the OpenGL cube-map major-axis convention so
+    // @ref select_face, using the Vulkan cube-map major-axis convention so
     // the CPU convolution and the GPU sampler agree on orientation.
     math::vec3 dir_for_face_uv(int face, float u, float v)
     {
@@ -78,7 +78,7 @@ namespace
         float v;
     };
 
-    // The cube face and face-local UV a direction maps to — the OpenGL
+    // The cube face and face-local UV a direction maps to — the Vulkan
     // cube-map selection rule, matching @ref dir_for_face_uv.
     face_sample select_face(const math::vec3& dir)
     {
@@ -513,7 +513,7 @@ namespace rendering_engine
         // Layout entry helpers. These layouts are only ever bound by
         // the compute pipelines above, so every entry declares the
         // compute stage (the Vulkan backend bakes it into the
-        // descriptor-set layout; OpenGL ignores it).
+        // descriptor-set layout).
         const auto sampler_entry = [](uint32_t binding)
         {
             gpu::bind_group_layout_entry e{binding, gpu::binding_kind::texture};

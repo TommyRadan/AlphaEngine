@@ -4,7 +4,7 @@
 /**
  * @file vk_resources.hpp
  * @brief Vulkan-side record types stored inside the @c vk_device's
- *        handle_pool slots. Mirrors @c gl_resources.hpp.
+ *        handle_pool slots.
  */
 
 #pragma once
@@ -109,10 +109,9 @@ namespace rendering_engine::gpu::backend::vulkan
         // Released alongside the texture.
         std::vector<VkImageView> attachment_views;
 
-        // Built-in sampler set from the texture descriptor — mirrors
-        // the GL backend's "sampler is part of the texture" model so
-        // existing call sites continue to work without authoring a
-        // separate sampler resource.
+        // Built-in sampler set from the texture descriptor: sampler
+        // state is part of the texture (see texture_descriptor), so a
+        // caller need not author a separate sampler resource.
         VkSampler default_sampler{VK_NULL_HANDLE};
 
         VkImageLayout layout{VK_IMAGE_LAYOUT_UNDEFINED};
@@ -205,7 +204,7 @@ namespace rendering_engine::gpu::backend::vulkan
             // Off-screen targets render in Vulkan-natural Y-down so
             // that subsequent samplers see image row 0 == world-Z-down,
             // which is the convention the engine's tonemap shader
-            // expects. Swapchain targets keep the OpenGL Y-up
+            // expects. Swapchain targets keep the engine's Y-up NDC
             // convention via a negative-height viewport, so their
             // pipelines need the matching front-face flip. The two
             // variants are otherwise identical, so they're keyed by

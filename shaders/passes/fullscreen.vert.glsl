@@ -10,10 +10,6 @@
 // fragment stage sees every pixel exactly once. UVs are emitted in
 // [0, 1] with the origin at the bottom left, matching the convention the
 // engine's textures sample with.
-//
-// A real attribute is used instead of gl_VertexIndex because some
-// OpenGL ARB_gl_spirv specializers (NVIDIA) silently drop draws whose
-// vertex shader has no input variables.
 
 layout(location = 0) in vec2 in_pos;
 layout(location = 0) out vec2 texCoord;

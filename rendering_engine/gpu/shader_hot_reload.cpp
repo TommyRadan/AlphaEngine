@@ -102,23 +102,15 @@ namespace rendering_engine::gpu
 
     shader_module create_library_shader_module(device& device, const shader_variant& variant, shader_stage stage)
     {
-        // The backend define rides along with the variant's own, so a
-        // hot-reload recompile of the tracked variant keeps it.
-        shader_variant target = variant;
-        if (device.features().push_constants)
-        {
-            target.defines.emplace_back(std::string{push_constants_define}, std::string{});
-        }
-
         shader_module_descriptor descriptor{};
         descriptor.stage = stage;
-        descriptor.spirv = compile_library_shader(target, stage);
+        descriptor.spirv = compile_library_shader(variant, stage);
         const shader_module module = device.create_shader_module(descriptor);
 #if defined(_DEBUG)
         if (shader_hot_reload* reload = shader_hot_reload::active();
             reload != nullptr && module.valid() && &reload->target_device() == &device)
         {
-            reload->track(module, target, stage);
+            reload->track(module, variant, stage);
         }
 #endif
         return module;

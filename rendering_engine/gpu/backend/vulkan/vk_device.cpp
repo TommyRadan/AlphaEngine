@@ -273,8 +273,7 @@ namespace rendering_engine::gpu::backend::vulkan
 
             // Vsync off: prefer IMMEDIATE (uncapped, may tear); fall back to
             // MAILBOX (low-latency triple buffering) and finally the
-            // guaranteed FIFO when neither is exposed. Mirrors the OpenGL
-            // path, which sets a swap interval of 0 when vsync is disabled.
+            // guaranteed FIFO when neither is exposed.
             if (supports(VK_PRESENT_MODE_IMMEDIATE_KHR))
             {
                 return VK_PRESENT_MODE_IMMEDIATE_KHR;
@@ -753,7 +752,7 @@ namespace rendering_engine::gpu::backend::vulkan
         if (instance_version < VK_API_VERSION_1_1)
         {
             LOG_FTL("Vulkan loader supports API %u.%u only; the Vulkan backend needs 1.1 or newer "
-                    "(update the graphics driver / Vulkan runtime, or run with ALPHAENGINE_GRAPHICS_BACKEND=opengl)",
+                    "(update the graphics driver / Vulkan runtime)",
                     VK_VERSION_MAJOR(instance_version),
                     VK_VERSION_MINOR(instance_version));
             throw std::runtime_error{"Vulkan 1.1 or newer is required"};
@@ -1149,10 +1148,11 @@ namespace rendering_engine::gpu::backend::vulkan
         {
             // Extension exposed but the feature bit is off — fall
             // back to building pipelines without the negativeOneToOne
-            // hint and let the GL Z range fight Vulkan's clipping.
+            // hint, and Vulkan clips the [-1, 0) half of the
+            // projections' clip-space depth.
             m_depth_clip_control_enabled = false;
             LOG_WRN("VK_EXT_depth_clip_control extension exposed but depthClipControl feature unavailable; "
-                    "GL-style projection matrices may be clipped");
+                    "projection matrices with [-1, 1] clip depth may be clipped");
         }
         if (m_extended_dynamic_state_enabled && eds_query.extendedDynamicState != VK_TRUE)
         {
@@ -1332,23 +1332,18 @@ namespace rendering_engine::gpu::backend::vulkan
         m_features.debug_labels = m_debug_utils_enabled && m_set_debug_object_name != nullptr;
         // Compute pipelines, storage-image bind groups and the layout
         // transitions the IBL convolution needs are implemented, so
-        // the GPU prefilter path is taken just like OpenGL.
+        // the GPU prefilter path is taken.
         m_features.compute_prefilter = true;
-        // The spec guarantees min_push_constants_size (128) bytes; a
-        // device that reports less would fail every pipeline declaring
-        // the per-draw range, so it runs without push constants and the
-        // renderer keeps its per-draw blocks in uniform buffers.
-        m_features.push_constants = limits.maxPushConstantsSize >= min_push_constants_size;
-        // Secondary command buffers from per-lane pools (see the file
-        // comment): core Vulkan, so every device records in parallel.
-        m_features.parallel_recording = true;
-        if (!m_features.push_constants)
+        // Every pipeline that draws a renderable declares the 128-byte
+        // PerDraw push-constant range. The spec guarantees
+        // min_push_constants_size bytes, so only a non-conformant device
+        // falls short, and it could create none of those pipelines.
+        if (limits.maxPushConstantsSize < min_push_constants_size)
         {
-            LOG_WRN("Vulkan maxPushConstantsSize is %u, below the required %u bytes: push constants are disabled "
-                    "and per-draw data stays in uniform buffers",
+            LOG_FTL("Vulkan maxPushConstantsSize is %u, below the required %u bytes",
                     limits.maxPushConstantsSize,
                     min_push_constants_size);
-            m_limits.max_push_constants_size = 0;
+            throw std::runtime_error{"Vulkan device offers too few push-constant bytes"};
         }
 
         LOG_INF("Vulkan limits: texture %u / 3d %u / cube %u, %u array layers, %u colour attachments, "
@@ -2839,13 +2834,12 @@ namespace rendering_engine::gpu::backend::vulkan
         // this slot — frames_in_flight frames ago — has finished
         // executing. This runs before the renderer records anything for
         // the new frame, so every host write that follows — this slot's
-        // regions of the per-frame camera / light / shadow UBOs, the
-        // per-draw ring's region, instance re-uploads — lands in memory
-        // the GPU is no longer reading. Waiting lazily at the first
-        // swapchain pass instead, after every off-screen pass had
-        // already written its UBOs, would race those host writes
-        // against the GPU's reads. The fence is only waited when a
-        // submission armed it: after a failed submit nothing would
+        // regions of the per-frame camera / light / shadow UBOs, instance
+        // re-uploads — lands in memory the GPU is no longer reading.
+        // Waiting lazily at the first swapchain pass instead, after every
+        // off-screen pass had already written its UBOs, would race those
+        // host writes against the GPU's reads. The fence is only waited
+        // when a submission armed it: after a failed submit nothing would
         // ever signal it.
         if (!wait_slot_fence(m_frame_slot) && m_device_lost)
         {

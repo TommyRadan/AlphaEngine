@@ -12,7 +12,7 @@
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/materials/material.hpp>
-#include <rendering_engine/renderables/per_draw_ring.hpp>
+#include <rendering_engine/renderables/per_draw_ubo.hpp>
 #include <runtime/engine.hpp>
 
 rendering_engine::line::line(material* mat) : m_material{mat} {}
@@ -167,14 +167,10 @@ void rendering_engine::line::collect_draw_items(std::vector<draw_item>& out)
     // trailing vertex is dropped).
     draw_item item{};
     item.mat = m_material;
-    // The model + normal matrix, pushed or put in this frame's per-draw
-    // ring slot (recomputed only when the transform moved); a
-    // mirroring transform flags the item so the pass draws it with
-    // the clockwise-front-face variant.
-    if (!m_per_draw.bind(transform, m_material->per_draw_layout(), item))
-    {
-        return;
-    }
+    // The model + normal matrix the pass pushes (recomputed only when
+    // the transform moved); a mirroring transform flags the item so the
+    // pass draws it with the clockwise-front-face variant.
+    m_per_draw.bind(transform, item);
     item.vertex_buffer = m_vertex_buffer;
     item.vertex_stride = m_vertex_stride;
 

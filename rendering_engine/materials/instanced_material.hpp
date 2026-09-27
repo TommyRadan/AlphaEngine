@@ -16,16 +16,16 @@ namespace rendering_engine
     // Built-in unlit material for @ref instanced_mesh. Position vertex
     // stream like @ref basic_material, but the model matrix and per-instance
     // tint come from a second, per-instance vertex stream (bound at slot 1)
-    // rather than a per-draw model UBO — so one draw paints every instance
+    // rather than a per-draw model block — so one draw paints every instance
     // with its own transform and colour.
     //
     // The per-instance stream is a tightly packed record of a @c mat4 model
     // (four @c vec4 columns at locations 1..4) followed by a @c vec4 colour
-    // (location 5); see @ref instance_buffer_stride. It is fed through
-    // @c glVertexAttribDivisor / @c VK_VERTEX_INPUT_RATE_INSTANCE instead of
-    // @c gl_InstanceIndex, which keeps the path portable across the OpenGL
-    // (ARB_gl_spirv) and Vulkan backends. @ref instanced_mesh builds a
-    // matching buffer; this material is meant to be fronted by it.
+    // (location 5); see @ref instance_buffer_stride. It is fed through a
+    // per-instance vertex binding (@c VK_VERTEX_INPUT_RATE_INSTANCE), so
+    // the shader reads ordinary attributes rather than indexing by
+    // @c gl_InstanceIndex. @ref instanced_mesh builds a matching buffer;
+    // this material is meant to be fronted by it.
     //
     // Slot layout: per-frame group at slot 0 (camera, owned by the
     // @ref scene_pass) and the per-material group at slot 2 (a flat tint

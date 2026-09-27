@@ -43,7 +43,7 @@ core::math::mat4 rendering_engine::camera::get_view_matrix() const
     // Column-major: columns 0 / 2 are the world-space images of the local
     // +X (forward) and +Z (up) axes, column 3 the translation. Each axis is
     // normalised so a scaled transform (say a camera under a scaled node)
-    // does not scale the view. core::math::look_at builds the GL-style view
+    // does not scale the view. core::math::look_at builds the view-space
     // frame (-Z forward, +Y up) from this world-space frame.
     const core::math::mat4 world = transform.get_world_matrix();
     const core::math::vec3 position{world.m[12], world.m[13], world.m[14]};

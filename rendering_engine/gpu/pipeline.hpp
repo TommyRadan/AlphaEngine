@@ -72,10 +72,8 @@ namespace rendering_engine::gpu
     // fragment's depth is offset by @c constant times the smallest
     // resolvable depth step plus @c slope times the polygon's depth
     // slope, and the sum is clamped to @c clamp when it is non-zero.
-    // Maps to @c glPolygonOffset (with @c GL_POLYGON_OFFSET_FILL /
-    // @c _LINE / @c _POINT following the polygon mode) and to the
-    // Vulkan rasterisation state's depth bias (@c clamp needs the
-    // @c depthBiasClamp feature and is 0 without it).
+    // Maps to the Vulkan rasterisation state's depth bias (@c clamp
+    // needs the @c depthBiasClamp feature and is 0 without it).
     struct depth_bias_state
     {
         bool enabled{false};
@@ -91,8 +89,8 @@ namespace rendering_engine::gpu
         polygon_mode polygon{polygon_mode::fill};
     };
 
-    // Push-constant bytes a device with @c device_features::push_constants
-    // takes at least: Vulkan's required minimum of maxPushConstantsSize.
+    // Push-constant bytes every device takes at least: Vulkan's required
+    // minimum of maxPushConstantsSize.
     constexpr uint32_t min_push_constants_size = 128;
 
     // A block of push constants a pipeline declares: @c size bytes from
@@ -100,8 +98,7 @@ namespace rendering_engine::gpu
     // and the block must end within @c device_limits::max_push_constants_size.
     // @c render_pass_encoder::push_constants writes into it, naming the
     // same stages. Maps to a @c VkPushConstantRange of the pipeline
-    // layout; ignored by a device without @c device_features::push_constants
-    // (OpenGL).
+    // layout.
     struct push_constant_range
     {
         shader_stages stages{shader_stages_default};
@@ -131,9 +128,8 @@ namespace rendering_engine::gpu
         primitive_topology topology{primitive_topology::triangles};
 
         // Number of vertices per patch when @c topology is
-        // @c patches. Maps to @c GL_PATCH_VERTICES on the OpenGL
-        // backend and to the equivalent @c VkPipelineTessellationStateCreateInfo
-        // field on Vulkan. Ignored for non-patch topologies.
+        // @c patches. Maps to @c VkPipelineTessellationStateCreateInfo's
+        // @c patchControlPoints. Ignored for non-patch topologies.
         uint32_t patch_control_points{0};
 
         // Blend state of every colour attachment the pipeline draws

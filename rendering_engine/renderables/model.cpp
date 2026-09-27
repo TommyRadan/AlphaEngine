@@ -14,7 +14,7 @@
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/materials/material.hpp>
 #include <rendering_engine/renderables/mesh_bounds.hpp>
-#include <rendering_engine/renderables/per_draw_ring.hpp>
+#include <rendering_engine/renderables/per_draw_ubo.hpp>
 #include <rendering_engine/renderables/vertex_format_check.hpp>
 #include <runtime/engine.hpp>
 
@@ -32,11 +32,6 @@ rendering_engine::model::~model()
     {
         gpu.destroy(m_joint_buffer);
         m_joint_buffer = {};
-    }
-    if (m_draw_ubo.valid())
-    {
-        gpu.destroy(m_draw_ubo);
-        m_draw_ubo = {};
     }
     if (m_index_buffer.valid())
     {
@@ -186,15 +181,20 @@ void rendering_engine::model::collect_draw_items(std::vector<draw_item>& out)
 
     draw_item item{};
     item.mat = m_material;
-    // The model + normal matrix (recomputed only when the transform
-    // moved); a mirroring transform flags the item so the pass draws it
-    // with the clockwise-front-face variant. With push constants the pass
-    // pushes them; otherwise a rigid model writes them into this frame's
-    // slot of the per-draw ring and a skinned one keeps them in the
-    // private group that also carries its joint palette.
-    if (!(skinned ? bind_skinned(item) : m_per_draw.bind(transform, m_material->per_draw_layout(), item)))
+    // The model + normal matrix the pass pushes (recomputed only when the
+    // transform moved); a mirroring transform flags the item so the pass
+    // draws it with the clockwise-front-face variant. A skinned model
+    // also binds the private group that carries its joint palette.
+    if (skinned)
     {
-        return;
+        if (!bind_skinned(item))
+        {
+            return;
+        }
+    }
+    else
+    {
+        m_per_draw.bind(transform, item);
     }
     item.vertex_buffer = vertex_buffer;
     item.vertex_count = vertex_count;
@@ -219,13 +219,6 @@ void rendering_engine::model::collect_draw_items(std::vector<draw_item>& out)
 bool rendering_engine::model::bind_skinned(draw_item& item)
 {
     auto& gpu = *runtime::current_engine().gpu;
-
-    if (!m_draw_ubo.valid())
-    {
-        // The PerDraw block: model + normal matrix (see per_draw_ubo.hpp).
-        m_draw_ubo = create_per_draw_ubo(gpu);
-        m_draw_ubo_version = 0;
-    }
 
     const gpu::bind_group_layout layout = m_material->per_draw_layout();
     if (m_draw_bind_group.valid() && m_draw_bind_group_layout != layout)
@@ -260,7 +253,7 @@ bool rendering_engine::model::bind_skinned(draw_item& item)
 
     if (!m_draw_bind_group.valid())
     {
-        m_draw_bind_group = create_skinned_per_draw_bind_group(gpu, layout, m_draw_ubo, m_joint_buffer);
+        m_draw_bind_group = create_skinned_per_draw_bind_group(gpu, layout, m_joint_buffer);
         m_draw_bind_group_layout = layout;
     }
     if (!m_draw_bind_group.valid())
@@ -268,23 +261,7 @@ bool rendering_engine::model::bind_skinned(draw_item& item)
         return false;
     }
 
-    m_per_draw.refresh(transform);
-    if (per_draw_push_constants(gpu))
-    {
-        // The pass pushes the block; the group is bound for the palette
-        // alone and its uniform block goes unread.
-        item.per_draw_push = &m_per_draw.payload();
-    }
-    else if (m_draw_ubo_version != m_per_draw.world_version())
-    {
-        // The private buffer keeps its contents between frames, so it is
-        // rewritten only when the block changed.
-        gpu.write_buffer(m_draw_ubo, &m_per_draw.payload(), per_draw_ubo_size, 0);
-        m_draw_ubo_version = m_per_draw.world_version();
-    }
-
+    m_per_draw.bind(transform, item);
     item.per_draw_bind_group = m_draw_bind_group;
-    item.per_draw_dynamic = false;
-    item.mirrored = m_per_draw.mirrored();
     return true;
 }

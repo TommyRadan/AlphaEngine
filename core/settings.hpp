@@ -30,7 +30,6 @@ namespace core
     /** @brief GPU backend selected by @ref graphics_settings. */
     enum class graphics_backend
     {
-        opengl, /**< OpenGL 4.6 core. */
         vulkan, /**< Vulkan. */
     };
 
@@ -46,7 +45,6 @@ namespace core
         unsigned int height{0};
         std::string title;
         window_mode mode{window_mode::windowed};
-        bool double_buffered{true};
 
         /**
          * @brief Whether the presentation engine should wait for vertical
@@ -99,8 +97,7 @@ namespace core
          *
          * At 1 the CPU waits for each frame's GPU work before recording the next; at 2 it records frame N+1
          * while the GPU still draws frame N, and every host-written buffer is double-buffered by the device so
-         * the two never touch the same memory. OpenGL keeps its own implicit synchronisation and ignores it.
-         * Read once during @ref rendering_engine::gpu::device::init.
+         * the two never touch the same memory. Read once during @ref rendering_engine::gpu::device::init.
          */
         unsigned int frames_in_flight{2};
 
@@ -112,8 +109,8 @@ namespace core
          * many draws is split into contiguous chunks of at least this many draws — at most one per recording
          * thread, the job pool's workers plus the main thread — and every chunk is recorded into its own
          * secondary command buffer at once; at or below it the pass records serially, so the fork-join
-         * overhead is only paid where it is amortised. 0 disables the parallel path. OpenGL always records
-         * serially. Read once during rendering-engine init.
+         * overhead is only paid where it is amortised. 0 disables the parallel path. Read once during
+         * rendering-engine init.
          */
         unsigned int parallel_draw_threshold{512};
     };
@@ -352,7 +349,7 @@ namespace core
     /** @brief The lowercase name of @p mode (`windowed`, `fullscreen`, `borderless`). */
     const char* window_mode_name(window_mode mode) noexcept;
 
-    /** @brief The lowercase name of @p backend (`opengl`, `vulkan`). */
+    /** @brief The lowercase name of @p backend (`vulkan`). */
     const char* graphics_backend_name(graphics_backend backend) noexcept;
 
     /** @brief The lowercase name of @p curve (`none`, `reinhard`, `aces`). */

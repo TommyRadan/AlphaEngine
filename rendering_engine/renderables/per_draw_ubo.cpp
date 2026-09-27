@@ -6,6 +6,7 @@
 #include <cmath>
 
 #include <core/math/mat3.hpp>
+#include <core/math/transform.hpp>
 #include <rendering_engine/gpu/bind_group.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/command_encoder.hpp>
@@ -79,11 +80,6 @@ namespace rendering_engine
         return payload;
     }
 
-    bool per_draw_push_constants(const gpu::device& device)
-    {
-        return device.features().push_constants;
-    }
-
     gpu::push_constant_range per_draw_push_constant_range()
     {
         gpu::push_constant_range range{};
@@ -93,53 +89,22 @@ namespace rendering_engine
         return range;
     }
 
-    void bind_per_draw(gpu::render_pass_encoder& encoder, const draw_item& item, uint32_t slot)
+    void push_per_draw(gpu::render_pass_encoder& encoder, const draw_item& item)
     {
         if (item.per_draw_push != nullptr)
         {
             const gpu::push_constant_range range = per_draw_push_constant_range();
             encoder.push_constants(range.stages, range.offset, range.size, item.per_draw_push);
         }
+    }
+
+    void bind_per_draw(gpu::render_pass_encoder& encoder, const draw_item& item, uint32_t slot)
+    {
+        push_per_draw(encoder, item);
         if (item.per_draw_bind_group.valid())
         {
-            encoder.set_bind_group(slot, item.per_draw_bind_group, item.per_draw_offsets());
+            encoder.set_bind_group(slot, item.per_draw_bind_group);
         }
-    }
-
-    gpu::bind_group_layout_entry per_draw_model_layout_entry()
-    {
-        gpu::bind_group_layout_entry entry{gpu::shader_bindings::per_draw_model, gpu::binding_kind::uniform_buffer};
-        entry.has_dynamic_offset = true;
-        return entry;
-    }
-
-    gpu::buffer create_per_draw_ubo(gpu::device& device)
-    {
-        gpu::buffer_descriptor descriptor{};
-        descriptor.size = per_draw_ubo_size;
-        descriptor.usage = gpu::buffer_usage_uniform | gpu::buffer_usage_copy_dst;
-        descriptor.hint = gpu::buffer_usage_hint::dynamic_data;
-        return device.create_buffer(descriptor);
-    }
-
-    gpu::bind_group create_per_draw_bind_group(gpu::device& device, gpu::bind_group_layout layout, gpu::buffer ubo)
-    {
-        gpu::bind_group_descriptor descriptor{};
-        descriptor.layout = layout;
-        gpu::binding_value model_slot{};
-        model_slot.binding = gpu::shader_bindings::per_draw_model;
-        model_slot.kind = gpu::binding_kind::uniform_buffer;
-        model_slot.buffer_value = ubo;
-        model_slot.size = per_draw_ubo_size;
-        descriptor.entries.push_back(model_slot);
-        return device.create_bind_group(descriptor);
-    }
-
-    bool write_per_draw_ubo(gpu::device& device, gpu::buffer ubo, const core::math::mat4& model)
-    {
-        const per_draw_payload payload = make_per_draw_payload(model);
-        device.write_buffer(ubo, &payload, per_draw_ubo_size, 0);
-        return is_mirrored(model);
     }
 
     gpu::buffer create_joint_buffer(gpu::device& device, size_t joint_count)
@@ -151,18 +116,11 @@ namespace rendering_engine
         return device.create_buffer(descriptor);
     }
 
-    gpu::bind_group create_skinned_per_draw_bind_group(gpu::device& device,
-                                                       gpu::bind_group_layout layout,
-                                                       gpu::buffer ubo,
-                                                       gpu::buffer joints)
+    gpu::bind_group
+    create_skinned_per_draw_bind_group(gpu::device& device, gpu::bind_group_layout layout, gpu::buffer joints)
     {
         gpu::bind_group_descriptor descriptor{};
         descriptor.layout = layout;
-        gpu::binding_value model_slot{};
-        model_slot.binding = gpu::shader_bindings::per_draw_model;
-        model_slot.kind = gpu::binding_kind::uniform_buffer;
-        model_slot.buffer_value = ubo;
-        descriptor.entries.push_back(model_slot);
         gpu::binding_value joints_slot{};
         joints_slot.binding = gpu::shader_bindings::per_draw_joints;
         joints_slot.kind = gpu::binding_kind::storage_buffer;
@@ -178,5 +136,21 @@ namespace rendering_engine
             return;
         }
         device.write_buffer(joints, matrices.data(), matrices.size() * joint_matrix_size, 0);
+    }
+
+    void per_draw_binding::bind(const core::transform& transform, draw_item& item)
+    {
+        const uint64_t version = transform.get_world_version();
+        if (version != m_world_version)
+        {
+            m_payload = make_per_draw_payload(transform.get_world_matrix());
+            m_mirrored = is_mirrored(m_payload.model);
+            m_world_version = version;
+        }
+        // The pass pushes the cached block right before the draw; the
+        // bytes are copied into the command stream there, so a draw an
+        // earlier pass recorded keeps the block it pushed.
+        item.per_draw_push = &m_payload;
+        item.mirrored = m_mirrored;
     }
 } // namespace rendering_engine

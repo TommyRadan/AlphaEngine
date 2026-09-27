@@ -158,7 +158,6 @@ namespace rendering_engine
         instanced_shadow_pipeline m_instanced{};
 
         gpu::bind_group_layout m_light_layout{};
-        gpu::bind_group_layout m_draw_layout{};
         std::array<gpu::buffer, point_shadow_face_count> m_light_ubos{};
         std::array<gpu::bind_group, point_shadow_face_count> m_light_bind_groups{};
 

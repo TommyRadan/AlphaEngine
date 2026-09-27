@@ -6,9 +6,7 @@
  * @brief Typed binding tables — the per-draw resource binding model.
  *
  * Layouts identify slots purely by binding number; the engine ships
- * SPIR-V with explicit Vulkan-style @c layout(set, binding) decorations,
- * so the OpenGL backend's @c glBindBufferBase / @c glActiveTexture calls
- * use the binding number verbatim and no @c glGetUniformLocation
+ * SPIR-V with explicit @c layout(set, binding) decorations, so no
  * reflection happens at create-pipeline time.
  *
  * The supported value kinds are intentionally narrow: a single
@@ -20,9 +18,8 @@
  * slot whose layout entry sets @ref bind_group_layout_entry::has_dynamic_offset
  * takes an extra offset at bind time (@c render_pass_encoder::set_bind_group's
  * @c dynamic_offsets), so one bind group over one large buffer can serve
- * many draws that each read their own slice — the per-draw ring's model
- * matrices. The OpenGL backend binds such a slot with @c glBindBufferRange,
- * Vulkan as a @c VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC descriptor.
+ * many draws that each read their own slice. Vulkan binds such a slot as
+ * a @c VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC descriptor.
  */
 
 #pragma once
@@ -47,18 +44,15 @@ namespace rendering_engine::gpu
     };
 
     // One slot in a layout. The binding number maps directly onto
-    // the SPIR-V @c Binding decoration and onto the OpenGL binding
-    // point (UBO / SSBO unit for @c uniform_buffer / @c storage_buffer,
-    // texture image unit for @c texture / @c sampler, image unit for
-    // @c storage_texture).
+    // the SPIR-V @c Binding decoration.
     struct bind_group_layout_entry
     {
         uint32_t binding{0};
         binding_kind kind{binding_kind::uniform_buffer};
 
-        // For @c storage_texture only: the image format used by
-        // @c glBindImageTexture and matched against the SPIR-V
-        // image @c Format decoration. Ignored for other kinds.
+        // For @c storage_texture only: the image format, matched
+        // against the SPIR-V image @c Format decoration. Ignored for
+        // other kinds.
         texture_format storage_format{texture_format::rgba8_unorm};
 
         // For @c storage_texture only: shader-side access mode.
@@ -66,10 +60,9 @@ namespace rendering_engine::gpu
         storage_access storage_access_mode{storage_access::read_write};
 
         // For @c texture only: the sampler dimensionality the shader
-        // declares (e.g. @c samplerCube vs @c sampler2D). Explicit-
-        // binding backends use it to pick a matching placeholder when a
-        // bind group leaves this slot unset; the OpenGL backend ignores
-        // it. Defaults to 2D.
+        // declares (e.g. @c samplerCube vs @c sampler2D). The backend
+        // uses it to pick a matching placeholder when a bind group
+        // leaves this slot unset. Defaults to 2D.
         texture_dimension dimension{texture_dimension::d2};
 
         // The shader stages that read this binding. The Vulkan backend
@@ -77,8 +70,7 @@ namespace rendering_engine::gpu
         // layout must name every stage that declares the binding: the
         // default covers the vertex + fragment pair of a rasterisation
         // pipeline, a compute layout sets @c shader_stages_compute, and
-        // a geometry / tessellation consumer widens it. The OpenGL
-        // backend ignores it.
+        // a geometry / tessellation consumer widens it.
         shader_stages stages{shader_stages_default};
 
         // For @c uniform_buffer only: the slot takes a dynamic offset at

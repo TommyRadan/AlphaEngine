@@ -202,10 +202,8 @@ namespace rendering_engine
 
         // Per-cascade light bind groups (slot 0): each cascade's
         // light-space view-projection at binding 0. The per-draw model
-        // matrix (binding 1) comes from each renderable's own bind
-        // group, bound at slot 1.
+        // matrix is each caster's pushed PerDraw block.
         gpu::bind_group_layout m_light_layout{};
-        gpu::bind_group_layout m_draw_layout{};
         std::array<gpu::buffer, max_shadow_cascades> m_light_ubos{};
         std::array<gpu::bind_group, max_shadow_cascades> m_light_bind_groups{};
 

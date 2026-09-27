@@ -42,8 +42,7 @@ namespace rendering_engine
      * less-or-equal test — so each covered pixel shades once; the other
      * items keep their ordinary variant.
      *
-     * On a device with @c device_features::parallel_recording (Vulkan)
-     * a frame whose draw list is longer than the parallel draw threshold
+     * A frame whose draw list is longer than the parallel draw threshold
      * (@c core::graphics_settings::parallel_draw_threshold) is recorded
      * in parallel: the sorted list is cut into contiguous chunks of at
      * least that many draws, at most one per recording thread (the job
@@ -54,11 +53,11 @@ namespace rendering_engine
      * executes the secondaries in order, so the frame's draws land
      * exactly as the serial walk would issue them. Each chunk binds the
      * per-frame group and its pipelines itself, since bound state does
-     * not carry into a secondary. Below the threshold, with it at 0,
-     * without workers or on OpenGL the list is dispatched serially on
-     * the primary. The shading pass and the depth pre-pass both take
-     * this path; the render stats are tallied from the list in
-     * @ref prepare, so they are the same either way.
+     * not carry into a secondary. Below the threshold, with it at 0 or
+     * without workers the list is dispatched serially on the primary.
+     * The shading pass and the depth pre-pass both take this path; the
+     * render stats are tallied from the list in @ref prepare, so they are
+     * the same either way.
      *
      * A renderable whose @ref renderable::layer_mask shares no bit with
      * the camera's @ref camera::culling_mask is skipped outright. Culling
@@ -303,10 +302,8 @@ namespace rendering_engine
         size_t m_depth_item_end{0};
 
         // Draw count above which a dispatch is recorded in parallel and
-        // the fewest draws per chunk (0: never), and whether the device
-        // records secondaries at all; both fixed at construction.
+        // the fewest draws per chunk (0: never); fixed at construction.
         uint32_t m_parallel_draw_threshold{0};
-        bool m_parallel_recording{false};
 
         // The depth pre-pass announced itself for the next @ref prepare
         // (@ref expect_depth_prepass), and whether it runs this frame,

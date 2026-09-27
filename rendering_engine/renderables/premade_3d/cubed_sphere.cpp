@@ -15,7 +15,7 @@
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/materials/material.hpp>
 #include <rendering_engine/renderables/mesh_bounds.hpp>
-#include <rendering_engine/renderables/per_draw_ring.hpp>
+#include <rendering_engine/renderables/per_draw_ubo.hpp>
 #include <rendering_engine/renderables/vertex_format_check.hpp>
 #include <runtime/engine.hpp>
 
@@ -25,8 +25,8 @@ namespace
     // (u=0, v=0) corner of the face on the unit cube and
     // (`u_axis`, `v_axis`) are the world-space vectors that traverse
     // the face from u=0->1 and v=0->1 respectively. Conventions match
-    // standard GL cube maps: u increases to the right when looking at
-    // the face from outside, v increases downward.
+    // standard (Vulkan) cube maps: u increases to the right when looking
+    // at the face from outside, v increases downward.
     struct face_def
     {
         core::math::vec3 origin;
@@ -177,14 +177,10 @@ void rendering_engine::cubed_sphere::collect_draw_items(std::vector<draw_item>& 
 
     draw_item item{};
     item.mat = m_material;
-    // The model + normal matrix, pushed or put in this frame's per-draw
-    // ring slot (recomputed only when the transform moved); a
-    // mirroring transform flags the item so the pass draws it with
-    // the clockwise-front-face variant.
-    if (!m_per_draw.bind(transform, m_material->per_draw_layout(), item))
-    {
-        return;
-    }
+    // The model + normal matrix the pass pushes (recomputed only when
+    // the transform moved); a mirroring transform flags the item so the
+    // pass draws it with the clockwise-front-face variant.
+    m_per_draw.bind(transform, item);
     item.vertex_buffer = m_mesh->vertex_buffer;
     item.index_buffer = m_mesh->index_buffer;
     item.index_count = m_index_count;

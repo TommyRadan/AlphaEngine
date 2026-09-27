@@ -10,11 +10,10 @@
  * @ref pass_hooks. One query set more than the device
  * keeps frames in flight rotate: a frame writes one set and reads back,
  * with @c device::resolve_queries at its top, the set written
- * @c frames_in_flight frames earlier — on Vulkan the frame fence wait in
+ * @c frames_in_flight frames earlier — the frame fence wait in
  * @c begin_frame has retired that frame by then, so the set it is about
- * to reset is complete too; on OpenGL (one frame in flight, two sets)
- * the results are simply polled and the previous values kept when a
- * query is still pending. The overlay's profiler panel shows the result.
+ * to reset is complete too. The overlay's profiler panel shows the
+ * result.
  * On a device without @c device_features::timestamp_queries the
  * profiler stays disabled and records nothing.
  */

@@ -68,12 +68,8 @@ namespace
     // bias covers the rest of the PCF footprint.
     constexpr float shadow_depth_bias_constant = 1.0f;
 
-    // Binding numbers within the depth-only pipeline. Both are UBOs and
-    // share OpenGL's global UBO namespace, so they mirror the lit
-    // pipeline: the per-cascade view-projection takes 0 and the per-draw
-    // model matrix takes 1 (per_draw_model_layout_entry) — the latter
-    // matching every renderable's per-draw bind group so they bind
-    // unchanged here.
+    // Binding number of the per-cascade view-projection UBO within the
+    // depth-only pipeline's light set (slot 0).
     constexpr uint32_t light_frame_binding = 0;
 
     // One of the camera frustum's four side edges: its near- and
@@ -340,15 +336,6 @@ namespace rendering_engine
         light_layout.entries.push_back({light_frame_binding, gpu::binding_kind::uniform_buffer});
         m_light_layout = gpu.create_bind_group_layout(light_layout);
 
-        // Per-draw layout (slot 1): the model matrix UBO at binding 1,
-        // identical to the layout every 3D renderable builds its
-        // per-draw bind group against, so on a device without push
-        // constants those bind groups bind here unchanged, at the same
-        // dynamic offset into the per-draw ring.
-        gpu::bind_group_layout_descriptor draw_layout{};
-        draw_layout.entries.push_back(per_draw_model_layout_entry());
-        m_draw_layout = gpu.create_bind_group_layout(draw_layout);
-
         // One view-projection UBO and bind group per cascade, so each
         // cascade's pass binds its own matrix without rewriting a buffer
         // an earlier pass in the same frame still reads.
@@ -408,13 +395,8 @@ namespace rendering_engine
         pipeline_descriptor.rasterizer = rasterizer;
         pipeline_descriptor.depth_bias = depth_bias;
         pipeline_descriptor.bind_group_layouts.push_back(m_light_layout);
-        pipeline_descriptor.bind_group_layouts.push_back(m_draw_layout);
-        // Where the device takes push constants the casters push their
-        // PerDraw block instead of binding a per-draw group.
-        if (per_draw_push_constants(gpu))
-        {
-            pipeline_descriptor.push_constant_ranges.push_back(per_draw_push_constant_range());
-        }
+        // The casters push their PerDraw block; there is no per-draw set.
+        pipeline_descriptor.push_constant_ranges.push_back(per_draw_push_constant_range());
         m_pipeline = gpu.create_pipeline(pipeline_descriptor);
 
         // Instanced casters rasterize with the same state through the
@@ -446,11 +428,6 @@ namespace rendering_engine
                 gpu.destroy(ubo);
                 ubo = {};
             }
-        }
-        if (m_draw_layout.valid())
-        {
-            gpu.destroy(m_draw_layout);
-            m_draw_layout = {};
         }
         if (m_light_layout.valid())
         {

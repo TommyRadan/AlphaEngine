@@ -31,9 +31,9 @@ namespace rendering_engine
     constexpr uint32_t layer_all = ~0u;
 
     // Anything that can contribute draws to a render pass. @ref upload
-    // allocates GPU resources (buffers, bind groups) once GL is alive;
-    // @ref collect_draw_items appends one or more @ref draw_item values
-    // describing what to draw this frame. The pass sorts the collected
+    // allocates GPU resources (buffers, bind groups) once the device is
+    // alive; @ref collect_draw_items appends one or more @ref draw_item
+    // values describing what to draw this frame. The pass sorts the collected
     // items by material and dispatches them in one place — renderables
     // never call @c set_pipeline / @c set_bind_group / @c draw_indexed
     // themselves.

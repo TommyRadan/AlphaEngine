@@ -5,13 +5,10 @@
  * @file shader_bindings.hpp
  * @brief The global binding-number table shared by every scene pipeline.
  *
- * The OpenGL backend consumes SPIR-V through ARB_gl_spirv, which
- * flattens the @c layout(set, binding) pairs of a pipeline into one
- * global namespace per resource class (UBOs, samplers). Every resource a
- * scene pipeline can see therefore needs a binding number that is unique
- * across all of its descriptor sets, not just within one. Vulkan only
- * requires uniqueness within a set, so the same numbering satisfies both
- * backends.
+ * Every resource a scene pipeline can see has a binding number that is
+ * unique across all of its descriptor sets, not just within one, so a
+ * number names the same resource in every shader and set that declares
+ * it. Vulkan itself only requires uniqueness within a set.
  *
  * This header is the single owner of that table. The build generates
  * @c shaders/include/bindings.glsl from it (see
@@ -47,15 +44,6 @@ namespace rendering_engine::gpu::shader_bindings
     constexpr uint32_t shadow = 10;
     constexpr uint32_t point_shadow = 14;
     constexpr uint32_t point_shadow_map = 15;
-
-    // Set 1, per draw: the per-draw model matrix, a slot of the per-draw
-    // ring read at a dynamic offset. Every 3D renderable's per-draw group
-    // binds it at this number, so the depth-only shadow pipelines reuse
-    // those groups (and offsets) unchanged. Only on a device without push
-    // constants (OpenGL): with them the block is the pipeline's push
-    // constants and the binding stays in the layouts unread (see
-    // include/per_draw.glsl).
-    constexpr uint32_t per_draw_model = 1;
 
     // Set 2, owned by each material: the params block and up to five
     // sampled maps. Materials with a single map (phong's diffuse, points'

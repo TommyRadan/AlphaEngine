@@ -5,12 +5,9 @@
 // (frame_context::scene_depth_texture). The texture stores the non-linear
 // window-space depth the scene and skybox passes leave in the HDR
 // target's depth24 attachment: d = 0.5 * z_ndc + 0.5 in [0, 1], where
-// z_ndc is the post-divide z of a GL-convention projection (clip z in
-// [-w, w], the matrices core::math::perspective builds). Both backends
-// store that same value - OpenGL through its default depth range and
-// Vulkan through the [0, 1] viewport depth with VK_EXT_depth_clip_control
-// mapping the [-1, 1] NDC range onto it - so shaders never need a
-// per-backend branch.
+// z_ndc is the post-divide z of the engine's projections (clip z in
+// [-w, w], the matrices core::math::perspective builds), which
+// VK_EXT_depth_clip_control maps onto the [0, 1] viewport depth.
 #ifndef AE_DEPTH_UTILS_GLSL
 #define AE_DEPTH_UTILS_GLSL
 

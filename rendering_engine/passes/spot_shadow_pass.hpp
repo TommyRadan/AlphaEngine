@@ -131,10 +131,9 @@ namespace rendering_engine
         instanced_shadow_pipeline m_instanced{};
 
         // Per-light bind group (slot 0): the light-space view-projection
-        // matrix at binding 0. The per-draw model matrix (binding 1)
-        // comes from each renderable's own bind group, bound at slot 1.
+        // matrix at binding 0. The per-draw model matrix is each caster's
+        // pushed PerDraw block.
         gpu::bind_group_layout m_light_layout{};
-        gpu::bind_group_layout m_draw_layout{};
         gpu::buffer m_light_ubo{};
         gpu::bind_group m_light_bind_group{};
 

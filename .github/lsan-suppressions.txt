@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2015-2026 Tomislav Radanovic
+
+# LeakSanitizer suppressions for the sanitizer entry of the CI smoke job.
+#
+# SDL loads libX11 with dlopen when the video subsystem starts and unloads it
+# again in SDL_QuitSubSystem. libX11 keeps process-lifetime state that only
+# its own globals point at, so once the library is unmapped, LeakSanitizer
+# finds those blocks unreachable at exit and reports them. The allocating
+# frames sit inside the unloaded library and print as <unknown module>, so
+# each entry names the SDL X11-backend function that made the libX11 call.
+
+# XSetLocaleModifiers and XOpenIM: the locale modifiers and the input-method
+# state set up for text input while the keyboard is initialised.
+leak:X11_InitKeyboard
+
+# XrmInitialize: the resource-manager quark tables built while reading the
+# Xft.dpi content scale.
+leak:GetGlobalContentScale
