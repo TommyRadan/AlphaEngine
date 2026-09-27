@@ -1,12 +1,9 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2015-2026 Tomislav Radanovic
 
-# This file defines AlphaEngine build system
-
 cmake_minimum_required(VERSION 3.16)
 project(AlphaEngine C CXX)
 
-# Set build type to Debug if not specified
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Debug)
 endif()
@@ -39,15 +36,12 @@ if(ALPHAENGINE_SANITIZE)
     add_link_options(-fsanitize=${ALPHAENGINE_SANITIZE})
 endif()
 
-# Set cmake module directory
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 
-# Version
 add_definitions(-DVERSION_MAJOR=0)
 add_definitions(-DVERSION_MINOR=0)
 add_definitions(-DVERSION_PATCH=1)
 
-# Set the macOS SDK path
 if(APPLE)
     execute_process(COMMAND 
         xcrun --show-sdk-path OUTPUT_VARIABLE MACOS_SDK_PATH 
@@ -55,21 +49,17 @@ if(APPLE)
     set(CMAKE_OSX_SYSROOT ${MACOS_SDK_PATH})
 endif(APPLE)
 
-# Compile options
 set(LIBRARY_OUTPUT_PATH ${CMAKE_SOURCE_DIR}/Binaries/)
 set(EXECUTABLE_OUTPUT_PATH ${CMAKE_SOURCE_DIR}/Binaries/)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_VERBOSE_MAKEFILE false)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-# Vendor options
 set(VENDOR_ROOT ${CMAKE_SOURCE_DIR}/vendor/)
 
-# Make output directory if it doesn't exist
 add_custom_target(build-time-make-directory ALL
     COMMAND ${CMAKE_COMMAND} -E make_directory Binaries)
 
-# Set top level directory to be searched for includes
 include_directories(${CMAKE_SOURCE_DIR})
 
 # Main executable. Sources are contributed by per-directory CMakeLists.txt
@@ -99,7 +89,6 @@ set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 target_link_libraries(AlphaEngine Threads::Threads)
 
-# Use C++ standard library
 if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
     target_compile_options(AlphaEngine PRIVATE -stdlib=libc++)
     target_link_options(AlphaEngine PRIVATE -stdlib=libc++)
@@ -526,7 +515,6 @@ set_source_files_properties(
         COMPILE_DEFINITIONS "SOL_ALL_SAFETIES_ON=1;SOL_PRINT_ERRORS=0"
         COMPILE_OPTIONS "${ALPHAENGINE_SCRIPTING_OPTIONS}")
 
-# Post-build
 if(APPLE)
     target_link_libraries(AlphaEngine "-framework CoreFoundation -framework IOKit -framework CoreVideo")
 endif(APPLE)
