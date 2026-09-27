@@ -59,6 +59,10 @@ namespace core
 {
     struct time;
 }
+namespace core
+{
+    struct audio;
+}
 namespace rendering_engine
 {
     struct window;
@@ -136,6 +140,10 @@ namespace runtime
         std::unique_ptr<core::time> time;
         std::unique_ptr<core::jobs> jobs;
         std::unique_ptr<core::event_bus> events;
+        // No rendering dependency (its own SDL audio device, opened
+        // independently of the window/GL context), so it lives here as a
+        // core-level subsystem rather than under rendering_engine.
+        std::unique_ptr<core::audio> audio;
         std::unique_ptr<rendering_engine::window> window;
         std::unique_ptr<rendering_engine::gpu::device> gpu;
         std::unique_ptr<rendering_engine::asset_cache> assets;
