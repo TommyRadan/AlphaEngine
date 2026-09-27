@@ -116,14 +116,14 @@ namespace rendering_engine::gpu
         // image. Cube and 3D storage images bind every layer (the IBL
         // compute writes a whole cube level through an @c imageCube), so
         // only the level needs selecting. Ignored for other kinds and
-        // defaults to the base level to preserve existing bindings.
+        // defaults to the base level.
         uint32_t storage_level{0};
 
         // For @c uniform_buffer / @c storage_buffer only: the byte range
         // of @ref buffer_value the slot exposes. @c offset must be a
         // multiple of the matching @c device_limits offset alignment; a
         // @c size of 0 covers the rest of the buffer from @c offset. The
-        // defaults bind the whole buffer, as before. A dynamic slot (see
+        // defaults bind the whole buffer. A dynamic slot (see
         // @ref bind_group_layout_entry::has_dynamic_offset) needs a
         // non-zero @c size: each bind adds its dynamic offset to
         // @c offset and exposes @c size bytes from there.

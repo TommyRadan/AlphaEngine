@@ -488,11 +488,12 @@ namespace rendering_engine::gpu::backend::vulkan
         // Destroy callbacks queued from @c destroy() overloads. Freeing
         // a buffer or descriptor set while a command buffer that
         // references it is executing, or still being recorded, is
-        // invalid (the engine's per-draw UBO / bind-group churn used to
-        // trigger streams of VUID-vkDestroyBuffer-buffer-00922 /
-        // VUID-vkFreeDescriptorSets-pDescriptorSets-00309), and with
-        // several frames in flight the previous frame's command buffer
-        // is still running when a resource is destroyed. Each
+        // invalid (VUID-vkDestroyBuffer-buffer-00922 /
+        // VUID-vkFreeDescriptorSets-pDescriptorSets-00309) — the
+        // engine's per-draw UBO / bind-group churn would otherwise
+        // trigger streams of it — and with several frames in flight
+        // the previous frame's command buffer is still running when a
+        // resource is destroyed. Each
         // @c destroy() pushes a closure here stamped with the serial of
         // the last queue submission that can reference the resource:
         // inside a frame that is the frame's own submission, still to

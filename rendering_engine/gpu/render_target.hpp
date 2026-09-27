@@ -95,9 +95,8 @@ namespace rendering_engine::gpu
 
         // Samples per pixel of every attachment (1 = single-sampled).
         // A pipeline drawn into the target must declare the same
-        // @c pipeline_descriptor::sample_count. Only the plumbing:
-        // resolving a multisampled attachment to a single-sampled
-        // texture is a follow-on.
+        // @c pipeline_descriptor::sample_count. A multisampled attachment
+        // is not resolved to a single-sampled texture.
         uint32_t sample_count{1};
 
         // Whether the target has a depth attachment, described by

@@ -537,9 +537,9 @@ namespace rendering_engine::gpu::backend::opengl
 
         // The attribute formats are baked into the VAO; only the buffer
         // behind the slot's binding point changes here. A binding stride
-        // of 0 would make every vertex read the same record (unlike the
-        // old attribute-pointer path, where 0 meant tightly packed), so
-        // a layout that leaves the stride to the draw and a draw that
+        // of 0 would make every vertex read the same record (unlike
+        // glVertexAttribPointer, where 0 meant tightly packed), so a
+        // layout that leaves the stride to the draw and a draw that
         // leaves it to the layout fall back to the record the layout's
         // attributes span.
         const auto& layout = pipe->vertex_buffers[slot];

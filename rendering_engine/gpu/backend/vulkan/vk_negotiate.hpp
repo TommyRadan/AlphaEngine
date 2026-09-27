@@ -9,10 +9,8 @@
  *
  * Everything here is a pure function over Vulkan's header constants
  * — no @c VkDevice, no loader call — so @c vk_device can resolve its
- * tables once at init and the unit tests can pin the chains without a
- * GPU. The caller supplies the format-support query (backed by
- * @c vkGetPhysicalDeviceFormatProperties in the device, by a table in
- * the tests).
+ * tables once at init. The caller supplies the format-support query,
+ * backed by @c vkGetPhysicalDeviceFormatProperties in the device.
  */
 
 #pragma once
@@ -37,8 +35,7 @@ namespace rendering_engine::gpu::backend::vulkan
 
     // True when @p format may back a depth/stencil attachment with
     // optimal tiling. What the device answers from
-    // vkGetPhysicalDeviceFormatProperties; the tests answer from a
-    // table.
+    // vkGetPhysicalDeviceFormatProperties.
     using depth_attachment_query = std::function<bool(VkFormat)>;
 
     // The first candidate of @ref depth_format_candidates that

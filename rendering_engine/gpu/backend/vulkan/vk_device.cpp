@@ -1958,9 +1958,9 @@ namespace rendering_engine::gpu::backend::vulkan
         }
         // The surface, not the cached window size, is the authority on
         // the extent. An OS-driven out-of-date (display change, a
-        // compositor decision) arrives without any resize hint, and
-        // rebuilding at the cached size used to be a no-op that left
-        // the swapchain out of date for every following acquire.
+        // compositor decision) arrives without any resize hint, so
+        // rebuilding at the cached size would leave the swapchain out
+        // of date for every following acquire.
         VkSurfaceCapabilitiesKHR caps{};
         const VkResult caps_result = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(m_physical_device, m_surface, &caps);
         if (caps_result != VK_SUCCESS)
@@ -2588,10 +2588,10 @@ namespace rendering_engine::gpu::backend::vulkan
         // that last used it, so it is signaled and idle unless a
         // no-image submission armed it again this frame. Reset it
         // here, right before the one submission that signals it again,
-        // rather than at acquire time: a reset at acquire left the
-        // fence unsignaled whenever the acquire failed (out-of-date
-        // swapchain), and the next begin_frame then blocked forever
-        // (issue #206).
+        // rather than at acquire time: a reset at acquire time would
+        // leave the fence unsignaled whenever the acquire fails
+        // (out-of-date swapchain), and the next begin_frame would then
+        // block forever.
         if (!wait_slot_fence(slot))
         {
             return;
@@ -2841,11 +2841,12 @@ namespace rendering_engine::gpu::backend::vulkan
         // the new frame, so every host write that follows — this slot's
         // regions of the per-frame camera / light / shadow UBOs, the
         // per-draw ring's region, instance re-uploads — lands in memory
-        // the GPU is no longer reading. (The wait used to run lazily at
-        // the first swapchain pass, after every off-screen pass had
-        // already written its UBOs: the host-write / device-read race
-        // of issue #169.) The fence is only waited when a submission
-        // armed it: after a failed submit nothing would ever signal it.
+        // the GPU is no longer reading. Waiting lazily at the first
+        // swapchain pass instead, after every off-screen pass had
+        // already written its UBOs, would race those host writes
+        // against the GPU's reads. The fence is only waited when a
+        // submission armed it: after a failed submit nothing would
+        // ever signal it.
         if (!wait_slot_fence(m_frame_slot) && m_device_lost)
         {
             return;
@@ -3665,10 +3666,6 @@ namespace rendering_engine::gpu::backend::vulkan
         // tonemap's fragment shader can sample the scene HDR target
         // before scene_pass's color writes are visible, and the
         // sample silently returns undefined data (typically zeros).
-        // That's exactly what was producing a black off-screen
-        // target on NVIDIA: the cube draw issued, validation was
-        // happy, but tonemap saw black because the writes hadn't
-        // committed by the time the sample fired.
         std::array<VkSubpassDependency, 2> deps{};
         deps[0].srcSubpass = VK_SUBPASS_EXTERNAL;
         deps[0].dstSubpass = 0;

@@ -13,9 +13,7 @@
  * ring space it took stays reserved until that batch's fence has
  * signaled. This class is only the arithmetic — reserve, wrap, seal a
  * batch, retire it — over plain integers: no @c VkBuffer, no fence, so
- * @c vk_device can drive it against the real buffer while the unit
- * tests pin the offset / alignment / wrap / reclaim rules without a
- * GPU.
+ * @c vk_device can drive it against the real buffer.
  *
  * Positions are absolute, monotonically increasing byte counters
  * (@c head is where the next reservation starts, @c tail is the start
