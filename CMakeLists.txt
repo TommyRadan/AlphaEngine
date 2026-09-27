@@ -2,6 +2,20 @@
 # Copyright (c) 2015-2026 Tomislav Radanovic
 
 cmake_minimum_required(VERSION 3.22)
+
+# Lets the MSVC debug-information format be chosen through
+# CMAKE_MSVC_DEBUG_INFORMATION_FORMAT (CI sets it to Embedded / /Z7,
+# since a compiler cache cannot key /Zi's shared PDB per object file).
+# CMAKE_POLICY_DEFAULT_CMP0141 carries the same policy into every
+# FetchContent'd dependency's own project() call, whose
+# cmake_minimum_required() would otherwise leave it unset for that
+# dependency's targets. Guarded for a CMake below 3.25, which does not
+# know this policy.
+if(POLICY CMP0141)
+    cmake_policy(SET CMP0141 NEW)
+    set(CMAKE_POLICY_DEFAULT_CMP0141 NEW)
+endif()
+
 project(AlphaEngine C CXX)
 
 if(NOT CMAKE_BUILD_TYPE)
@@ -10,10 +24,12 @@ endif()
 
 # Add debug definitions and flags. Use generator expressions so this works
 # correctly with multi-config generators (e.g. Visual Studio) where
-# CMAKE_BUILD_TYPE is empty at configure time.
+# CMAKE_BUILD_TYPE is empty at configure time. With CMP0141 NEW and
+# CMAKE_MSVC_DEBUG_INFORMATION_FORMAT unset, MSVC Debug already gets
+# ProgramDatabase (/Zi) as CMake's own default, so only /Od is added here.
 add_compile_definitions($<$<CONFIG:Debug>:_DEBUG>)
 if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
-    add_compile_options($<$<CONFIG:Debug>:/Zi> $<$<CONFIG:Debug>:/Od>)
+    add_compile_options($<$<CONFIG:Debug>:/Od>)
 else()
     add_compile_options($<$<CONFIG:Debug>:-g> $<$<CONFIG:Debug>:-O0>)
 endif()
