@@ -92,7 +92,8 @@ namespace rendering_engine::gpu::backend::opengl
 
     // Bytes per texel of the tightly packed client layout
     // @ref to_gl_texture_format's upload format / type describe, for
-    // validating the byte count handed to a texture write.
+    // validating the byte count handed to a texture write (per 4x4 block
+    // for a compressed format).
     uint32_t to_gl_texel_bytes(texture_format format);
 
     // The client format / type of the *native* texel layout the copy

@@ -629,9 +629,11 @@ namespace rendering_engine::gpu::backend::vulkan
             return false;
         }
         // The client layout of every upload is the tightly packed
-        // storage texel (rgb8 is widened in upload_region).
-        const size_t texel = record->format == texture_format::rgb8_unorm ? 3u : texel_size_bytes(record->format);
-        const size_t required = static_cast<size_t>(region.width) * region.height * texel;
+        // storage texel, or whole blocks of a compressed format (rgb8 is
+        // widened in upload_region).
+        const size_t required = record->format == texture_format::rgb8_unorm
+                                    ? static_cast<size_t>(region.width) * region.height * 3u
+                                    : texture_image_bytes(record->format, region.width, region.height);
         if (size < required)
         {
             LOG_WRN("write_texture_region: %zu bytes supplied, %zu needed", size, required);

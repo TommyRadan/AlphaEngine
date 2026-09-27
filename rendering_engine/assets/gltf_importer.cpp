@@ -558,135 +558,286 @@ namespace rendering_engine
             return mesh_data::from_vertices(records, std::move(indices));
         }
 
-        // Per-load state shared by the import stages: the parsed file, where
-        // its relative URIs resolve, and the decoded images (lazily, at most
-        // once each).
-        struct import_context
+        std::string primitive_label(std::size_t mesh, std::size_t primitive, const std::filesystem::path& path)
         {
-            const cgltf_data& data;
-            const std::filesystem::path& path;
-            std::string path_text;
-            std::filesystem::path base_dir;
-            std::string identity;
-            asset_cache& cache;
-            const gltf_import_options& options;
+            return "mesh " + std::to_string(mesh) + " primitive " + std::to_string(primitive) + " of '" +
+                   path.string() + "'";
+        }
 
-            // Index-aligned with data.images; an entry is decoded on first
-            // use and left empty (with the failure remembered) when it
-            // cannot be.
-            std::vector<std::optional<util::image>> images;
-            std::vector<bool> image_failed;
-
-            import_context(const cgltf_data& in_data,
-                           const std::filesystem::path& in_path,
-                           asset_cache& in_cache,
-                           const gltf_import_options& in_options)
-                : data{in_data}, path{in_path}, path_text{in_path.string()}, base_dir{in_path.parent_path()},
-                  identity{file_identity(in_path)}, cache{in_cache}, options{in_options}, images(in_data.images_count),
-                  image_failed(in_data.images_count, false)
+        // Whether @p primitive is one the importer turns into a mesh:
+        // TRIANGLES, not Draco-compressed, with a POSITION attribute. With
+        // @p warn the reason one is skipped is logged (by the finishing
+        // stage, so each warning appears once).
+        bool importable_primitive(const cgltf_primitive& primitive, const std::string& label, bool warn)
+        {
+            if (primitive.type != cgltf_primitive_type_triangles)
             {
+                if (warn)
+                {
+                    LOG_WRN("gltf: %s uses %s topology; only TRIANGLES are imported, skipped",
+                            label.c_str(),
+                            topology_name(primitive.type));
+                }
+                return false;
             }
-
-            // The file name for log lines.
-            const char* path_name() const
+            if (primitive.has_draco_mesh_compression)
             {
-                return path_text.c_str();
+                if (warn)
+                {
+                    LOG_WRN("gltf: %s is Draco-compressed, which is not supported; skipped", label.c_str());
+                }
+                return false;
             }
-
-            // The decoded pixels of image @p index, or nullptr when it cannot
-            // be decoded (warned about once).
-            const util::image* decoded_image(std::size_t index)
+            if (cgltf_find_accessor(&primitive, cgltf_attribute_type_position, 0) == nullptr)
             {
-                if (index >= images.size() || image_failed[index])
+                if (warn)
                 {
-                    return nullptr;
+                    LOG_WRN("gltf: %s has no POSITION attribute; skipped", label.c_str());
                 }
-                if (images[index].has_value())
-                {
-                    return &*images[index];
-                }
-                images[index] = decode_image(data.images[index], index);
-                if (!images[index].has_value())
-                {
-                    image_failed[index] = true;
-                    return nullptr;
-                }
+                return false;
+            }
+            return true;
+        }
+
+        // One primitive's geometry, built ahead by a prebuilding
+        // begin_gltf_import.
+        struct prebuilt_geometry
+        {
+            std::optional<mesh_data> data;
+            // build_geometry refused the primitive (and warned); it is
+            // skipped without a second attempt.
+            bool failed{false};
+        };
+    } // namespace
+
+    // The state both halves of an import share: the parsed file (owned, so
+    // it outlives the worker that parsed it), where its relative URIs
+    // resolve, the decoded images (lazily, at most once each), the geometry
+    // built ahead and the parts of the model the CPU stages produce.
+    struct gltf_import
+    {
+        gltf_import(cgltf_data_ptr parsed, const std::filesystem::path& in_path, const gltf_import_options& in_options)
+            : owner{std::move(parsed)}, data{*owner}, path{in_path}, path_text{in_path.string()},
+              base_dir{in_path.parent_path()}, identity{file_identity(in_path)}, options{in_options},
+              images(data.images_count), image_failed(data.images_count, false), geometry(data.meshes_count)
+        {
+        }
+
+        gltf_import(const gltf_import&) = delete;
+        gltf_import& operator=(const gltf_import&) = delete;
+
+        cgltf_data_ptr owner;
+        const cgltf_data& data;
+        std::filesystem::path path;
+        std::string path_text;
+        std::filesystem::path base_dir;
+        std::string identity;
+        gltf_import_options options;
+
+        // Index-aligned with data.images; an entry is decoded on first use
+        // and left empty (with the failure remembered) when it cannot be.
+        std::vector<std::optional<util::image>> images;
+        std::vector<bool> image_failed;
+
+        // geometry[i][j] is primitive j of mesh i when prebuilt; the inner
+        // vectors stay empty otherwise.
+        std::vector<std::vector<prebuilt_geometry>> geometry;
+
+        // The nodes (their primitives linked by the finishing stage), the
+        // roots, the skeleton and the clips; completed and handed out by
+        // finish_gltf_import.
+        gltf_model model;
+
+        // The file name for log lines.
+        const char* path_name() const
+        {
+            return path_text.c_str();
+        }
+
+        // The decoded pixels of image @p index, or nullptr when it cannot
+        // be decoded (warned about once).
+        const util::image* decoded_image(std::size_t index)
+        {
+            if (index >= images.size() || image_failed[index])
+            {
+                return nullptr;
+            }
+            if (images[index].has_value())
+            {
                 return &*images[index];
             }
-
-            std::optional<util::image> decode_image(const cgltf_image& image, std::size_t index)
+            images[index] = decode_image(data.images[index], index);
+            if (!images[index].has_value())
             {
-                try
+                image_failed[index] = true;
+                return nullptr;
+            }
+            return &*images[index];
+        }
+
+        std::optional<util::image> decode_image(const cgltf_image& image, std::size_t index)
+        {
+            try
+            {
+                if (image.buffer_view != nullptr)
                 {
-                    if (image.buffer_view != nullptr)
+                    const uint8_t* bytes = cgltf_buffer_view_data(image.buffer_view);
+                    if (bytes == nullptr)
                     {
-                        const uint8_t* bytes = cgltf_buffer_view_data(image.buffer_view);
-                        if (bytes == nullptr)
-                        {
-                            LOG_WRN("gltf: image %zu of '%s' has no buffer data", index, path_name());
-                            return std::nullopt;
-                        }
-                        return util::image{bytes, image.buffer_view->size};
-                    }
-                    if (const char* payload = data_uri_payload(image.uri); payload != nullptr)
-                    {
-                        const std::vector<uint8_t> bytes = decode_base64(payload);
-                        if (bytes.empty())
-                        {
-                            LOG_WRN("gltf: image %zu of '%s' has a malformed data URI", index, path_name());
-                            return std::nullopt;
-                        }
-                        return util::image{bytes.data(), bytes.size()};
-                    }
-                    if (!is_file_uri(image.uri))
-                    {
-                        LOG_WRN("gltf: image %zu of '%s' has an unsupported URI (%s)",
-                                index,
-                                path_name(),
-                                image.uri != nullptr ? image.uri : "none");
+                        LOG_WRN("gltf: image %zu of '%s' has no buffer data", index, path_name());
                         return std::nullopt;
                     }
-                    return util::image{resolve_file_uri(base_dir, image.uri).string()};
+                    return util::image{bytes, image.buffer_view->size};
+                }
+                if (const char* payload = data_uri_payload(image.uri); payload != nullptr)
+                {
+                    const std::vector<uint8_t> bytes = decode_base64(payload);
+                    if (bytes.empty())
+                    {
+                        LOG_WRN("gltf: image %zu of '%s' has a malformed data URI", index, path_name());
+                        return std::nullopt;
+                    }
+                    return util::image{bytes.data(), bytes.size()};
+                }
+                if (!is_file_uri(image.uri))
+                {
+                    LOG_WRN("gltf: image %zu of '%s' has an unsupported URI (%s)",
+                            index,
+                            path_name(),
+                            image.uri != nullptr ? image.uri : "none");
+                    return std::nullopt;
+                }
+                return util::image{resolve_file_uri(base_dir, image.uri).string()};
+            }
+            catch (const std::runtime_error&)
+            {
+                // util::image already logged the decoder's reason.
+                LOG_WRN("gltf: image %zu of '%s' could not be decoded; maps using it are skipped", index, path_name());
+                return std::nullopt;
+            }
+        }
+
+        // The map a texture view samples, decoded, or nullptr when the
+        // view names no texture or its image failed to decode.
+        const util::image* map_image(const cgltf_texture_view& view, const char* slot)
+        {
+            if (view.texture == nullptr || view.texture->image == nullptr)
+            {
+                return nullptr;
+            }
+            if (view.texcoord != 0)
+            {
+                LOG_WRN("gltf: %s of '%s' samples TEXCOORD_%d; only TEXCOORD_0 is imported",
+                        slot,
+                        path_name(),
+                        view.texcoord);
+            }
+            if (view.has_transform)
+            {
+                LOG_WRN("gltf: %s of '%s' uses KHR_texture_transform, which is ignored", slot, path_name());
+            }
+            return decoded_image(cgltf_image_index(&data, view.texture->image));
+        }
+    };
+
+    void gltf_import_deleter::operator()(gltf_import* import) const noexcept
+    {
+        delete import;
+    }
+
+    namespace
+    {
+        // CPU stage (prebuild): every importable primitive's geometry, so
+        // the main thread only uploads it.
+        void prebuild_geometry(gltf_import& ctx)
+        {
+            for (std::size_t i = 0; i < ctx.data.meshes_count; ++i)
+            {
+                const cgltf_mesh& mesh = ctx.data.meshes[i];
+                ctx.geometry[i].resize(mesh.primitives_count);
+                for (std::size_t j = 0; j < mesh.primitives_count; ++j)
+                {
+                    const cgltf_primitive& primitive = mesh.primitives[j];
+                    const std::string label = primitive_label(i, j, ctx.path);
+                    if (!importable_primitive(primitive, label, false))
+                    {
+                        continue;
+                    }
+                    prebuilt_geometry& built = ctx.geometry[i][j];
+                    try
+                    {
+                        built.data = build_geometry(primitive, ctx.options, label);
+                        built.data->bounds =
+                            accessor_bounds(*cgltf_find_accessor(&primitive, cgltf_attribute_type_position, 0));
+                    }
+                    catch (const primitive_import_error&)
+                    {
+                        built.failed = true; // already warned
+                    }
+                }
+            }
+        }
+
+        // CPU stage (prebuild): every image a texture samples, decoded once
+        // (external files included), so the main thread only uploads.
+        void predecode_images(gltf_import& ctx)
+        {
+            for (std::size_t t = 0; t < ctx.data.textures_count; ++t)
+            {
+                const cgltf_texture& texture = ctx.data.textures[t];
+                if (texture.image != nullptr)
+                {
+                    ctx.decoded_image(cgltf_image_index(&ctx.data, texture.image));
+                }
+            }
+        }
+
+        // The cache texture for image @p index in @p space, or null when it
+        // cannot be decoded (the decoder warned). An image with a file of
+        // its own is keyed on that file's path — shared with every other
+        // loader of it, and followed by a debug hot reload — through the
+        // decode already in hand when there is one; an embedded image (GLB
+        // chunk or data URI) on the model's identity plus the index.
+        std::shared_ptr<texture_asset>
+        image_texture(gltf_import& ctx, asset_cache& cache, std::size_t index, gpu::color_space space)
+        {
+            const cgltf_image& image = ctx.data.images[index];
+            if (image.buffer_view == nullptr && is_file_uri(image.uri))
+            {
+                const std::filesystem::path file = resolve_file_uri(ctx.base_dir, image.uri);
+                if (ctx.images[index].has_value())
+                {
+                    return cache.adopt_texture_image(file, *ctx.images[index], space);
+                }
+                if (ctx.image_failed[index])
+                {
+                    return nullptr;
+                }
+                try
+                {
+                    return cache.load_texture(file, space);
                 }
                 catch (const std::runtime_error&)
                 {
-                    // util::image already logged the decoder's reason.
-                    LOG_WRN(
-                        "gltf: image %zu of '%s' could not be decoded; maps using it are skipped", index, path_name());
-                    return std::nullopt;
+                    return nullptr; // the decoder logged why
                 }
             }
-
-            // The map a texture view samples, decoded, or nullptr when the
-            // view names no texture or its image failed to decode.
-            const util::image* map_image(const cgltf_texture_view& view, const char* slot)
+            const util::image* decoded = ctx.decoded_image(index);
+            if (decoded == nullptr)
             {
-                if (view.texture == nullptr || view.texture->image == nullptr)
-                {
-                    return nullptr;
-                }
-                if (view.texcoord != 0)
-                {
-                    LOG_WRN("gltf: %s of '%s' samples TEXCOORD_%d; only TEXCOORD_0 is imported",
-                            slot,
-                            path_name(),
-                            view.texcoord);
-                }
-                if (view.has_transform)
-                {
-                    LOG_WRN("gltf: %s of '%s' uses KHR_texture_transform, which is ignored", slot, path_name());
-                }
-                return decoded_image(cgltf_image_index(&data, view.texture->image));
+                return nullptr;
             }
-        };
+            return cache.load_texture_from_image(ctx.identity + "#image" + std::to_string(index), *decoded, space);
+        }
 
-        // Stage 1: every TRIANGLES primitive through the cache. Fills
-        // @p primitives_by_mesh (glTF mesh index -> model primitive indices)
-        // for the node stage.
-        void import_primitives(import_context& ctx,
-                               gltf_model& model,
+        // Finishing stage: every TRIANGLES primitive through the cache.
+        // Fills @p primitives_by_mesh (glTF mesh index -> model primitive
+        // indices) for the node links.
+        void import_primitives(gltf_import& ctx,
+                               asset_cache& cache,
                                std::vector<std::vector<std::size_t>>& primitives_by_mesh)
         {
+            gltf_model& model = ctx.model;
             primitives_by_mesh.assign(ctx.data.meshes_count, {});
             for (std::size_t i = 0; i < ctx.data.meshes_count; ++i)
             {
@@ -694,46 +845,47 @@ namespace rendering_engine
                 for (std::size_t j = 0; j < mesh.primitives_count; ++j)
                 {
                     const cgltf_primitive& primitive = mesh.primitives[j];
-                    const std::string label = "mesh " + std::to_string(i) + " primitive " + std::to_string(j) +
-                                              " of '" + ctx.path.string() + "'";
-
-                    if (primitive.type != cgltf_primitive_type_triangles)
+                    const std::string label = primitive_label(i, j, ctx.path);
+                    if (!importable_primitive(primitive, label, true))
                     {
-                        LOG_WRN("gltf: %s uses %s topology; only TRIANGLES are imported, skipped",
-                                label.c_str(),
-                                topology_name(primitive.type));
                         continue;
                     }
-                    if (primitive.has_draco_mesh_compression)
+                    prebuilt_geometry* built = j < ctx.geometry[i].size() ? &ctx.geometry[i][j] : nullptr;
+                    if (built != nullptr && built->failed)
                     {
-                        LOG_WRN("gltf: %s is Draco-compressed, which is not supported; skipped", label.c_str());
-                        continue;
+                        continue; // already warned; nothing was cached
                     }
                     const cgltf_accessor* position = cgltf_find_accessor(&primitive, cgltf_attribute_type_position, 0);
-                    if (position == nullptr)
-                    {
-                        LOG_WRN("gltf: %s has no POSITION attribute; skipped", label.c_str());
-                        continue;
-                    }
 
                     // The builder only runs on a cache miss; a hit shares the
-                    // upload of an earlier load of this file.
+                    // upload of an earlier load of this file (and drops any
+                    // geometry built ahead).
                     const std::string key = ctx.identity + "#mesh" + std::to_string(i) + "/prim" + std::to_string(j);
                     std::shared_ptr<mesh_asset> asset;
                     try
                     {
-                        asset = ctx.cache.get_or_create_mesh(key,
-                                                             [&]
+                        asset = cache.get_or_create_mesh(key,
+                                                         [&]
+                                                         {
+                                                             if (built != nullptr && built->data.has_value())
                                                              {
-                                                                 mesh_data data =
-                                                                     build_geometry(primitive, ctx.options, label);
-                                                                 data.bounds = accessor_bounds(*position);
+                                                                 mesh_data data = std::move(*built->data);
+                                                                 built->data.reset();
                                                                  return data;
-                                                             });
+                                                             }
+                                                             mesh_data data =
+                                                                 build_geometry(primitive, ctx.options, label);
+                                                             data.bounds = accessor_bounds(*position);
+                                                             return data;
+                                                         });
                     }
                     catch (const primitive_import_error&)
                     {
                         continue; // already warned; nothing was cached
+                    }
+                    if (asset == nullptr)
+                    {
+                        continue; // the cache logged why
                     }
 
                     gltf_mesh_primitive imported;
@@ -747,10 +899,11 @@ namespace rendering_engine
             }
         }
 
-        // Stage 2: one cache texture per glTF texture, in the colour space
-        // the materials sampling it expect.
-        void import_textures(import_context& ctx, gltf_model& model)
+        // Finishing stage: one cache texture per glTF texture, in the colour
+        // space the materials sampling it expect.
+        void import_textures(gltf_import& ctx, asset_cache& cache)
         {
+            gltf_model& model = ctx.model;
             // Usage bits per texture, gathered from the materials: colour
             // (base colour / emissive) wins over data when a texture is,
             // unusually, used both ways.
@@ -811,34 +964,32 @@ namespace rendering_engine
                             ctx.path_name());
                 }
 
-                const std::size_t image_index = cgltf_image_index(&ctx.data, texture.image);
-                if (texture.image->buffer_view == nullptr && is_file_uri(texture.image->uri))
+                model.textures[t] = image_texture(ctx, cache, cgltf_image_index(&ctx.data, texture.image), space);
+                if (model.textures[t] == nullptr && texture.image->buffer_view == nullptr &&
+                    is_file_uri(texture.image->uri))
                 {
-                    // A file of its own: the path is the cache key, shared
-                    // with every other loader of that file.
-                    try
-                    {
-                        model.textures[t] =
-                            ctx.cache.load_texture(resolve_file_uri(ctx.base_dir, texture.image->uri), space);
-                    }
-                    catch (const std::runtime_error&)
-                    {
-                        LOG_WRN("gltf: texture %zu of '%s' could not be loaded", t, ctx.path_name());
-                    }
-                    continue;
-                }
-
-                // Embedded (GLB chunk or data URI): keyed on the file's
-                // identity plus the image index.
-                if (const util::image* decoded = ctx.decoded_image(image_index); decoded != nullptr)
-                {
-                    model.textures[t] = ctx.cache.load_texture_from_image(
-                        ctx.identity + "#image" + std::to_string(image_index), *decoded, space);
+                    LOG_WRN("gltf: texture %zu of '%s' could not be loaded", t, ctx.path_name());
                 }
             }
         }
 
-        gltf_material_description describe_material(import_context& ctx, const cgltf_material& material)
+        // The cache texture behind a decoded map, in the colour space its
+        // slot samples it in; null exactly when @p image is.
+        std::shared_ptr<texture_asset> slot_texture(gltf_import& ctx,
+                                                    asset_cache& cache,
+                                                    const cgltf_texture_view& view,
+                                                    const util::image* image,
+                                                    gpu::color_space space)
+        {
+            if (image == nullptr)
+            {
+                return nullptr;
+            }
+            return image_texture(ctx, cache, cgltf_image_index(&ctx.data, view.texture->image), space);
+        }
+
+        gltf_material_description
+        describe_material(gltf_import& ctx, asset_cache& cache, const cgltf_material& material)
         {
             gltf_material_description description;
             description.name = material.name != nullptr ? material.name : "";
@@ -854,10 +1005,17 @@ namespace rendering_engine
                 description.metallic_factor = pbr.metallic_factor;
                 description.roughness_factor = pbr.roughness_factor;
                 description.base_color_map = ctx.map_image(pbr.base_color_texture, "baseColorTexture");
+                description.base_color_texture = slot_texture(
+                    ctx, cache, pbr.base_color_texture, description.base_color_map, ctx.options.base_color_space);
                 // Passed through packed: G roughness, B metallic, the ORM
                 // layout the material samples directly.
                 description.metallic_roughness_map =
                     ctx.map_image(pbr.metallic_roughness_texture, "metallicRoughnessTexture");
+                description.metallic_roughness_texture = slot_texture(ctx,
+                                                                      cache,
+                                                                      pbr.metallic_roughness_texture,
+                                                                      description.metallic_roughness_map,
+                                                                      gpu::color_space::linear);
             }
             else if (material.has_pbr_specular_glossiness)
             {
@@ -874,11 +1032,17 @@ namespace rendering_engine
                 description.emissive_strength = material.emissive_strength.emissive_strength;
             }
             description.normal_map = ctx.map_image(material.normal_texture, "normalTexture");
+            description.normal_texture =
+                slot_texture(ctx, cache, material.normal_texture, description.normal_map, gpu::color_space::linear);
             description.emissive_map = ctx.map_image(material.emissive_texture, "emissiveTexture");
+            description.emissive_texture =
+                slot_texture(ctx, cache, material.emissive_texture, description.emissive_map, gpu::color_space::srgb);
             // The occlusion texture is usually the metallic-roughness image
             // itself (R channel); the factory tells the two cases apart by
             // comparing the pointers. cgltf stores strength in scale.
             description.occlusion_map = ctx.map_image(material.occlusion_texture, "occlusionTexture");
+            description.occlusion_texture = slot_texture(
+                ctx, cache, material.occlusion_texture, description.occlusion_map, gpu::color_space::linear);
             if (description.occlusion_map != nullptr)
             {
                 description.occlusion_strength = material.occlusion_texture.scale;
@@ -901,17 +1065,18 @@ namespace rendering_engine
             return description;
         }
 
-        // Stage 3: one material per glTF material through the factory, plus
-        // the shared default when a primitive names none, and a skinned
-        // twin of each of those a skinned primitive draws with.
-        void import_materials(import_context& ctx, gltf_model& model, gltf_material_factory& factory)
+        // Finishing stage: one material per glTF material through the
+        // factory, plus the shared default when a primitive names none, and
+        // a skinned twin of each of those a skinned primitive draws with.
+        void import_materials(gltf_import& ctx, asset_cache& cache, gltf_material_factory& factory)
         {
+            gltf_model& model = ctx.model;
             std::vector<gltf_material_description> descriptions;
             descriptions.reserve(ctx.data.materials_count);
             model.materials.reserve(ctx.data.materials_count);
             for (std::size_t m = 0; m < ctx.data.materials_count; ++m)
             {
-                descriptions.push_back(describe_material(ctx, ctx.data.materials[m]));
+                descriptions.push_back(describe_material(ctx, cache, ctx.data.materials[m]));
                 model.materials.push_back(factory.create(descriptions.back()));
             }
 
@@ -1020,11 +1185,11 @@ namespace rendering_engine
             node.rotation = math::normalize(q);
         }
 
-        // Stage 4: the node tree and which roots to instantiate.
-        void import_nodes(import_context& ctx,
-                          gltf_model& model,
-                          const std::vector<std::vector<std::size_t>>& primitives_by_mesh)
+        // CPU stage: the node tree and which roots to instantiate (each
+        // node's primitives are linked by the finishing stage).
+        void import_nodes(gltf_import& ctx)
         {
+            gltf_model& model = ctx.model;
             model.nodes.resize(ctx.data.nodes_count);
             for (std::size_t k = 0; k < ctx.data.nodes_count; ++k)
             {
@@ -1061,10 +1226,6 @@ namespace rendering_engine
                     }
                 }
 
-                if (source.mesh != nullptr)
-                {
-                    node.primitives = primitives_by_mesh[cgltf_mesh_index(&ctx.data, source.mesh)];
-                }
                 node.skin = source.skin != nullptr ? cgltf_skin_index(&ctx.data, source.skin) : gltf_npos;
             }
 
@@ -1110,11 +1271,26 @@ namespace rendering_engine
             }
         }
 
-        // Stage 5: the skeleton over every node, with one palette per glTF
+        // Finishing stage: each node's primitives, once import_primitives has
+        // numbered them.
+        void link_node_primitives(gltf_import& ctx, const std::vector<std::vector<std::size_t>>& primitives_by_mesh)
+        {
+            for (std::size_t k = 0; k < ctx.data.nodes_count && k < ctx.model.nodes.size(); ++k)
+            {
+                const cgltf_node& source = ctx.data.nodes[k];
+                if (source.mesh != nullptr)
+                {
+                    ctx.model.nodes[k].primitives = primitives_by_mesh[cgltf_mesh_index(&ctx.data, source.mesh)];
+                }
+            }
+        }
+
+        // CPU stage: the skeleton over every node, with one palette per glTF
         // skin. Only built when something will pose it (a skin or an
         // animation).
-        void import_skeleton(import_context& ctx, gltf_model& model)
+        void import_skeleton(gltf_import& ctx)
         {
+            gltf_model& model = ctx.model;
             if (ctx.data.skins_count == 0 && ctx.data.animations_count == 0)
             {
                 return;
@@ -1210,10 +1386,11 @@ namespace rendering_engine
             return result;
         }
 
-        // Stage 6: one clip per glTF animation. Channels are grouped into one
+        // CPU stage: one clip per glTF animation. Channels are grouped into one
         // track per node they drive; the node index is the skeleton joint.
-        void import_animations(import_context& ctx, gltf_model& model)
+        void import_animations(gltf_import& ctx)
         {
+            gltf_model& model = ctx.model;
             model.animations.reserve(ctx.data.animations_count);
             for (std::size_t a = 0; a < ctx.data.animations_count; ++a)
             {
@@ -1306,10 +1483,8 @@ namespace rendering_engine
         }
     } // namespace
 
-    gltf_model load_gltf(const std::filesystem::path& path,
-                         asset_cache& cache,
-                         gltf_material_factory& materials,
-                         const gltf_import_options& options)
+    gltf_import_ptr
+    begin_gltf_import(const std::filesystem::path& path, const gltf_import_options& options, bool prebuild)
     {
         // Generic separators: cgltf derives the buffers' directory from this
         // string, and the VFS reads the result whether it is mount-relative
@@ -1326,7 +1501,7 @@ namespace rendering_engine
             LOG_ERR("gltf: could not parse '%s': %s", path_string.c_str(), result_name(result));
             throw std::runtime_error{"Could not parse glTF file (" + path_string + ")"};
         }
-        const cgltf_data_ptr data{raw};
+        cgltf_data_ptr data{raw};
 
         // Pulls external .bin files (relative to the glTF), base64 buffer
         // URIs and the GLB binary chunk into memory.
@@ -1346,22 +1521,46 @@ namespace rendering_engine
             throw std::runtime_error{"Invalid glTF file (" + path_string + ")"};
         }
 
-        import_context ctx{*data, path, cache, options};
-        gltf_model model;
-        std::vector<std::vector<std::size_t>> primitives_by_mesh;
-        import_primitives(ctx, model, primitives_by_mesh);
-        import_textures(ctx, model);
-        import_materials(ctx, model, materials);
-        import_nodes(ctx, model, primitives_by_mesh);
-        import_skeleton(ctx, model);
-        import_animations(ctx, model);
+        gltf_import_ptr import{new gltf_import(std::move(data), path, options)};
+        if (prebuild)
+        {
+            prebuild_geometry(*import);
+            predecode_images(*import);
+        }
+        import_nodes(*import);
+        import_skeleton(*import);
+        import_animations(*import);
+        return import;
+    }
 
+    gltf_model finish_gltf_import(gltf_import& import, asset_cache& cache, gltf_material_factory& materials)
+    {
+        std::vector<std::vector<std::size_t>> primitives_by_mesh;
+        import_primitives(import, cache, primitives_by_mesh);
+        import_textures(import, cache);
+        import_materials(import, cache, materials);
+        link_node_primitives(import, primitives_by_mesh);
+
+        gltf_model model = std::move(import.model);
+        import.model = gltf_model{};
         LOG_INF("gltf: loaded '%s' (%zu nodes, %zu primitives, %zu materials, %zu textures)",
-                path_string.c_str(),
+                import.path.generic_string().c_str(),
                 model.nodes.size(),
                 model.primitives.size(),
                 model.materials.size(),
                 model.textures.size());
         return model;
+    }
+
+    gltf_model load_gltf(const std::filesystem::path& path,
+                         asset_cache& cache,
+                         gltf_material_factory& materials,
+                         const gltf_import_options& options)
+    {
+        // Both halves on this thread, and without the prebuild: the
+        // geometry is built only for the primitives the cache misses, and a
+        // texture file is decoded by the cache only when it is not held.
+        const gltf_import_ptr import = begin_gltf_import(path, options, false);
+        return finish_gltf_import(*import, cache, materials);
     }
 } // namespace rendering_engine

@@ -90,6 +90,9 @@ set(ALPHAENGINE_TEST_SOURCES_UNDER_TEST
     ${CMAKE_SOURCE_DIR}/rendering_engine/assets/font_asset.cpp
     ${CMAKE_SOURCE_DIR}/rendering_engine/assets/mesh_asset.cpp
     ${CMAKE_SOURCE_DIR}/rendering_engine/assets/texture_asset.cpp
+    # texture_decode — the CPU half of a texture load the cache calls (stb_image,
+    # or libktx for .ktx2), linked against ktx_read below.
+    ${CMAKE_SOURCE_DIR}/rendering_engine/assets/texture_decode.cpp
     ${CMAKE_SOURCE_DIR}/rendering_engine/gpu/device.cpp
     ${CMAKE_SOURCE_DIR}/rendering_engine/util/image.cpp
     ${CMAKE_SOURCE_DIR}/rendering_engine/util/font.cpp
@@ -227,6 +230,7 @@ target_link_libraries(AlphaEngineTests PRIVATE
     glslang::SPIRV
     glslang::glslang-default-resource-limits
     nlohmann_json::nlohmann_json
+    ktx_read
 )
 
 # Same printf-format checking as the AlphaEngine target (see the root

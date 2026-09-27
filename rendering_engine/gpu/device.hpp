@@ -236,8 +236,9 @@ namespace rendering_engine::gpu
         // packed rows of @c width texels covering the whole base level,
         // so @p size must be at least @c width * @c height * texel
         // bytes — a backend rejects (and logs) a short upload rather
-        // than reading past @p data. Required before the texture is
-        // sampled.
+        // than reading past @p data. A block-compressed texture takes
+        // whole blocks (@ref texture_image_bytes). Required before the
+        // texture is sampled.
         virtual void write_texture(texture texture_handle, const void* data, size_t size) = 0;
 
         // Upload @p size bytes of tightly packed texels into @p region
@@ -276,7 +277,8 @@ namespace rendering_engine::gpu
 
         // Generate the full mip chain for a previously uploaded
         // texture. The texture must have been created with
-        // @c texture_descriptor::mipmaps == @c true.
+        // @c texture_descriptor::mipmaps == @c true, in a format that is
+        // not block-compressed (those upload every level instead).
         virtual void generate_mipmaps(texture texture_handle) = 0;
 
         // -- Render targets -----------------------------------------------

@@ -26,10 +26,13 @@
 #include <string>
 #include <utility>
 
+#include <core/event.hpp>
+#include <core/event_engine.hpp>
 #include <core/log.hpp>
 #include <core/math/math.hpp>
 #include <runtime/components/animator_component.hpp>
 #include <runtime/components/mesh_component.hpp>
+#include <runtime/engine.hpp>
 #include <runtime/node.hpp>
 #include <runtime/scene_graph.hpp>
 
@@ -236,5 +239,37 @@ namespace runtime
         }
         attach_animator(ctx);
         return roots;
+    }
+
+    core::subscription instantiate_gltf_when_ready(std::shared_ptr<const rendering_engine::gltf_asset> asset,
+                                                   node& parent,
+                                                   std::function<void(const std::vector<node*>& roots)> on_spawned)
+    {
+        if (asset == nullptr)
+        {
+            return {};
+        }
+        node* target = &parent;
+        bool handled = false;
+        return current_engine().events->subscribe<core::render_update>(
+            [asset = std::move(asset), target, on_spawned = std::move(on_spawned), handled](
+                const core::render_update&) mutable
+            {
+                if (handled || asset->state == rendering_engine::gltf_asset::load_state::loading)
+                {
+                    return;
+                }
+                handled = true;
+                if (!asset->is_ready())
+                {
+                    LOG_WRN("gltf: the model did not load (%s); nothing instantiated", asset->error.c_str());
+                    return;
+                }
+                const std::vector<node*> roots = instantiate_gltf(asset->model, *target);
+                if (on_spawned)
+                {
+                    on_spawned(roots);
+                }
+            });
     }
 } // namespace runtime

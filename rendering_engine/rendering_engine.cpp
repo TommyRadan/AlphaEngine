@@ -448,6 +448,20 @@ void rendering_engine::context::render()
     // read it has retired (see per_draw_ring).
     m_per_draw_ring->begin_frame();
 
+    // Standard materials sampling shared texture assets rebuild their
+    // bind group when an asset's texture was replaced since (an
+    // asynchronous load resolved in asset_cache::pump, or a debug hot
+    // reload swapped it). Here, with the frame open and no pass recording
+    // yet, the old group is released safely and every pass binds the new
+    // one. Every instance of the standard template is a standard_material.
+    if (m_standard_template != nullptr)
+    {
+        for (material* instance : m_standard_template->instances())
+        {
+            static_cast<standard_material*>(instance)->refresh_texture_assets();
+        }
+    }
+
     // The previous frame's work has retired (or its queries are polled
     // without waiting), so its per-pass timestamps can be read now.
     m_gpu_profiler.resolve(gpu);

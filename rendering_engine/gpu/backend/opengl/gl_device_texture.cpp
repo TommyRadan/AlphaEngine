@@ -76,12 +76,16 @@ namespace rendering_engine::gpu::backend::opengl
                 texture_id, GL_TEXTURE_WRAP_R, static_cast<GLint>(to_gl_address_mode(descriptor.address_w)));
         }
 
-        // True when @p size bytes cover a tightly packed upload of
-        // @p texels in @p format; logs and returns false otherwise so
+        // True when @p size bytes cover a tightly packed upload of a
+        // @p width x @p height x @p depth box in @p format (whole blocks
+        // for a compressed format); logs and returns false otherwise so
         // the caller never hands GL a buffer it would read past.
-        bool upload_fits(const char* where, size_t size, uint64_t texels, texture_format format)
+        bool upload_fits(
+            const char* where, size_t size, uint32_t width, uint32_t height, uint32_t depth, texture_format format)
         {
-            const uint64_t required = texels * to_gl_texel_bytes(format);
+            const uint64_t required = is_compressed_texture_format(format)
+                                          ? static_cast<uint64_t>(texture_image_bytes(format, width, height, depth))
+                                          : static_cast<uint64_t>(width) * height * depth * to_gl_texel_bytes(format);
             if (static_cast<uint64_t>(size) < required)
             {
                 LOG_WRN("%s: %zu bytes supplied, %llu needed", where, size, static_cast<unsigned long long>(required));
@@ -260,11 +264,25 @@ namespace rendering_engine::gpu::backend::opengl
             LOG_WRN("write_texture: invalid 2D texture handle");
             return;
         }
-        if (!upload_fits("write_texture", size, static_cast<uint64_t>(record->width) * record->height, record->format))
+        if (!upload_fits("write_texture", size, record->width, record->height, 1, record->format))
         {
             return;
         }
         const auto fmt = to_gl_texture_format(record->format);
+        if (is_compressed_texture_format(record->format))
+        {
+            GL_CHECK(glCompressedTextureSubImage2D(
+                record->object_id,
+                0,
+                0,
+                0,
+                static_cast<GLsizei>(record->width),
+                static_cast<GLsizei>(record->height),
+                fmt.internal_format,
+                static_cast<GLsizei>(texture_image_bytes(record->format, record->width, record->height)),
+                data));
+            return;
+        }
         GL_CHECK(glTextureSubImage2D(record->object_id,
                                      0,
                                      0,
@@ -314,12 +332,40 @@ namespace rendering_engine::gpu::backend::opengl
                     level_height);
             return false;
         }
-        if (!upload_fits(
-                "write_texture_region", size, static_cast<uint64_t>(region.width) * region.height, record->format))
+        if (!upload_fits("write_texture_region", size, region.width, region.height, 1, record->format))
         {
             return false;
         }
         const auto fmt = to_gl_texture_format(record->format);
+        if (is_compressed_texture_format(record->format))
+        {
+            const auto bytes = static_cast<GLsizei>(texture_image_bytes(record->format, region.width, region.height));
+            if (record->layered)
+            {
+                GL_CHECK(glCompressedTextureSubImage3D(record->object_id,
+                                                       static_cast<GLint>(region.mip_level),
+                                                       static_cast<GLint>(region.x),
+                                                       static_cast<GLint>(region.y),
+                                                       static_cast<GLint>(region.layer),
+                                                       static_cast<GLsizei>(region.width),
+                                                       static_cast<GLsizei>(region.height),
+                                                       1,
+                                                       fmt.internal_format,
+                                                       bytes,
+                                                       data));
+                return true;
+            }
+            GL_CHECK(glCompressedTextureSubImage2D(record->object_id,
+                                                   static_cast<GLint>(region.mip_level),
+                                                   static_cast<GLint>(region.x),
+                                                   static_cast<GLint>(region.y),
+                                                   static_cast<GLsizei>(region.width),
+                                                   static_cast<GLsizei>(region.height),
+                                                   fmt.internal_format,
+                                                   bytes,
+                                                   data));
+            return true;
+        }
         if (record->layered)
         {
             // The named upload addresses a cube map or an array like a
@@ -357,10 +403,12 @@ namespace rendering_engine::gpu::backend::opengl
             LOG_WRN("write_texture_3d: invalid 3D texture handle");
             return;
         }
-        if (!upload_fits("write_texture_3d",
-                         size,
-                         static_cast<uint64_t>(record->width) * record->height * record->depth,
-                         record->format))
+        if (is_compressed_texture_format(record->format))
+        {
+            LOG_WRN("write_texture_3d: block-compressed 3D textures are not supported");
+            return;
+        }
+        if (!upload_fits("write_texture_3d", size, record->width, record->height, record->depth, record->format))
         {
             return;
         }
@@ -386,8 +434,12 @@ namespace rendering_engine::gpu::backend::opengl
             LOG_WRN("write_cube_face: invalid cube texture handle");
             return;
         }
-        if (!upload_fits(
-                "write_cube_face", size, static_cast<uint64_t>(record->width) * record->height, record->format))
+        if (is_compressed_texture_format(record->format))
+        {
+            LOG_WRN("write_cube_face: a block-compressed cube uploads through write_texture_region");
+            return;
+        }
+        if (!upload_fits("write_cube_face", size, record->width, record->height, 1, record->format))
         {
             return;
         }
@@ -425,6 +477,11 @@ namespace rendering_engine::gpu::backend::opengl
         if ((record->usage & texture_usage_copy_src) == 0u)
         {
             LOG_WRN("read_texture: the texture was created without texture_usage_copy_src");
+            return false;
+        }
+        if (is_compressed_texture_format(record->format))
+        {
+            LOG_WRN("read_texture: a block-compressed texture cannot be read back as texels");
             return false;
         }
         if (!region_fits("read_texture", *record, region))
@@ -472,6 +529,11 @@ namespace rendering_engine::gpu::backend::opengl
         if (record->mip_levels <= 1)
         {
             LOG_WRN("generate_mipmaps: texture was created without mipmaps");
+            return;
+        }
+        if (is_compressed_texture_format(record->format))
+        {
+            LOG_WRN("generate_mipmaps: a block-compressed texture cannot derive its chain; upload every level");
             return;
         }
         // Format-agnostic: an rgba8_srgb texture carries its encoding in

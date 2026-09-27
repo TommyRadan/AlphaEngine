@@ -233,7 +233,9 @@ namespace rendering_engine::gpu
     // texture, for @ref device::write_texture_region. Coordinates and
     // extents are in texels of that level: level @c n measures
     // @c max(1, width >> n) by @c max(1, height >> n). @c layer is the
-    // array layer (or cube face); 0 for a plain 2D texture.
+    // array layer (or cube face); 0 for a plain 2D texture. For a
+    // block-compressed format the offset is a multiple of the block
+    // extent and the extent one too unless it reaches the level's edge.
     struct texture_write_region
     {
         uint32_t mip_level{0};
@@ -264,9 +266,10 @@ namespace rendering_engine::gpu
     };
 
     // Bytes a tightly packed buffer needs to hold @p region of a
-    // texture of @p format (see @ref texel_size_bytes).
+    // texture of @p format (see @ref texel_size_bytes; whole blocks for a
+    // compressed format, @ref texture_image_bytes).
     constexpr size_t texture_region_bytes(texture_format format, const texture_copy_region& region)
     {
-        return static_cast<size_t>(region.width) * region.height * region.depth * texel_size_bytes(format);
+        return texture_image_bytes(format, region.width, region.height, region.depth);
     }
 } // namespace rendering_engine::gpu

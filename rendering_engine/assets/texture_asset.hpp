@@ -45,8 +45,11 @@ namespace rendering_engine
      * have on its own. The cache itself keeps only a @c std::weak_ptr, so an
      * asset is freed as soon as every consumer drops it. An asynchronous
      * asset carries the cache's placeholder texture until its decode lands
-     * (@ref state); consumers that bind @ref texture re-read it each frame
-     * and rebuild on change, as they do for every other swapped handle.
+     * (@ref state), and a debug build's hot reload swaps in a fresh upload
+     * when the file changes on disk. Either way @ref generation moves:
+     * consumers that baked @ref texture into a bind group compare it with
+     * the generation they built against and rebuild on change (see
+     * @c standard_material::refresh_texture_assets).
      *
      * Non-copyable and non-movable: the GPU handle has a single owner (this
      * object) and is freed exactly once in the destructor.
@@ -66,13 +69,23 @@ namespace rendering_engine
 
         // The texel format the image was uploaded as: @c rgba8_srgb when
         // it was loaded as @ref gpu::color_space::srgb (the sampler decodes
-        // to linear), @c rgba8_unorm for linear data. Consumers that need
-        // to know whether a sample is already linear read it from here.
+        // to linear), @c rgba8_unorm for linear data, or the block-
+        // compressed format (again in the matching sRGB / unorm form where
+        // it has one) a KTX2 file was uploaded or transcoded to. Consumers
+        // that need to know whether a sample is already linear read it
+        // from here.
         gpu::texture_format format{gpu::texture_format::rgba8_unorm};
 
         // Dimensions of the source image, in texels.
         uint32_t width{0};
         uint32_t height{0};
+
+        // Bumped by the cache on the main thread every time @ref texture
+        // is replaced after the asset was handed out: an asynchronous load
+        // resolving onto its own upload, or a hot reload of the file. A
+        // consumer holding the handle in a bind group rebuilds when this
+        // differs from the value it built with.
+        uint64_t generation{0};
 
         /** @brief Where an asynchronous load (@ref asset_cache::load_texture_async) stands. */
         enum class load_state

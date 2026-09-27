@@ -14,4 +14,6 @@ target_sources(AlphaEngine PRIVATE
     mesh_asset.hpp
     texture_asset.cpp
     texture_asset.hpp
+    texture_decode.cpp
+    texture_decode.hpp
 )
