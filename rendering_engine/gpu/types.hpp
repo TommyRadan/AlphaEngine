@@ -19,8 +19,7 @@
 namespace rendering_engine::gpu
 {
     // Vertex attribute element types. The @c float32 and @c uint32 variants
-    // cover everything the engine currently uploads; the smaller integer
-    // and packed types are placeholders for future use.
+    // cover everything the engine currently uploads.
     enum class scalar_type
     {
         float32,

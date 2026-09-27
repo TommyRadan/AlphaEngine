@@ -73,11 +73,10 @@ namespace rendering_engine::gpu::backend::vulkan
         }
 
         // A bind group that does not resolve — never created, already
-        // destroyed, or its descriptor-set allocation failed — used to
-        // be skipped silently, so the draw ran against whatever set was
-        // bound before and produced wrong output with nothing in the
-        // log. It is an error; reported once per handle per pass
-        // encoder rather than once per draw.
+        // destroyed, or its descriptor-set allocation failed — is an
+        // error: silently keeping the previously bound set would draw
+        // with wrong data and nothing in the log. Reported once per
+        // handle per pass encoder rather than once per draw.
         void report_missing_bind_group(std::vector<uint64_t>& reported,
                                        const char* encoder,
                                        uint32_t group,
