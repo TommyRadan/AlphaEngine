@@ -71,5 +71,17 @@ namespace rendering_engine
             (void)out;
             return false;
         }
+
+        // The same geometry's axis-aligned bounds in the space of the
+        // renderable's parent: its own local transform applied, not its
+        // parent chain's. For a renderable a component hangs under a node
+        // that is the node's local space, which is what the physics
+        // colliders fit themselves to. Returns false, leaving @p out
+        // untouched, where there is no such box (the default).
+        virtual bool local_bounds(core::math::aabb& out) const
+        {
+            (void)out;
+            return false;
+        }
     };
 } // namespace rendering_engine

@@ -20,30 +20,12 @@
  * SOFTWARE.
  */
 
-#include <rendering_engine/renderables/mesh_bounds.hpp>
+#include <core/math/ray.hpp>
 
-#include <rendering_engine/assets/mesh_asset.hpp>
-#include <rendering_engine/util/transform.hpp>
-
-namespace rendering_engine
+namespace core::math
 {
-    bool mesh_world_bounds(const mesh_asset* mesh, const util::transform& world, core::math::aabb& out)
+    vec3 ray::point_at(float t) const noexcept
     {
-        if (mesh == nullptr)
-        {
-            return false;
-        }
-        out = core::math::transform(mesh->bounds, world.get_world_matrix());
-        return true;
+        return vec3{origin.x + direction.x * t, origin.y + direction.y * t, origin.z + direction.z * t};
     }
-
-    bool mesh_local_bounds(const mesh_asset* mesh, const util::transform& local, core::math::aabb& out)
-    {
-        if (mesh == nullptr)
-        {
-            return false;
-        }
-        out = core::math::transform(mesh->bounds, local.get_transform_matrix());
-        return true;
-    }
-} // namespace rendering_engine
+} // namespace core::math

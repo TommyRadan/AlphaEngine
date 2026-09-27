@@ -183,6 +183,11 @@ bool rendering_engine::cubed_sphere::world_bounds(core::math::aabb& out) const
     return mesh_world_bounds(m_mesh.get(), transform, out);
 }
 
+bool rendering_engine::cubed_sphere::local_bounds(core::math::aabb& out) const
+{
+    return mesh_local_bounds(m_mesh.get(), transform, out);
+}
+
 void rendering_engine::cubed_sphere::collect_draw_items(std::vector<draw_item>& out)
 {
     if (m_material == nullptr)

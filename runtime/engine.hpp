@@ -73,6 +73,10 @@ namespace runtime
 {
     struct scene_manager;
 }
+namespace runtime::physics
+{
+    struct world;
+}
 
 namespace runtime
 {
@@ -140,6 +144,9 @@ namespace runtime
         std::unique_ptr<rendering_engine::gpu::device> gpu;
         std::unique_ptr<rendering_engine::asset_cache> assets;
         std::unique_ptr<rendering_engine::context> renderer;
+        // Rigid-body simulation, stepped once per fixed update. Outlives the
+        // scenes so their physics components unregister against it.
+        std::unique_ptr<runtime::physics::world> physics;
         // Every scene: the persistent one plus whatever is loaded. New
         // content goes to scenes->active_scene().
         std::unique_ptr<runtime::scene_manager> scenes;

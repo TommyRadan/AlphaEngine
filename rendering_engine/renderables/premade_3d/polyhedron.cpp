@@ -261,6 +261,11 @@ namespace rendering_engine
         return mesh_world_bounds(m_mesh.get(), transform, out);
     }
 
+    bool polyhedron::local_bounds(core::math::aabb& out) const
+    {
+        return mesh_local_bounds(m_mesh.get(), transform, out);
+    }
+
     void polyhedron::collect_draw_items(std::vector<draw_item>& out)
     {
         if (m_material == nullptr)

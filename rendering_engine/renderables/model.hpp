@@ -82,6 +82,10 @@ namespace rendering_engine
         // the animated pose, so a skinned model is never frustum-culled.
         bool world_bounds(core::math::aabb& out) const final;
 
+        // The same box under @ref transform's own matrix only (the bind
+        // pose, for a skinned mesh, even while world_bounds declines).
+        bool local_bounds(core::math::aabb& out) const final;
+
         // The joint palette a skinned material draws the mesh with: one
         // matrix per joint the vertices' joint indices name, each mapping
         // the mesh's bind-pose space onto that joint's current pose in the

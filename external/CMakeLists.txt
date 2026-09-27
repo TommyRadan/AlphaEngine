@@ -1,6 +1,7 @@
 target_sources(AlphaEngine PRIVATE
     camera_module.cpp
     exit_module.cpp
+    physics_demo_module.cpp
     shadow_demo_module.cpp
     ui_demo_module.cpp
 )
@@ -14,7 +15,9 @@ target_sources(AlphaEngine PRIVATE
 # active one: a field of PBR spheres and tall pillars spread over a wide
 # ground plane under a slowly orbiting shadow-casting sun, showcasing the
 # auto-fit directional shadow frustum from issue #146 (crisp shadows across
-# the whole field, not just near the origin).
+# the whole field, not just near the origin). physics_demo_module.cpp is
+# compiled beside it: a few crates dropped onto a pedestal that stands in
+# a gap of that field, on its ground plane (issue #177).
 #
 # fog_demo_module.cpp (Blinn-Phong spheres receding into linear distance
 # fog, issue #122), instanced_demo_module.cpp (a grid_side^3 lattice of
