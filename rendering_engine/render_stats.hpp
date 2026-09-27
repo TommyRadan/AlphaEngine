@@ -30,7 +30,7 @@ namespace rendering_engine
 {
     // Per-frame scene / draw statistics, refreshed by the @ref scene_pass
     // each frame and surfaced read-only through
-    // @ref context::get_render_stats (consumed by the debug overlay).
+    // @ref renderer::get_render_stats (consumed by the debug overlay).
     //
     // The scene pass skips a renderable whose @ref renderable::layer_mask
     // shares no bit with the camera's culling mask, and frustum-culls

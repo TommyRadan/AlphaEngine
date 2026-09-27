@@ -48,7 +48,7 @@ namespace rendering_engine
      * top-left corner, pivot top-left, @p size pixels large, drawing
      * opaque white.
      *
-     * Register it with @c context::register_ui_renderable and unregister
+     * Register it with @c renderer::register_ui_renderable and unregister
      * it before destroying it.
      */
     struct pane : public renderable

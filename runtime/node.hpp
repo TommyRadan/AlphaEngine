@@ -42,7 +42,7 @@
 
 namespace runtime
 {
-    struct context;
+    struct scene;
 
     /**
      * @brief A node in the scene hierarchy — the entity of the
@@ -66,7 +66,7 @@ namespace runtime
      * subsystem and lets nodes stay small.
      *
      * **Ownership.** Nodes are normally owned by a scene: create them with
-     * @c context::create_node, retire them with @c context::destroy_node, and
+     * @c scene::create_node, retire them with @c scene::destroy_node, and
      * the scene keeps each one at a stable address until then (and frees
      * whatever is left when it quits). A node can still be constructed
      * directly — a stack node in a test, an embedded root — in which case
@@ -82,9 +82,9 @@ namespace runtime
      * — the node, child and component lists being iterated must not change.
      * The immediate APIs (@ref add, @ref remove, @ref set_active,
      * @ref add_component, @ref remove_component, @ref remove_all_components)
-     * detect that case through the owning @ref runtime::context: in debug
+     * detect that case through the owning @ref runtime::scene: in debug
      * builds they assert; in release builds they log an error and apply the
-     * call at the end of @ref runtime::context::update instead. Code that
+     * call at the end of @ref runtime::scene::update instead. Code that
      * needs to mutate the tree from a hook should say so explicitly with the
      * scene's @c destroy_node / @c defer_remove_component / @c defer_reparent
      * / @c defer_set_active, reached via @ref scene.
@@ -116,7 +116,7 @@ namespace runtime
 
         /**
          * @brief Renames the node, keeping its scene's name index (see
-         *        @c context::find) in step.
+         *        @c scene::find) in step.
          */
         void set_name(core::string_id name);
 
@@ -126,7 +126,7 @@ namespace runtime
          *
          * Depth-first, in child insertion order; each step is an integer
          * compare of interned ids. For a scene-wide lookup by name without the
-         * walk, use @c context::find.
+         * walk, use @c scene::find.
          */
         node* find(core::string_id target);
 
@@ -213,7 +213,7 @@ namespace runtime
          * Calls each component's @c on_update(node&) (those that define one),
          * node by node, depth-first. Skipped entirely — this node and its
          * subtree — unless the node is effectively active. The scene's own
-         * per-frame @ref runtime::context::update does not come through here
+         * per-frame @ref runtime::scene::update does not come through here
          * (it dispatches each component type's pool as a unit); this is for
          * driving a subtree by hand, e.g. one that is not linked under a
          * scene root.
@@ -233,7 +233,7 @@ namespace runtime
          *        draws its component pools from.
          *
          * Usually called indirectly: a scene's root is given the store by
-         * @ref runtime::context, and @ref add hands it down the tree. A node
+         * @ref runtime::scene, and @ref add hands it down the tree. A node
          * that already carries components has them migrated into the new
          * store (moved, so no @c on_destroy / @c on_attach fires and every
          * external registration survives). Passing @c nullptr unscopes the
@@ -247,28 +247,28 @@ namespace runtime
 
         /**
          * @brief The scene this node belongs to, or @c nullptr when its store
-         *        is not owned by a @ref runtime::context (or it has none).
+         *        is not owned by a @ref runtime::scene (or it has none).
          *
          * This is how a component reaches the scene's deferred command queue
          * from inside a hook: @c owner.scene()->destroy_node(owner).
          */
-        context* scene() const noexcept;
+        runtime::scene* scene() const noexcept;
 
         /**
          * @brief The scene whose node pool holds this node's memory, or
          *        @c nullptr for a caller-owned node.
          *
-         * Set by @c context::create_node. It stays the creating scene even if
+         * Set by @c scene::create_node. It stays the creating scene even if
          * the node is later re-parented into another scene's tree (that
-         * changes @ref scene, not the owner); @c context::destroy_node routes
+         * changes @ref scene, not the owner); @c scene::destroy_node routes
          * to it.
          */
-        context* owning_scene() const noexcept;
+        runtime::scene* owning_scene() const noexcept;
 
         /**
-         * @brief True between a @c context::destroy_node / @c defer_destroy
+         * @brief True between a @c scene::destroy_node / @c defer_destroy
          *        request for this node and the end of the
-         *        @c context::update that applies it.
+         *        @c scene::update that applies it.
          *
          * Lets a component's @c on_update skip work on a node that is already
          * on its way out.
@@ -298,7 +298,7 @@ namespace runtime
          * Replaces any existing @c C on this node. Returns a pointer to the
          * pooled component, or @c nullptr if the node has no store yet — or if
          * called during a traversal, in which case (release builds) the add is
-         * applied at the end of the current @c context::update instead.
+         * applied at the end of the current @c scene::update instead.
          */
         template<typename C>
         C* add_component(C value)
@@ -437,7 +437,7 @@ namespace runtime
     private:
         // The scene applies deferred commands against these and owns the
         // pool slot, name and visit bookkeeping.
-        friend struct context;
+        friend struct scene;
 
         struct component_entry
         {
@@ -483,7 +483,7 @@ namespace runtime
 
         // Scene-pool ownership (see owning_scene); m_pool_slot is meaningful
         // only while m_owning_scene is set.
-        context* m_owning_scene;
+        runtime::scene* m_owning_scene;
         uint32_t m_pool_slot;
 
         // Written by the scene's update walk; read by the store's per-type

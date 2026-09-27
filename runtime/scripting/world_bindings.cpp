@@ -57,7 +57,7 @@
 #include <runtime/components/rigidbody_component.hpp>
 #include <runtime/engine.hpp>
 #include <runtime/node.hpp>
-#include <runtime/scene_graph.hpp>
+#include <runtime/scene.hpp>
 
 namespace
 {
@@ -82,14 +82,14 @@ namespace
     }
 
     // True while @p scene is being walked, so a structural change must wait.
-    bool walking(const runtime::context* scene)
+    bool walking(const runtime::scene* scene)
     {
         return scene != nullptr && scene->is_traversing();
     }
 
     void set_active(runtime::node& target, bool active)
     {
-        runtime::context* scene = target.scene();
+        runtime::scene* scene = target.scene();
         if (walking(scene))
         {
             scene->defer_set_active(target, active);
@@ -104,7 +104,7 @@ namespace
     // @p parent is null.
     void set_parent(runtime::node& target, runtime::node* parent)
     {
-        runtime::context* scene = target.scene();
+        runtime::scene* scene = target.scene();
         if (parent == nullptr)
         {
             if (scene == nullptr)
@@ -117,7 +117,7 @@ namespace
         {
             return;
         }
-        runtime::context* parent_scene = parent->scene();
+        runtime::scene* parent_scene = parent->scene();
         if (walking(scene) || walking(parent_scene))
         {
             (scene != nullptr ? scene : parent_scene)->defer_reparent(target, parent);
@@ -434,7 +434,7 @@ namespace
         { return optional_ref(self.resolve().find(core::string_id{name})); };
         type["scene"] = [](const node_ref& self) -> sol::optional<scene_ref>
         {
-            runtime::context* scene = self.resolve().scene();
+            runtime::scene* scene = self.resolve().scene();
             if (scene == nullptr)
             {
                 return sol::nullopt;
@@ -474,17 +474,17 @@ namespace
             return root != nullptr && root->scene() != nullptr;
         };
         type["root"] = sol::readonly_property([](const scene_ref& self) { return make_node_ref(self.resolve().root); });
-        // context::create_node links the node at the end of the update when
+        // scene::create_node links the node at the end of the update when
         // the parent's scene is being walked; destroy_node always waits.
         type["create_node"] = [](const scene_ref& self, sol::optional<std::string> name, sol::optional<node_ref> parent)
         {
-            runtime::context& scene = self.resolve();
+            runtime::scene& scene = self.resolve();
             runtime::node* under = parent ? &parent->resolve() : nullptr;
             return make_node_ref(scene.create_node(core::string_id{name ? *name : std::string{}}, under));
         };
         type["destroy_node"] = [](const scene_ref& self, const node_ref& target)
         {
-            runtime::context& scene = self.resolve();
+            runtime::scene& scene = self.resolve();
             runtime::node& doomed = target.resolve();
             if (&doomed == &scene.root)
             {
@@ -601,10 +601,10 @@ runtime::scripting::node_ref runtime::scripting::make_node_ref(node& target)
     return node_ref{target.lifetime_cell()};
 }
 
-runtime::context& runtime::scripting::scene_ref::resolve() const
+runtime::scene& runtime::scripting::scene_ref::resolve() const
 {
     node* root_node = root ? *root : nullptr;
-    context* scene = root_node != nullptr ? root_node->scene() : nullptr;
+    runtime::scene* scene = root_node != nullptr ? root_node->scene() : nullptr;
     if (scene == nullptr)
     {
         raise("the scene has been unloaded");

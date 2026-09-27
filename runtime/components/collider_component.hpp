@@ -98,7 +98,7 @@ namespace runtime
         void on_destroy();
         /** @brief Takes the body out of (or back into) the simulation with its node. */
         void on_active_changed(node& owner, bool active);
-        /** @brief A component with the same settings, for @c context::clone. Listeners are not copied. */
+        /** @brief A component with the same settings, for @c scene::clone. Listeners are not copied. */
         collider_component clone() const;
 
         // --- Settings -------------------------------------------------------

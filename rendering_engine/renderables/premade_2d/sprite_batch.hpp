@@ -83,14 +83,14 @@ namespace rendering_engine
      * earlier.
      *
      * Register the batch (or the client that owns it) with
-     * @c context::register_ui_renderable, and unregister it before it is
+     * @c renderer::register_ui_renderable, and unregister it before it is
      * destroyed. The textures it draws are borrowed: each must stay alive
      * until the quads using it are cleared and a frame has been collected.
      */
     struct sprite_batch : public renderable
     {
         // @p mat is the ui material the quads draw with (not owned; the
-        // renderer's lives until context::quit).
+        // renderer's lives until renderer::quit).
         explicit sprite_batch(ui_material* mat);
         ~sprite_batch() override;
 

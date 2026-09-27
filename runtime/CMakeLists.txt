@@ -12,10 +12,10 @@ target_sources(AlphaEngine PRIVATE
     node.hpp
     reflection.cpp
     reflection.hpp
+    scene.cpp
+    scene.hpp
     scene_assets.cpp
     scene_assets.hpp
-    scene_graph.cpp
-    scene_graph.hpp
     scene_manager.cpp
     scene_manager.hpp
     scene_serializer.cpp

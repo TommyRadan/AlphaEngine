@@ -44,11 +44,11 @@ namespace rendering_engine
      * @ref record runs no event listener and does not depend on the
      * main-thread event bus. Debug-line / gizmo / frustum / bounds
      * visualisations reach it through
-     * @ref context::register_debug_renderable.
+     * @ref renderer::register_debug_renderable.
      *
      * Only appended to the engine's pass list in debug builds — the
      * `#if _DEBUG` gate at the construction site in
-     * @ref context::init drops it from release entirely, so the
+     * @ref renderer::init drops it from release entirely, so the
      * stage costs nothing in shipping configurations. Inside a debug
      * build it runs last (after the UI pass) so debug visuals always
      * read on top of the game UI.
@@ -87,7 +87,7 @@ namespace rendering_engine
         }
 
     private:
-        // Non-owning back-pointer to the engine context's
+        // Non-owning back-pointer to the renderer's
         // debug-renderable registry. Same lifetime guarantee as
         // @ref ui_pass::m_registry.
         std::vector<renderable*>* m_registry;

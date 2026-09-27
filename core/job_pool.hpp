@@ -21,7 +21,7 @@
  */
 
 /**
- * @file jobs.hpp
+ * @file job_pool.hpp
  * @brief Fixed-size worker pool and the fork-join primitives built on it.
  */
 
@@ -75,7 +75,7 @@ namespace core
      * Unlike every other subsystem, this type is itself thread-safe: its
      * queues, dispatch, and completion tracking are synchronised.
      */
-    struct jobs
+    struct job_pool
     {
         /** @brief Callable unit of work handed to @ref dispatch. */
         using job_fn = std::function<void()>;
@@ -98,7 +98,7 @@ namespace core
         static constexpr std::size_t default_grain = 64;
 
         /** @brief Starts the worker threads. */
-        jobs();
+        job_pool();
 
         /**
          * @brief Drains every queued job, signals the workers to stop, then
@@ -108,12 +108,12 @@ namespace core
          * queued or running at teardown finishes before anything it captured
          * (or this pool) goes away.
          */
-        ~jobs();
+        ~job_pool();
 
-        jobs(const jobs&) = delete;
-        jobs& operator=(const jobs&) = delete;
-        jobs(jobs&&) = delete;
-        jobs& operator=(jobs&&) = delete;
+        job_pool(const job_pool&) = delete;
+        job_pool& operator=(const job_pool&) = delete;
+        job_pool(job_pool&&) = delete;
+        job_pool& operator=(job_pool&&) = delete;
 
         /**
          * @brief Number of worker threads, excluding the calling/main thread.

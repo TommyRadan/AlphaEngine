@@ -46,7 +46,7 @@ namespace runtime
      * node's component entries, rather than dropped — so saving the loaded
      * scene reproduces the file, and nothing a later build could restore is
      * lost. It does nothing at runtime; the serializer (scene_serializer.hpp)
-     * is the only reader and writer. Plain data: copied by @c context::clone.
+     * is the only reader and writer. Plain data: copied by @c scene::clone.
      */
     struct placeholder_component
     {

@@ -37,7 +37,7 @@ namespace rendering_engine
      *
      * Opt-in (@ref frame_context::depth_prepass, from
      * @c core::settings::graphics.depth_prepass and
-     * @ref context::set_depth_prepass). While it is off, or no camera is
+     * @ref renderer::set_depth_prepass). While it is off, or no camera is
      * active, the pass records nothing and the scene pass clears and
      * writes the scene depth itself as it always has; it stays in the
      * frame graph either way so the setting can flip at runtime.
@@ -77,8 +77,8 @@ namespace rendering_engine
     {
         // @p scene is the scene pass that runs right after this one and
         // owns the draw list, the per-frame bind group and the choice
-        // between loading and clearing the depth. Non-owning; the engine
-        // context owns both passes.
+        // between loading and clearing the depth. Non-owning; the
+        // renderer owns both passes.
         explicit depth_prepass(scene_pass* scene);
         ~depth_prepass() override;
 
@@ -98,7 +98,7 @@ namespace rendering_engine
         }
 
         // Drops the depth-only target: it imports the scene target's
-        // depth attachment, which the context has just recreated at the
+        // depth attachment, which the renderer has just recreated at the
         // new size, so the next @ref record rebuilds it over the new one.
         void resize(uint32_t width, uint32_t height) override;
 
@@ -111,7 +111,7 @@ namespace rendering_engine
         // Depth-only target over @ref m_target_depth, the scene depth
         // attachment it was built against. Rebuilt whenever
         // @ref frame_context::scene_depth_texture publishes another
-        // handle; the attachment itself stays owned by the context's
+        // handle; the attachment itself stays owned by the renderer's
         // scene-colour target.
         gpu::render_target m_target{};
         gpu::texture m_target_depth{};

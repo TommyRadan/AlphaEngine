@@ -71,7 +71,7 @@ bool runtime::register_game_module(const char* source, game_module_bootstrap boo
     return true;
 }
 
-void runtime::install_game_modules(context& scene)
+void runtime::install_game_modules(scene& scene)
 {
     // Indexed, and copied out, so the loop stays valid even if a bootstrap
     // were to register another module.

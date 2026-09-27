@@ -25,7 +25,7 @@
 #include <utility>
 
 #include <core/log.hpp>
-#include <runtime/scene_graph.hpp>
+#include <runtime/scene.hpp>
 
 namespace
 {
@@ -38,7 +38,7 @@ namespace
 
 runtime::scene_manager::scene_manager()
 {
-    m_scenes.push_back(entry{persistent_name(), std::make_unique<context>()});
+    m_scenes.push_back(entry{persistent_name(), std::make_unique<runtime::scene>()});
     m_active = m_scenes.front().scene.get();
 }
 
@@ -83,12 +83,12 @@ void runtime::scene_manager::update()
     apply_pending_unloads();
 }
 
-runtime::context& runtime::scene_manager::load(core::string_id name, load_mode mode)
+runtime::scene& runtime::scene_manager::load(core::string_id name, load_mode mode)
 {
-    context* scene = find(name);
+    runtime::scene* scene = find(name);
     if (scene == nullptr)
     {
-        m_scenes.push_back(entry{name, std::make_unique<context>()});
+        m_scenes.push_back(entry{name, std::make_unique<runtime::scene>()});
         scene = m_scenes.back().scene.get();
         scene->init();
         LOG_INF("Loaded scene '%s'%s", name.c_str(), mode == load_mode::additive ? " (additive)" : "");
@@ -118,7 +118,7 @@ runtime::context& runtime::scene_manager::load(core::string_id name, load_mode m
 
 bool runtime::scene_manager::unload(core::string_id name)
 {
-    context* scene = find(name);
+    runtime::scene* scene = find(name);
     if (scene == nullptr)
     {
         LOG_WRN("runtime::scene_manager::unload: no scene '%s' is loaded", name.c_str());
@@ -127,7 +127,7 @@ bool runtime::scene_manager::unload(core::string_id name)
     return unload(*scene);
 }
 
-bool runtime::scene_manager::unload(context& scene)
+bool runtime::scene_manager::unload(runtime::scene& scene)
 {
     entry* target = find_entry(scene);
     if (target == nullptr)
@@ -148,7 +148,7 @@ bool runtime::scene_manager::unload(context& scene)
     return true;
 }
 
-runtime::context* runtime::scene_manager::find(core::string_id name) noexcept
+runtime::scene* runtime::scene_manager::find(core::string_id name) noexcept
 {
     for (entry& candidate : m_scenes)
     {
@@ -160,23 +160,23 @@ runtime::context* runtime::scene_manager::find(core::string_id name) noexcept
     return nullptr;
 }
 
-core::string_id runtime::scene_manager::name_of(const context& scene) const noexcept
+core::string_id runtime::scene_manager::name_of(const runtime::scene& scene) const noexcept
 {
     const entry* found = find_entry(scene);
     return found != nullptr ? found->name : core::string_id{};
 }
 
-runtime::context& runtime::scene_manager::persistent_scene() noexcept
+runtime::scene& runtime::scene_manager::persistent_scene() noexcept
 {
     return *m_scenes.front().scene;
 }
 
-runtime::context& runtime::scene_manager::active_scene() noexcept
+runtime::scene& runtime::scene_manager::active_scene() noexcept
 {
     return *m_active;
 }
 
-void runtime::scene_manager::set_active_scene(context& scene)
+void runtime::scene_manager::set_active_scene(runtime::scene& scene)
 {
     if (find_entry(scene) == nullptr)
     {
@@ -186,7 +186,7 @@ void runtime::scene_manager::set_active_scene(context& scene)
     m_active = &scene;
 }
 
-void runtime::scene_manager::set_enabled(context& scene, bool enabled)
+void runtime::scene_manager::set_enabled(runtime::scene& scene, bool enabled)
 {
     // The root's active flag drives every component below it through
     // on_active_changed; that is what takes the scene's meshes, lights and
@@ -201,7 +201,7 @@ void runtime::scene_manager::set_enabled(context& scene, bool enabled)
     }
 }
 
-bool runtime::scene_manager::is_enabled(const context& scene) const noexcept
+bool runtime::scene_manager::is_enabled(const runtime::scene& scene) const noexcept
 {
     return scene.root.is_active();
 }
@@ -211,7 +211,7 @@ std::size_t runtime::scene_manager::scene_count() const noexcept
     return m_scenes.size();
 }
 
-runtime::context& runtime::scene_manager::scene_at(std::size_t index) noexcept
+runtime::scene& runtime::scene_manager::scene_at(std::size_t index) noexcept
 {
     return *m_scenes[index].scene;
 }
@@ -221,7 +221,7 @@ core::string_id runtime::scene_manager::name_at(std::size_t index) const noexcep
     return m_scenes[index].name;
 }
 
-runtime::scene_manager::entry* runtime::scene_manager::find_entry(const context& scene) noexcept
+runtime::scene_manager::entry* runtime::scene_manager::find_entry(const runtime::scene& scene) noexcept
 {
     for (entry& candidate : m_scenes)
     {
@@ -233,7 +233,7 @@ runtime::scene_manager::entry* runtime::scene_manager::find_entry(const context&
     return nullptr;
 }
 
-const runtime::scene_manager::entry* runtime::scene_manager::find_entry(const context& scene) const noexcept
+const runtime::scene_manager::entry* runtime::scene_manager::find_entry(const runtime::scene& scene) const noexcept
 {
     for (const entry& candidate : m_scenes)
     {

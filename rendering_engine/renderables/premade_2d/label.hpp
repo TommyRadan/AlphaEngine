@@ -57,7 +57,7 @@ namespace rendering_engine
      * centred pivot centres the text on its position. It starts at the
      * drawable's top-left corner, pivot top-left, in opaque white.
      *
-     * Register it with @c context::register_ui_renderable and unregister
+     * Register it with @c renderer::register_ui_renderable and unregister
      * it before destroying it.
      */
     struct label : public renderable

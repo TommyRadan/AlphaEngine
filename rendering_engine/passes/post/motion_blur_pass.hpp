@@ -53,7 +53,7 @@ namespace rendering_engine
      *
      * A blur cannot sample the image it writes, so the pass draws into a
      * full-resolution @c rgba16f target of its own rather than back into
-     * the scene colour. @ref context::render asks @ref draws before any
+     * the scene colour. @ref renderer::render asks @ref draws before any
      * pass records and, when it does, publishes that target as
      * @ref frame_context::hdr_color_target / @c hdr_color_texture, which
      * bloom, auto exposure and tonemap read instead of the scene colour.
@@ -63,7 +63,7 @@ namespace rendering_engine
      * "scene_color", which this pass reads and writes like bloom does.
      *
      * The output target is only allocated the first time motion blur is
-     * switched on (@ref prepare, called by @ref context::render outside the
+     * switched on (@ref prepare, called by @ref renderer::render outside the
      * frame), so the default configuration does not pay for a
      * full-resolution target it never draws; once allocated it stays for
      * the pass's lifetime. The inputs arrive through the frame context and
@@ -109,7 +109,7 @@ namespace rendering_engine
         /**
          * @brief Allocates the output target the first time @p settings
          *        make the pass active (@ref motion_blur_active). Called by
-         *        @ref context::render ahead of each frame, outside the
+         *        @ref renderer::render ahead of each frame, outside the
          *        frame bracket; a no-op once the target exists or while
          *        motion blur stays off.
          */
@@ -119,7 +119,7 @@ namespace rendering_engine
          * @brief Whether @ref record draws for @p ctx: the pass is live and
          *        its target allocated, @ref frame_context::post enables
          *        motion blur (@ref motion_blur_active) and motion vectors
-         *        are published. @ref context::render decides
+         *        are published. @ref renderer::render decides
          *        @ref frame_context::hdr_color_target by it.
          */
         bool draws(const frame_context& ctx) const;

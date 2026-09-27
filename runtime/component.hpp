@@ -34,8 +34,8 @@
  *
  * Each pool also records which node owns every live component, so the scene
  * can walk one type's pool as a unit — dispatching @c on_update per type
- * (@ref runtime::context::update) or answering "every @c mesh_component"
- * (@ref runtime::context::each / @ref runtime::context::view) — rather than
+ * (@ref runtime::scene::update) or answering "every @c mesh_component"
+ * (@ref runtime::scene::each / @ref runtime::scene::view) — rather than
  * chasing the node tree.
  */
 
@@ -59,7 +59,7 @@
 namespace runtime
 {
     struct node;
-    struct context;
+    struct scene;
 
     template<typename C, typename... Rest>
     struct component_view;
@@ -86,7 +86,7 @@ namespace runtime
     /**
      * @brief Where a node stood in the most recent scene update walk.
      *
-     * Written by @ref runtime::context::update as it walks the tree for
+     * Written by @ref runtime::scene::update as it walks the tree for
      * transform propagation: @c stamp names the update that reached the node
      * (it is only reached while effectively active and linked under the scene
      * root) and @c order is its depth-first position in that walk. The store
@@ -103,7 +103,7 @@ namespace runtime
     /**
      * @brief Owns one @ref core::pool per component type for a scene.
      *
-     * Created and owned by @ref runtime::context; @ref node funnels its
+     * Created and owned by @ref runtime::scene; @ref node funnels its
      * @c add_component / @c get_component / @c remove_component calls through
      * here. Type-erased so the store needs no compile-time list of component
      * types — a pool is created lazily the first time a given type is added,
@@ -126,14 +126,14 @@ namespace runtime
 
         /**
          * @brief The scene this store belongs to, or @c nullptr for a
-         *        standalone store (one built outside a @ref runtime::context,
+         *        standalone store (one built outside a @ref runtime::scene,
          *        e.g. by a test).
          *
          * Nodes reach their scene — and its deferred command queue — through
          * their store, so a component's @c on_update can call
          * @c owner.scene()->destroy_node(owner).
          */
-        context* scene() const noexcept
+        runtime::scene* scene() const noexcept
         {
             return m_scene;
         }
@@ -181,7 +181,7 @@ namespace runtime
          * node owns — or @c (C&) — called for every component, owned or
          * not. Slot order is neither insertion nor hierarchy order. @p fn must
          * not add a @c C (that may grow the pool under the walk); removing
-         * one is fine. @ref runtime::context::each wraps this in a traversal
+         * one is fine. @ref runtime::scene::each wraps this in a traversal
          * so the node APIs enforce that.
          */
         template<typename C, typename Fn>
@@ -306,7 +306,7 @@ namespace runtime
     private:
         // The owning scene installs itself here on construction; nodes insert
         // with an owner and clone through the private entry points below.
-        friend struct context;
+        friend struct scene;
         friend struct node;
         template<typename C, typename... Rest>
         friend struct component_view;
@@ -599,6 +599,6 @@ namespace runtime
         // The same pools in the order their types first appeared: the
         // per-type update order.
         std::vector<pool_base*> m_pool_order;
-        context* m_scene{nullptr};
+        runtime::scene* m_scene{nullptr};
     };
 } // namespace runtime

@@ -70,7 +70,7 @@
 #include <rendering_engine/materials/material.hpp>
 #include <rendering_engine/materials/material_template.hpp>
 #include <rendering_engine/materials/phong_material.hpp>
-#include <rendering_engine/rendering_engine.hpp>
+#include <rendering_engine/renderer.hpp>
 #include <runtime/components/animator_component.hpp>
 #include <runtime/components/audio_listener_component.hpp>
 #include <runtime/components/audio_source_component.hpp>
@@ -420,7 +420,7 @@ namespace
 
     rendering_engine::material* builtin_material_for(const std::string& template_name)
     {
-        rendering_engine::context& renderer = *runtime::current_engine().renderer;
+        rendering_engine::renderer& renderer = *runtime::current_engine().renderer;
         if (template_name == "phong")
         {
             return &renderer.get_phong_material();

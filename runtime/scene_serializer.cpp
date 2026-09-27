@@ -47,7 +47,7 @@
 #include <runtime/components/placeholder_component.hpp>
 #include <runtime/node.hpp>
 #include <runtime/reflection.hpp>
-#include <runtime/scene_graph.hpp>
+#include <runtime/scene.hpp>
 #include <runtime/scene_manager.hpp>
 
 namespace runtime
@@ -1032,7 +1032,7 @@ namespace runtime
         return finish(state);
     }
 
-    scene_document save_scene(context& scene)
+    scene_document save_scene(runtime::scene& scene)
     {
         save_state state{default_type_registry()};
         for (node* child : scene.root.children())
@@ -1045,7 +1045,7 @@ namespace runtime
         return finish(state);
     }
 
-    bool save_scene(context& scene, const std::filesystem::path& path)
+    bool save_scene(runtime::scene& scene, const std::filesystem::path& path)
     {
         const scene_document document = save_scene(scene);
         std::string error;
@@ -1061,7 +1061,7 @@ namespace runtime
     std::vector<node*> instantiate(const scene_document& document, node& parent)
     {
         std::vector<node*> roots;
-        context* scene = parent.scene();
+        runtime::scene* scene = parent.scene();
         if (scene == nullptr)
         {
             LOG_ERR("scene load: the parent node belongs to no scene; nothing instantiated");
@@ -1137,7 +1137,7 @@ namespace runtime
             }
 
             // After the components, so a disabled node hides them through
-            // the usual on_active_changed (as context::clone does it).
+            // the usual on_active_changed (as scene::clone does it).
             const auto active = entry.find("active");
             if (active != entry.end() && active->is_boolean() && !active->get<bool>())
             {
@@ -1160,7 +1160,7 @@ namespace runtime
         return roots;
     }
 
-    context* load_scene(scene_manager& scenes, const std::filesystem::path& path, bool additive)
+    runtime::scene* load_scene(scene_manager& scenes, const std::filesystem::path& path, bool additive)
     {
         const std::string label = core::platform::path_to_utf8(path);
         std::string error;
@@ -1172,7 +1172,7 @@ namespace runtime
         }
 
         const core::string_id name{scene_name_for(path)};
-        if (context* existing = scenes.find(name))
+        if (runtime::scene* existing = scenes.find(name))
         {
             if (existing == &scenes.persistent_scene() || existing->is_traversing())
             {
@@ -1190,7 +1190,7 @@ namespace runtime
             }
         }
 
-        context& scene = scenes.load(name, additive ? load_mode::additive : load_mode::single);
+        runtime::scene& scene = scenes.load(name, additive ? load_mode::additive : load_mode::single);
         instantiate(*document, scene.root);
         LOG_INF("Loaded %zu nodes into scene '%s' from %s", document->node_count(), name.c_str(), label.c_str());
         return &scene;

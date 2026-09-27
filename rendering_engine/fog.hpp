@@ -32,7 +32,7 @@ namespace rendering_engine
     // approximating aerial perspective cheaply with no extra pass.
     //
     // The active fog is scene-wide state set through
-    // @ref context::set_fog; the scene pass packs it into the per-view
+    // @ref renderer::set_fog; the scene pass packs it into the per-view
     // @ref view_globals block (slot 0, binding 0) each frame, and the lit
     // fragment shaders read it from there. Disabled by default
     // (@ref fog_mode::none).

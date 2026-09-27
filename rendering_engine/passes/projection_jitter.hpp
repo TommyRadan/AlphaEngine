@@ -25,7 +25,7 @@
  * @brief The temporal-AA sub-pixel jitter: its sequence and how it is
  *        applied to (and undone from) a projection.
  *
- * Device-free so the maths is unit-testable. The engine context computes
+ * Device-free so the maths is unit-testable. The renderer computes
  * one jitter per frame from the live target size and publishes it through
  * @ref frame_context::jitter; the scene and skybox passes apply it with
  * @ref jitter_projection so their depth and colour agree, and the velocity

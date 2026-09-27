@@ -45,7 +45,7 @@ namespace rendering_engine
     {
         // The material is non-owning; it is typically a
         // @ref points_material (its pipeline must bake point topology)
-        // created by @ref rendering_engine::context and shared by every
+        // created by @ref rendering_engine::renderer and shared by every
         // point cloud that draws under it.
         explicit points(material* mat);
         ~points() override;

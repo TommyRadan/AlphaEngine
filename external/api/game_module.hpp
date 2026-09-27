@@ -81,15 +81,15 @@
 #include <runtime/game_module.hpp>
 #include <runtime/node.hpp>
 #include <runtime/reflection.hpp>
-#include <runtime/scene_graph.hpp>
+#include <runtime/scene.hpp>
 
 /**
  * @brief Opens the definition of this translation unit's bootstrap — a
- *        function of @c runtime::context& @c scene — and registers it through
+ *        function of @c runtime::scene& @c scene — and registers it through
  *        @ref runtime::register_game_module. Use it once per module.
  */
 #define GAME_MODULE()                                                                                                  \
-    static void game_module_bootstrap(runtime::context& scene);                                                        \
+    static void game_module_bootstrap(runtime::scene& scene);                                                          \
     [[maybe_unused]] static const bool game_module_registered =                                                        \
         runtime::register_game_module(__FILE__, &game_module_bootstrap);                                               \
-    static void game_module_bootstrap([[maybe_unused]] runtime::context& scene)
+    static void game_module_bootstrap([[maybe_unused]] runtime::scene& scene)

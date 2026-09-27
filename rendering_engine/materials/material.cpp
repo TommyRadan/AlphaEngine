@@ -41,7 +41,7 @@ namespace rendering_engine
     material::~material()
     {
         // Instances are released while the device is live (before
-        // rendering_engine::context::quit tears it down); the template
+        // rendering_engine::renderer::quit tears it down); the template
         // they share outlives them through the shared handle.
         m_template->unregister_instance(this);
         release_per_material_bind_group();

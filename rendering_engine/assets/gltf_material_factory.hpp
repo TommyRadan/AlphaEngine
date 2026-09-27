@@ -36,7 +36,7 @@ namespace rendering_engine
 {
     /**
      * @brief Builds each imported material with
-     *        @ref context::create_standard_material and applies the
+     *        @ref renderer::create_standard_material and applies the
      *        description's factors and maps.
      *
      * Factors are quantised to the material's 8-bit colours. Each map binds
@@ -52,7 +52,7 @@ namespace rendering_engine
      * channel is ignored. A description marked skinned builds the instance
      * with @ref standard_material::set_skinned. Every instance shares the
      * renderer's standard template
-     * (@ref context::create_standard_material). Needs a live
+     * (@ref renderer::create_standard_material). Needs a live
      * renderer (it reaches @ref runtime::current_engine), which is why it
      * lives in its own translation unit apart from the importer.
      */

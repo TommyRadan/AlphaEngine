@@ -240,7 +240,7 @@ jobs:
   # a report inside dependency code carries a usable stack.
   #
   # ASan and TSan cannot share a binary, so TSan is a second matrix entry with
-  # its own build. It runs only the suites that exercise threads (core::jobs,
+  # its own build. It runs only the suites that exercise threads (core::job_pool,
   # core::time, core::event_bus, core::pool) and repeats them 20 times in one
   # process so a race that needs an unlucky interleaving has a chance to show
   # up; the whole suite would mostly be single-threaded noise at TSan's cost.

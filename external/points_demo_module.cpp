@@ -31,7 +31,7 @@
 #include <core/math/math.hpp>
 #include <rendering_engine/materials/points_material.hpp>
 #include <rendering_engine/renderables/points.hpp>
-#include <rendering_engine/rendering_engine.hpp>
+#include <rendering_engine/renderer.hpp>
 #include <rendering_engine/util/color.hpp>
 #include <runtime/components/renderable_component.hpp>
 #include <runtime/engine.hpp>

@@ -62,7 +62,7 @@
 #include <rendering_engine/materials/standard_material.hpp>
 #include <rendering_engine/mesh/tangent.hpp>
 #include <rendering_engine/mesh/vertex.hpp>
-#include <rendering_engine/rendering_engine.hpp>
+#include <rendering_engine/renderer.hpp>
 #include <rendering_engine/util/color.hpp>
 #include <runtime/components/light_component.hpp>
 #include <runtime/components/mesh_component.hpp>
@@ -185,7 +185,7 @@ namespace
     // Spawns the bodies of one system into @p scene.
     struct system_builder
     {
-        runtime::context& scene;
+        runtime::scene& scene;
         solar_system& system;
         int planet_count{0};
 
@@ -257,7 +257,7 @@ GAME_MODULE()
 {
     runtime::register_mesh_resolver(sphere_key, [](const std::string&) { return shared_sphere(); });
 
-    runtime::context& demo = runtime::current_engine().scenes->load("scene_graph_demo", runtime::load_mode::additive);
+    runtime::scene& demo = runtime::current_engine().scenes->load("scene_graph_demo", runtime::load_mode::additive);
 
     // Build the sphere once and share it across every body via the asset
     // cache; the key encodes the tessellation so a second request returns this

@@ -80,9 +80,9 @@ namespace rendering_engine
      *
      * @ref enabled mirrors whether @ref taa_pass is actually in the pass
      * chain rather than requesting it: temporal AA also gates the scene
-     * pass's projection jitter and is decided once, at @ref context::init,
+     * pass's projection jitter and is decided once, at @ref renderer::init,
      * from @c core::settings::graphics.temporal_aa and the drawable size.
-     * @ref context::set_post_settings overwrites whatever value it is
+     * @ref renderer::set_post_settings overwrites whatever value it is
      * given here with the pass's real presence, so this always reports the
      * truth rather than silently failing to apply a request to flip it.
      *
@@ -120,7 +120,7 @@ namespace rendering_engine
      *
      * @ref volumetric_fog_pass raymarches the scene's exponential height
      * fog (@ref fog_settings::height_density, @c height_falloff and
-     * @c reference_height, set through @ref context::set_fog) as a
+     * @c reference_height, set through @ref renderer::set_fog) as a
      * participating medium lit by the scene lights, so the medium itself
      * is not duplicated here: with a height density of 0 there is nothing
      * to march and the pass draws nothing even while enabled. These fields
@@ -185,7 +185,7 @@ namespace rendering_engine
      * authored in any image editor on top of it (or exported by a grading
      * tool at 16 or 32 texels per axis) reproduces that grade here.
      *
-     * @ref context loads @ref lut through the asset cache as a
+     * @ref renderer loads @ref lut through the asset cache as a
      * @c gpu::color_space::linear texture (the stored values are already
      * the encoded output colours and must reach the shader unchanged) the
      * first frame after the path changes. An empty path, a table that
@@ -280,27 +280,27 @@ namespace rendering_engine
     /**
      * @brief Runtime-tunable post-processing chain parameters.
      *
-     * Lives on @ref context (@ref context::set_post_settings /
-     * @ref context::get_post_settings) and is copied into
-     * @ref frame_context::post every @ref context::render so each post
+     * Lives on @ref renderer (@ref renderer::set_post_settings /
+     * @ref renderer::get_post_settings) and is copied into
+     * @ref frame_context::post every @ref renderer::render so each post
      * pass can read the fields it owns and rewrite its own UBO only when a
      * value actually changed. @ref exposure and @ref tonemap_op are the
-     * exception: @ref context::set_post_settings forwards them straight to
+     * exception: @ref renderer::set_post_settings forwards them straight to
      * @ref tonemap_pass::set_exposure / @ref tonemap_pass::set_operator,
      * which already rewrite their UBO immediately and only on change, so
      * @ref tonemap_pass::record has no need to read them back out of the
      * frame context.
      *
      * The scene-wide fog medium is deliberately not part of this struct:
-     * it stays on the existing @ref context::set_fog / @ref fog_settings
+     * it stays on the existing @ref renderer::set_fog / @ref fog_settings
      * path the lit materials apply analytically. @ref volumetric only
      * tunes how @ref volumetric_fog_pass raymarches that same height-fog
      * medium in the post chain.
      *
-     * @ref context::init seeds it from @c core::settings::post (the
+     * @ref renderer::init seeds it from @c core::settings::post (the
      * settings.json @c post section, the matching @c ALPHAENGINE_*
      * variables and command-line options), so the engine starts with the
-     * persisted values; later changes live only in the context.
+     * persisted values; later changes live only in the renderer.
      */
     struct post_settings
     {

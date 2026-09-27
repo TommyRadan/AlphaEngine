@@ -39,13 +39,13 @@
 
 namespace runtime
 {
-    struct context;
+    struct scene;
 
     /**
      * @brief A game module's bootstrap: spawns the module's nodes into
      *        @p scene (or into scenes it loads) and attaches their behaviours.
      */
-    using game_module_bootstrap = void (*)(context& scene);
+    using game_module_bootstrap = void (*)(scene& scene);
 
     /**
      * @brief Registers @p bootstrap, from the source file @p source (named in
@@ -67,5 +67,5 @@ namespace runtime
      * @c on_start, which runs on the first update, can. An exception thrown
      * by a bootstrap propagates to the caller.
      */
-    void install_game_modules(context& scene);
+    void install_game_modules(scene& scene);
 } // namespace runtime

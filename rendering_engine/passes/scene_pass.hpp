@@ -98,9 +98,9 @@ namespace rendering_engine
         // light; its depth map is baked into the per-frame bind group and its
         // matrix uploaded each frame. May be null.
         // @p stats is filled with this frame's draw statistics each record();
-        // non-owning, owned by the engine context and surfaced to the debug
+        // non-owning, owned by the renderer and surfaced to the debug
         // overlay. May be null to disable stats collection.
-        // @p taa_jitter says whether the context will publish a temporal-AA
+        // @p taa_jitter says whether the renderer will publish a temporal-AA
         // jitter through @ref frame_context::jitter: the pass then applies
         // it to the projection it uploads and builds the unjittered overlay
         // twin of its per-frame bind group (see @ref overlay_frame_bind_group).
@@ -173,7 +173,7 @@ namespace rendering_engine
         gpu::bind_group overlay_frame_bind_group() const;
 
         // No resize override: the pass renders into the scene target the
-        // context hands it each frame, and the jitter it applies arrives
+        // renderer hands it each frame, and the jitter it applies arrives
         // through frame_context already scaled to the live target size.
 
     private:
@@ -194,8 +194,8 @@ namespace rendering_engine
         // per-draw group, vertex / index streams and draw call.
         void dispatch(gpu::render_pass_encoder& pass_encoder, draw_phase phase);
 
-        // Non-owning back-pointer to the engine context's
-        // scene-renderable registry. The context outlives every
+        // Non-owning back-pointer to the renderer's
+        // scene-renderable registry. The renderer outlives every
         // pass so the pointer stays valid for the pass's lifetime.
         std::vector<renderable*>* m_registry;
 
@@ -224,19 +224,19 @@ namespace rendering_engine
         gpu::bind_group m_overlay_frame_bind_group{};
 
         // Shadow passes feeding the per-frame group. Non-owning — the
-        // engine context owns the passes and orders them before this one.
+        // renderer owns the passes and orders them before this one.
         // Null disables that kind of shadowing.
         shadow_pass* m_shadow{nullptr};
         point_shadow_pass* m_point_shadow{nullptr};
         spot_shadow_pass* m_spot_shadow{nullptr};
 
         // Non-owning; filled each record() with this frame's draw stats.
-        // Owned by the engine context, which outlives the pass. Null
+        // Owned by the renderer, which outlives the pass. Null
         // disables collection.
         render_stats* m_stats{nullptr};
 
         // Temporal-AA projection jitter. When set, each record() offsets
-        // the camera projection by the sub-pixel jitter the context
+        // the camera projection by the sub-pixel jitter the renderer
         // published in frame_context::jitter (a Halton step computed from
         // the live target size) before uploading it, so consecutive frames
         // sample the scene at slightly different positions for the

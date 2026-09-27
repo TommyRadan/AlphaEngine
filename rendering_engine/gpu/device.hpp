@@ -306,7 +306,7 @@ namespace rendering_engine::gpu
 
         // Notify the device that the window backbuffer was resized —
         // the renderer's window_resized listener is the caller, with
-        // the drawable's pixel size, and context::init makes the same
+        // the drawable's pixel size, and renderer::init makes the same
         // call once. The swapchain target's recorded extent updates so
         // the next pass viewport defaults match the window. A zero
         // extent means the window is minimised: a backend that owns

@@ -88,7 +88,7 @@ namespace rendering_engine
         // Rewrites the UiFrame block for m_width x m_height.
         void write_frame_block();
 
-        // Non-owning back-pointer to the engine context's
+        // Non-owning back-pointer to the renderer's
         // ui-renderable registry. Same lifetime guarantee as
         // @ref scene_pass::m_registry.
         std::vector<renderable*>* m_registry;

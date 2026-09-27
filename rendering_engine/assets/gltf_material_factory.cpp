@@ -27,7 +27,7 @@
 #include <cstdint>
 
 #include <rendering_engine/assets/asset_cache.hpp>
-#include <rendering_engine/rendering_engine.hpp>
+#include <rendering_engine/renderer.hpp>
 #include <rendering_engine/util/color.hpp>
 #include <runtime/engine.hpp>
 

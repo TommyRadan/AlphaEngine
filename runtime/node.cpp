@@ -25,7 +25,7 @@
 #include <algorithm>
 #include <cassert>
 
-#include <runtime/scene_graph.hpp>
+#include <runtime/scene.hpp>
 
 runtime::node::node()
     : m_parent{nullptr}, m_store{nullptr}, m_owning_scene{nullptr}, m_pool_slot{0}, m_active{true},
@@ -174,7 +174,7 @@ void runtime::node::update_subtree()
 
     // on_update hooks may not restructure the lists being walked here; the
     // scope makes the immediate APIs assert (debug) or defer (release).
-    context::traversal_scope traversal{scene()};
+    scene::traversal_scope traversal{scene()};
 
     if (m_store != nullptr)
     {
@@ -228,12 +228,12 @@ runtime::component_store* runtime::node::store() const noexcept
     return m_store;
 }
 
-runtime::context* runtime::node::scene() const noexcept
+runtime::scene* runtime::node::scene() const noexcept
 {
     return m_store != nullptr ? m_store->scene() : nullptr;
 }
 
-runtime::context* runtime::node::owning_scene() const noexcept
+runtime::scene* runtime::node::owning_scene() const noexcept
 {
     return m_owning_scene;
 }
@@ -332,7 +332,7 @@ void runtime::node::set_name(core::string_id name)
 
 void runtime::node::index_name()
 {
-    if (context* owner = scene())
+    if (runtime::scene* owner = scene())
     {
         owner->index_name(*this);
     }
@@ -340,7 +340,7 @@ void runtime::node::index_name()
 
 void runtime::node::unindex_name()
 {
-    if (context* owner = scene())
+    if (runtime::scene* owner = scene())
     {
         owner->unindex_name(*this);
     }
@@ -433,7 +433,7 @@ void runtime::node::refresh_active(bool parent_effective)
 
     // on_active_changed hooks run against the lists walked below, so they are
     // held to the same no-structural-mutation rule as on_update.
-    context::traversal_scope traversal{scene()};
+    scene::traversal_scope traversal{scene()};
 
     if (m_store != nullptr)
     {
@@ -451,13 +451,13 @@ void runtime::node::refresh_active(bool parent_effective)
 
 bool runtime::node::reject_during_traversal(const char* operation) const
 {
-    const context* owner = scene();
+    const runtime::scene* owner = scene();
     if (owner == nullptr || !owner->is_traversing())
     {
         return false;
     }
     LOG_ERR("runtime::node::%s on '%s': called from inside a scene traversal (on_update / on_active_changed). "
-            "The call is deferred to the end of context::update; use context::defer_* to make that explicit",
+            "The call is deferred to the end of scene::update; use scene::defer_* to make that explicit",
             operation,
             m_name.c_str());
     assert(false && "runtime::node: structural mutation from inside a scene traversal");
@@ -466,7 +466,7 @@ bool runtime::node::reject_during_traversal(const char* operation) const
 
 void runtime::node::defer(std::function<void()> command)
 {
-    context* owner = scene();
+    runtime::scene* owner = scene();
     if (owner == nullptr)
     {
         LOG_ERR("runtime::node::defer on '%s': node belongs to no scene; command dropped", m_name.c_str());

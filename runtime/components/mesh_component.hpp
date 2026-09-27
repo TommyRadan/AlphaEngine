@@ -124,7 +124,7 @@ namespace runtime
 
         /**
          * @brief A new component drawing the same cached mesh with the same
-         *        material, for @c context::clone.
+         *        material, for @c scene::clone.
          *
          * Only a component built from a @ref rendering_engine::mesh_asset can
          * be cloned — the copy shares the upload; one built from a private

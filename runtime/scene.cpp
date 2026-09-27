@@ -20,7 +20,7 @@
  * SOFTWARE.
  */
 
-#include <runtime/scene_graph.hpp>
+#include <runtime/scene.hpp>
 
 #include <algorithm>
 #include <unordered_set>
@@ -62,7 +62,7 @@ namespace
     uint64_t g_update_stamp = 0;
 } // namespace
 
-runtime::context::traversal_scope::traversal_scope(context* scene) noexcept : m_scene{scene}
+runtime::scene::traversal_scope::traversal_scope(scene* scene) noexcept : m_scene{scene}
 {
     if (m_scene != nullptr)
     {
@@ -70,7 +70,7 @@ runtime::context::traversal_scope::traversal_scope(context* scene) noexcept : m_
     }
 }
 
-runtime::context::traversal_scope::~traversal_scope()
+runtime::scene::traversal_scope::~traversal_scope()
 {
     if (m_scene != nullptr)
     {
@@ -78,7 +78,7 @@ runtime::context::traversal_scope::~traversal_scope()
     }
 }
 
-runtime::node& runtime::context::node_pool::allocate(uint32_t& slot)
+runtime::node& runtime::scene::node_pool::allocate(uint32_t& slot)
 {
     if (m_free.empty())
     {
@@ -102,7 +102,7 @@ runtime::node& runtime::context::node_pool::allocate(uint32_t& slot)
     return *target;
 }
 
-void runtime::context::node_pool::release(uint32_t slot)
+void runtime::scene::node_pool::release(uint32_t slot)
 {
     std::optional<node>& target = cell(slot);
     if (!target.has_value())
@@ -114,7 +114,7 @@ void runtime::context::node_pool::release(uint32_t slot)
     --m_live;
 }
 
-std::vector<runtime::node*> runtime::context::node_pool::live() const
+std::vector<runtime::node*> runtime::scene::node_pool::live() const
 {
     std::vector<node*> nodes;
     nodes.reserve(m_live);
@@ -131,7 +131,7 @@ std::vector<runtime::node*> runtime::context::node_pool::live() const
     return nodes;
 }
 
-runtime::context::context()
+runtime::scene::scene()
 {
     // Wire the root to the scene's component store so every node added under it
     // inherits the store (via node::add) and can carry components, and point
@@ -140,13 +140,13 @@ runtime::context::context()
     root.set_store(&components);
 }
 
-runtime::context::~context()
+runtime::scene::~scene()
 {
     if (!m_pending.empty())
     {
         // Applying them now would touch nodes whose owners may already be
         // tearing down; dropping is the safe choice, but it is worth a note.
-        LOG_WRN("runtime::context: destroyed with %zu deferred command(s) never applied", m_pending.size());
+        LOG_WRN("runtime::scene: destroyed with %zu deferred command(s) never applied", m_pending.size());
         m_pending.clear();
     }
 
@@ -154,15 +154,15 @@ runtime::context::~context()
     release_all();
 }
 
-void runtime::context::init()
+void runtime::scene::init()
 {
     LOG_INF("Init Scene Graph");
     // The root node is always present; subtrees parent under it via node::add.
     // Node add/remove and traversal diagnostics are expected to be logged from
-    // scene_graph API calls. See docs/logging.md.
+    // scene API calls. See docs/logging.md.
 }
 
-void runtime::context::quit()
+void runtime::scene::quit()
 {
     LOG_INF("Quit Scene Graph");
     // Apply what was asked for, then free everything while the subsystems the
@@ -172,7 +172,7 @@ void runtime::context::quit()
     release_all();
 }
 
-void runtime::context::update()
+void runtime::scene::update()
 {
     {
         // on_update hooks may not restructure the lists walked here; the
@@ -212,7 +212,7 @@ void runtime::context::update()
     apply_deferred();
 }
 
-void runtime::context::propagate(node& target, uint64_t stamp, uint32_t& order)
+void runtime::scene::propagate(node& target, uint64_t stamp, uint32_t& order)
 {
     // A disabled node — or one under a disabled ancestor — freezes its whole
     // subtree: it is not stamped, so none of its components update.
@@ -229,7 +229,7 @@ void runtime::context::propagate(node& target, uint64_t stamp, uint32_t& order)
     }
 }
 
-runtime::node& runtime::context::create_node(core::string_id name, node* parent)
+runtime::node& runtime::scene::create_node(core::string_id name, node* parent)
 {
     uint32_t slot = 0;
     node& created = m_nodes.allocate(slot);
@@ -241,7 +241,7 @@ runtime::node& runtime::context::create_node(core::string_id name, node* parent)
     created.set_store(&components);
 
     node& target = parent != nullptr ? *parent : root;
-    context* target_scene = target.scene();
+    scene* target_scene = target.scene();
     if (target_scene != nullptr && target_scene->is_traversing())
     {
         // The parent's child list may be under a walk right now; link once
@@ -255,11 +255,11 @@ runtime::node& runtime::context::create_node(core::string_id name, node* parent)
     return created;
 }
 
-void runtime::context::destroy_node(node& target)
+void runtime::scene::destroy_node(node& target)
 {
     if (&target == &root)
     {
-        LOG_ERR("runtime::context::destroy_node: the scene root cannot be destroyed");
+        LOG_ERR("runtime::scene::destroy_node: the scene root cannot be destroyed");
         return;
     }
     if (target.m_owning_scene == nullptr)
@@ -276,7 +276,7 @@ void runtime::context::destroy_node(node& target)
     }
     if (target.m_destroy_pending)
     {
-        LOG_WRN("runtime::context::destroy_node: '%s' is already pending destruction; ignoring", target.m_name.c_str());
+        LOG_WRN("runtime::scene::destroy_node: '%s' is already pending destruction; ignoring", target.m_name.c_str());
         return;
     }
     target.m_destroy_pending = true;
@@ -291,7 +291,7 @@ void runtime::context::destroy_node(node& target)
         });
 }
 
-void runtime::context::unlink_and_strip(node& target)
+void runtime::scene::unlink_and_strip(node& target)
 {
     // Unlink first so nothing walks into the subtree once it is gone from the
     // scene, then unwind the components (renderer registrations, lights,
@@ -303,7 +303,7 @@ void runtime::context::unlink_and_strip(node& target)
     release_subtree_components(target);
 }
 
-void runtime::context::collect_doomed(node& target)
+void runtime::scene::collect_doomed(node& target)
 {
     for (node* child : target.m_children)
     {
@@ -324,7 +324,7 @@ void runtime::context::collect_doomed(node& target)
     }
 }
 
-void runtime::context::free_doomed()
+void runtime::scene::free_doomed()
 {
     std::vector<node*> doomed;
     doomed.swap(m_doomed);
@@ -336,12 +336,12 @@ void runtime::context::free_doomed()
     }
 }
 
-void runtime::context::free_node(node& target)
+void runtime::scene::free_node(node& target)
 {
     m_nodes.release(target.m_pool_slot);
 }
 
-runtime::node& runtime::context::clone(node& source, node* parent)
+runtime::node& runtime::scene::clone(node& source, node* parent)
 {
     node& copy = create_node(source.m_name, parent);
     copy_pose(source, copy);
@@ -349,7 +349,7 @@ runtime::node& runtime::context::clone(node& source, node* parent)
     // The copy's components go into the store it is scoped to right now; if
     // that scene is mid-walk its pools must not grow, so the rest waits for
     // the end of its update.
-    context* copy_scene = copy.scene();
+    scene* copy_scene = copy.scene();
     if (copy_scene != nullptr && copy_scene->is_traversing())
     {
         copy_scene->defer([this, &source, &copy] { clone_contents(source, copy); });
@@ -361,7 +361,7 @@ runtime::node& runtime::context::clone(node& source, node* parent)
     return copy;
 }
 
-void runtime::context::clone_contents(node& source, node& copy)
+void runtime::scene::clone_contents(node& source, node& copy)
 {
     // Plan the whole subtree before creating anything. The copy may sit
     // inside the source subtree (a node cloned under its own child), and the
@@ -403,12 +403,12 @@ void runtime::context::clone_contents(node& source, node& copy)
     }
 }
 
-std::size_t runtime::context::node_count() const noexcept
+std::size_t runtime::scene::node_count() const noexcept
 {
     return m_nodes.size();
 }
 
-runtime::node* runtime::context::find(core::string_id name)
+runtime::node* runtime::scene::find(core::string_id name)
 {
     if (name.empty())
     {
@@ -418,7 +418,7 @@ runtime::node* runtime::context::find(core::string_id name)
     return it != m_name_index.end() && !it->second.empty() ? it->second.front() : nullptr;
 }
 
-void runtime::context::index_name(node& target)
+void runtime::scene::index_name(node& target)
 {
     if (!target.m_name.empty())
     {
@@ -426,7 +426,7 @@ void runtime::context::index_name(node& target)
     }
 }
 
-void runtime::context::unindex_name(node& target)
+void runtime::scene::unindex_name(node& target)
 {
     if (target.m_name.empty())
     {
@@ -445,7 +445,7 @@ void runtime::context::unindex_name(node& target)
     }
 }
 
-void runtime::context::release_all()
+void runtime::scene::release_all()
 {
     // Everything the scene can reach: the tree under the root, then each
     // scene-owned node outside it (detached, or re-parented into another
@@ -516,12 +516,12 @@ void runtime::context::release_all()
 
     if (cut_loose > 0)
     {
-        LOG_WRN("runtime::context: %zu caller-owned subtree(s) still attached at teardown; freed their components",
+        LOG_WRN("runtime::scene: %zu caller-owned subtree(s) still attached at teardown; freed their components",
                 cut_loose);
     }
 }
 
-void runtime::context::defer(std::function<void()> command)
+void runtime::scene::defer(std::function<void()> command)
 {
     if (!command)
     {
@@ -530,12 +530,11 @@ void runtime::context::defer(std::function<void()> command)
     m_pending.push_back(std::move(command));
 }
 
-void runtime::context::defer_destroy(node& target, std::function<void()> release)
+void runtime::scene::defer_destroy(node& target, std::function<void()> release)
 {
     if (target.m_destroy_pending)
     {
-        LOG_WRN("runtime::context::defer_destroy: '%s' is already pending destruction; ignoring",
-                target.m_name.c_str());
+        LOG_WRN("runtime::scene::defer_destroy: '%s' is already pending destruction; ignoring", target.m_name.c_str());
         return;
     }
     target.m_destroy_pending = true;
@@ -555,7 +554,7 @@ void runtime::context::defer_destroy(node& target, std::function<void()> release
         });
 }
 
-void runtime::context::defer_reparent(node& target, node* new_parent)
+void runtime::scene::defer_reparent(node& target, node* new_parent)
 {
     defer(
         [&target, new_parent]
@@ -571,16 +570,16 @@ void runtime::context::defer_reparent(node& target, node* new_parent)
         });
 }
 
-void runtime::context::defer_set_active(node& target, bool active)
+void runtime::scene::defer_set_active(node& target, bool active)
 {
     defer([&target, active] { target.set_active(active); });
 }
 
-void runtime::context::apply_deferred()
+void runtime::scene::apply_deferred()
 {
     if (is_traversing())
     {
-        LOG_ERR("runtime::context::apply_deferred: called during a traversal; commands stay queued");
+        LOG_ERR("runtime::scene::apply_deferred: called during a traversal; commands stay queued");
         return;
     }
 
@@ -600,21 +599,20 @@ void runtime::context::apply_deferred()
     {
         // The retired nodes stay allocated (detached, component-less) until a
         // drain completes: a command left over may still name one.
-        LOG_ERR(
-            "runtime::context::apply_deferred: commands kept re-queueing for %d rounds; %zu left for the next update",
-            k_max_drain_rounds,
-            m_pending.size());
+        LOG_ERR("runtime::scene::apply_deferred: commands kept re-queueing for %d rounds; %zu left for the next update",
+                k_max_drain_rounds,
+                m_pending.size());
         return;
     }
     free_doomed();
 }
 
-std::size_t runtime::context::pending_command_count() const noexcept
+std::size_t runtime::scene::pending_command_count() const noexcept
 {
     return m_pending.size();
 }
 
-bool runtime::context::is_traversing() const noexcept
+bool runtime::scene::is_traversing() const noexcept
 {
     return m_traversal_depth > 0;
 }

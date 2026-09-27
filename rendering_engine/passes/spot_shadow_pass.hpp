@@ -125,9 +125,9 @@ namespace rendering_engine
         uint32_t caster_mask() const noexcept;
 
     private:
-        // Non-owning back-pointer to the engine context's
+        // Non-owning back-pointer to the renderer's
         // scene-renderable registry — the same one the scene and other
-        // shadow passes walk. The context outlives every pass.
+        // shadow passes walk. The renderer outlives every pass.
         std::vector<renderable*>* m_registry;
 
         // Off-screen depth-only shadow-map target (the sampled

@@ -111,7 +111,7 @@ namespace runtime
      * piece of logic goes on a child node. See the file notes for when each
      * hook runs.
      *
-     * **Cloning.** @c context::clone copies a behaviour only if its type
+     * **Cloning.** @c scene::clone copies a behaviour only if its type
      * opts in by overriding @ref clone; the default declines, and the copy
      * of the node is left without a behaviour (with a warning). The usual
      * implementation is @c std::make_unique<my_behavior>(*this): copying a
@@ -177,7 +177,7 @@ namespace runtime
         virtual void on_destroy() {}
 
         /**
-         * @brief A fresh copy of this behaviour for @c context::clone, or
+         * @brief A fresh copy of this behaviour for @c scene::clone, or
          *        @c nullptr (the default) when the type cannot be cloned.
          */
         virtual std::unique_ptr<behavior> clone() const

@@ -45,7 +45,7 @@ namespace rendering_engine
     void depth_prepass::release_target()
     {
         // Only the target goes: the depth attachment it imports belongs to
-        // the context's scene-colour target.
+        // the renderer's scene-colour target.
         if (m_target.valid())
         {
             runtime::current_engine().gpu->destroy(m_target);

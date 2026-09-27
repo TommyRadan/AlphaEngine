@@ -358,7 +358,7 @@ namespace rendering_engine
         // view-projection, and the fog, all from the frame context.
         //
         // Temporal-AA sub-pixel jitter: the projection is offset by the
-        // Halton step the context published for this frame (already scaled
+        // Halton step the renderer published for this frame (already scaled
         // to the live target size) so this frame samples the scene a
         // fraction of a pixel away from the last. The jitter feeds the
         // taa_pass accumulation and is otherwise invisible — culling still

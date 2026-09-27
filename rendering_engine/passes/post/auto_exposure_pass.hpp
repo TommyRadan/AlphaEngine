@@ -81,7 +81,7 @@ namespace rendering_engine
      * clears the HDR image to black then, which would otherwise drag the
      * exposure to its limit). While disabled the pass records nothing and
      * tonemap applies @ref post_settings::exposure; @ref produces_exposure
-     * is the rule @ref context::render publishes
+     * is the rule @ref renderer::render publishes
      * @ref frame_context::exposure_texture by.
      */
     struct auto_exposure_pass : pass

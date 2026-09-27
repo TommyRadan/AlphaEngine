@@ -84,7 +84,7 @@ namespace runtime
         /**
          * @brief A new component owning a light of the same kind and settings
          *        (colour, intensity, direction or position and attenuation,
-         *        shadow casting), for @c context::clone.
+         *        shadow casting), for @c scene::clone.
          *
          * The copy registers itself like any new light and starts enabled;
          * the cloned node's active state then applies as usual.

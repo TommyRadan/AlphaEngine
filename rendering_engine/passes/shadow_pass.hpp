@@ -184,9 +184,9 @@ namespace rendering_engine
             uint32_t cascades{0};
         };
 
-        // Non-owning back-pointer to the engine context's
+        // Non-owning back-pointer to the renderer's
         // scene-renderable registry — the same one the scene pass
-        // walks. The context outlives every pass.
+        // walks. The renderer outlives every pass.
         std::vector<renderable*>* m_registry;
 
         // Configuration, fixed at construction (see core::shadow_settings).

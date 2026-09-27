@@ -81,7 +81,7 @@ namespace rendering_engine
     struct fxaa_pass : pass
     {
         // @p width / @p height are the backbuffer dimensions the per-texel
-        // edge step is baked from. @p taa_enabled says whether the context
+        // edge step is baked from. @p taa_enabled says whether the renderer
         // publishes a TAA resolve for this pass to sample (see
         // @ref declare_io); the per-frame choice still follows the handle's
         // validity.

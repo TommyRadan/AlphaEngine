@@ -15,7 +15,7 @@
 #include <rendering_engine/camera/camera_registry.hpp>
 #include <rendering_engine/camera/orthographic_camera.hpp>
 #include <runtime/components/camera_component.hpp>
-#include <runtime/scene_graph.hpp>
+#include <runtime/scene.hpp>
 
 using core::math::mat4;
 using core::math::vec3;
@@ -25,7 +25,6 @@ using rendering_engine::camera;
 using rendering_engine::orthographic_camera;
 using rendering_engine::registered_cameras;
 using runtime::camera_component;
-using runtime::context;
 using runtime::node;
 
 namespace
@@ -71,7 +70,7 @@ namespace
 
 TEST_F(camera_component_fixture, attaching_registers_the_camera_and_destroying_the_node_detaches_it)
 {
-    context scene;
+    runtime::scene scene;
     camera* cam = nullptr;
     {
         node n;
@@ -87,7 +86,7 @@ TEST_F(camera_component_fixture, attaching_registers_the_camera_and_destroying_t
 
 TEST_F(camera_component_fixture, the_view_follows_the_node_world_pose_without_an_update)
 {
-    context scene;
+    runtime::scene scene;
     node rig;
     node n;
     scene.root.add(rig);
@@ -109,7 +108,7 @@ TEST_F(camera_component_fixture, the_view_follows_the_node_world_pose_without_an
 
 TEST_F(camera_component_fixture, disabling_the_node_disables_the_camera_and_enabling_restores_it)
 {
-    context scene;
+    runtime::scene scene;
     node n;
     scene.root.add(n);
     camera* cam = add_camera(n);
@@ -127,7 +126,7 @@ TEST_F(camera_component_fixture, disabling_the_node_disables_the_camera_and_enab
 
 TEST_F(camera_component_fixture, a_disabled_ancestor_disables_the_camera)
 {
-    context scene;
+    runtime::scene scene;
     node parent;
     node child;
     scene.root.add(parent);
@@ -142,7 +141,7 @@ TEST_F(camera_component_fixture, a_disabled_ancestor_disables_the_camera)
 
 TEST_F(camera_component_fixture, a_camera_added_to_a_disabled_node_starts_disabled)
 {
-    context scene;
+    runtime::scene scene;
     node n;
     scene.root.add(n);
     n.set_active(false);
@@ -154,7 +153,7 @@ TEST_F(camera_component_fixture, a_camera_added_to_a_disabled_node_starts_disabl
 
 TEST_F(camera_component_fixture, two_camera_nodes_arbitrate_by_priority_and_promote_on_destroy)
 {
-    context scene;
+    runtime::scene scene;
     node player;
     scene.root.add(player);
     camera* player_cam = add_camera(player, 0);
@@ -178,7 +177,7 @@ TEST_F(camera_component_fixture, two_camera_nodes_arbitrate_by_priority_and_prom
 
 TEST_F(camera_component_fixture, removing_the_component_detaches_and_unparents_the_camera)
 {
-    context scene;
+    runtime::scene scene;
     node n;
     scene.root.add(n);
     camera* cam = add_camera(n);
@@ -191,7 +190,7 @@ TEST_F(camera_component_fixture, removing_the_component_detaches_and_unparents_t
 
 TEST_F(camera_component_fixture, an_empty_component_is_inert)
 {
-    context scene;
+    runtime::scene scene;
     node n;
     scene.root.add(n);
     n.add_component<camera_component>(camera_component{});

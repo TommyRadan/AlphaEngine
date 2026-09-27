@@ -3,8 +3,8 @@ target_sources(AlphaEngine PRIVATE
     gpu_profiler.hpp
     post_settings.hpp
     render_stats.hpp
-    rendering_engine.cpp
-    rendering_engine.hpp
+    renderer.cpp
+    renderer.hpp
     sdl_input.cpp
     sdl_input.hpp
     window.cpp

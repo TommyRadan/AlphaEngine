@@ -30,8 +30,8 @@
  * macro is set for Debug builds only (see the root CMakeLists.txt), so in
  * release every function below collapses to an empty no-op and ImGui is
  * not linked at all. None of these declarations expose an ImGui or SDL
- * type, so callers in the always-compiled engine core (window, rendering
- * context, debug pass) can include this header unconditionally.
+ * type, so callers in the always-compiled engine core (window, renderer,
+ * debug pass) can include this header unconditionally.
  *
  * ImGui renders through the OpenGL3 or the Vulkan backend, matching the
  * GPU backend the engine brought up. The frame is split in two: building
