@@ -281,6 +281,29 @@ FetchContent_Declare(
     GIT_SHALLOW TRUE
 )
 FetchContent_MakeAvailable(imgui)
+
+# ImGuizmo — the 3D translate/rotate/scale gizmo ImGui itself does not
+# provide, fetched the same way and folded into the same `imgui` static
+# library below so it shares its Debug-only fate: Release never compiles
+# or links it either. Only its ImGuizmo.{h,cpp} are used; the repository
+# also ships GraphEditor / ImCurveEdit / ImGradient / ImSequencer /
+# ImVectorEditor, unrelated widget libraries this engine has no editor
+# for, so SOURCE_SUBDIR points at the one directory with no CMakeLists.txt
+# of its own — FetchContent_MakeAvailable then only populates the source
+# (like ImGui above) instead of add_subdirectory-ing ImGuizmo's own
+# ImGuizmo::imguizmo target (and its own copy of every one of those
+# extra widgets) into every configuration. Pinned to the commit that
+# updates ImGuizmo's AddPolyline() / AddRect() calls for the ImGui
+# 1.92.8 argument order above; ImGuizmo's own tags predate that ImGui
+# release.
+FetchContent_Declare(
+    imguizmo
+    GIT_REPOSITORY https://github.com/CedricGuillemet/ImGuizmo.git
+    GIT_TAG 18cef5e031d8c6973d80284c67f60549fafd78c1
+    SOURCE_SUBDIR src
+)
+FetchContent_MakeAvailable(imguizmo)
+
 add_library(imgui STATIC
     ${imgui_SOURCE_DIR}/imgui.cpp
     ${imgui_SOURCE_DIR}/imgui_draw.cpp
@@ -289,8 +312,9 @@ add_library(imgui STATIC
     ${imgui_SOURCE_DIR}/imgui_demo.cpp
     ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl3.cpp
     ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp
-    ${imgui_SOURCE_DIR}/backends/imgui_impl_vulkan.cpp)
-target_include_directories(imgui PUBLIC ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/backends)
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_vulkan.cpp
+    ${imguizmo_SOURCE_DIR}/src/ImGuizmo.cpp)
+target_include_directories(imgui PUBLIC ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/backends ${imguizmo_SOURCE_DIR}/src)
 # The SDL3 backend needs the SDL headers; the OpenGL3 backend ships its
 # own function loader, so no GL link dependency is required there. The
 # Vulkan backend links against the loader (default Vulkan prototypes).
