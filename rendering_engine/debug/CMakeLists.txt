@@ -19,4 +19,6 @@ target_sources(AlphaEngine PRIVATE
     line_helper.hpp
     point_light_helper.cpp
     point_light_helper.hpp
+    spot_light_helper.cpp
+    spot_light_helper.hpp
 )

@@ -56,6 +56,7 @@
 #include <rendering_engine/passes/scene_pass.hpp>
 #include <rendering_engine/passes/shadow_pass.hpp>
 #include <rendering_engine/passes/skybox_pass.hpp>
+#include <rendering_engine/passes/spot_shadow_pass.hpp>
 #include <rendering_engine/passes/ui_pass.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
 #include <rendering_engine/window.hpp>
@@ -126,8 +127,11 @@ void rendering_engine::context::init()
     // point light; like the directional shadow it runs before the scene pass so
     // its maps are ready for the per-frame bind group.
     auto point_shadow = std::make_unique<point_shadow_pass>(&m_scene_renderables);
+    // The spot shadow pass renders a single perspective depth map from the
+    // first shadow-casting spot light; also runs before the scene pass.
+    auto spot_shadow = std::make_unique<spot_shadow_pass>(&m_scene_renderables);
     auto scene = std::make_unique<scene_pass>(
-        &m_scene_renderables, shadow.get(), point_shadow.get(), &m_render_stats, taa_enabled);
+        &m_scene_renderables, shadow.get(), point_shadow.get(), spot_shadow.get(), &m_render_stats, taa_enabled);
     // The material templates below are built against the same per-frame
     // layout the scene pass binds at slot 0.
     const gpu::bind_group_layout scene_frame_layout = scene->frame_bind_group_layout();
@@ -249,6 +253,7 @@ void rendering_engine::context::init()
     // pass can sample it the same frame.
     m_passes.push_back(std::move(shadow));
     m_passes.push_back(std::move(point_shadow));
+    m_passes.push_back(std::move(spot_shadow));
     m_passes.push_back(std::move(scene));
     m_passes.push_back(std::move(skybox));
     // Motion vectors are computed from the finalised scene depth, before

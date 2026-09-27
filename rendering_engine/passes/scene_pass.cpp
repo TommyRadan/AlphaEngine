@@ -40,6 +40,7 @@
 #include <rendering_engine/passes/point_shadow_pass.hpp>
 #include <rendering_engine/passes/projection_jitter.hpp>
 #include <rendering_engine/passes/shadow_pass.hpp>
+#include <rendering_engine/passes/spot_shadow_pass.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
 #include <runtime/engine.hpp>
 
@@ -82,14 +83,27 @@ namespace rendering_engine
         // z caster point index, w the faces' far plane). 416 bytes total.
         constexpr size_t point_shadow_ubo_size =
             point_shadow_face_count * sizeof(core::math::mat4) + 2 * 4 * sizeof(float);
+
+        // Spot shadow data shares the per-frame group too, in a block
+        // shaped just like the directional Shadow one (a single
+        // perspective matrix rather than an auto-fitted orthographic box).
+        constexpr uint32_t spot_shadow_binding = gpu::shader_bindings::spot_shadow;
+        constexpr uint32_t spot_shadow_map_binding = gpu::shader_bindings::spot_shadow_map;
+
+        // std140 layout of the SpotShadow block: mat4 lightViewProj at
+        // offset 0, vec4 params at offset 64 (x enabled, y bias, z caster
+        // spot index). 80 bytes total.
+        constexpr size_t spot_shadow_ubo_size = sizeof(core::math::mat4) + 4 * sizeof(float);
     } // namespace
 
     scene_pass::scene_pass(std::vector<renderable*>* registry,
                            shadow_pass* shadow,
                            point_shadow_pass* point_shadow,
+                           spot_shadow_pass* spot_shadow,
                            render_stats* stats,
                            bool taa_jitter)
-        : m_registry(registry), m_shadow(shadow), m_point_shadow(point_shadow), m_stats(stats), m_taa_jitter(taa_jitter)
+        : m_registry(registry), m_shadow(shadow), m_point_shadow(point_shadow), m_spot_shadow(spot_shadow),
+          m_stats(stats), m_taa_jitter(taa_jitter)
     {
         auto& gpu = *runtime::current_engine().gpu;
 
@@ -105,6 +119,8 @@ namespace rendering_engine
         gpu::bind_group_layout_entry point_shadow_map_entry{point_shadow_map_binding, gpu::binding_kind::texture};
         point_shadow_map_entry.dimension = gpu::texture_dimension::cube;
         frame_layout_descriptor.entries.push_back(point_shadow_map_entry);
+        frame_layout_descriptor.entries.push_back({spot_shadow_binding, gpu::binding_kind::uniform_buffer});
+        frame_layout_descriptor.entries.push_back({spot_shadow_map_binding, gpu::binding_kind::texture});
         m_frame_layout = gpu.create_bind_group_layout(frame_layout_descriptor);
 
         gpu::buffer_descriptor ubo_descriptor{};
@@ -137,6 +153,12 @@ namespace rendering_engine
         point_shadow_descriptor.usage = gpu::buffer_usage_uniform | gpu::buffer_usage_copy_dst;
         point_shadow_descriptor.hint = gpu::buffer_usage_hint::dynamic_data;
         m_point_shadow_ubo = gpu.create_buffer(point_shadow_descriptor);
+
+        gpu::buffer_descriptor spot_shadow_descriptor{};
+        spot_shadow_descriptor.size = spot_shadow_ubo_size;
+        spot_shadow_descriptor.usage = gpu::buffer_usage_uniform | gpu::buffer_usage_copy_dst;
+        spot_shadow_descriptor.hint = gpu::buffer_usage_hint::dynamic_data;
+        m_spot_shadow_ubo = gpu.create_buffer(spot_shadow_descriptor);
 
         gpu::bind_group_descriptor frame_bind_group_descriptor{};
         frame_bind_group_descriptor.layout = m_frame_layout;
@@ -183,6 +205,21 @@ namespace rendering_engine
         point_map_slot.texture_value = m_point_shadow != nullptr ? m_point_shadow->shadow_map() : gpu::texture{};
         frame_bind_group_descriptor.entries.push_back(point_map_slot);
 
+        gpu::binding_value spot_shadow_slot{};
+        spot_shadow_slot.binding = spot_shadow_binding;
+        spot_shadow_slot.kind = gpu::binding_kind::uniform_buffer;
+        spot_shadow_slot.buffer_value = m_spot_shadow_ubo;
+        frame_bind_group_descriptor.entries.push_back(spot_shadow_slot);
+
+        // The spot shadow map is owned by the spot shadow pass. An invalid
+        // handle (no pass) binds nothing and the lit shader's enabled flag
+        // keeps it unsampled, just like the directional and omni maps.
+        gpu::binding_value spot_map_slot{};
+        spot_map_slot.binding = spot_shadow_map_binding;
+        spot_map_slot.kind = gpu::binding_kind::texture;
+        spot_map_slot.texture_value = m_spot_shadow != nullptr ? m_spot_shadow->shadow_map() : gpu::texture{};
+        frame_bind_group_descriptor.entries.push_back(spot_map_slot);
+
         m_frame_bind_group = gpu.create_bind_group(frame_bind_group_descriptor);
 
         // The overlay twin shares every binding with the main group except
@@ -213,6 +250,11 @@ namespace rendering_engine
         {
             gpu.destroy(m_frame_bind_group);
             m_frame_bind_group = {};
+        }
+        if (m_spot_shadow_ubo.valid())
+        {
+            gpu.destroy(m_spot_shadow_ubo);
+            m_spot_shadow_ubo = {};
         }
         if (m_point_shadow_ubo.valid())
         {
@@ -274,6 +316,7 @@ namespace rendering_engine
             // culling tallies over so the overlay reads one struct.
             m_stats->shadow_culled = m_shadow != nullptr ? m_shadow->culled_count() : 0u;
             m_stats->point_shadow_culled = m_point_shadow != nullptr ? m_point_shadow->culled_count() : 0u;
+            m_stats->spot_shadow_culled = m_spot_shadow != nullptr ? m_spot_shadow->culled_count() : 0u;
         }
 
         // Render into the HDR scene-colour target so the post chain
@@ -396,6 +439,21 @@ namespace rendering_engine
             point_shadow_payload[103] = m_point_shadow->shadow_far();
         }
         gpu.write_buffer(m_point_shadow_ubo, point_shadow_payload.data(), point_shadow_ubo_size, 0);
+
+        // Upload the spot shadow block: the light-space matrix plus
+        // {enabled, bias, caster spot index}, shaped just like the
+        // directional Shadow block. enabled stays 0 with no caster so the
+        // lit shader skips the (cleared) map.
+        std::array<float, 20> spot_shadow_payload{};
+        if (m_spot_shadow != nullptr && m_spot_shadow->has_shadow())
+        {
+            std::memcpy(
+                spot_shadow_payload.data(), m_spot_shadow->light_view_projection().data(), sizeof(core::math::mat4));
+            spot_shadow_payload[16] = 1.0f;
+            spot_shadow_payload[17] = m_spot_shadow->depth_bias();
+            spot_shadow_payload[18] = static_cast<float>(m_spot_shadow->shadow_spot_index());
+        }
+        gpu.write_buffer(m_spot_shadow_ubo, spot_shadow_payload.data(), spot_shadow_ubo_size, 0);
 
         // Frustum-cull, then collect. A renderable that reports world
         // bounds is tested against the camera frustum first and skipped

@@ -36,6 +36,7 @@ namespace rendering_engine
         ambient,
         directional,
         point,
+        spot,
     };
 
     // Base for every light source. Carries the colour / intensity every

@@ -1,9 +1,9 @@
 #version 450
 
 // Blinn-Phong lit surface: ambient + per-light diffuse and specular for
-// the packed directional and point lights, the directional caster's
-// shadow, and distance fog. The per-frame, lights, shadow and fog code
-// is shared with standard_material through the includes.
+// the packed directional, point and spot lights, the directional / spot
+// casters' shadows, and distance fog. The per-frame, lights, shadow and
+// fog code is shared with standard_material through the includes.
 //
 // NO_FOG (injected when the material's fog flag is off) compiles the
 // fog blend out entirely; every other keyword is ignored here.
@@ -84,6 +84,28 @@ void main()
             vec3 H = normalize(L + V);
             float nDotH = max(dot(N, H), 0.0);
             result += pow(nDotH, shininess) * radiance * specularColor;
+        }
+    }
+
+    for (int i = 0; i < u_lights.counts.z; ++i)
+    {
+        vec3 toLight = u_lights.spot[i].position.xyz - worldPosition;
+        float dist = length(toLight);
+        vec3 L = toLight / max(dist, 0.0001);
+        float atten = spot_attenuation(i, L, dist);
+        if (atten <= 0.0)
+        {
+            continue;
+        }
+        vec3 radiance = u_lights.spot[i].color.rgb * atten;
+        float shadow = spot_shadow(worldPosition, i, N, L);
+        float nDotL = max(dot(N, L), 0.0);
+        result += shadow * nDotL * radiance * diffuseAlbedo;
+        if (nDotL > 0.0)
+        {
+            vec3 H = normalize(L + V);
+            float nDotH = max(dot(N, H), 0.0);
+            result += shadow * pow(nDotH, shininess) * radiance * specularColor;
         }
     }
 

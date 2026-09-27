@@ -9,4 +9,6 @@ target_sources(AlphaEngine PRIVATE
     lights_ubo.hpp
     point_light.cpp
     point_light.hpp
+    spot_light.cpp
+    spot_light.hpp
 )

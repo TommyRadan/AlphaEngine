@@ -233,6 +233,7 @@ namespace rendering_engine::debug_ui
             uint32_t ambient = 0;
             uint32_t directional = 0;
             uint32_t point = 0;
+            uint32_t spot = 0;
             const auto& lights = registered_lights();
             for (const auto* source : lights)
             {
@@ -246,6 +247,9 @@ namespace rendering_engine::debug_ui
                     break;
                 case light_type::point:
                     ++point;
+                    break;
+                case light_type::spot:
+                    ++spot;
                     break;
                 }
             }
@@ -262,11 +266,15 @@ namespace rendering_engine::debug_ui
                                       "no bounds (fullscreen effects, gizmos) and are always drawn.");
                 }
                 ImGui::Text("Frustum culled: %u", stats.culled);
-                ImGui::Text("Shadow culled: %u (omni %u)", stats.shadow_culled, stats.point_shadow_culled);
+                ImGui::Text("Shadow culled: %u (omni %u, spot %u)",
+                            stats.shadow_culled,
+                            stats.point_shadow_culled,
+                            stats.spot_shadow_culled);
                 if (ImGui::IsItemHovered())
                 {
-                    ImGui::SetTooltip("Casters skipped by the directional shadow pass, and caster/face pairs\n"
-                                      "skipped across the six omni shadow faces.");
+                    ImGui::SetTooltip("Casters skipped by the directional shadow pass, caster/face pairs\n"
+                                      "skipped across the six omni shadow faces, and casters skipped by\n"
+                                      "the spot shadow pass.");
                 }
                 ImGui::Text("Draw calls: %u", stats.draw_calls);
                 ImGui::Text("Instances: %u", stats.instances);
@@ -281,6 +289,7 @@ namespace rendering_engine::debug_ui
                 ImGui::Text("Ambient: %u", ambient);
                 ImGui::Text("Directional: %u", directional);
                 ImGui::Text("Point: %u", point);
+                ImGui::Text("Spot: %u", spot);
             }
             ImGui::End();
         }
