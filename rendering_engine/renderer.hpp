@@ -37,14 +37,17 @@
 #include <rendering_engine/fog.hpp>
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/gpu_profiler.hpp>
+#include <rendering_engine/material_library.hpp>
 #include <rendering_engine/passes/pass_list.hpp>
 #include <rendering_engine/post_settings.hpp>
 #include <rendering_engine/render_stats.hpp>
+#include <rendering_engine/render_world.hpp>
 
 namespace rendering_engine
 {
     struct camera;
     struct renderable;
+    struct scene_pass;
     struct skybox_pass;
     struct tonemap_pass;
     struct velocity_pass;
@@ -53,6 +56,7 @@ namespace rendering_engine
     struct taa_pass;
     struct texture_asset;
     struct shadow_pass;
+    struct point_shadow_pass;
     struct spot_shadow_pass;
     struct environment_probe;
     struct material_template;
@@ -79,14 +83,27 @@ namespace rendering_engine
 #endif
 
     /**
-     * @brief Orchestrates the rendering subsystem (window, GL context, materials, passes).
+     * @brief Orchestrates the rendering subsystem: the window and GPU
+     *        device bring-up, the off-screen targets, the ordered pass
+     *        list, the post settings and stats, and the frame itself.
      *
-     * Owned by @ref runtime::engine. @ref init brings up the window
-     * and OpenGL context, constructs the built-in passes (which own
-     * their per-frame bind-group layouts) and the built-in materials
-     * (which read those layouts when building their pipelines);
-     * @ref quit tears them down in reverse order. All methods must be
-     * called from the main thread that owns the GL context.
+     * Owned by @ref runtime::engine. It owns two parts it hands out:
+     *
+     * - a @ref render_world — what is drawn: the renderable registries,
+     *   the lights and cameras (and the camera arbitration), the
+     *   environment probe and the fog (@ref world);
+     * - a @ref material_library — the built-in material templates and
+     *   instances (@ref materials).
+     *
+     * The registration, material and environment calls below forward to
+     * those two, so renderables and game code keep reaching them through
+     * the renderer. @ref init brings up the window and GPU device,
+     * constructs the built-in passes (which own their per-frame bind-group
+     * layouts) and then the material library (which reads those layouts
+     * when building its pipelines); @ref quit tears them down in reverse
+     * order, and the members are declared so that their destruction
+     * follows the same order. All methods must be called from the main
+     * thread that owns the GL context.
      */
     struct renderer
     {
@@ -114,9 +131,9 @@ namespace rendering_engine
          * frame index, this frame's and the previous frame's
          * temporal-AA jitter, and the previous frame's unjittered
          * view-projection) so they cannot disagree mid-frame. The
-         * active camera is the camera registry's arbitration result
-         * (@ref active_camera: the highest-priority attached, enabled
-         * camera) evaluated once here, so a camera destroyed or
+         * active camera is the world's arbitration result
+         * (@ref render_world::active_camera: the highest-priority attached,
+         * enabled camera) evaluated once here, so a camera destroyed or
          * disabled since the last frame is replaced by the runner-up
          * without any owner bookkeeping. The renderer is the only
          * place that advances the frame index, the jitter sequence
@@ -153,7 +170,7 @@ namespace rendering_engine
          * passes compare against changes — calls @ref pass::resize on
          * every pass in order so they rebuild their own full-resolution
          * targets and size-dependent UBOs, and reports the new aspect to
-         * the camera registry (@ref set_drawable_aspect), which forwards
+         * the world (@ref render_world::set_drawable_aspect), which forwards
          * it to every attached camera's @ref camera::set_aspect_ratio and
          * to cameras attached later, so the projection matches the new
          * drawable. Passes that sample a texture owned by
@@ -170,128 +187,89 @@ namespace rendering_engine
          */
         void on_resize(uint32_t pixel_width, uint32_t pixel_height);
 
+        /** @brief What the renderer draws; see @ref render_world. */
+        render_world& world() noexcept
+        {
+            return m_world;
+        }
+
+        /** @copydoc world() */
+        const render_world& world() const noexcept
+        {
+            return m_world;
+        }
+
         /**
-         * @brief Adds @p r to the scene-pass registry.
-         *
-         * The pointer is non-owning; callers must @ref unregister_scene_renderable
-         * before destroying the renderable. Registration order is
-         * preserved and is the dispatch order during the scene pass.
+         * @brief The built-in materials, built in @ref init; see
+         *        @ref material_library.
          */
+        material_library& materials() noexcept
+        {
+            return m_materials;
+        }
+
+        /** @brief @ref render_world::register_scene_renderable on @ref world. */
         void register_scene_renderable(renderable* r);
 
-        /** @brief Removes @p r from the scene-pass registry; no-op if absent. */
+        /** @brief @ref render_world::unregister_scene_renderable on @ref world. */
         void unregister_scene_renderable(renderable* r);
 
-        /** @brief Adds @p r to the UI-pass registry; same ownership rules as the scene variant. */
+        /** @brief @ref render_world::register_ui_renderable on @ref world. */
         void register_ui_renderable(renderable* r);
 
-        /** @brief Removes @p r from the UI-pass registry; no-op if absent. */
+        /** @brief @ref render_world::unregister_ui_renderable on @ref world. */
         void unregister_ui_renderable(renderable* r);
 
-        /**
-         * @brief Adds @p r to the debug-pass registry.
-         *
-         * Renderables registered here are drawn after the UI pass in
-         * debug builds; release builds drop the debug pass from the
-         * pass list entirely so registrations are inert. Same
-         * ownership rules as the scene variant.
-         */
+        /** @brief @ref render_world::register_debug_renderable on @ref world. */
         void register_debug_renderable(renderable* r);
 
-        /** @brief Removes @p r from the debug-pass registry; no-op if absent. */
+        /** @brief @ref render_world::unregister_debug_renderable on @ref world. */
         void unregister_debug_renderable(renderable* r);
 
-        /** @brief Built-in unlit 3D scene material. Constructed in @ref init. */
+        /** @brief @ref material_library::get_basic_material. Valid between @ref init and @ref quit. */
         basic_material& get_basic_material();
 
-        /**
-         * @brief Built-in unlit instanced material fronted by
-         *        @ref instanced_mesh. Constructed in @ref init.
-         *
-         * Shares the scene per-frame layout (camera at slot 0); its
-         * per-draw slot reads the per-instance transform / colour storage
-         * buffer the @ref instanced_mesh renderable builds.
-         */
+        /** @brief @ref material_library::get_instanced_material. Valid between @ref init and @ref quit. */
         instanced_material& get_instanced_material();
 
-        /** @brief Built-in Blinn-Phong lit 3D scene material. Constructed in @ref init. */
+        /** @brief @ref material_library::get_phong_material. Valid between @ref init and @ref quit. */
         phong_material& get_phong_material();
 
-        /** @brief Built-in PBR metallic-roughness lit 3D scene material. Constructed in @ref init. */
+        /** @brief @ref material_library::get_standard_material. Valid between @ref init and @ref quit. */
         standard_material& get_standard_material();
 
         /**
-         * @brief Creates a fresh @ref standard_material instance of the
-         *        shared standard template, owned by the caller.
-         *
-         * Use this when a scene needs several PBR surfaces with different
-         * parameters (a material grid, distinct objects) rather than the
-         * single shared @ref get_standard_material. Every instance shares
-         * the one template (see @ref get_standard_material_template):
-         * N materials cost one set of shaders and layouts, and only
-         * instances whose keywords or base params differ draw through a
-         * different pipeline variant. If a scene environment is set (see
-         * @ref set_environment) it is applied to the new material so it
-         * picks up image-based ambient immediately. The returned material
-         * must not outlive the renderer.
+         * @brief @ref material_library::create_standard_material with the
+         *        world's current environment probe (see @ref set_environment),
+         *        so the new material picks up image-based ambient
+         *        immediately. The returned material must not outlive the
+         *        renderer.
          */
         std::unique_ptr<standard_material> create_standard_material();
 
-        /**
-         * @brief The template every @ref standard_material shares, built
-         *        in @ref init over the scene pass's per-frame layout.
-         *
-         * Exposed so game code can construct instances directly; prefer
-         * @ref create_standard_material, which also applies the current
-         * environment.
-         */
+        /** @brief @ref material_library::get_standard_material_template. */
         const std::shared_ptr<material_template>& get_standard_material_template() const;
 
-        /** @brief Built-in unlit point-cloud material (point topology). Constructed in @ref init. */
+        /** @brief @ref material_library::get_points_material. Valid between @ref init and @ref quit. */
         points_material& get_points_material();
 
-        /** @brief Built-in unlit line material (line topology). Constructed in @ref init. */
+        /** @brief @ref material_library::get_line_material. Valid between @ref init and @ref quit. */
         line_material& get_line_material();
 
-        /**
-         * @brief Built-in line material for debug gizmos — line topology
-         *        with depth testing disabled.
-         *
-         * Shares the scene per-frame layout (camera at slot 0) with
-         * @ref get_line_material, but draws depth-less so the debug
-         * helpers always read on top in the
-         * depth-less debug pass. Constructed in @ref init; used by the
-         * @ref editor::helper family.
-         */
+        /** @brief @ref material_library::get_debug_line_material. Valid between @ref init and @ref quit. */
         line_material& get_debug_line_material();
 
-        /**
-         * @brief Built-in analytic infinite-grid material (the CAD-style
-         *        ground grid) at the default fade distance. Constructed
-         *        in @ref init.
-         *
-         * Shares the scene per-frame layout (camera at slot 0). The
-         * @ref editor::infinite_grid renderable builds its own material
-         * through @ref create_grid_material so its fade distance is
-         * honoured; this shared one serves callers that want the default.
-         */
+        /** @brief @ref material_library::get_grid_material. Valid between @ref init and @ref quit. */
         grid_material& get_grid_material();
 
         /**
-         * @brief Creates a @ref grid_material bound to the scene pass's
-         *        per-frame layout that fades out @p fade_distance world
-         *        units from the camera, owned by the caller.
-         *
-         * The fade distance is baked into the grid template's fragment
-         * shader as a define, so the material comes with a grid
-         * template of its own (@ref grid_material::create_template),
-         * which it keeps alive; repeat compiles of a distance are served
-         * from the SPIR-V cache. Valid between @ref init and @ref quit;
-         * the returned material must not outlive the renderer.
+         * @brief @ref material_library::create_grid_material. Valid between
+         *        @ref init and @ref quit; the returned material must not
+         *        outlive the renderer.
          */
         std::unique_ptr<grid_material> create_grid_material(float fade_distance);
 
-        /** @brief Built-in 2D overlay material. Constructed in @ref init. */
+        /** @brief @ref material_library::get_ui_material. Valid between @ref init and @ref quit. */
         ui_material& get_ui_material();
 
         /**
@@ -439,56 +417,97 @@ namespace rendering_engine
          */
         gpu::texture spot_shadow_map() const;
 
-        /**
-         * @brief The active environment's BRDF look-up table (a 2D
-         *        scale/bias table), or an invalid handle when no
-         *        environment is set (see @ref set_environment).
-         */
+        /** @brief @ref render_world::environment_brdf_lut on @ref world. */
         gpu::texture environment_brdf_lut() const;
 
         /**
          * @brief Sets (or clears) the scene's image-based-lighting
          *        environment plus background.
          *
-         * Points the skybox pass at @p env's cube map so it draws as the
-         * background, and attaches the same environment to every live
-         * @ref standard_material instance — the built-in one and each
-         * one made by @ref create_standard_material, whenever it was
-         * created — so their surfaces pick up image-based ambient. Pass
+         * Stores @p env in the @ref world, points the skybox pass at its
+         * cube map so it draws as the background, and attaches the same
+         * environment to every live @ref standard_material instance — the
+         * built-in one and each one made by @ref create_standard_material,
+         * whenever it was created — so their surfaces pick up image-based
+         * ambient (@ref material_library::set_environment). Pass
          * @c nullptr to drop the skybox and revert the materials to flat
-         * ambient. The @ref environment_probe is non-owning and must outlive
-         * the scene (or be cleared first).
+         * ambient. The @ref environment_probe is non-owning and must
+         * outlive the scene (or be cleared first).
          */
         void set_environment(const environment_probe* env);
 
         /**
-         * @brief Sets the scene-wide atmospheric fog.
+         * @brief Sets the scene-wide atmospheric fog in the @ref world.
          *
-         * Stored and copied into the per-view @ref view_globals block by
-         * the scene pass each frame, so the built-in lit materials
-         * (@ref phong_material, @ref standard_material) blend toward the
-         * fog colour by camera distance. Pass a @ref fog_settings with
-         * @ref fog_mode::none (the default) to disable fog.
+         * Copied into the frame context each frame and into the per-view
+         * @ref view_globals block by the scene pass, so the built-in lit
+         * materials (@ref phong_material, @ref standard_material) blend
+         * toward the fog colour by camera distance. Pass a
+         * @ref fog_settings with @ref fog_mode::none (the default) to
+         * disable fog.
          */
         void set_fog(const fog_settings& fog);
 
     private:
-        std::vector<renderable*> m_scene_renderables;
-        std::vector<renderable*> m_ui_renderables;
-        std::vector<renderable*> m_debug_renderables;
+        // The members are declared in dependency order: each is destroyed
+        // (and @ref quit releases it) before the ones declared above it.
+        // Everything that registers into the world goes before it, the
+        // passes (which point into its registries, and whose per-frame
+        // layouts the materials were built against) go before the
+        // materials, and the materials before the per-draw ring and the
+        // targets. @ref quit walks the same order explicitly, since the
+        // GPU device the resources are freed through goes down right after
+        // it, before this object is destroyed.
 
-        // Built-in debug gizmos (ground grid + world axes) created in
-        // @ref init for debug builds and toggled from the debug UI. They
-        // auto-register into @ref m_debug_renderables on construction, so
-        // this list owns their lifetime and must be cleared in @ref quit
-        // before the line material and GPU device they reference. Empty in
-        // release builds, where the debug pass is dropped entirely.
-        std::vector<std::unique_ptr<editor::helper>> m_debug_helpers;
+        // What is drawn (see @ref world). Owns no GPU resource; declared
+        // first so every renderable, pass and helper below that points
+        // into its registries is gone before it.
+        render_world m_world;
+
+        // Off-screen HDR target the scene pass renders into.
+        // Created in @ref init at the current backbuffer size, recreated
+        // by @ref on_resize and released in @ref quit. Surfaced to passes
+        // via @ref frame_context::scene_color_target / @c scene_color_texture
+        // so the post chain can sample it as input.
+        gpu::render_target m_scene_color_target{};
+        gpu::texture m_scene_color_texture{};
+
+        // Off-screen LDR target the tonemap pass resolves into and the
+        // FXAA pass samples. rgba8, no depth; created alongside the HDR
+        // target in @ref init, recreated by @ref on_resize and released in
+        // @ref quit. Surfaced via @ref frame_context::ldr_color_target /
+        // @c ldr_color_texture.
+        gpu::render_target m_ldr_color_target{};
+        gpu::texture m_ldr_color_texture{};
+
+        // The per-draw ring (see @ref get_per_draw_ring). Created in
+        // @ref init right after the device; every renderable has released
+        // its per-draw state (offsets only, no ring resources) by @ref quit.
+        std::unique_ptr<per_draw_ring> m_per_draw_ring;
+
+        // The built-in materials (see @ref materials), built in @ref init
+        // after the passes, against the per-frame layouts they own, and
+        // released after them.
+        material_library m_materials;
+
+        // The colour-grading LUT loaded for @ref m_grading_lut_path (null
+        // when that is empty, failed to load or is not a strip LUT), and
+        // the path it was resolved for. @ref update_grading_lut reloads
+        // when @c m_post_settings.grading.lut differs from the path. The
+        // handle keeps the cached texture alive; released in @ref quit
+        // before the device.
+        std::shared_ptr<texture_asset> m_grading_lut;
+        std::string m_grading_lut_path;
+
+        // This frame's draw statistics, filled by the scene pass (which
+        // holds a pointer to it, so it is declared ahead of the passes) and
+        // surfaced via @ref get_render_stats.
+        render_stats m_render_stats{};
 
         // Ordered pass list recorded once per frame in @ref render.
         // Populated by @ref init with the built-in passes in render order,
-        // which validates the resources each declares, and torn down first
-        // in @ref quit, before the materials and GPU device the passes
+        // which validates the resources each declares, and torn down in
+        // @ref quit before the materials and the GPU device the passes
         // reference.
         pass_list m_passes;
 
@@ -521,26 +540,33 @@ namespace rendering_engine
         motion_blur_pass* m_motion_blur{nullptr};
         auto_exposure_pass* m_auto_exposure{nullptr};
 
-        // Non-owning back-pointers to the directional and spot shadow
-        // passes owned by @ref m_passes, surfaced through
+        // Non-owning back-pointers to the scene pass and the three shadow
+        // passes owned by @ref m_passes. @ref render publishes them through
+        // @ref frame_context (@c scene, @c directional_shadow,
+        // @c point_shadow, @c spot_shadow) every frame for the passes that
+        // consume their output, so no pass holds another; the directional
+        // and spot maps are also surfaced through
         // @ref directional_shadow_map / @ref spot_shadow_map for tooling
         // (the debug overlay's render-target viewer). Null until
         // @ref init runs.
+        scene_pass* m_scene{nullptr};
         shadow_pass* m_shadow{nullptr};
+        point_shadow_pass* m_point_shadow{nullptr};
         spot_shadow_pass* m_spot_shadow{nullptr};
 
-        // The standard material's shared template: shaders, layouts and
-        // the pipeline-variant cache every @ref standard_material
-        // instance draws through. Kept here so
-        // @ref create_standard_material can hand new instances the same
-        // one and @ref set_environment can reach every live instance.
-        // The other built-in types' templates are held only by their
-        // single built-in instance. Released after the materials in
-        // @ref quit.
-        std::shared_ptr<material_template> m_standard_template;
+        // Per-pass GPU timer over the pass list, brought up after the list
+        // is validated in @ref init and released before the device in
+        // @ref quit. Surfaced via @ref get_gpu_profiler.
+        gpu_profiler m_gpu_profiler;
 
-        // The per-draw ring (see @ref get_per_draw_ring).
-        std::unique_ptr<per_draw_ring> m_per_draw_ring;
+        // Built-in debug gizmos (ground grid + world axes) created in
+        // @ref init for debug builds and toggled from the debug UI. They
+        // auto-register into the world's registries on construction and
+        // draw through the material library's line and grid materials, so
+        // they go (in @ref quit, and by declaration order) before both.
+        // Empty in release builds, where the debug pass is dropped
+        // entirely.
+        std::vector<std::unique_ptr<editor::helper>> m_debug_helpers;
 
 #if _DEBUG
         // Debug-build shader hot reload over the shader library's
@@ -552,29 +578,11 @@ namespace rendering_engine
         std::unique_ptr<gpu::shader_hot_reload> m_shader_hot_reload;
 #endif
 
-        // This frame's draw statistics, filled by the scene pass (which
-        // holds a pointer to it) and surfaced via @ref get_render_stats.
-        render_stats m_render_stats{};
-
-        // Per-pass GPU timer over the pass list, brought up after the list
-        // is validated in @ref init and released before the device in
-        // @ref quit. Surfaced via @ref get_gpu_profiler.
-        gpu_profiler m_gpu_profiler;
-
         // The window_resized listener that keeps the swapchain extent and,
         // through @ref on_resize, the off-screen targets and passes in
         // step with the drawable. Held from @ref init to @ref quit so it
         // is dropped before the device it resizes is torn down.
         core::subscription m_window_resized_subscription;
-
-        // The active scene environment, or null. Stored so newly created
-        // materials inherit the image-based lighting. Non-owning.
-        const environment_probe* m_environment{nullptr};
-
-        // Scene-wide atmospheric fog, set via @ref set_fog and copied
-        // into the frame context each @ref render so the scene pass can
-        // upload it. Defaults to @ref fog_mode::none (disabled).
-        fog_settings m_fog{};
 
         // Runtime-tunable post-processing chain parameters, set via
         // @ref set_post_settings and copied into
@@ -584,52 +592,10 @@ namespace rendering_engine
         // baked in before either existed.
         post_settings m_post_settings{};
 
-        // The colour-grading LUT loaded for @ref m_grading_lut_path (null
-        // when that is empty, failed to load or is not a strip LUT), and
-        // the path it was resolved for. @ref update_grading_lut reloads
-        // when @c m_post_settings.grading.lut differs from the path. The
-        // handle keeps the cached texture alive; released in @ref quit
-        // before the device.
-        std::shared_ptr<texture_asset> m_grading_lut;
-        std::string m_grading_lut_path;
-
         // Whether the depth pre-pass runs, set via @ref set_depth_prepass
         // (seeded from the graphics settings in @ref init) and copied into
         // @ref frame_context::depth_prepass each @ref render.
         bool m_depth_prepass_enabled{false};
-
-        // Built-in materials, constructed after the passes in
-        // @ref init so they can read the passes' per-frame bind-group
-        // layouts. Released after the passes in @ref quit.
-        std::unique_ptr<basic_material> m_basic_material;
-        std::unique_ptr<instanced_material> m_instanced_material;
-        std::unique_ptr<phong_material> m_phong_material;
-        std::unique_ptr<standard_material> m_standard_material;
-        std::unique_ptr<points_material> m_points_material;
-        std::unique_ptr<line_material> m_line_material;
-        // Depth-disabled line material the debug gizmos draw through.
-        std::unique_ptr<line_material> m_debug_line_material;
-        // Analytic infinite-grid material at the default fade distance.
-        // editor::infinite_grid builds its own through
-        // create_grid_material, on a template made like this one's.
-        std::unique_ptr<grid_material> m_grid_material;
-        std::unique_ptr<ui_material> m_ui_material;
-
-        // Off-screen HDR target the scene pass renders into.
-        // Created in @ref init at the current backbuffer size, recreated
-        // by @ref on_resize and released in @ref quit. Surfaced to passes
-        // via @ref frame_context::scene_color_target / @c scene_color_texture
-        // so the post chain can sample it as input.
-        gpu::render_target m_scene_color_target{};
-        gpu::texture m_scene_color_texture{};
-
-        // Off-screen LDR target the tonemap pass resolves into and the
-        // FXAA pass samples. rgba8, no depth; created alongside the HDR
-        // target in @ref init, recreated by @ref on_resize and released in
-        // @ref quit. Surfaced via @ref frame_context::ldr_color_target /
-        // @c ldr_color_texture.
-        gpu::render_target m_ldr_color_target{};
-        gpu::texture m_ldr_color_texture{};
 
         // Pixel size the two targets above (and, through pass::resize,
         // every pass) are currently built for. @ref on_resize compares
@@ -658,7 +624,7 @@ namespace rendering_engine
         const camera* m_prev_camera{nullptr};
 
         // Allocates the HDR scene-colour target (+ depth) and the LDR
-        // target at @p width x @p height, pointing the four members above
+        // target at @p width x @p height, pointing the four target members
         // at them and recording the size. Does not release what they
         // pointed at before.
         void create_color_targets(uint32_t width, uint32_t height);

@@ -34,9 +34,6 @@
 namespace rendering_engine
 {
     struct renderable;
-    struct shadow_pass;
-    struct point_shadow_pass;
-    struct spot_shadow_pass;
 
     /**
      * @brief 3D scene pass. Clears the HDR scene colour and depth (or
@@ -85,17 +82,14 @@ namespace rendering_engine
      */
     struct scene_pass : pass
     {
-        // @p shadow is the directional shadow pass that runs ahead of this
-        // one; the scene pass bakes its cascade array and comparison
-        // sampler into the per-frame bind group and uploads its cascade
-        // matrices and splits each frame so the lit materials can sample
-        // it. May be null to disable shadowing.
-        // @p point_shadow is the omni shadow pass for the first shadow-casting
-        // point light; its six depth maps are baked into the per-frame bind
-        // group and its matrices uploaded each frame. May be null.
-        // @p spot_shadow is the shadow pass for the first shadow-casting spot
-        // light; its depth map is baked into the per-frame bind group and its
-        // matrix uploaded each frame. May be null.
+        // The shadow passes that run ahead of this one reach it through the
+        // frame context (@ref frame_context::directional_shadow,
+        // @c point_shadow, @c spot_shadow): their maps (and the directional
+        // comparison sampler) go into the per-frame bind group, rebuilt if
+        // one of them changes, and their fitted matrices, biases and
+        // caster indices are uploaded each frame so the lit materials can
+        // sample them. An absent shadow pass disables that kind of
+        // shadowing.
         // @p stats is filled with this frame's draw statistics each record();
         // non-owning, owned by the renderer and surfaced to the debug
         // overlay. May be null to disable stats collection.
@@ -103,12 +97,7 @@ namespace rendering_engine
         // jitter through @ref frame_context::jitter: the pass then applies
         // it to the projection it uploads and builds the unjittered overlay
         // twin of its per-frame bind group (see @ref overlay_frame_bind_group).
-        scene_pass(std::vector<renderable*>* registry,
-                   shadow_pass* shadow,
-                   point_shadow_pass* point_shadow,
-                   spot_shadow_pass* spot_shadow,
-                   render_stats* stats,
-                   bool taa_jitter);
+        scene_pass(const std::vector<renderable*>* registry, render_stats* stats, bool taa_jitter);
         ~scene_pass() override;
 
         scene_pass(const scene_pass&) = delete;
@@ -157,10 +146,12 @@ namespace rendering_engine
         gpu::bind_group_layout frame_bind_group_layout() const;
 
         // The per-frame bind group itself (camera / lights / shadow at
-        // slot 0). The handle is stable across frames — the pass refills
-        // the backing UBOs in record() rather than recreating the group —
-        // so the debug pass can capture it once and bind it to project
-        // its line-based gizmos with the same camera the scene used.
+        // slot 0). Built by the first @ref prepare and stable after that
+        // unless a shadow map changes — the pass refills the backing UBOs
+        // every frame rather than recreating the group. Passes later in the
+        // frame (the volumetric fog) read it through
+        // @ref frame_context::scene once this pass has prepared, and bind it
+        // to draw with the same camera, lights and shadows the scene used.
         gpu::bind_group frame_bind_group() const;
 
         // Per-frame bind group carrying the *unjittered* camera, for
@@ -168,7 +159,8 @@ namespace rendering_engine
         // would otherwise show the projection jitter as an un-averaged
         // sub-pixel wobble. Identical to @ref frame_bind_group in every
         // other binding, and the same handle when temporal-AA jitter is off
-        // (there is nothing to undo). Stable across frames.
+        // (there is nothing to undo). Built and rebuilt with it; the debug
+        // pass reads it through @ref frame_context::scene.
         gpu::bind_group overlay_frame_bind_group() const;
 
         // No resize override: the pass renders into the scene target the
@@ -187,19 +179,26 @@ namespace rendering_engine
             shading,
         };
 
+        // (Re)builds @ref m_frame_bind_group and its overlay twin when they do
+        // not exist yet or a shadow map @p ctx publishes differs from the one
+        // they were built with. Called by @ref prepare.
+        void update_frame_bind_groups(const frame_context& ctx);
+
         // Binds and draws @ref m_items for @p phase into @p pass_encoder:
         // the per-frame group once, the pipeline when it changes, the
         // per-material group when the instance changes, then each item's
         // per-draw group, vertex / index streams and draw call.
         void dispatch(gpu::render_pass_encoder& pass_encoder, draw_phase phase);
 
-        // Non-owning back-pointer to the renderer's
-        // scene-renderable registry. The renderer outlives every
-        // pass so the pointer stays valid for the pass's lifetime.
-        std::vector<renderable*>* m_registry;
+        // Non-owning back-pointer to the render world's
+        // scene-renderable registry. The world outlives every pass
+        // (see renderer.hpp), so the pointer stays valid for the pass's
+        // lifetime.
+        const std::vector<renderable*>* m_registry;
 
-        // Per-frame state — owned by the pass; created once and
-        // refilled every record(). Released in the destructor before
+        // Per-frame state — owned by the pass; the layout and buffers are
+        // created at construction, the groups by the first prepare(), and
+        // the buffers refilled every record(). Released in the destructor before
         // the device tears its pools down. The frame UBO carries the
         // @ref view_globals block (camera matrices, viewport, clock,
         // jitter and fog) at binding 0; the lights UBO carries the
@@ -222,12 +221,13 @@ namespace rendering_engine
         gpu::buffer m_overlay_frame_ubo{};
         gpu::bind_group m_overlay_frame_bind_group{};
 
-        // Shadow passes feeding the per-frame group. Non-owning — the
-        // renderer owns the passes and orders them before this one.
-        // Null disables that kind of shadowing.
-        shadow_pass* m_shadow{nullptr};
-        point_shadow_pass* m_point_shadow{nullptr};
-        spot_shadow_pass* m_spot_shadow{nullptr};
+        // The shadow maps and sampler the groups above were built with, as
+        // the frame context published them (invalid for an absent shadow
+        // pass); @ref update_frame_bind_groups rebuilds when they differ.
+        gpu::texture m_bound_shadow_map{};
+        gpu::sampler m_bound_shadow_sampler{};
+        gpu::texture m_bound_point_shadow_map{};
+        gpu::texture m_bound_spot_shadow_map{};
 
         // Non-owning; filled each record() with this frame's draw stats.
         // Owned by the renderer, which outlives the pass. Null

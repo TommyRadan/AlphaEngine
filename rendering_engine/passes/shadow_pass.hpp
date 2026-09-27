@@ -89,7 +89,7 @@ namespace rendering_engine
         // @p settings supplies the map resolution, the shadow distance,
         // the cascade count, the receiver and slope biases and the PCF
         // kernel; they are fixed for the pass's lifetime.
-        shadow_pass(std::vector<renderable*>* registry, const core::shadow_settings& settings);
+        shadow_pass(const std::vector<renderable*>* registry, const core::shadow_settings& settings);
         ~shadow_pass() override;
 
         shadow_pass(const shadow_pass&) = delete;
@@ -183,10 +183,10 @@ namespace rendering_engine
             uint32_t cascades{0};
         };
 
-        // Non-owning back-pointer to the renderer's
+        // Non-owning back-pointer to the render world's
         // scene-renderable registry — the same one the scene pass
-        // walks. The renderer outlives every pass.
-        std::vector<renderable*>* m_registry;
+        // walks. The world outlives every pass.
+        const std::vector<renderable*>* m_registry;
 
         // Configuration, fixed at construction (see core::shadow_settings).
         uint32_t m_resolution{0};

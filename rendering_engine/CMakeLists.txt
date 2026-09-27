@@ -1,8 +1,12 @@
 target_sources(AlphaEngine PRIVATE
     gpu_profiler.cpp
     gpu_profiler.hpp
+    material_library.cpp
+    material_library.hpp
     post_settings.hpp
     render_stats.hpp
+    render_world.cpp
+    render_world.hpp
     renderer.cpp
     renderer.hpp
     sdl_input.cpp

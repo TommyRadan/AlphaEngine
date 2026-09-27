@@ -85,9 +85,9 @@ namespace rendering_engine
     material_template::~material_template()
     {
         // Templates are released before the device tears its pools
-        // down (the renderer drops its materials, and with them the
-        // templates they share, in renderer::quit), so the device is
-        // live here.
+        // down (the renderer's material library drops its materials, and
+        // with them the templates they share, in material_library::quit),
+        // so the device is live here.
         for (auto& [key, pipeline] : m_pipelines)
         {
             if (pipeline.valid())

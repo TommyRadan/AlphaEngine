@@ -39,6 +39,7 @@
 #include <rendering_engine/gpu/shader_bindings.hpp>
 #include <rendering_engine/gpu/shader_hot_reload.hpp>
 #include <rendering_engine/passes/post/fullscreen_triangle.hpp>
+#include <rendering_engine/passes/scene_pass.hpp>
 #include <runtime/engine.hpp>
 
 namespace
@@ -96,11 +97,7 @@ namespace
 
 namespace rendering_engine
 {
-    volumetric_fog_pass::volumetric_fog_pass(gpu::bind_group_layout frame_layout,
-                                             gpu::bind_group frame_bind_group,
-                                             uint32_t width,
-                                             uint32_t height)
-        : m_frame_bind_group(frame_bind_group)
+    volumetric_fog_pass::volumetric_fog_pass(gpu::bind_group_layout frame_layout, uint32_t width, uint32_t height)
     {
         auto& gpu = *runtime::current_engine().gpu;
 
@@ -428,11 +425,12 @@ namespace rendering_engine
     {
         const volumetric_fog_settings& settings = ctx.post.volumetric;
 
-        // Off (the default), no camera, no depth to march toward, or no
-        // medium to march through: draw nothing, leaving the scene colour
-        // exactly as the scene and skybox passes wrote it. The medium is
-        // the height fog, so a zero height density means empty air.
-        if (!m_enabled || !volumetric_fog_active(settings) || ctx.active_camera == nullptr ||
+        // Off (the default), no camera, no scene pass to take the view
+        // from, no depth to march toward, or no medium to march through:
+        // draw nothing, leaving the scene colour exactly as the scene and
+        // skybox passes wrote it. The medium is the height fog, so a zero
+        // height density means empty air.
+        if (!m_enabled || !volumetric_fog_active(settings) || ctx.active_camera == nullptr || ctx.scene == nullptr ||
             !ctx.scene_depth_texture.valid() || ctx.fog.height_density <= 0.0f)
         {
             return;
@@ -465,7 +463,7 @@ namespace rendering_engine
 
             auto pass_encoder = encoder.begin_render_pass(descriptor);
             pass_encoder->set_pipeline(m_march_pipeline);
-            pass_encoder->set_bind_group(0, m_frame_bind_group);
+            pass_encoder->set_bind_group(0, ctx.scene->frame_bind_group());
             pass_encoder->set_bind_group(1, m_march_bind_group);
             draw_fullscreen(*pass_encoder);
             pass_encoder->end();
