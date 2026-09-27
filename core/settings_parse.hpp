@@ -98,9 +98,8 @@ namespace core
     std::optional<tonemap_curve> parse_tonemap_curve(std::string_view text);
 
     /**
-     * @brief Applies a `settings.json` document (schema in docs/settings.md) on top of @p out. Only the keys
-     *        present are applied; an unknown key, a value of the wrong JSON type or one outside its range is
-     *        warned about and skipped.
+     * @brief Applies a `settings.json` document on top of @p out. Only the keys present are applied; an
+     *        unknown key, a value of the wrong JSON type or one outside its range is warned about and skipped.
      * @return false when @p text is not a JSON object at all (nothing was applied), true otherwise.
      */
     bool apply_json(settings& out, std::string_view text);

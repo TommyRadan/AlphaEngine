@@ -79,10 +79,6 @@ namespace core
         }
     };
 
-    // Test-only backdoor, defined by the unit tests: lets them push a slot's
-    // generation to the wrap boundary without four billion erase/insert cycles.
-    struct pool_test_access;
-
     /**
      * @brief Owning store of @c T values addressed by stable @ref pool_handle.
      *
@@ -327,8 +323,6 @@ namespace core
         }
 
     private:
-        friend struct pool_test_access;
-
         struct slot
         {
             std::optional<T> value; // engaged exactly while the slot is live

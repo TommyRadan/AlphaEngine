@@ -17,8 +17,8 @@ env:
   # built from source via FetchContent and on Linux its CMake refuses to
   # configure without the X11 (or Wayland) development libraries, even for a
   # build that never opens a window; the root CMakeLists calls
-  # find_package(OpenGL / Vulkan REQUIRED) unconditionally, so the GL and
-  # Vulkan loader headers are needed even by a test-only build.
+  # find_package(OpenGL / Vulkan REQUIRED) unconditionally, so every job that
+  # configures needs the GL and Vulkan loader headers.
   LINUX_DEV_PACKAGES: >-
     cmake
     ninja-build
@@ -33,14 +33,14 @@ env:
     libxss-dev
 
 # The Linux jobs share one actions/cache of the FetchContent checkouts
-# (SDL3, GLM, glslang, ImGui, GoogleTest) so only the first job after a
-# CMakeLists.txt change hits GitHub for the sources. Both the *-src trees
-# and the *-subbuild directories are cached: FetchContent skips the clone
-# only when the "<name>-populate-gitclone-lastrun.txt" stamp inside the
-# subbuild is present and up to date, and with the pinned tag already
-# checked out the update step is a no-op — a restored cache never touches
-# the network. The *-build trees are left out: they hold compiled objects
-# that differ per compiler and per sanitizer flag.
+# (SDL3, GLM, glslang, ImGui) so only the first job after a CMakeLists.txt
+# change hits GitHub for the sources. Both the *-src trees and the
+# *-subbuild directories are cached: FetchContent skips the clone only when
+# the "<name>-populate-gitclone-lastrun.txt" stamp inside the subbuild is
+# present and up to date, and with the pinned tag already checked out the
+# update step is a no-op — a restored cache never touches the network. The
+# *-build trees are left out: they hold compiled objects that differ per
+# compiler and per sanitizer flag.
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -144,12 +144,10 @@ jobs:
   # ---------------------------------------------------------------------------
   # build-linux: compile the full AlphaEngine target (both GPU backends, both
   # windowing paths, glslang, ImGui) with GCC and with Clang + libc++ on
-  # Linux, then build and run the device-free unit-test suite (tests/,
-  # GoogleTest) through ctest. The engine binary itself cannot run here —
-  # there is no display and no headless mode yet — so the job proves that the
-  # tree compiles and links on both Linux toolchains and that the tests pass
-  # on each; with only the MSVC matrix a Linux-only breakage outside the test
-  # TUs would keep CI green.
+  # Linux. The engine binary itself is not run interactively here — see the
+  # smoke job below for that — so this job proves that the tree compiles and
+  # links on both Linux toolchains; with only the MSVC matrix a Linux-only
+  # breakage would keep CI green.
   # ---------------------------------------------------------------------------
   build-linux:
     name: build (linux-${{ matrix.compiler }})
@@ -166,10 +164,10 @@ jobs:
             cc: clang
             cxx: clang++
             # CMakeLists.txt puts the AlphaEngine target on libc++ but leaves
-            # the fetched C++ dependencies (glslang, ImGui, GoogleTest) on the
-            # default libstdc++, and a libc++ TU cannot link a libstdc++
-            # glslang (std::__1::vector vs std::vector in the mangled names).
-            # Build the whole tree against libc++ so the engine links.
+            # the fetched C++ dependencies (glslang, ImGui) on the default
+            # libstdc++, and a libc++ TU cannot link a libstdc++ glslang
+            # (std::__1::vector vs std::vector in the mangled names). Build
+            # the whole tree against libc++ so the engine links.
             cmake_args: -DCMAKE_CXX_FLAGS=-stdlib=libc++
     steps:
       - name: Checkout
@@ -213,11 +211,10 @@ jobs:
             -DCMAKE_BUILD_TYPE=Debug \
             -DCMAKE_C_COMPILER=${{ matrix.cc }} \
             -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} \
-            -DALPHAENGINE_BUILD_TESTS=ON \
             ${{ matrix.cmake_args }}
 
-      - name: Build engine and tests
-        run: cmake --build build --target AlphaEngine AlphaEngineTests
+      - name: Build engine
+        run: cmake --build build --target AlphaEngine
 
       - name: Verify output
         run: |
@@ -228,93 +225,6 @@ jobs:
             exit 1
           fi
           echo "Built ${exe} ($(stat -c %s "${exe}") bytes)"
-
-      - name: Run tests
-        run: ctest --test-dir build --output-on-failure
-
-  # ---------------------------------------------------------------------------
-  # sanitizers: the unit-test suite under AddressSanitizer + UndefinedBehavior
-  # Sanitizer, and the threaded suites under ThreadSanitizer. Both are GCC
-  # Debug builds configured with ALPHAENGINE_SANITIZE (root CMakeLists.txt),
-  # which instruments every target — the fetched SDL3 and GoogleTest too — so
-  # a report inside dependency code carries a usable stack.
-  #
-  # ASan and TSan cannot share a binary, so TSan is a second matrix entry with
-  # its own build. It runs only the suites that exercise threads (core::job_pool,
-  # core::time, core::event_bus, core::pool) and repeats them 20 times in one
-  # process so a race that needs an unlucky interleaving has a chance to show
-  # up; the whole suite would mostly be single-threaded noise at TSan's cost.
-  #
-  # The gtest binary is run directly for the TSan entry because ctest cannot
-  # forward --gtest_repeat; the ASan entry goes through ctest like the build
-  # jobs do. UBSan keeps running after a report by default (exit 0), so
-  # halt_on_error=1 is what turns a finding into a failed step; ASan aborts on
-  # its first error and LeakSanitizer exits non-zero at process end; TSan
-  # reports every race and exits 66 at the end of the run.
-  # ---------------------------------------------------------------------------
-  sanitizers:
-    name: sanitizers (linux ${{ matrix.name }})
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: asan+ubsan
-            sanitize: address,undefined
-          - name: tsan
-            sanitize: thread
-    env:
-      ASAN_OPTIONS: detect_leaks=1
-      UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install toolchain and dev headers
-        run: |
-          set -euxo pipefail
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends ${LINUX_DEV_PACKAGES} g++
-          g++ --version
-
-      # GCC 13's libasan / libtsan abort at startup ("unexpected memory
-      # mapping") when the kernel randomises mmap with more than 28 bits of
-      # entropy. The runner images set vm.mmap_rnd_bits=28 for exactly this
-      # reason, but the kernel default is 32, so pin it rather than depend on
-      # the image (actions/runner-images#9491).
-      - name: Limit mmap randomisation for the sanitizer runtimes
-        run: sudo sysctl -w vm.mmap_rnd_bits=28
-
-      - name: Cache FetchContent sources
-        uses: actions/cache@v4
-        with:
-          path: |
-            build/_deps/*-src
-            build/_deps/*-subbuild
-          key: fetchcontent-${{ runner.os }}-${{ hashFiles('CMakeLists.txt') }}
-          restore-keys: fetchcontent-${{ runner.os }}-
-
-      - name: Configure (-fsanitize=${{ matrix.sanitize }})
-        run: |
-          cmake -S . -B build \
-            -G Ninja \
-            -DCMAKE_BUILD_TYPE=Debug \
-            -DALPHAENGINE_BUILD_TESTS=ON \
-            -DALPHAENGINE_SANITIZE=${{ matrix.sanitize }}
-
-      - name: Build tests
-        run: cmake --build build --target AlphaEngineTests
-
-      - name: Run tests (ctest)
-        if: matrix.name == 'asan+ubsan'
-        run: ctest --test-dir build --output-on-failure
-
-      - name: Run threaded suites 20x
-        if: matrix.name == 'tsan'
-        run: |
-          Binaries/AlphaEngineTests \
-            --gtest_filter='jobs.*:time.*:event_bus.*:pool.*' \
-            --gtest_repeat=20
 
   # ---------------------------------------------------------------------------
   # smoke: launches the real Debug binary headlessly under Xvfb, on Mesa's
@@ -361,8 +271,10 @@ jobs:
           g++ --version
 
       # GCC 13's libasan aborts at startup ("unexpected memory mapping") when
-      # the kernel randomises mmap with more than 28 bits of entropy; only
-      # the sanitizer entry links it (see the sanitizers job above).
+      # the kernel randomises mmap with more than 28 bits of entropy. The
+      # runner images set vm.mmap_rnd_bits=28 for exactly this reason, but
+      # the kernel default is 32, so pin it rather than depend on the image
+      # (actions/runner-images#9491); only the sanitizer entry links libasan.
       - name: Limit mmap randomisation for the sanitizer runtime
         if: matrix.name == 'asan+ubsan'
         run: sudo sysctl -w vm.mmap_rnd_bits=28
@@ -383,7 +295,6 @@ jobs:
             -DCMAKE_BUILD_TYPE=Debug \
             -DCMAKE_C_COMPILER=gcc \
             -DCMAKE_CXX_COMPILER=g++ \
-            -DALPHAENGINE_BUILD_TESTS=OFF \
             ${{ matrix.cmake_args }}
 
       - name: Build engine

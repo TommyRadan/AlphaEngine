@@ -159,7 +159,7 @@ void runtime::scene::init()
     LOG_INF("Init Scene Graph");
     // The root node is always present; subtrees parent under it via node::add.
     // Node add/remove and traversal diagnostics are expected to be logged from
-    // scene API calls. See docs/logging.md.
+    // scene API calls.
 }
 
 void runtime::scene::quit()
