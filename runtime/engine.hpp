@@ -81,6 +81,10 @@ namespace runtime
 {
     struct scene_manager;
 }
+namespace runtime
+{
+    struct script_host;
+}
 namespace runtime::physics
 {
     struct world;
@@ -160,6 +164,9 @@ namespace runtime
         // Rigid-body simulation, stepped once per fixed update. Outlives the
         // scenes so their physics components unregister against it.
         std::unique_ptr<runtime::physics::world> physics;
+        // The Lua state scripted behaviours run in. Outlives the scenes, so
+        // every scripted behaviour is gone before the state closes.
+        std::unique_ptr<runtime::script_host> scripts;
         // Every scene: the persistent one plus whatever is loaded. New
         // content goes to scenes->active_scene().
         std::unique_ptr<runtime::scene_manager> scenes;

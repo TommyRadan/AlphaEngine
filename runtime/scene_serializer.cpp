@@ -544,6 +544,15 @@ namespace runtime
                     fields[field.name] = encode_value(state.registry, field.get(object), &field);
                 }
             }
+            // Then whatever this one object carries beyond its type's fields
+            // (a scripted behaviour's properties).
+            for (const field_info& field : type.extra_fields(object))
+            {
+                if (field.applies_to(object))
+                {
+                    fields[field.name] = encode_value(state.registry, field.get(object), &field);
+                }
+            }
             json entry = json::object();
             entry["type"] = type.name;
             entry["fields"] = std::move(fields);
@@ -715,34 +724,52 @@ namespace runtime
             load_state& state, const std::string& where, const type_info& type, void* object, const json& fields)
         {
             bool applied = true;
-            for (const field_info& field : type.fields)
+            auto apply_one = [&](const field_info& field)
             {
                 const auto it = fields.find(field.name);
                 if (it == fields.end())
                 {
-                    continue;
+                    return;
                 }
                 if (!field.applies_to(object))
                 {
                     LOG_WRN("%s: field '%s' does not apply here; ignored", where.c_str(), field.name.c_str());
-                    continue;
+                    return;
                 }
                 std::string problem;
                 std::optional<field_value> decoded = decode_value(state.registry, field, *it, problem);
                 if (!decoded.has_value())
                 {
                     LOG_WRN("%s: field '%s' %s; ignored", where.c_str(), field.name.c_str(), problem.c_str());
-                    continue;
+                    return;
                 }
                 if (!field.set(object, *decoded))
                 {
                     LOG_WRN("%s: field '%s' could not be applied", where.c_str(), field.name.c_str());
                     applied = false;
                 }
-            }
-            for (auto it = fields.begin(); it != fields.end(); ++it)
+            };
+            for (const field_info& field : type.fields)
             {
-                if (type.find_field(it.key()) == nullptr)
+                apply_one(field);
+            }
+            // Asked only once the type's own fields are in: they can decide
+            // what the object carries (a script path, its properties). An
+            // object that refused one of those is not asked, and the entry
+            // is kept as it is, so its other fields are not called unknown.
+            const bool complete = applied || !type.instance_fields;
+            const std::vector<field_info> extra = applied ? type.extra_fields(object) : std::vector<field_info>{};
+            for (const field_info& field : extra)
+            {
+                apply_one(field);
+            }
+            for (auto it = fields.begin(); it != fields.end() && complete; ++it)
+            {
+                const bool known = type.find_field(it.key()) != nullptr ||
+                                   std::any_of(extra.begin(),
+                                               extra.end(),
+                                               [&](const field_info& field) { return field.name == it.key(); });
+                if (!known)
                 {
                     LOG_WRN("%s: unknown field '%s' ignored", where.c_str(), it.key().c_str());
                 }

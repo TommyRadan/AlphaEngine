@@ -106,16 +106,35 @@ const runtime::field_info* runtime::type_info::find_field(std::string_view field
     return nullptr;
 }
 
+std::vector<runtime::field_info> runtime::type_info::extra_fields(const void* object) const
+{
+    if (!instance_fields)
+    {
+        return {};
+    }
+    std::vector<field_info> extra = instance_fields(object);
+    std::erase_if(extra, [this](const field_info& field) { return find_field(field.name) != nullptr; });
+    return extra;
+}
+
 runtime::object_value runtime::type_info::snapshot(const void* object) const
 {
     object_value value;
     value.type = name;
-    for (const field_info& field : fields)
+    auto read = [&](const field_info& field)
     {
         if (field.applies_to(object))
         {
             value.fields.push_back(field_entry{field.name, field.get(object)});
         }
+    };
+    for (const field_info& field : fields)
+    {
+        read(field);
+    }
+    for (const field_info& field : extra_fields(object))
+    {
+        read(field);
     }
     return value;
 }
@@ -123,17 +142,26 @@ runtime::object_value runtime::type_info::snapshot(const void* object) const
 bool runtime::type_info::apply(void* object, const object_value& value) const
 {
     bool applied = true;
-    for (const field_info& field : fields)
+    auto write = [&](const field_info& field)
     {
         const field_value* incoming = runtime::find_field(value, field.name);
         if (incoming == nullptr || !field.applies_to(object))
         {
-            continue;
+            return;
         }
         if (!field.set(object, *incoming))
         {
             applied = false;
         }
+    };
+    for (const field_info& field : fields)
+    {
+        write(field);
+    }
+    // Asked only now: the type's own fields may have decided what they are.
+    for (const field_info& field : extra_fields(object))
+    {
+        write(field);
     }
     return applied;
 }

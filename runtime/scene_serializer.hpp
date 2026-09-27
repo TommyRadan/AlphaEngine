@@ -55,8 +55,11 @@
  * (runtime/reflection.hpp): numbers, booleans and strings as themselves,
  * vectors / colours / quaternions as arrays, enumerations by name, objects
  * (a material) as @c {"type", "fields"}. A behaviour is an entry like any
- * other, named by its registered behaviour type. Asset references are VFS
- * paths or asset-cache keys resolved through the asset cache on load.
+ * other, named by its registered behaviour type. The fields one object
+ * carries beyond its type's (@c type_info::instance_fields — a scripted
+ * behaviour's properties) are written into the same @c "fields" object and
+ * applied after the type's own on load. Asset references are VFS paths or
+ * asset-cache keys resolved through the asset cache on load.
  *
  * **Placeholders.** A component that cannot be written as data — no
  * registered name, a renderable built in code, a mesh from a private upload

@@ -276,6 +276,22 @@ namespace runtime
         bool is_destroy_pending() const noexcept;
 
         /**
+         * @brief A shared cell that holds this node's address while the node
+         *        lives and is cleared when it is destroyed.
+         *
+         * For code that keeps a reference to a node it does not own and
+         * cannot tell when the node goes away — a script's node handle, say.
+         * It keeps the cell and reads it on every use, so a destroyed node
+         * reads as @c nullptr instead of a dangling pointer. Every call
+         * returns the same cell, so two holders refer to the same node
+         * exactly when their cells are the same object. It is cleared once
+         * the node's components have been freed (their @c on_destroy hooks
+         * still see it set). Made on the first request; a node nobody asks
+         * about carries an empty pointer.
+         */
+        std::shared_ptr<node* const> lifetime_cell();
+
+        /**
          * @brief Adds (or replaces) the @c C component on this node.
          *
          * Stores @p value in the scene's pool for @c C and records its handle.
@@ -473,6 +489,9 @@ namespace runtime
         // Written by the scene's update walk; read by the store's per-type
         // on_update dispatch through the owner record.
         visit_mark m_visit;
+
+        // See lifetime_cell; null until first requested.
+        std::shared_ptr<node*> m_lifetime;
 
         bool m_active;
         bool m_effective_active;

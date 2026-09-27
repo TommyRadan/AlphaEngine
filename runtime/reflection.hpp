@@ -251,6 +251,19 @@ namespace runtime
         /** @brief The fields, in registration order (also the order a load applies them in). */
         std::vector<field_info> fields;
 
+        /**
+         * @brief The fields one object carries beyond the type's own — a
+         *        scripted behaviour's declared properties, say — or null for
+         *        a type whose fields are all in @ref fields.
+         *
+         * Asked after the type's own fields have been applied, since they can
+         * decide what the object carries (a script path names the script
+         * that declares the properties). A save writes them after the type's
+         * fields and a load applies the ones it finds; one named like a type
+         * field is ignored. Their accessors take the same object pointer.
+         */
+        std::function<std::vector<field_info>(const void* object)> instance_fields;
+
         /** @brief Components: this type's component on @p owner, or @c nullptr. */
         std::function<void*(node& owner)> find;
 
@@ -287,13 +300,24 @@ namespace runtime
         /** @brief The field named @p field_name, or @c nullptr. */
         const field_info* find_field(std::string_view field_name) const noexcept;
 
-        /** @brief Reads every field that applies to @p object into an @ref object_value named after this type. */
+        /**
+         * @brief @ref instance_fields of @p object, less any named like one of
+         *        the type's own fields; empty for a type without them.
+         */
+        std::vector<field_info> extra_fields(const void* object) const;
+
+        /**
+         * @brief Reads every field that applies to @p object, its
+         *        @ref extra_fields included, into an @ref object_value named
+         *        after this type.
+         */
         object_value snapshot(const void* object) const;
 
         /**
          * @brief Writes the fields @p value carries into @p object, in this
-         *        type's field order, skipping the ones this type does not
-         *        have or that do not apply. False when a setter refused.
+         *        type's field order and then its @ref extra_fields, skipping
+         *        the ones @p object does not have or that do not apply. False
+         *        when a setter refused.
          */
         bool apply(void* object, const object_value& value) const;
     };
@@ -592,6 +616,18 @@ namespace runtime
         {
             m_info->placeholder_reason = [reason](const void* object) -> std::string
             { return reason(*static_cast<const T*>(object)); };
+            return *this;
+        }
+
+        /**
+         * @brief Sets the type's @ref type_info::instance_fields from
+         *        @p fields — @c std::vector<field_info>(const T&).
+         */
+        template<typename Fields>
+        type_builder& instance_fields(Fields fields)
+        {
+            m_info->instance_fields = [fields](const void* object) -> std::vector<field_info>
+            { return fields(*static_cast<const T*>(object)); };
             return *this;
         }
 

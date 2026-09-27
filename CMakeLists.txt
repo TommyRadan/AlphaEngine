@@ -448,6 +448,108 @@ set(BUILD_SHARED_LIBS ${ALPHAENGINE_BUILD_SHARED_LIBS_SAVED})
 set_property(DIRECTORY ${ktx_SOURCE_DIR} PROPERTY EXCLUDE_FROM_ALL TRUE)
 target_link_libraries(AlphaEngine ktx_read)
 
+# Lua 5.4 and sol2 — the embedded scripting behind runtime/scripting (the
+# script host and lua_behavior).
+#
+# Lua comes from the Lua team's own repository, pinned by release tag. It
+# ships no CMakeLists, so FetchContent only populates it and the engine
+# builds the core and the standard libraries as a small static C library
+# from an explicit file list: the stand-alone interpreter (lua.c), the
+# test harness (ltests.c) and the one-file amalgamation (onelua.c) are left
+# out. It is compiled as C, so a Lua error unwinds with longjmp and sol2
+# turns C++ exceptions into Lua errors at every boundary. On POSIX systems
+# LUA_USE_POSIX picks the POSIX variants of the few OS calls the standard
+# libraries make (mkstemp rather than tmpnam, say). The FetchContent name
+# is `lua`, so an offline build points FETCHCONTENT_SOURCE_DIR_LUA at a
+# checkout.
+#
+# sol2 is header-only and pinned by release tag. Its own CMakeLists needs
+# CMake 3.26 and only wraps the include/ directory in an interface target,
+# so SOURCE_SUBDIR names that directory — which has no CMakeLists — and
+# FetchContent only populates the sources (FETCHCONTENT_SOURCE_DIR_SOL2
+# for an offline build).
+#
+# Neither is a usage requirement of the engine target: the scripting
+# implementation units are the only ones that include Lua or sol2, so the
+# include directories and sol2's configuration go to those files alone, as
+# source properties (set here because source properties apply to targets
+# defined in the same directory), and the rest of the engine never parses
+# them. Every one of those units gets the same sol2 configuration: all the
+# safety checks on (argument and return types are checked, so a script
+# passing the wrong type raises a Lua error rather than corrupting memory)
+# and sol2's own error printing off (the engine logs script errors). MSVC
+# needs /bigobj for the binding units' section count. The engine builds
+# without warnings-as-errors, and neither library adds any.
+FetchContent_Declare(
+    lua
+    GIT_REPOSITORY https://github.com/lua/lua.git
+    GIT_TAG v5.4.8
+    GIT_SHALLOW TRUE
+)
+FetchContent_MakeAvailable(lua)
+add_library(lua STATIC
+    ${lua_SOURCE_DIR}/lapi.c
+    ${lua_SOURCE_DIR}/lauxlib.c
+    ${lua_SOURCE_DIR}/lbaselib.c
+    ${lua_SOURCE_DIR}/lcode.c
+    ${lua_SOURCE_DIR}/lcorolib.c
+    ${lua_SOURCE_DIR}/lctype.c
+    ${lua_SOURCE_DIR}/ldblib.c
+    ${lua_SOURCE_DIR}/ldebug.c
+    ${lua_SOURCE_DIR}/ldo.c
+    ${lua_SOURCE_DIR}/ldump.c
+    ${lua_SOURCE_DIR}/lfunc.c
+    ${lua_SOURCE_DIR}/lgc.c
+    ${lua_SOURCE_DIR}/linit.c
+    ${lua_SOURCE_DIR}/liolib.c
+    ${lua_SOURCE_DIR}/llex.c
+    ${lua_SOURCE_DIR}/lmathlib.c
+    ${lua_SOURCE_DIR}/lmem.c
+    ${lua_SOURCE_DIR}/loadlib.c
+    ${lua_SOURCE_DIR}/lobject.c
+    ${lua_SOURCE_DIR}/lopcodes.c
+    ${lua_SOURCE_DIR}/loslib.c
+    ${lua_SOURCE_DIR}/lparser.c
+    ${lua_SOURCE_DIR}/lstate.c
+    ${lua_SOURCE_DIR}/lstring.c
+    ${lua_SOURCE_DIR}/lstrlib.c
+    ${lua_SOURCE_DIR}/ltable.c
+    ${lua_SOURCE_DIR}/ltablib.c
+    ${lua_SOURCE_DIR}/ltm.c
+    ${lua_SOURCE_DIR}/lundump.c
+    ${lua_SOURCE_DIR}/lutf8lib.c
+    ${lua_SOURCE_DIR}/lvm.c
+    ${lua_SOURCE_DIR}/lzio.c)
+target_compile_definitions(lua PRIVATE
+    $<$<NOT:$<PLATFORM_ID:Windows>>:LUA_USE_POSIX>
+    $<$<C_COMPILER_ID:MSVC>:_CRT_SECURE_NO_WARNINGS>)
+target_link_libraries(AlphaEngine lua)
+
+FetchContent_Declare(
+    sol2
+    GIT_REPOSITORY https://github.com/ThePhD/sol2.git
+    GIT_TAG v3.5.0
+    GIT_SHALLOW TRUE
+    SOURCE_SUBDIR include
+)
+FetchContent_MakeAvailable(sol2)
+
+set(ALPHAENGINE_SCRIPTING_SOURCES
+    ${CMAKE_SOURCE_DIR}/runtime/scripting/lua_behavior.cpp
+    ${CMAKE_SOURCE_DIR}/runtime/scripting/math_bindings.cpp
+    ${CMAKE_SOURCE_DIR}/runtime/scripting/script_host.cpp
+    ${CMAKE_SOURCE_DIR}/runtime/scripting/world_bindings.cpp)
+set(ALPHAENGINE_SCRIPTING_OPTIONS "")
+if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+    list(APPEND ALPHAENGINE_SCRIPTING_OPTIONS /bigobj)
+endif()
+set_source_files_properties(
+    ${ALPHAENGINE_SCRIPTING_SOURCES}
+    PROPERTIES
+        INCLUDE_DIRECTORIES "${sol2_SOURCE_DIR}/include;${lua_SOURCE_DIR}"
+        COMPILE_DEFINITIONS "SOL_ALL_SAFETIES_ON=1;SOL_PRINT_ERRORS=0"
+        COMPILE_OPTIONS "${ALPHAENGINE_SCRIPTING_OPTIONS}")
+
 # Post-build
 if(APPLE)
     target_link_libraries(AlphaEngine "-framework CoreFoundation -framework IOKit -framework CoreVideo")
