@@ -9,7 +9,7 @@
 #include <core/math/transform.hpp>
 #include <rendering_engine/assets/vertex.hpp>
 #include <rendering_engine/gpu/handle.hpp>
-#include <rendering_engine/renderables/per_draw_ring.hpp>
+#include <rendering_engine/renderables/per_draw_ubo.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
 
 namespace rendering_engine
@@ -19,7 +19,7 @@ namespace rendering_engine
     // A point cloud. It owns a list
     // of point positions (with optional per-point colours) and submits
     // a single non-indexed @ref draw_item against a point-list material
-    // (@ref points_material), so the scene pass rasterizes one GL point
+    // (@ref points_material), so the scene pass rasterizes one point
     // sprite per vertex. Size, tint and the optional sprite live on the
     // material; the geometry and the model transform live here.
     struct points : public renderable
@@ -63,8 +63,7 @@ namespace rendering_engine
         bool m_has_local_bounds{false};
 
         gpu::buffer m_vertex_buffer{};
-        // The PerDraw block and this frame's slot of it in the per-draw
-        // ring; no buffer of its own.
+        // The PerDraw block the pass pushes; no buffer of its own.
         per_draw_binding m_per_draw;
 
         size_t m_vertex_count{0};

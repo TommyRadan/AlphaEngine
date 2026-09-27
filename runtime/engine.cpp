@@ -40,8 +40,6 @@ namespace runtime
         {
             switch (b)
             {
-            case core::graphics_backend::opengl:
-                return rendering_engine::gpu::backend_type::opengl;
             case core::graphics_backend::vulkan:
                 return rendering_engine::gpu::backend_type::vulkan;
             }
@@ -100,8 +98,8 @@ namespace runtime
         // its in-flight decodes before it goes.
         assets->set_jobs(jobs.get());
         // The built-in materials inside @c renderer are deferred
-        // until init() because they compile GL shader programs and
-        // need the GL context to be live first.
+        // until init() because they build shader modules and pipelines
+        // on the device, which needs the window to be live first.
         renderer = std::make_unique<rendering_engine::renderer>();
         physics = std::make_unique<runtime::physics::world>();
         scripts = std::make_unique<runtime::script_host>();
@@ -141,9 +139,9 @@ namespace runtime
 
     void engine::init()
     {
-        // The window/GL context is brought up inside
+        // The window and the gpu device are brought up inside
         // rendering_engine::renderer::init(); it in turn constructs the
-        // built-in passes and materials once GL is alive.
+        // built-in passes and materials once the device is alive.
         events->init();
         // No renderer/VFS dependency: opens (or gracefully declines) the
         // playback device up front so a module's on_engine_start can play a
@@ -306,11 +304,10 @@ namespace runtime
             // Build the ImGui debug overlay before the passes run; its draw
             // data is recorded inside the swapchain-targeted debug pass
             // (editor::record_draw_data) so it composites on top of the
-            // frame on both the OpenGL and Vulkan backends. No-op in release
-            // builds.
+            // frame. No-op in release builds. The device presents the
+            // frame at the end of renderer->render().
             rendering_engine::editor::begin_frame();
             renderer->render();
-            window->swap_buffers();
 
             // Counts rendered frames only, so a run stuck minimized never reaches its limit.
             const unsigned int frame_limit = settings->diagnostics.frame_limit;

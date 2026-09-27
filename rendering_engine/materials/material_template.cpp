@@ -152,16 +152,13 @@ namespace rendering_engine
         {
             pipeline_descriptor.bind_group_layouts.push_back(m_per_material_layout);
         }
-        // Where the PerDraw block is pushed, every variant of every
-        // template declares its range, whether its shaders read the block
-        // or not (the instanced and ui ones do not): a pass binds its
-        // per-frame group once and switches between these pipelines under
-        // it, which Vulkan allows only across layouts with identical
-        // push-constant ranges.
-        if (per_draw_push_constants(*m_device))
-        {
-            pipeline_descriptor.push_constant_ranges.push_back(per_draw_push_constant_range());
-        }
+        // Every variant of every template declares the PerDraw block's
+        // push-constant range, whether its shaders read the block or not
+        // (the instanced and ui ones do not): a pass binds its per-frame
+        // group once and switches between these pipelines under it, which
+        // Vulkan allows only across layouts with identical push-constant
+        // ranges.
+        pipeline_descriptor.push_constant_ranges.push_back(per_draw_push_constant_range());
 
         const gpu::pipeline built = m_device->create_pipeline(pipeline_descriptor);
         m_pipelines.emplace(packed, built);

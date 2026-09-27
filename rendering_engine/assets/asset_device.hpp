@@ -10,7 +10,7 @@
  * resources, including from their destructors which run at arbitrary points in
  * the program. Rather than reach into the @c runtime::engine global directly —
  * which would couple the whole asset layer (and anything that links it) to the
- * engine, the window, and both gpu backends — they go through this tiny
+ * engine, the window, and the gpu backend — they go through this tiny
  * accessor.
  *
  * The engine installs the live device via @ref set_asset_device once the

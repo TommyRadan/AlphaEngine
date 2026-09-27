@@ -100,9 +100,9 @@ namespace rendering_engine
     void shadow_caster_dispatch::draw(const draw_item& item)
     {
         // An item with a per-instance stream carries its transforms there;
-        // any other one needs its PerDraw block, pushed or in its group.
+        // any other one needs its PerDraw block.
         const bool instanced = item.instance_buffer.valid();
-        if (!instanced && item.per_draw_push == nullptr && !item.per_draw_bind_group.valid())
+        if (!instanced && item.per_draw_push == nullptr)
         {
             // No model matrix to place the caster with: nothing sensible
             // could be rasterized into the map.
@@ -132,11 +132,8 @@ namespace rendering_engine
         }
         else
         {
-            // The block the scene pass records too: pushed where the device
-            // takes push constants, else the same group and dynamic offset,
-            // the renderable having written its block into the per-draw
-            // ring once this frame for every pass to read.
-            bind_per_draw(m_encoder, item, 1);
+            // The same block the scene pass pushes.
+            push_per_draw(m_encoder, item);
         }
 
         if (item.index_buffer.valid())

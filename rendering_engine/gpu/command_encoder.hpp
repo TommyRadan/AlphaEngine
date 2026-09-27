@@ -7,12 +7,9 @@
  *
  * The shape mirrors the WebGPU / Vulkan recording model: a
  * @ref command_encoder begins zero or more @ref render_pass_encoder
- * scopes and is then submitted through the device. The OpenGL backend
- * implements both interfaces with immediate-mode GL calls — there is no
- * actual command buffer — while the Vulkan backend records every call
- * into a @c VkCommandBuffer that @c device::submit queues; the explicit
- * begin/end scope, typed resource binding and pipeline binding are the
- * same for both.
+ * scopes and is then submitted through the device. The Vulkan backend
+ * records every call into a @c VkCommandBuffer that @c device::submit
+ * queues.
  */
 
 #pragma once
@@ -78,18 +75,15 @@ namespace rendering_engine::gpu
         // must be exactly that range's stages; @p offset and @p size are
         // multiples of 4. A push that does not fit the bound pipeline is
         // reported once per pass and dropped. Pushed values survive a
-        // switch to a pipeline that declares the same ranges. Needs
-        // @c device_features::push_constants: OpenGL has none for SPIR-V
-        // programs, so there the call records nothing (reported once per
-        // pipeline) and the caller keeps such data in a uniform buffer.
+        // switch to a pipeline that declares the same ranges.
         virtual void push_constants(shader_stages stages, uint32_t offset, uint32_t size, const void* data) = 0;
 
         // Override the pass-default viewport. Most callers can leave
         // this alone — @c command_encoder::begin_render_pass sets the
         // viewport to the target's full extent automatically. @p x /
-        // @p y are the rectangle's bottom-left corner in window
-        // (OpenGL) convention on both backends. Also resets the scissor
-        // rectangle to the same extent.
+        // @p y are the rectangle's bottom-left corner, measured from the
+        // target's bottom-left corner. Also resets the scissor rectangle
+        // to the same extent.
         virtual void set_viewport(int x, int y, int width, int height) = 0;
 
         // Restrict rasterisation to the given rectangle (bottom-left
@@ -107,8 +101,7 @@ namespace rendering_engine::gpu
         // Issue an unindexed draw of @p vertex_count vertices,
         // starting at vertex index @p first_vertex, @p instance_count
         // times. Per-instance vertex streams start at record
-        // @p first_instance (@c glDrawArraysInstancedBaseInstance;
-        // @c vkCmdDraw).
+        // @p first_instance (@c vkCmdDraw).
         virtual void draw(uint32_t vertex_count,
                           uint32_t instance_count = 1,
                           uint32_t first_vertex = 0,
@@ -119,9 +112,7 @@ namespace rendering_engine::gpu
         // @p instance_count times. @p base_vertex is added to every
         // index before the vertex fetch, so several meshes can share
         // one vertex buffer; per-instance streams start at record
-        // @p first_instance
-        // (@c glDrawElementsInstancedBaseVertexBaseInstance;
-        // @c vkCmdDrawIndexed).
+        // @p first_instance (@c vkCmdDrawIndexed).
         virtual void draw_indexed(uint32_t index_count,
                                   uint32_t instance_count = 1,
                                   uint32_t first_index = 0,
@@ -132,18 +123,17 @@ namespace rendering_engine::gpu
         // @p indirect_buffer at @p offset. The buffer record at that
         // offset is a five-uint32 @c indexCount, @c instanceCount,
         // @c firstIndex, @c vertexOffset, @c firstInstance — the
-        // shape shared by GL's @c DrawElementsIndirectCommand and
-        // Vulkan's @c VkDrawIndexedIndirectCommand. The buffer must
-        // have been created with @c buffer_usage_indirect.
+        // shape of Vulkan's @c VkDrawIndexedIndirectCommand. The buffer
+        // must have been created with @c buffer_usage_indirect.
         virtual void draw_indexed_indirect(buffer indirect_buffer, size_t offset = 0) = 0;
 
         // Issue @p draw_count back-to-back indexed indirect draws,
         // each with the same five-uint32 record described in
         // @ref draw_indexed_indirect. @p stride is the byte stride
         // between consecutive records (typically 20 for tightly
-        // packed records). Maps to @c glMultiDrawElementsIndirect
-        // on the OpenGL backend and to @c vkCmdDrawIndexedIndirect
-        // on Vulkan.
+        // packed records). Maps to @c vkCmdDrawIndexedIndirect, issued
+        // once per record on a device without
+        // @c device_features::multi_draw_indirect.
         virtual void
         multi_draw_indexed_indirect(buffer indirect_buffer, size_t offset, uint32_t draw_count, uint32_t stride) = 0;
 
@@ -151,16 +141,10 @@ namespace rendering_engine::gpu
         // (a @c VkCommandBuffer on Vulkan) as an opaque pointer so a
         // debug overlay can record draws straight into the open render
         // pass — Dear ImGui's @c ImGui_ImplVulkan_RenderDrawData wants
-        // the raw command buffer. Returns @c nullptr on backends that
-        // record immediately (OpenGL) and therefore have no command
-        // buffer to hand out — those overlays issue their draws against
-        // the bound framebuffer instead — and on any backend while the
-        // pass is not open (it failed to begin, e.g. no swapchain image
-        // this frame), so nothing is recorded outside a render pass.
-        virtual void* native_command_buffer() const noexcept
-        {
-            return nullptr;
-        }
+        // the raw command buffer. Returns @c nullptr while the pass is
+        // not open (it failed to begin, e.g. no swapchain image this
+        // frame), so nothing is recorded outside a render pass.
+        virtual void* native_command_buffer() const noexcept = 0;
 
         // Escape hatch returning the backend-native render pass (a
         // @c VkRenderPass on Vulkan) this encoder is currently recording
@@ -171,12 +155,8 @@ namespace rendering_engine::gpu
         // by comparing against the pass it last built for, rather than
         // re-deriving the pass's load/store arguments itself and hoping
         // they still match what the owning pass begins. Returns
-        // @c nullptr on backends with no render-pass object (OpenGL) and
-        // on any backend while the pass is not open.
-        virtual void* native_render_pass() const noexcept
-        {
-            return nullptr;
-        }
+        // @c nullptr while the pass is not open.
+        virtual void* native_render_pass() const noexcept = 0;
 
         // Parallel recording. On a pass begun with
         // @c render_pass_descriptor::parallel, opens one secondary
@@ -194,16 +174,11 @@ namespace rendering_engine::gpu
         // back in order with @ref execute_secondary on the owning thread.
         // Bound state (pipeline, bind groups, push constants, dynamic
         // state) does not carry into a secondary: each one binds what it
-        // draws with. Returns null, with the reason logged, on a backend
-        // without @c device_features::parallel_recording, on a pass that
-        // was not begun with @c parallel, or when the buffer could not be
-        // allocated; the caller then has no way to record those draws
-        // into this pass.
-        virtual std::unique_ptr<render_pass_encoder> begin_secondary(uint32_t lane)
-        {
-            (void)lane;
-            return nullptr;
-        }
+        // draws with. Returns null, with the reason logged, on a pass
+        // that was not begun with @c parallel or when the buffer could
+        // not be allocated; the caller then has no way to record those
+        // draws into this pass.
+        virtual std::unique_ptr<render_pass_encoder> begin_secondary(uint32_t lane) = 0;
 
         // Execute @p secondary, an ended encoder from @ref begin_secondary
         // on this pass, at this point of the pass: the draws it recorded
@@ -211,10 +186,7 @@ namespace rendering_engine::gpu
         // after every thread has finished recording. Each secondary is
         // executed at most once; a secondary that never ended, or that
         // came from another pass, is reported and skipped.
-        virtual void execute_secondary(render_pass_encoder& secondary)
-        {
-            (void)secondary;
-        }
+        virtual void execute_secondary(render_pass_encoder& secondary) = 0;
 
         // Close the pass. After this call no further methods may be
         // invoked on the encoder. The next pass on the same command
@@ -263,9 +235,8 @@ namespace rendering_engine::gpu
         // Open a new render pass scope. The returned encoder is
         // single-use: call its methods to record draws, then
         // @ref render_pass_encoder::end before opening another pass.
-        // The return type is @c unique_ptr so each backend can keep a
-        // small per-pass state object: the OpenGL encoder shadows the
-        // bound framebuffer and vertex state, the Vulkan one wraps the
+        // The return type is @c unique_ptr so the backend can keep a
+        // small per-pass state object: the Vulkan one wraps the
         // @c vkCmdBeginRenderPass / @c vkCmdEndRenderPass scope on the
         // frame's command buffer.
         virtual std::unique_ptr<render_pass_encoder> begin_render_pass(const render_pass_descriptor& descriptor) = 0;
@@ -287,18 +258,15 @@ namespace rendering_engine::gpu
 
         // Fill @p size bytes of @p buffer_handle starting at
         // @p offset with the 32-bit pattern @p value (broadcast as
-        // little-endian, matching @c glClearBufferSubData and
-        // Vulkan's @c vkCmdFillBuffer). The buffer must have been
-        // created with @c buffer_usage_copy_dst.
+        // little-endian, as Vulkan's @c vkCmdFillBuffer does). The
+        // buffer must have been created with @c buffer_usage_copy_dst.
         virtual void clear_buffer(buffer buffer_handle, size_t offset, size_t size, uint32_t value) = 0;
 
         // Insert a memory barrier ordering prior @p src_stage work
         // (which produced data via @p src_access) against
         // subsequent @p dst_stage work (which consumes data via
-        // @p dst_access). On the OpenGL backend the @p src_stage /
-        // @p src_access pair is informational and the @p dst_access
-        // mask drives @c glMemoryBarrier; on Vulkan all four
-        // arguments map verbatim.
+        // @p dst_access). All four arguments map verbatim onto the
+        // Vulkan pipeline barrier.
         virtual void
         barrier(pipeline_stage src_stage, pipeline_stage dst_stage, access_flag src_access, access_flag dst_access) = 0;
 
@@ -326,8 +294,7 @@ namespace rendering_engine::gpu
 
         // Open / close a named region in the recorded stream for
         // graphics debuggers and the driver's debug output
-        // (@c glPushDebugGroup / @c glPopDebugGroup;
-        // @c vkCmdBeginDebugUtilsLabelEXT / @c vkCmdEndDebugUtilsLabelEXT
+        // (@c vkCmdBeginDebugUtilsLabelEXT / @c vkCmdEndDebugUtilsLabelEXT
         // when @c VK_EXT_debug_utils was enabled). Groups nest; every
         // push is balanced by a pop before the encoder is submitted.
         // No-ops on a device without @c device_features::debug_labels.
@@ -337,17 +304,16 @@ namespace rendering_engine::gpu
         // Reset @p count queries of @p set from @p first so they can be
         // written again this frame. Vulkan requires a reset before
         // every write (@c vkCmdResetQueryPool, recorded outside a render
-        // pass); OpenGL query objects need none, so this is a no-op
-        // there. Record it before the frame's first @ref write_timestamp
+        // pass). Record it before the frame's first @ref write_timestamp
         // into the set.
         virtual void reset_queries(query_set set, uint32_t first, uint32_t count) = 0;
 
         // Write the GPU's timestamp into query @p index of @p set once
         // every command recorded before this point has completed
-        // (@c glQueryCounter; @c vkCmdWriteTimestamp at the bottom of the
-        // pipe). Read back through @c device::resolve_queries after the
-        // frame's work has retired; @c device_limits::timestamp_period_ns
-        // converts the ticks. No-op on a device without
+        // (@c vkCmdWriteTimestamp at the bottom of the pipe). Read back
+        // through @c device::resolve_queries after the frame's work has
+        // retired; @c device_limits::timestamp_period_ns converts the
+        // ticks. No-op on a device without
         // @c device_features::timestamp_queries.
         virtual void write_timestamp(query_set set, uint32_t index) = 0;
     };

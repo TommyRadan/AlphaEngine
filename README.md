@@ -12,8 +12,8 @@ targets Windows and Linux and builds with CMake.
 - CMake 3.22 or newer.
 - Ninja on Linux.
 - The Vulkan SDK (LunarG) on Windows; on Linux, these development packages:
-  `libgl1-mesa-dev libvulkan-dev libx11-dev libxext-dev libxrandr-dev
-  libxcursor-dev libxi-dev libxfixes-dev libxss-dev`.
+  `libvulkan-dev libx11-dev libxext-dev libxrandr-dev libxcursor-dev
+  libxi-dev libxfixes-dev libxss-dev`.
 - Supported platforms: Windows and Linux. macOS is not supported yet (Metal
   is on the roadmap).
 

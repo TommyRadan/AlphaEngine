@@ -38,7 +38,7 @@ namespace rendering_engine::gpu::backend::vulkan
     }
 
     // A buffer the host writes with plain memcpy and keeps mapped for
-    // its whole lifetime (the per-frame and per-draw UBOs, the staging
+    // its whole lifetime (the per-frame and material UBOs, the staging
     // ring, a dedicated staging buffer). Host-visible and coherent is
     // required, not preferred, so a write needs no flush; with
     // @p prefer_host the allocation goes to system memory (the staging

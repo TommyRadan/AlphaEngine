@@ -46,7 +46,7 @@ namespace
     // the plane clears it with a small margin.
     constexpr float ground_z = -1.05f;
 
-    // The world-space direction a cube texel faces, matching the OpenGL
+    // The world-space direction a cube texel faces, matching the Vulkan
     // cube-map convention the @ref environment samples with (kept in
     // lock-step with environment.cpp's dir_for_face_uv).
     math::vec3 dir_for_face_uv(int face, float u, float v)

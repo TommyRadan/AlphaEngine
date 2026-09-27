@@ -49,7 +49,6 @@ namespace rendering_engine
     struct line_material;
     struct grid_material;
     struct ui_material;
-    class per_draw_ring;
 
     namespace editor
     {
@@ -84,7 +83,7 @@ namespace rendering_engine
      * when building its pipelines); @ref quit tears them down in reverse
      * order, and the members are declared so that their destruction
      * follows the same order. All methods must be called from the main
-     * thread that owns the GL context.
+     * thread.
      */
     struct renderer
     {
@@ -95,12 +94,12 @@ namespace rendering_engine
         ~renderer();
 
         /**
-         * @brief Initializes the window, GL context and built-in passes / materials.
+         * @brief Initializes the window, the gpu device and the built-in passes / materials.
          *        Must be called once before @ref render.
          */
         void init();
 
-        /** @brief Tears the materials, passes, GL context and window down. */
+        /** @brief Tears the materials, passes, gpu device and window down. */
         void quit();
 
         /**
@@ -126,11 +125,9 @@ namespace rendering_engine
          * built before the walk); no event is broadcast while a pass
          * is recording, so debug / gizmo callers register a
          * renderable rather than subscribe. The walk is bracketed by
-         * @c gpu::device::begin_frame / @c end_frame: the Vulkan
-         * backend waits for the previous frame before any pass
-         * writes its per-frame buffers and presents inside
-         * @c end_frame, while OpenGL presents when the caller
-         * invokes @c window::swap_buffers.
+         * @c gpu::device::begin_frame / @c end_frame: the device
+         * waits for the previous frame before any pass writes its
+         * per-frame buffers and presents inside @c end_frame.
          */
         void render();
 
@@ -162,10 +159,9 @@ namespace rendering_engine
          * @ref render, so it needs no notification. Shadow maps are
          * fixed-size by design and unaffected.
          *
-         * Releasing the old targets is safe here on both backends: the
-         * OpenGL device frees immediately (nothing is bound outside a
-         * frame) and the Vulkan device defers the free until the last
-         * command buffer that referenced them has retired.
+         * Releasing the old targets is safe here: the device defers the
+         * free until the last command buffer that referenced them has
+         * retired.
          */
         void on_resize(uint32_t pixel_width, uint32_t pixel_height);
 
@@ -253,16 +249,6 @@ namespace rendering_engine
 
         /** @brief @ref material_library::get_ui_material. Valid between @ref init and @ref quit. */
         ui_material& get_ui_material();
-
-        /**
-         * @brief The per-frame allocator the 3D renderables write their
-         *        PerDraw block into on a device without push constants
-         *        (see @ref per_draw_ring). Created in
-         *        @ref init right after the device, rewound by @ref render
-         *        at the top of every frame and released in @ref quit
-         *        before the device.
-         */
-        per_draw_ring& get_per_draw_ring();
 
         /**
          * @brief The tonemap post pass, for live tuning of its exposure
@@ -436,10 +422,10 @@ namespace rendering_engine
         // Everything that registers into the world goes before it, the
         // passes (which point into its registries, and whose per-frame
         // layouts the materials were built against) go before the
-        // materials, and the materials before the per-draw ring and the
-        // targets. @ref quit walks the same order explicitly, since the
-        // GPU device the resources are freed through goes down right after
-        // it, before this object is destroyed.
+        // materials, and the materials before the targets. @ref quit walks
+        // the same order explicitly, since the GPU device the resources are
+        // freed through goes down right after it, before this object is
+        // destroyed.
 
         // What is drawn (see @ref world). Owns no GPU resource; declared
         // first so every renderable, pass and helper below that points
@@ -461,11 +447,6 @@ namespace rendering_engine
         // @c ldr_color_texture.
         gpu::render_target m_ldr_color_target{};
         gpu::texture m_ldr_color_texture{};
-
-        // The per-draw ring (see @ref get_per_draw_ring). Created in
-        // @ref init right after the device; every renderable has released
-        // its per-draw state (offsets only, no ring resources) by @ref quit.
-        std::unique_ptr<per_draw_ring> m_per_draw_ring;
 
         // The built-in materials (see @ref materials), built in @ref init
         // after the passes, against the per-frame layouts they own, and

@@ -55,8 +55,8 @@ namespace
     // up) then lands with row 0 / column 0 where a samplerCube lookup
     // expects them (for the +X face, +Y at the first row and +Z at the
     // first column), so the hardware face selection and the rendered
-    // image agree. Both backends write off-screen row 0 for NDC y = -1,
-    // so one basis serves both.
+    // image agree. Off-screen targets store NDC y = -1 in row 0, which
+    // this basis assumes.
     struct face_basis
     {
         math::vec3 dir;
@@ -128,13 +128,6 @@ namespace rendering_engine
         light_layout.entries.push_back({light_frame_binding, gpu::binding_kind::uniform_buffer});
         m_light_layout = gpu.create_bind_group_layout(light_layout);
 
-        // Without push constants the renderables' per-draw groups bind
-        // here unchanged, at the same dynamic offset into the per-draw
-        // ring.
-        gpu::bind_group_layout_descriptor draw_layout{};
-        draw_layout.entries.push_back(per_draw_model_layout_entry());
-        m_draw_layout = gpu.create_bind_group_layout(draw_layout);
-
         for (int face = 0; face < point_shadow_face_count; ++face)
         {
             gpu::buffer_descriptor ubo_descriptor{};
@@ -189,13 +182,8 @@ namespace rendering_engine
         pipeline_descriptor.rasterizer = rasterizer;
         pipeline_descriptor.depth_bias = depth_bias;
         pipeline_descriptor.bind_group_layouts.push_back(m_light_layout);
-        pipeline_descriptor.bind_group_layouts.push_back(m_draw_layout);
-        // Where the device takes push constants the casters push their
-        // PerDraw block instead of binding a per-draw group.
-        if (per_draw_push_constants(gpu))
-        {
-            pipeline_descriptor.push_constant_ranges.push_back(per_draw_push_constant_range());
-        }
+        // The casters push their PerDraw block; there is no per-draw set.
+        pipeline_descriptor.push_constant_ranges.push_back(per_draw_push_constant_range());
         m_pipeline = gpu.create_pipeline(pipeline_descriptor);
 
         // Instanced casters rasterize with the same state (back-face culling
@@ -227,11 +215,6 @@ namespace rendering_engine
                 gpu.destroy(ubo);
                 ubo = {};
             }
-        }
-        if (m_draw_layout.valid())
-        {
-            gpu.destroy(m_draw_layout);
-            m_draw_layout = {};
         }
         if (m_light_layout.valid())
         {
@@ -364,7 +347,7 @@ namespace rendering_engine
         }
 
         // Walk the registry once per frame, not once per face: every caster
-        // builds its draw items (and writes its per-draw UBO) exactly once,
+        // builds its draw items (and refreshes its per-draw block) exactly once,
         // and its world bounds are recorded beside its item range so each
         // face can cull against its own frustum without asking the
         // renderable again. A caster that reports no bounds casts into

@@ -16,10 +16,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include <glad/gl.h>
-
 #include <imgui.h>
-#include <imgui_impl_opengl3.h>
 #include <imgui_impl_sdl3.h>
 #include <imgui_impl_vulkan.h>
 #include <imgui_internal.h>
@@ -33,8 +30,6 @@
 #include <rendering_engine/camera/orthographic_camera.hpp>
 #include <rendering_engine/camera/perspective_camera.hpp>
 #include <rendering_engine/editor/helper.hpp>
-#include <rendering_engine/gpu/backend/opengl/gl_device.hpp>
-#include <rendering_engine/gpu/backend/opengl/gl_resources.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_device.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_resources.hpp>
 #include <rendering_engine/gpu/command_encoder.hpp>
@@ -63,17 +58,9 @@ namespace rendering_engine::editor
 {
     namespace
     {
-        // Which renderer backend the overlay is driving. Stays @c none
-        // until @ref init succeeds, so every entry point early-outs when
-        // ImGui is not live.
-        enum class backend_mode
-        {
-            none,
-            opengl,
-            vulkan,
-        };
-
-        backend_mode g_backend = backend_mode::none;
+        // Set once @ref init succeeds, so every entry point early-outs
+        // when ImGui is not live.
+        bool g_live = false;
 
         // Set by begin_frame() once ImGui::Render() has produced draw
         // data, cleared after the draw data is recorded in the debug
@@ -150,14 +137,14 @@ namespace rendering_engine::editor
 
         // -- Render-target viewer: backend texture-id bridge -----------------
         //
-        // ImGui::Image wants an ImTextureID: on OpenGL that is just the
-        // texture name, but Vulkan needs a VkDescriptorSet registered
-        // through ImGui_ImplVulkan_AddTexture. Every off-screen texture in
-        // this engine is transitioned to VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-        // immediately on creation and rests there between render passes
-        // (see vk_device::create_texture), so that layout is always the
-        // right one to bake into the descriptor — including on the very
-        // first frame, before any pass has touched the texture.
+        // ImGui::Image wants an ImTextureID, which on Vulkan is a
+        // VkDescriptorSet registered through ImGui_ImplVulkan_AddTexture.
+        // Every off-screen texture in this engine is transitioned to
+        // VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL immediately on creation
+        // and rests there between render passes (see
+        // vk_device::create_texture), so that layout is always the right
+        // one to bake into the descriptor — including on the very first
+        // frame, before any pass has touched the texture.
         struct vulkan_texture_binding
         {
             VkImageView view{VK_NULL_HANDLE};
@@ -256,20 +243,6 @@ namespace rendering_engine::editor
                 return result;
             }
 
-            if (g_backend == backend_mode::opengl)
-            {
-                auto* device = static_cast<gpu::backend::opengl::gl_device*>(runtime::current_engine().gpu.get());
-                gpu::backend::opengl::gl_texture* tex = device->lookup_texture(handle);
-                if (tex == nullptr)
-                {
-                    return result;
-                }
-                result.id = static_cast<ImTextureID>(tex->object_id);
-                result.width = tex->width;
-                result.height = tex->height;
-                return result;
-            }
-
             auto* device = static_cast<gpu::backend::vulkan::vk_device*>(runtime::current_engine().gpu.get());
             gpu::backend::vulkan::vk_texture* tex = device->lookup_texture(handle);
             if (tex == nullptr || tex->view == VK_NULL_HANDLE)
@@ -332,7 +305,7 @@ namespace rendering_engine::editor
                 {"IBL BRDF LUT", renderer.environment_brdf_lut()},
             }};
 
-            // Resolved (and, on Vulkan, cached / pruned) every frame
+            // Resolved (and cached / pruned) every frame
             // regardless of whether the window is open or collapsed, so
             // the descriptor cache always tracks exactly the handles
             // currently in play rather than whatever was last drawn.
@@ -346,10 +319,7 @@ namespace rendering_engine::editor
                     touched.push_back(slots[i].texture.id);
                 }
             }
-            if (g_backend == backend_mode::vulkan)
-            {
-                prune_vulkan_texture_bindings(touched);
-            }
+            prune_vulkan_texture_bindings(touched);
 
             ImGui::SetNextWindowSize(ImVec2{420.0f, 380.0f}, ImGuiCond_FirstUseEver);
             if (ImGui::Begin("Render Targets", &g_show_render_targets))
@@ -1354,7 +1324,6 @@ namespace rendering_engine::editor
                 ImGui::Text("Size: %u x %u", settings.window.width, settings.window.height);
                 ImGui::Text("Aspect: %.3f", static_cast<double>(settings.window.aspect_ratio()));
                 ImGui::Text("Mode: %s", core::window_mode_name(settings.window.mode));
-                ImGui::Text("Double buffered: %s", settings.window.double_buffered ? "yes" : "no");
                 ImGui::Text("Vsync: %s", settings.window.vsync ? "on" : "off");
 
                 ImGui::SeparatorText("Camera / input");
@@ -1693,26 +1662,9 @@ namespace rendering_engine::editor
                 return false;
             }
 
-            g_backend = backend_mode::vulkan;
             return true;
         }
 
-        bool init_opengl(runtime::engine& eng)
-        {
-            if (!ImGui_ImplSDL3_InitForOpenGL(eng.window->sdl_window(), eng.window->gl_context()))
-            {
-                LOG_ERR("editor: ImGui_ImplSDL3_InitForOpenGL failed");
-                return false;
-            }
-            if (!ImGui_ImplOpenGL3_Init("#version 460"))
-            {
-                LOG_ERR("editor: ImGui_ImplOpenGL3_Init failed");
-                ImGui_ImplSDL3_Shutdown();
-                return false;
-            }
-            g_backend = backend_mode::opengl;
-            return true;
-        }
         // Where ImGui persists window / dock layout (imgui.ini): the
         // per-user preference directory rather than beside the
         // executable, matching the shader cache's use of the same pref
@@ -1724,13 +1676,12 @@ namespace rendering_engine::editor
 
     void init()
     {
-        if (g_backend != backend_mode::none)
+        if (g_live)
         {
             return;
         }
 
         auto& eng = runtime::current_engine();
-        const core::graphics_backend backend = eng.settings->graphics.backend;
 
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
@@ -1742,56 +1693,38 @@ namespace rendering_engine::editor
         io.IniFilename = g_ini_path.c_str();
         ImGui::StyleColorsDark();
 
-        bool ok = false;
-        if (backend == core::graphics_backend::vulkan)
-        {
-            ok = init_vulkan(eng);
-        }
-        else
-        {
-            ok = init_opengl(eng);
-        }
-
-        if (!ok)
+        if (!init_vulkan(eng))
         {
             ImGui::DestroyContext();
-            g_backend = backend_mode::none;
             return;
         }
 
-        LOG_INF("editor: ImGui overlay initialised (SDL3 + %s)", core::graphics_backend_name(backend));
+        g_live = true;
+        LOG_INF("editor: ImGui overlay initialised (SDL3 + Vulkan)");
     }
 
     void shutdown()
     {
-        if (g_backend == backend_mode::none)
+        if (!g_live)
         {
             return;
         }
-        if (g_backend == backend_mode::vulkan)
-        {
-            // The render queue must be idle before tearing the backend's
-            // GPU resources down, and every descriptor-set release the
-            // render-target viewer deferred while the run was live (see
-            // defer_release_vulkan_texture_binding) must have actually
-            // run by now too, or its captured VkDescriptorSet dangles
-            // once ImGui_ImplVulkan_Shutdown reclaims the pool it came
-            // from.
-            auto* device = static_cast<gpu::backend::vulkan::vk_device*>(runtime::current_engine().gpu.get());
-            device->flush_pending_destroys();
-            // Release the render-target viewer's remaining descriptor sets
-            // before the backend's descriptor pool goes with
-            // ImGui_ImplVulkan_Shutdown.
-            clear_vulkan_texture_bindings();
-            ImGui_ImplVulkan_Shutdown();
-        }
-        else
-        {
-            ImGui_ImplOpenGL3_Shutdown();
-        }
+        // The render queue must be idle before tearing the backend's GPU
+        // resources down, and every descriptor-set release the
+        // render-target viewer deferred while the run was live (see
+        // defer_release_vulkan_texture_binding) must have actually run by
+        // now too, or its captured VkDescriptorSet dangles once
+        // ImGui_ImplVulkan_Shutdown reclaims the pool it came from.
+        auto* device = static_cast<gpu::backend::vulkan::vk_device*>(runtime::current_engine().gpu.get());
+        device->flush_pending_destroys();
+        // Release the render-target viewer's remaining descriptor sets
+        // before the backend's descriptor pool goes with
+        // ImGui_ImplVulkan_Shutdown.
+        clear_vulkan_texture_bindings();
+        ImGui_ImplVulkan_Shutdown();
         ImGui_ImplSDL3_Shutdown();
         ImGui::DestroyContext();
-        g_backend = backend_mode::none;
+        g_live = false;
         g_frame_ready = false;
         g_vulkan_render_pass = VK_NULL_HANDLE;
         g_selected_node = nullptr;
@@ -1800,7 +1733,7 @@ namespace rendering_engine::editor
 
     void process_event(const void* sdl_event)
     {
-        if (g_backend == backend_mode::none || sdl_event == nullptr)
+        if (!g_live || sdl_event == nullptr)
         {
             return;
         }
@@ -1809,19 +1742,12 @@ namespace rendering_engine::editor
 
     void begin_frame()
     {
-        if (g_backend == backend_mode::none)
+        if (!g_live)
         {
             return;
         }
 
-        if (g_backend == backend_mode::vulkan)
-        {
-            ImGui_ImplVulkan_NewFrame();
-        }
-        else
-        {
-            ImGui_ImplOpenGL3_NewFrame();
-        }
+        ImGui_ImplVulkan_NewFrame();
         ImGui_ImplSDL3_NewFrame();
         ImGui::NewFrame();
         ImGuizmo::BeginFrame();
@@ -1834,7 +1760,7 @@ namespace rendering_engine::editor
 
     void record_draw_data(gpu::render_pass_encoder& encoder)
     {
-        if (g_backend == backend_mode::none || !g_frame_ready)
+        if (!g_live || !g_frame_ready)
         {
             return;
         }
@@ -1844,34 +1770,25 @@ namespace rendering_engine::editor
             return;
         }
 
-        if (g_backend == backend_mode::opengl)
+        // Null while the debug pass is not open — no swapchain image this
+        // frame (minimised) — so nothing is recorded outside a render
+        // pass.
+        auto* cmd = static_cast<VkCommandBuffer>(encoder.native_command_buffer());
+        if (cmd != VK_NULL_HANDLE && refresh_vulkan_pipeline(encoder))
         {
-            // The debug pass left the swapchain framebuffer bound;
-            // the immediate-mode GL backend draws straight into it.
-            ImGui_ImplOpenGL3_RenderDrawData(draw_data);
-        }
-        else if (g_backend == backend_mode::vulkan)
-        {
-            // Null while the debug pass is not open — no swapchain
-            // image this frame (minimised) — so nothing is recorded
-            // outside a render pass.
-            auto* cmd = static_cast<VkCommandBuffer>(encoder.native_command_buffer());
-            if (cmd != VK_NULL_HANDLE && refresh_vulkan_pipeline(encoder))
-            {
-                ImGui_ImplVulkan_RenderDrawData(draw_data, cmd);
-            }
+            ImGui_ImplVulkan_RenderDrawData(draw_data, cmd);
         }
         g_frame_ready = false;
     }
 
     bool wants_keyboard()
     {
-        return g_backend != backend_mode::none && ImGui::GetIO().WantCaptureKeyboard;
+        return g_live && ImGui::GetIO().WantCaptureKeyboard;
     }
 
     bool wants_mouse()
     {
-        return g_backend != backend_mode::none && ImGui::GetIO().WantCaptureMouse;
+        return g_live && ImGui::GetIO().WantCaptureMouse;
     }
 } // namespace rendering_engine::editor
 

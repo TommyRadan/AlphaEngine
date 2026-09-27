@@ -24,10 +24,10 @@
  * axis, so no two call sites can disagree about it.
  *
  * View space is a separate matter: @ref look_at, @ref perspective and
- * @ref ortho keep the OpenGL convention the projection matrices assume
- * (the camera looks down its -Z with +Y up). @c camera::get_view_matrix
- * maps a world-space camera frame onto it, so nothing outside the camera
- * needs to know about view space.
+ * @ref ortho keep the right-handed view-space convention the projection
+ * matrices assume (the camera looks down its -Z with +Y up).
+ * @c camera::get_view_matrix maps a world-space camera frame onto it, so
+ * nothing outside the camera needs to know about view space.
  */
 
 #pragma once

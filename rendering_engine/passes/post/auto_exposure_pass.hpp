@@ -45,8 +45,7 @@ namespace rendering_engine
      * The histogram route (a compute pass binning luminance) meters more
      * robustly but would add the engine's first mid-frame compute work and
      * its synchronisation to the post chain; the log-average reduction
-     * reuses the render-pass machinery every post pass already relies on,
-     * identically on both backends.
+     * reuses the render-pass machinery every post pass already relies on.
      *
      * Every target is a fixed size, independent of the drawable, so
      * @ref resize has nothing to rebuild: the adapted value (a property of

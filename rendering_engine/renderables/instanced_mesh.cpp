@@ -17,9 +17,8 @@
 
 namespace
 {
-    // A DrawElementsIndirectCommand record: index count, instance count,
-    // first index, base vertex, base instance. Mirrors GL's
-    // @c glDrawElementsIndirect struct and Vulkan's
+    // An indexed indirect draw record: index count, instance count, first
+    // index, base vertex, base instance. Mirrors Vulkan's
     // @c VkDrawIndexedIndirectCommand, the five-uint32 shape the device's
     // @c draw_indexed_indirect documents.
     constexpr size_t indirect_command_uints = 5;

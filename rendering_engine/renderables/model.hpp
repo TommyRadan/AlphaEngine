@@ -12,7 +12,7 @@
 #include <core/math/transform.hpp>
 #include <rendering_engine/assets/vertex.hpp>
 #include <rendering_engine/gpu/handle.hpp>
-#include <rendering_engine/renderables/per_draw_ring.hpp>
+#include <rendering_engine/renderables/per_draw_ubo.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
 
 namespace rendering_engine
@@ -86,14 +86,13 @@ namespace rendering_engine
         size_t joint_count() const;
 
         // False while the material skins: the depth-only shadow pipelines
-        // have no skinned variant, so the model would cast its bind pose
-        // (and its per-draw group does not match their layout).
+        // have no skinned variant, so the model would cast its bind pose.
         bool casts_shadow() const override;
 
     private:
-        // Point @p item at the skinned per-draw group, (re)building it,
-        // the joint palette buffer and the block as needed. False when the
-        // group could not be created.
+        // Point @p item at the block and the skinned per-draw group,
+        // (re)building the group and the joint palette buffer as needed.
+        // False when the group could not be created.
         bool bind_skinned(draw_item& item);
 
         material* m_material{nullptr};
@@ -111,21 +110,12 @@ namespace rendering_engine
         gpu::buffer m_index_buffer{};
         uint32_t m_index_count{0};
 
-        // The PerDraw block, recomputed when the transform moves, and its
-        // slot in the per-draw ring while the material is rigid (on a
-        // device without push constants).
+        // The PerDraw block, recomputed when the transform moves.
         per_draw_binding m_per_draw;
 
-        // A skinned draw's own per-draw group: its joint palette cannot
-        // live in the ring's shared group, so the block sits in a private
-        // uniform buffer beside it, bound without a dynamic offset and
-        // rewritten only when @ref m_draw_ubo_version falls behind the
-        // block. Allocated on the first skinned draw. On a device with
-        // push constants the block is pushed instead and the buffer is
-        // never written.
-        gpu::buffer m_draw_ubo{};
+        // A skinned draw's own per-draw group, carrying its joint palette.
+        // Allocated on the first skinned draw.
         gpu::bind_group m_draw_bind_group{};
-        uint64_t m_draw_ubo_version{0};
 
         // The layout @ref m_draw_bind_group was built against; a material
         // that switches skinned variants changes it, and the group is

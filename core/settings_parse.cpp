@@ -137,8 +137,9 @@ namespace core
             const auto parsed = parse_graphics_backend(text);
             if (!parsed.has_value())
             {
-                LOG_WRN(
-                    "settings: %s='%s' is not one of opengl|vulkan; ignoring it", source, std::string{text}.c_str());
+                LOG_WRN("settings: %s='%s' is not a supported graphics backend (vulkan); ignoring it",
+                        source,
+                        std::string{text}.c_str());
             }
             return parsed;
         }
@@ -254,7 +255,7 @@ namespace core
             const auto parsed = parse_graphics_backend(text);
             if (!parsed.has_value())
             {
-                LOG_WRN("settings: %s='%s' is not one of opengl|vulkan; keeping %s",
+                LOG_WRN("settings: %s='%s' is not a supported graphics backend (vulkan); keeping %s",
                         key,
                         text.c_str(),
                         graphics_backend_name(target));
@@ -893,7 +894,7 @@ Options:
   --windowed               decorated window
   --fullscreen             fullscreen at the display's resolution
   --borderless             borderless window
-  --backend <name>         gpu backend: opengl or vulkan
+  --backend <name>         gpu backend: vulkan
   --vsync <on|off>         wait for vertical sync
   --frames-in-flight <n>   frames the vulkan backend keeps in flight, 1 to 2
   --parallel-draw-threshold <n>
@@ -1035,7 +1036,7 @@ the ALPHAENGINE_* environment variables, which override the settings file.
     std::optional<graphics_backend> parse_graphics_backend(std::string_view text)
     {
         text = trim(text);
-        constexpr graphics_backend k_all_backends[] = {graphics_backend::opengl, graphics_backend::vulkan};
+        constexpr graphics_backend k_all_backends[] = {graphics_backend::vulkan};
         for (const graphics_backend backend : k_all_backends)
         {
             if (equals_ignoring_case(text, graphics_backend_name(backend)))

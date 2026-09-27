@@ -17,23 +17,23 @@ namespace rendering_engine::gpu::backend::vulkan
     namespace
     {
         // Vulkan rasterises with Y down by default; the engine's
-        // projection matrices are GL-style (Y up). For the swapchain
-        // path we use a negative-height viewport so OpenGL clip
-        // space lands the right way round on screen. Off-screen
-        // targets keep Vulkan's natural Y-down so that a downstream
-        // sampler (tonemap) sees image row 0 == "world Z down" —
-        // the texCoord origin the OpenGL-style shader assumes. The
-        // matching front-face mapping happens at pipeline build
+        // projection matrices put NDC +Y up. For the swapchain path we
+        // use a negative-height viewport so the Y-up clip space lands
+        // the right way round on screen. Off-screen targets keep
+        // Vulkan's natural Y-down so that a downstream sampler
+        // (tonemap) sees image row 0 == "world Z down" — the
+        // bottom-left texCoord origin the fullscreen shaders assume.
+        // The matching front-face mapping happens at pipeline build
         // time, keyed off the same y_flipped flag.
         //
         // @p x / @p y / @p width / @p height are the rectangle in the
         // window convention the abstract encoder uses (bottom-left
-        // origin, as glViewport takes it). A flipped viewport covers
-        // framebuffer rows [vp.y - height, vp.y] with NDC +Y at the
-        // top row, so the bottom-left @p y maps to
-        // vp.y = target_height - y: the rectangle sits where the GL
-        // backend would put it, and a full-target rectangle is
-        // unchanged (vp.y = target_height, height = -height).
+        // origin). A flipped viewport covers framebuffer rows
+        // [vp.y - height, vp.y] with NDC +Y at the top row, so the
+        // bottom-left @p y maps to vp.y = target_height - y: the
+        // rectangle keeps its distance from the target's bottom edge,
+        // and a full-target rectangle is unchanged
+        // (vp.y = target_height, height = -height).
         VkViewport
         make_viewport(int32_t x, int32_t y, int32_t width, int32_t height, uint32_t target_height, bool y_flipped)
         {

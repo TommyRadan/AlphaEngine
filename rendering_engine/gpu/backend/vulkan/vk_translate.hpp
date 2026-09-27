@@ -4,7 +4,7 @@
 /**
  * @file vk_translate.hpp
  * @brief Mapping between backend-agnostic @c gpu::* enums and Vulkan
- *        constants. Mirrors @c gl_translate.hpp on the OpenGL side.
+ *        constants.
  */
 
 #pragma once

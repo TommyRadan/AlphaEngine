@@ -52,8 +52,8 @@ namespace rendering_engine
      * (@ref material::depth_prepass_pipeline): the same vertex module
      * (skinning included), vertex layout and rasterizer state, the same
      * per-frame group with the TAA-jittered view-projection, the same
-     * per-draw block at the same dynamic offset, into a target of the
-     * same extent; and the vertex shaders declare @c gl_Position
+     * pushed per-draw block, into a target of the same extent; and the
+     * vertex shaders declare @c gl_Position
      * @c invariant so the two pipelines may not compile the position
      * differently.
      *

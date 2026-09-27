@@ -6,9 +6,8 @@
  * @brief Backend-agnostic enums for the @ref rendering_engine::gpu device.
  *
  * Values are abstract names — backends translate them to their own native
- * constants (@c gpu/backend/opengl/gl_translate.hpp and
- * @c gpu/backend/vulkan/vk_translate.hpp). No header in this directory
- * ever names a backend-specific type.
+ * constants (@c gpu/backend/vulkan/vk_translate.hpp). No header in this
+ * directory ever names a backend-specific type.
  */
 
 #pragma once
@@ -206,9 +205,8 @@ namespace rendering_engine::gpu
     };
 
     // Bitmask of shader stages, used by @c bind_group_layout_entry to
-    // declare which stages read a binding. Explicit-binding backends
-    // (Vulkan) bake it into the descriptor-set layout; the OpenGL
-    // backend ignores it. Combine with @c |.
+    // declare which stages read a binding. The backend bakes it into
+    // the descriptor-set layout. Combine with @c |.
     using shader_stages = uint32_t;
     constexpr shader_stages shader_stages_vertex = 1u << 0;
     constexpr shader_stages shader_stages_fragment = 1u << 1;
@@ -236,12 +234,10 @@ namespace rendering_engine::gpu
         d2_array,
     };
 
-    // Bitmask of what a texture may be used for. Explicit-binding
-    // backends (Vulkan) bake it into the image's usage flags, so a
-    // texture bound as a render-target attachment, a storage image or
-    // a copy source must have asked for it up front; the OpenGL
-    // backend allows every use unconditionally and only validates.
-    // Combine with @c |. @c texture_usage_default is what an uploaded,
+    // Bitmask of what a texture may be used for. The backend bakes it
+    // into the image's usage flags, so a texture bound as a
+    // render-target attachment, a storage image or a copy source must
+    // have asked for it up front. Combine with @c |. @c texture_usage_default is what an uploaded,
     // sampled asset needs: sampling plus the copies that fill it and
     // derive its mip chain.
     using texture_usage = uint32_t;
@@ -354,7 +350,7 @@ namespace rendering_engine::gpu
     }
 
     // Stencil-buffer update applied by a stencil test outcome
-    // (@c stencil_face_state). Names follow the GL / Vulkan pair.
+    // (@c stencil_face_state). Names follow Vulkan's @c VkStencilOp.
     enum class stencil_op
     {
         keep,
@@ -405,9 +401,8 @@ namespace rendering_engine::gpu
         return (mask & count) != 0;
     }
 
-    // Shader-side access mode for a storage image binding. Maps to
-    // GL @c access in @c glBindImageTexture and to the SPIR-V
-    // image @c NonReadable / @c NonWritable decorations.
+    // Shader-side access mode for a storage image binding. Maps to the
+    // SPIR-V image @c NonReadable / @c NonWritable decorations.
     enum class storage_access
     {
         read_only,
@@ -415,8 +410,8 @@ namespace rendering_engine::gpu
         read_write,
     };
 
-    // Cube-map face index. Order matches GL convention; the backend
-    // translates to native values.
+    // Cube-map face index, in the layer order Vulkan gives a cube
+    // image's faces; the backend translates to native values.
     enum class cube_face
     {
         positive_x,
@@ -442,12 +437,8 @@ namespace rendering_engine::gpu
         dont_care,
     };
 
-    // Buffer usage hint passed at create time. Matches the GL static /
-    // dynamic / stream draw split for a clean translation; the Vulkan
-    // backend places @c static_data in device-local memory (filled
-    // through its staging ring) and keeps the other two host-visible
-    // and persistently mapped.
-    // Where a buffer lives and how the host may write it.
+    // Buffer usage hint passed at create time: where a buffer lives and
+    // how the host may write it.
     //
     //   static_data   Filled once (initial data or the odd write_buffer)
     //                 and read by the GPU: device-local memory, written
@@ -461,7 +452,7 @@ namespace rendering_engine::gpu
     //                 copy the host is writing.
     //   stream_data   Host-visible and mapped like dynamic_data, but a
     //                 single copy: the caller partitions it per frame in
-    //                 flight itself (the per-draw ring's regions, sized by
+    //                 flight itself (one region per
     //                 device::frames_in_flight) or otherwise never writes
     //                 what a frame in flight may read.
     enum class buffer_usage_hint
@@ -505,9 +496,8 @@ namespace rendering_engine::gpu
     constexpr pipeline_stage pipeline_stage_all_commands = 0xFFFFu;
 
     // Memory-access categories used by @c command_encoder::barrier.
-    // The OpenGL backend folds @c dst_access into a bitmask of
-    // @c GL_*_BARRIER_BIT flags; the Vulkan backend uses both
-    // @c src_access and @c dst_access verbatim. Combine with @c |.
+    // The Vulkan backend uses both @c src_access and @c dst_access
+    // verbatim. Combine with @c |.
     using access_flag = uint32_t;
     constexpr access_flag access_none = 0u;
     constexpr access_flag access_indirect_command_read = 1u << 0;

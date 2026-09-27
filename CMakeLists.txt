@@ -145,8 +145,8 @@ FetchContent_MakeAvailable(json)
 target_link_libraries(AlphaEngine nlohmann_json::nlohmann_json)
 
 # glslang — fetched and built statically. Compiles GLSL to SPIR-V at
-# runtime so both the OpenGL and the Vulkan backend consume the same
-# byte blobs (cached on disk by rendering_engine/gpu/shader_compiler).
+# runtime for the Vulkan backend's shader modules (cached on disk by
+# rendering_engine/gpu/shader_compiler).
 # ENABLE_OPT=OFF drops the SPIRV-Tools optimizer dependency: glslang's
 # CMake hard-errors with ENABLE_OPT=ON unless SPIRV-Tools and
 # SPIRV-Headers sit in its External/ directory, which a shallow tag
@@ -180,21 +180,8 @@ target_link_libraries(AlphaEngine
 
 target_include_directories(AlphaEngine PRIVATE ${VENDOR_ROOT}stb/ ${VENDOR_ROOT}cgltf/)
 
-# glad — OpenGL loader (generated for GL 4.6 Core, no extensions)
-add_library(glad STATIC ${VENDOR_ROOT}glad/src/gl.c)
-target_include_directories(glad PUBLIC ${VENDOR_ROOT}glad/include)
-target_link_libraries(AlphaEngine glad)
-
-find_package(OpenGL REQUIRED)
-target_link_libraries(AlphaEngine ${OPENGL_LIBRARIES})
-
-# Vulkan — always linked. Both the OpenGL and Vulkan backends are
-# compiled into the binary; the runtime choice is driven by
-# core::settings::graphics.backend. The Vulkan backend at
-# rendering_engine/gpu/backend/vulkan/ links against the loader from
-# the system Vulkan SDK; the engine already pulls glslang in for the
-# OpenGL ARB_gl_spirv path, so the Vulkan backend reuses that for its
-# shader compile.
+# Vulkan — the GPU backend at rendering_engine/gpu/backend/vulkan/
+# links against the loader from the system Vulkan SDK.
 find_package(Vulkan REQUIRED)
 target_link_libraries(AlphaEngine Vulkan::Vulkan)
 
@@ -229,7 +216,7 @@ endif()
 # Dear ImGui — fetched from source and built as a small static library
 # from the same explicit-file pattern the rest of the tree uses. ImGui
 # ships no CMakeLists, so FetchContent only populates the sources and we
-# compile the core plus the SDL3 platform backend and the OpenGL3
+# compile the core plus the SDL3 platform backend and the Vulkan
 # renderer backend ourselves. The docking branch is pinned by tag so the
 # debug tooling can dock and tear off panels.
 #
@@ -276,13 +263,11 @@ add_library(imgui STATIC
     ${imgui_SOURCE_DIR}/imgui_widgets.cpp
     ${imgui_SOURCE_DIR}/imgui_demo.cpp
     ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl3.cpp
-    ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp
     ${imgui_SOURCE_DIR}/backends/imgui_impl_vulkan.cpp
     ${imguizmo_SOURCE_DIR}/src/ImGuizmo.cpp)
 target_include_directories(imgui PUBLIC ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/backends ${imguizmo_SOURCE_DIR}/src)
-# The SDL3 backend needs the SDL headers; the OpenGL3 backend ships its
-# own function loader, so no GL link dependency is required there. The
-# Vulkan backend links against the loader (default Vulkan prototypes).
+# The SDL3 backend needs the SDL headers; the Vulkan backend links
+# against the loader (default Vulkan prototypes).
 target_link_libraries(imgui PUBLIC SDL3::SDL3-static Vulkan::Vulkan)
 target_link_libraries(AlphaEngine $<$<CONFIG:Debug>:imgui>)
 target_compile_definitions(AlphaEngine PRIVATE $<$<CONFIG:Debug>:ALPHAENGINE_HAS_IMGUI>)

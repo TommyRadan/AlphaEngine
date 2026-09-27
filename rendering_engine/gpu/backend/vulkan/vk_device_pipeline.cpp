@@ -19,9 +19,9 @@
  *                      (sampler taken from the standalone sampler
  *                       entry at the same binding when the bind group
  *                       has one, else from the texture's built-in
- *                       VkSampler — matches the GL backend, which
- *                       bakes sampler state into the texture and lets
- *                       a sampler object on the same unit override it)
+ *                       VkSampler, so a texture carries its own
+ *                       sampler state and a sampler entry on the same
+ *                       binding overrides it)
  *   sampler         -> no descriptor binding of its own: folded into
  *                      the combined image sampler of the texture at
  *                      the same binding number.
@@ -324,8 +324,8 @@ namespace rendering_engine::gpu::backend::vulkan
             const bool uses_tess =
                 descriptor.topology == primitive_topology::patches && descriptor.patch_control_points > 0;
 
-            // GL-style projection matrices (the engine ships these
-            // through glm::perspective) emit clip-space Z in [-w, w].
+            // The engine's projection matrices (core::math::perspective /
+            // ortho) emit clip-space Z in [-w, w].
             // VK_EXT_depth_clip_control's negativeOneToOne == VK_TRUE
             // tells Vulkan to use that range instead of the default
             // [0, w]; without it everything in the front half of the
@@ -362,8 +362,8 @@ namespace rendering_engine::gpu::backend::vulkan
             // CCW → VK_FRONT_FACE_COUNTER_CLOCKWISE mapping from
             // to_vk_front_face is what we want. Off-screen targets
             // render through Vulkan's default viewport, which has
-            // framebuffer Y pointing the opposite way to the GL-style
-            // NDC the engine produces; that single reflection flips
+            // framebuffer Y pointing the opposite way to the Y-up NDC
+            // the engine produces; that single reflection flips
             // every triangle's screen-space winding, so the off-screen
             // variant inverts the front-face enum to compensate.
             if (!y_flipped)
@@ -743,8 +743,7 @@ namespace rendering_engine::gpu::backend::vulkan
         // the same binding number: the texture's combined image
         // sampler then carries that sampler (its full descriptor —
         // comparison mode, anisotropy, LOD, border) instead of the
-        // state baked onto the texture, matching what the OpenGL
-        // backend does by binding the sampler object to the same unit.
+        // state baked onto the texture.
         const auto standalone_sampler = [&](uint32_t binding) -> VkSampler
         {
             for (const auto& candidate : descriptor.entries)
@@ -826,9 +825,7 @@ namespace rendering_engine::gpu::backend::vulkan
                         // resource, so substitute the 1x1 placeholder of the
                         // dimension this binding declares (a material may
                         // leave maps unbound — e.g. no albedo, or no IBL
-                        // cube when no environment is attached). OpenGL just
-                        // leaves the sampler unbound, which is why it never
-                        // tripped here.
+                        // cube when no environment is attached).
                         texture_dimension dim = texture_dimension::d2;
                         for (const auto& layout_entry : layout_record->descriptor.entries)
                         {

@@ -145,8 +145,8 @@ float directional_shadow(vec3 worldPosition, int lightIndex, vec3 N, vec3 L)
 
 // The window-space depth a face of the omni cube stores for a point at
 // distance z along that face's axis: the 90-degree perspective with the
-// pass's near / far planes, through the GL-convention projection both
-// backends share (0.5 * z_ndc + 0.5, see depth_utils.glsl). Every face
+// pass's near / far planes, through the engine's [-1, 1] clip-depth
+// projection (0.5 * z_ndc + 0.5, see depth_utils.glsl). Every face
 // has the same near and far, so the depth depends only on the distance
 // along the face axis, never on which face or where within it.
 float point_face_depth(float z)

@@ -55,7 +55,7 @@ namespace rendering_engine::gpu::backend::vulkan
         uint32_t max_sets{0};
         uint32_t uniform_buffers{0};
         // VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, a pool size of its
-        // own: the per-draw ring's shared groups.
+        // own.
         uint32_t dynamic_uniform_buffers{0};
         uint32_t combined_image_samplers{0};
         uint32_t storage_buffers{0};

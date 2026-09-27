@@ -90,10 +90,7 @@ namespace rendering_engine
     {
         auto& gpu = *runtime::current_engine().gpu;
 
-        // Whether the device records secondaries at all is fixed for its
-        // lifetime; the threshold does the rest per frame.
-        m_parallel_recording = gpu.features().parallel_recording;
-        if (m_parallel_recording && m_parallel_draw_threshold != 0)
+        if (m_parallel_draw_threshold != 0)
         {
             LOG_INF("scene_pass: draws record in parallel above %u draws (and per chunk)", m_parallel_draw_threshold);
         }
@@ -107,7 +104,7 @@ namespace rendering_engine
         // texture entry says so, so a device that substitutes a
         // placeholder for an unset slot picks an array, and the sampler
         // shares its binding number (Vulkan folds it into that texture's
-        // combined image sampler, OpenGL binds it to the same unit).
+        // combined image sampler).
         gpu::bind_group_layout_entry shadow_map_entry{shadow_map_binding, gpu::binding_kind::texture};
         shadow_map_entry.dimension = gpu::texture_dimension::d2_array;
         frame_layout_descriptor.entries.push_back(shadow_map_entry);
@@ -504,8 +501,8 @@ namespace rendering_engine
         // editor-only helper never reaches a gameplay camera that has
         // narrowed its mask. A renderable that reports world bounds is
         // then tested against the camera frustum and skipped when it lies
-        // wholly outside, so it never builds a draw item or writes its
-        // per-draw UBO; one with no bounds (fullscreen effects, gizmos) is
+        // wholly outside, so it never builds a draw item or refreshes its
+        // per-draw block; one with no bounds (fullscreen effects, gizmos) is
         // always collected. The frustum is the camera's unjittered one —
         // the TAA offset is a sub-pixel shift that no plane test could
         // tell apart.
@@ -550,7 +547,7 @@ namespace rendering_engine
             if (has_bounds)
             {
                 const core::math::vec3 centre = bounds.center();
-                // View space looks down -z (the GL convention
+                // View space looks down -z (the right-handed convention
                 // core::math::look_at builds), so forward depth is
                 // -(view * p).z — the same convention shadow_pass uses to
                 // fit its cascades.
@@ -660,7 +657,7 @@ namespace rendering_engine
 
     uint32_t scene_pass::plan_chunks(size_t draw_count) const
     {
-        if (!m_parallel_recording || m_parallel_draw_threshold == 0 || draw_count <= m_parallel_draw_threshold)
+        if (m_parallel_draw_threshold == 0 || draw_count <= m_parallel_draw_threshold)
         {
             return 1;
         }
@@ -799,11 +796,9 @@ namespace rendering_engine
 
             // Instanced renderables keep their per-instance data in a
             // vertex stream (slot 1), not a PerDraw block, so the per-draw
-            // data is optional. A rigid renderable's block is pushed where
-            // the device takes push constants, in the pre-pass as in the
-            // shading pass; otherwise its group is the per-draw ring's
-            // shared one and its dynamic offset picks the renderable's
-            // block.
+            // data is optional. A renderable's block is pushed, in the
+            // pre-pass as in the shading pass, and a skinned one also binds
+            // its joint-palette group.
             bind_per_draw(pass_encoder, item, item.mat->per_draw_slot());
             pass_encoder.set_vertex_buffer(0, item.vertex_buffer, 0, item.vertex_stride);
             if (item.instance_buffer.valid())

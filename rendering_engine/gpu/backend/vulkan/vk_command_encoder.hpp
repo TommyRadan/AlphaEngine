@@ -50,11 +50,11 @@ namespace rendering_engine::gpu::backend::vulkan
         // same stages (the validation layer's rule, checked here so a
         // bad push is reported once instead of failing validation).
         void push_constants(shader_stages stages, uint32_t offset, uint32_t size, const void* data) override;
-        // @p x / @p y are the rectangle's bottom-left corner in
-        // window (OpenGL) convention, matching the GL backend's
-        // glViewport / glScissor. A swapchain pass renders through a
-        // negative-height viewport, so both the viewport and the
-        // scissor are flipped into Vulkan's top-left framebuffer
+        // @p x / @p y are the rectangle's bottom-left corner, measured
+        // from the target's bottom-left corner (see
+        // render_pass_encoder::set_viewport). A swapchain pass renders
+        // through a negative-height viewport, so both the viewport and
+        // the scissor are flipped into Vulkan's top-left framebuffer
         // space here; off-screen passes keep Vulkan's orientation.
         void set_viewport(int x, int y, int width, int height) override;
         void set_scissor(int x, int y, int width, int height) override;
@@ -128,7 +128,7 @@ namespace rendering_engine::gpu::backend::vulkan
         // and asks for a Y-flipped pipeline variant in this mode;
         // off-screen targets render in Vulkan-natural orientation
         // so a downstream sampler (tonemap) sees its texels at the
-        // texCoord origin the OpenGL-style shader expects.
+        // bottom-left texCoord origin the fullscreen shaders expect.
         bool m_y_flipped{false};
         // The dynamic stencil reference: every graphics pipeline
         // declares it dynamic, so it is supplied after each bind and

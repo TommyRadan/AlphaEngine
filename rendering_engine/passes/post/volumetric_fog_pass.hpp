@@ -40,10 +40,7 @@ namespace rendering_engine
      *     / src_alpha, rgb only).
      *
      * The composite blends rather than sampling the scene colour, so it
-     * needs no ping-pong copy, and it is a stage of its own because the
-     * upsample samples the scene depth, which is attached to the
-     * scene-colour target: the OpenGL backend keeps it attached even in a
-     * depth-less pass, and sampling it while bound is a feedback loop.
+     * needs no ping-pong copy.
      *
      * The march binds the scene pass's per-frame group at slot 0 (the
      * @ref view_globals block, the lights and the shadow blocks and maps),

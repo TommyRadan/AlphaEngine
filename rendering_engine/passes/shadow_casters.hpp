@@ -64,11 +64,10 @@ namespace rendering_engine
      * bind group at slot 0 again whenever the pipeline changes, and issues
      * the matching draw — indexed-indirect when the item carries an
      * indirect command, else with the item's own counts and geometry
-     * offsets. A single draw pushes its PerDraw block or binds its
-     * per-draw group with the item's dynamic offset (@ref bind_per_draw),
-     * so it reads the very block the scene pass does. Items that carry
-     * neither a PerDraw block nor an instance stream have no model matrix
-     * to cast with and are skipped.
+     * offsets. A single draw pushes its PerDraw block (@ref push_per_draw),
+     * the very block the scene pass does. Items that carry neither a
+     * PerDraw block nor an instance stream have no model matrix to cast
+     * with and are skipped.
      */
     class shadow_caster_dispatch
     {

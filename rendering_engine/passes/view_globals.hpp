@@ -34,8 +34,8 @@ namespace rendering_engine
     {
         // World -> view, rigid (core::math::look_at).
         core::math::mat4 view;
-        // View -> clip, GL convention, carrying this block's temporal-AA
-        // jitter (see @ref jitter).
+        // View -> clip (core::math::perspective / ortho), carrying this
+        // block's temporal-AA jitter (see @ref jitter).
         core::math::mat4 projection;
         // projection * view.
         core::math::mat4 view_projection;

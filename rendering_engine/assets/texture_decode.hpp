@@ -28,8 +28,7 @@ namespace rendering_engine
     /**
      * @brief The block-compressed families a device can sample, captured on
      *        the main thread so a worker can choose a KTX2 transcode target
-     *        without touching the device (an OpenGL query needs the
-     *        context's thread).
+     *        without touching the device, which is main-thread only.
      *
      * A colour family counts only when both its unorm and its sRGB form
      * sample, so the loader never has to give up on the colour space.
