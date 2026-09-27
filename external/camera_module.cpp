@@ -26,20 +26,19 @@
  *        carrying a perspective @c camera_component.
  *
  * Controls: WASD to move, space / ctrl to rise / sink, shift to move faster,
- * hold the left mouse button and drag to look around.
+ * hold the left mouse button and drag to look around. On a connected gamepad:
+ * the left stick moves, the right stick looks, the shoulder buttons rise /
+ * sink and clicking the left stick sprints.
  */
 
 #include "api/game_module.hpp"
 
-#include <array>
 #include <cmath>
-#include <cstddef>
 #include <memory>
 
-#include <core/event_engine.hpp>
+#include <core/input.hpp>
 #include <core/math/math.hpp>
 #include <core/settings.hpp>
-#include <core/subscription.hpp>
 #include <rendering_engine/camera/camera_registry.hpp>
 #include <rendering_engine/camera/perspective_camera.hpp>
 #include <runtime/components/camera_component.hpp>
@@ -59,33 +58,52 @@ namespace
     // where the demos place their geometry.
     constexpr core::math::vec3 start_position{-5.0f, 0.0f, 0.0f};
 
-    // The keys the camera polls every frame. Their state lives in a table of
-    // this fixed size, indexed by position in this list, rather than in a map
-    // keyed by key_code: tracking a key never allocates, and a key that is not
-    // listed here is dropped on the way in instead of accumulating an entry.
-    // Both sides of each modifier are tracked so the right-hand shift / ctrl
-    // work the same as the left.
-    constexpr std::array<core::key_code, 9> tracked_keys{core::key_code::w,
-                                                         core::key_code::a,
-                                                         core::key_code::s,
-                                                         core::key_code::d,
-                                                         core::key_code::space,
-                                                         core::key_code::left_ctrl,
-                                                         core::key_code::right_ctrl,
-                                                         core::key_code::left_shift,
-                                                         core::key_code::right_shift};
+    // Per-second look rate a fully-deflected right stick drives, in the same
+    // units as a mouse delta (points) so it composes with mouse-look through
+    // one sensitivity setting (see fly_camera::look).
+    constexpr float gamepad_look_speed = 600.0f;
 
-    // Position of @p code in tracked_keys, or tracked_keys.size() if it is not tracked.
-    std::size_t key_slot(core::key_code code)
+    // Registers the camera's default bindings once, ahead of any fly_camera
+    // instance. A matching entry under `input.bindings` in settings.json
+    // (core::input_settings::bindings) replaces one of these lists entirely;
+    // see core/input.hpp for the binding-string grammar.
+    void bind_controls(core::input& input)
     {
-        for (std::size_t i = 0; i < tracked_keys.size(); ++i)
-        {
-            if (tracked_keys[i] == code)
-            {
-                return i;
-            }
-        }
-        return tracked_keys.size();
+        using core::action_binding;
+        using core::axis_binding;
+        using core::axis_sign;
+        using core::gamepad_axis_code;
+        using core::gamepad_button_code;
+        using core::key_code;
+        using core::mouse_key_code;
+
+        input.bind_action("move_forward",
+                          {action_binding::from_key(key_code::w),
+                           action_binding::from_gamepad_axis(gamepad_axis_code::left_y, axis_sign::negative)});
+        input.bind_action("move_back",
+                          {action_binding::from_key(key_code::s),
+                           action_binding::from_gamepad_axis(gamepad_axis_code::left_y, axis_sign::positive)});
+        input.bind_action("move_left",
+                          {action_binding::from_key(key_code::a),
+                           action_binding::from_gamepad_axis(gamepad_axis_code::left_x, axis_sign::negative)});
+        input.bind_action("move_right",
+                          {action_binding::from_key(key_code::d),
+                           action_binding::from_gamepad_axis(gamepad_axis_code::left_x, axis_sign::positive)});
+        input.bind_action("move_up",
+                          {action_binding::from_key(key_code::space),
+                           action_binding::from_gamepad_button(gamepad_button_code::right_shoulder)});
+        input.bind_action("move_down",
+                          {action_binding::from_key(key_code::left_ctrl),
+                           action_binding::from_key(key_code::right_ctrl),
+                           action_binding::from_gamepad_button(gamepad_button_code::left_shoulder)});
+        input.bind_action("sprint",
+                          {action_binding::from_key(key_code::left_shift),
+                           action_binding::from_key(key_code::right_shift),
+                           action_binding::from_gamepad_button(gamepad_button_code::left_stick)});
+        input.bind_action("look_enable", {action_binding::from_mouse_button(mouse_key_code::left)});
+
+        input.bind_axis("look_x", {axis_binding::from_gamepad_axis(gamepad_axis_code::right_x, 0.2f)});
+        input.bind_axis("look_y", {axis_binding::from_gamepad_axis(gamepad_axis_code::right_y, 0.2f)});
     }
 
     // Unit vector along @p v, or the zero vector when @p v has no direction.
@@ -109,60 +127,27 @@ namespace
     }
 
     /**
-     * Flies its node — the camera's pose — from keyboard and mouse input.
+     * Flies its node — the camera's pose — from the "move_*", "sprint" and
+     * "look_enable" actions and the "look_x" / "look_y" axes @ref bind_controls
+     * registers, instead of keeping its own key table and subscribing to raw
+     * input events.
      *
      * The node's transform is the camera's pose (its camera_component views
      * from the node), read fresh every frame, so anything else that places the
-     * node (a demo framing its model) simply hands over to the controls. While
-     * enabled it listens to the input events and keeps the held keys and the
-     * look button in members; movement is applied per rendered frame, so it
-     * stays smooth at the render rate, and mouse-look per motion event. The
-     * node moves in its parent's frame, which is world space under the scene
-     * root.
+     * node (a demo framing its model) simply hands over to the controls.
+     * Movement and mouse-look are both applied per rendered frame, so they
+     * stay smooth at the render rate; @c core::input keeps the state polled
+     * here live rather than latched to the fixed step (see core/input.hpp),
+     * which is what keeps the mouse-look feel unchanged from when it ran off
+     * a per-event subscription. The node moves in its parent's frame, which
+     * is world space under the scene root.
      */
     struct fly_camera final : runtime::behavior
     {
-        void on_enable() override
-        {
-            core::event_bus& events = *runtime::current_engine().events;
-            m_key_down = events.subscribe<core::key_down>([this](const core::key_down& event)
-                                                          { set_key(event.m_key_code, true); });
-            m_key_up =
-                events.subscribe<core::key_up>([this](const core::key_up& event) { set_key(event.m_key_code, false); });
-            m_mouse_key_down = events.subscribe<core::mouse_key_down>(
-                [this](const core::mouse_key_down& event)
-                {
-                    if (event.m_key_code == core::mouse_key_code::left)
-                    {
-                        m_look_button_held = true;
-                    }
-                });
-            m_mouse_key_up = events.subscribe<core::mouse_key_up>(
-                [this](const core::mouse_key_up& event)
-                {
-                    if (event.m_key_code == core::mouse_key_code::left)
-                    {
-                        m_look_button_held = false;
-                    }
-                });
-            m_mouse_move = events.subscribe<core::mouse_move>([this](const core::mouse_move& event) { look(event); });
-        }
-
-        void on_disable() override
-        {
-            m_key_down.reset();
-            m_key_up.reset();
-            m_mouse_key_down.reset();
-            m_mouse_key_up.reset();
-            m_mouse_move.reset();
-            // The releases are not heard while disabled, so let go of
-            // everything rather than come back with a key stuck down.
-            m_keys.fill(false);
-            m_look_button_held = false;
-        }
-
         void on_update(float delta_time) override
         {
+            core::input& input = *runtime::current_engine().input;
+
             rendering_engine::util::transform& pose = owner().transform;
             const core::math::vec3 position = pose.get_position();
             const core::math::vec3 forward = pose.get_forward();
@@ -172,71 +157,61 @@ namespace
             // prevents.
             const core::math::vec3 right = safe_normalize(core::math::cross(forward, up_vector));
 
-            float speed = 3.0f;
-            if (is_key_down(core::key_code::left_shift) || is_key_down(core::key_code::right_shift))
-            {
-                speed = 30.0f;
-            }
-
+            const float speed = input.is_action_down("sprint") ? 30.0f : 3.0f;
             const float distance = speed * (delta_time / 1000.0f);
             core::math::vec3 new_position = position;
 
-            if (is_key_down(core::key_code::w))
+            if (input.is_action_down("move_forward"))
             {
                 new_position += forward * distance;
             }
-
-            if (is_key_down(core::key_code::a))
+            if (input.is_action_down("move_left"))
             {
                 new_position -= right * distance;
             }
-
-            if (is_key_down(core::key_code::s))
+            if (input.is_action_down("move_back"))
             {
                 new_position -= forward * distance;
             }
-
-            if (is_key_down(core::key_code::d))
+            if (input.is_action_down("move_right"))
             {
                 new_position += right * distance;
             }
-
-            if (is_key_down(core::key_code::space))
+            if (input.is_action_down("move_up"))
             {
                 new_position += up_vector * distance;
             }
-
-            if (is_key_down(core::key_code::left_ctrl) || is_key_down(core::key_code::right_ctrl))
+            if (input.is_action_down("move_down"))
             {
                 new_position -= up_vector * distance;
             }
 
             pose.set_position(new_position);
+
+            look(input, delta_time);
         }
 
     private:
-        void set_key(core::key_code code, bool down)
+        void look(core::input& input, float delta_time)
         {
-            const std::size_t slot = key_slot(code);
-            if (slot < tracked_keys.size())
+            // Mouse-look only while "look_enable" (the left mouse button by
+            // default) is held, in every build configuration; the debug
+            // overlay already withholds mouse input while it is capturing the
+            // pointer, so is_action_down reflects that on its own. The right
+            // stick looks unconditionally, the way a gamepad camera usually
+            // works.
+            core::math::vec2 delta{};
+            if (input.is_action_down("look_enable"))
             {
-                m_keys[slot] = down;
+                delta += input.mouse_delta();
             }
-        }
-
-        bool is_key_down(core::key_code code) const
-        {
-            const std::size_t slot = key_slot(code);
-            return slot < tracked_keys.size() && m_keys[slot];
-        }
-
-        void look(const core::mouse_move& event)
-        {
-            // Mouse-look only while the left button is held, in every build
-            // configuration. The debug overlay already withholds mouse events
-            // while it is capturing the pointer, so it needs no special case
-            // here.
-            if (!m_look_button_held)
+            const float stick_x = input.get_axis("look_x");
+            const float stick_y = input.get_axis("look_y");
+            if (stick_x != 0.0f || stick_y != 0.0f)
+            {
+                delta += core::math::vec2{stick_x, stick_y} * (gamepad_look_speed * (delta_time / 1000.0f));
+            }
+            if (delta.x == 0.0f && delta.y == 0.0f)
             {
                 return;
             }
@@ -262,8 +237,8 @@ namespace
             // reversed pitch. The deltas keep their sub-pixel fraction, so a
             // slow drag still turns the camera instead of truncating to no
             // motion.
-            const float yaw_angle = -event.m_delta_x * sensitivity;
-            const float pitch_angle = pitch_direction * event.m_delta_y * sensitivity;
+            const float yaw_angle = -delta.x * sensitivity;
+            const float pitch_angle = pitch_direction * delta.y * sensitivity;
 
             const core::math::mat4 yaw_rotation = core::math::rotate(yaw_angle, up_vector);
             const core::math::mat4 pitch_rotation = core::math::rotate(pitch_angle, right);
@@ -291,21 +266,13 @@ namespace
             // (+Z up, with a horizontal fallback along the up axis).
             pose.look_at(pose.get_position() + new_forward);
         }
-
-        std::array<bool, tracked_keys.size()> m_keys{};
-        bool m_look_button_held{false};
-
-        // Input listeners, held only while the camera is enabled.
-        core::subscription m_key_down;
-        core::subscription m_key_up;
-        core::subscription m_mouse_key_down;
-        core::subscription m_mouse_key_up;
-        core::subscription m_mouse_move;
     };
 } // namespace
 
 GAME_MODULE()
 {
+    bind_controls(*runtime::current_engine().input);
+
     // The player's camera goes in the scene the engine hands the bootstrap —
     // the persistent one, so it outlives any level loaded later.
     runtime::node& camera = scene.create_node("fly_camera");

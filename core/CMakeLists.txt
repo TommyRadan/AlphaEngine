@@ -3,6 +3,8 @@ target_sources(AlphaEngine PRIVATE
     event_engine.cpp
     event_engine.hpp
     hash.hpp
+    input.cpp
+    input.hpp
     jobs.cpp
     jobs.hpp
     log.cpp

@@ -53,6 +53,10 @@ namespace core
 }
 namespace core
 {
+    struct input;
+}
+namespace core
+{
     struct jobs;
 }
 namespace core
@@ -148,6 +152,7 @@ namespace runtime
         // independently of the window/GL context), so it lives here as a
         // core-level subsystem rather than under rendering_engine.
         std::unique_ptr<core::audio> audio;
+        std::unique_ptr<core::input> input;
         std::unique_ptr<rendering_engine::window> window;
         std::unique_ptr<rendering_engine::gpu::device> gpu;
         std::unique_ptr<rendering_engine::asset_cache> assets;
