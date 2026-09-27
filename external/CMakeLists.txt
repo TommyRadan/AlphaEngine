@@ -2,6 +2,7 @@ target_sources(AlphaEngine PRIVATE
     camera_module.cpp
     exit_module.cpp
     shadow_demo_module.cpp
+    ui_demo_module.cpp
 )
 
 # The FPS counter used to live here as a label-rendering game module; it

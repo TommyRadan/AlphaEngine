@@ -25,16 +25,114 @@
 #include <algorithm>
 #include <functional>
 
+#include <core/math/mat4.hpp>
+#include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/gpu/render_target.hpp>
 #include <rendering_engine/materials/material.hpp>
+#include <rendering_engine/materials/material_template.hpp>
+#include <rendering_engine/materials/ui_material.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
+#include <runtime/engine.hpp>
 
 namespace rendering_engine
 {
-    ui_pass::ui_pass(std::vector<renderable*>* registry) : m_registry(registry) {}
+    namespace
+    {
+        // std140 layout of the UiFrame block (shaders/materials/ui.vert.glsl):
+        // mat4 projection at 0, vec4 viewport at 64 (size in pixels, then
+        // its reciprocal). 80 bytes.
+        struct ui_frame_block
+        {
+            core::math::mat4 projection;
+            float viewport[4];
+        };
+
+        static_assert(sizeof(ui_frame_block) == 80, "UiFrame block must be a std140 mat4 and a vec4");
+    } // namespace
+
+    ui_pass::ui_pass(std::vector<renderable*>* registry, uint32_t width, uint32_t height)
+        : m_registry(registry), m_width(width), m_height(height)
+    {
+        auto& gpu = *runtime::current_engine().gpu;
+        m_frame_layout = gpu.create_bind_group_layout(ui_material::frame_layout_descriptor());
+
+        gpu::buffer_descriptor ubo_descriptor{};
+        ubo_descriptor.size = sizeof(ui_frame_block);
+        ubo_descriptor.usage = gpu::buffer_usage_uniform | gpu::buffer_usage_copy_dst;
+        ubo_descriptor.hint = gpu::buffer_usage_hint::dynamic_data;
+        m_frame_ubo = gpu.create_buffer(ubo_descriptor);
+
+        gpu::bind_group_descriptor bind_group_descriptor{};
+        bind_group_descriptor.layout = m_frame_layout;
+        gpu::binding_value frame_slot{};
+        frame_slot.binding = ui_material::frame_binding;
+        frame_slot.kind = gpu::binding_kind::uniform_buffer;
+        frame_slot.buffer_value = m_frame_ubo;
+        bind_group_descriptor.entries.push_back(frame_slot);
+        m_frame_bind_group = gpu.create_bind_group(bind_group_descriptor);
+    }
+
+    ui_pass::~ui_pass()
+    {
+        auto& gpu = *runtime::current_engine().gpu;
+        if (m_frame_bind_group.valid())
+        {
+            gpu.destroy(m_frame_bind_group);
+        }
+        if (m_frame_ubo.valid())
+        {
+            gpu.destroy(m_frame_ubo);
+        }
+        if (m_frame_layout.valid())
+        {
+            gpu.destroy(m_frame_layout);
+        }
+    }
+
+    gpu::bind_group_layout ui_pass::frame_bind_group_layout() const
+    {
+        return m_frame_layout;
+    }
+
+    void ui_pass::resize(uint32_t width, uint32_t height)
+    {
+        // Runs between frames, while the previous frame may still be
+        // reading the block on a deferred-execution backend, so only note
+        // the size; record() rewrites the buffer after begin_frame waited.
+        m_width = width;
+        m_height = height;
+        m_frame_dirty = true;
+    }
+
+    void ui_pass::write_frame_block()
+    {
+        // A degenerate drawable never reaches here through resize; the
+        // construction-time size is clamped so the reciprocal stays finite.
+        const float width = static_cast<float>(std::max<uint32_t>(m_width, 1));
+        const float height = static_cast<float>(std::max<uint32_t>(m_height, 1));
+
+        // Left 0, right width; bottom height, top 0: pixel rows grow
+        // downwards and land on the engine's y-up clip space (the Vulkan
+        // backend flips its swapchain viewport to match OpenGL).
+        ui_frame_block block{};
+        block.projection = core::math::ortho(0.0f, width, height, 0.0f, -1.0f, 1.0f);
+        block.viewport[0] = width;
+        block.viewport[1] = height;
+        block.viewport[2] = 1.0f / width;
+        block.viewport[3] = 1.0f / height;
+        runtime::current_engine().gpu->write_buffer(m_frame_ubo, &block, sizeof(block), 0);
+    }
 
     void ui_pass::record(gpu::command_encoder& encoder, const frame_context& ctx)
     {
+        // Inside the frame bracket: the frame that last read the block has
+        // retired, so a resize's new projection can be written now.
+        if (m_frame_dirty)
+        {
+            write_frame_block();
+            m_frame_dirty = false;
+        }
+
         gpu::render_pass_descriptor descriptor{};
         descriptor.target = ctx.swapchain_target;
         // The scene pass already cleared the framebuffer (or there
@@ -55,6 +153,8 @@ namespace rendering_engine
         // Sorted by (pipeline, material instance) so instances sharing
         // a pipeline sit together; the per-material group is rebound
         // when the instance changes, not only when the pipeline does.
+        // The sort is stable, so the draws of one material keep the
+        // registry's order: an element registered later paints on top.
         std::stable_sort(m_items.begin(),
                          m_items.end(),
                          [](const draw_item& a, const draw_item& b)
@@ -76,6 +176,13 @@ namespace rendering_engine
             if (pid != last_pipeline_id)
             {
                 pass_encoder->set_pipeline(item.mat->pipeline());
+                // Every pipeline built on the ui template reads the
+                // UiFrame group at slot 0; a material with some other
+                // per-frame layout gets nothing bound there by this pass.
+                if (item.mat->get_template().descriptor().frame_layout == m_frame_layout)
+                {
+                    pass_encoder->set_bind_group(0, m_frame_bind_group);
+                }
                 last_pipeline_id = pid;
                 last_material = nullptr;
             }

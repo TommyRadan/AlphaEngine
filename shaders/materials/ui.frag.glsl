@@ -1,24 +1,20 @@
 #version 450
 
-// UI compositing: a flat colour or a texture (sampled with a flipped v so
-// image rows read top-down), straight onto the LDR swapchain.
+// UI compositing, straight onto the LDR swapchain: the texture modulated by
+// the vertex colour. An image is tinted, a font atlas (white, coverage in
+// alpha) takes the colour with its coverage as alpha, and the material's
+// white texel reduces a flat quad to the colour itself. uv (0, 0) is the
+// image's first row, which the y-down projection puts at the top.
 
 layout(location = 0) in vec2 texCoord;
+layout(location = 1) in vec4 tint;
 layout(location = 0) out vec4 fragColor;
 
-// The ui material has no per-frame set, so its per-draw block and
-// sampler number locally from 0 in set 0.
-layout(set = 0, binding = 0, std140) uniform UiDraw
-{
-    float useTexture;
-    vec4 color;
-} u_draw;
-
-layout(set = 0, binding = 1) uniform sampler2D tex;
+// Set 0 is the ui pass's UiFrame block at binding 0; the per-draw set
+// carries only the texture, at a binding of its own.
+layout(set = 1, binding = 1) uniform sampler2D tex;
 
 void main()
 {
-    fragColor = (u_draw.useTexture != 0.0)
-        ? texture(tex, vec2(texCoord.x, 1.0 - texCoord.y))
-        : u_draw.color;
+    fragColor = texture(tex, texCoord) * tint;
 }

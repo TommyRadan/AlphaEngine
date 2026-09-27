@@ -325,19 +325,19 @@ TEST_F(material_template_test, line_instances_with_different_depth_params_are_tw
     EXPECT_EQ(device.created_pipelines, 2u);
 }
 
-TEST_F(material_template_test, ui_template_without_a_frame_layout_puts_per_draw_at_slot_zero)
+TEST_F(material_template_test, ui_template_puts_per_draw_after_the_ui_frame_layout)
 {
-    const std::shared_ptr<material_template> tmpl = ui_material::create_template(device);
+    const std::shared_ptr<material_template> tmpl = ui_material::create_template(device, frame_layout);
     ui_material ui{tmpl};
-    EXPECT_FALSE(tmpl->has_frame_layout());
+    EXPECT_TRUE(tmpl->has_frame_layout());
     EXPECT_FALSE(tmpl->has_material_layout());
-    EXPECT_EQ(ui.per_draw_slot(), 0u);
-    EXPECT_EQ(ui.per_material_slot(), 1u);
+    EXPECT_EQ(ui.per_draw_slot(), 1u);
+    EXPECT_EQ(ui.per_material_slot(), 2u);
     EXPECT_FALSE(ui.per_material_bind_group().valid());
     EXPECT_TRUE(ui.params().transparent);
     EXPECT_FALSE(ui.params().depth_test);
     ASSERT_EQ(device.pipeline_descriptors.size(), 1u);
-    EXPECT_EQ(device.pipeline_descriptors.back().bind_group_layouts.size(), 1u);
+    EXPECT_EQ(device.pipeline_descriptors.back().bind_group_layouts.size(), 2u);
     EXPECT_FALSE(device.pipeline_descriptors.back().depth.test_enabled);
     EXPECT_TRUE(device.pipeline_descriptors.back().blend.enabled);
 }

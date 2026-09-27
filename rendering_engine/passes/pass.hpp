@@ -244,7 +244,7 @@ namespace rendering_engine
          * their bind group was built with on every @ref record and
          * rebuild on change, so any recreation reaches them on the next
          * frame. Defaults to a no-op for passes whose resources do not
-         * follow the drawable (shadow maps, UI, debug).
+         * follow the drawable (shadow maps, debug).
          */
         virtual void resize(uint32_t width, uint32_t height)
         {

@@ -38,8 +38,9 @@ namespace rendering_engine
     // themselves.
     //
     // The output vector is provided by the caller so the pass can reuse
-    // a single allocation across frames; composite renderables (e.g.
-    // @c label) push N items into the same vector.
+    // a single allocation across frames; composite renderables (e.g. a
+    // @c sprite_batch over several textures) push N items into the same
+    // vector.
     struct renderable
     {
         virtual ~renderable() = default;
