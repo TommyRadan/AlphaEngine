@@ -304,6 +304,28 @@ namespace rendering_engine::gpu::backend::vulkan
             return VK_FORMAT_D32_SFLOAT;
         case texture_format::depth24_stencil8:
             return VK_FORMAT_D24_UNORM_S8_UINT;
+        // Block-compressed: sampleable only where format_support says so
+        // (textureCompressionBC / textureCompressionASTC_LDR).
+        case texture_format::bc1_rgba_unorm:
+            return VK_FORMAT_BC1_RGBA_UNORM_BLOCK;
+        case texture_format::bc1_rgba_srgb:
+            return VK_FORMAT_BC1_RGBA_SRGB_BLOCK;
+        case texture_format::bc3_rgba_unorm:
+            return VK_FORMAT_BC3_UNORM_BLOCK;
+        case texture_format::bc3_rgba_srgb:
+            return VK_FORMAT_BC3_SRGB_BLOCK;
+        case texture_format::bc4_r_unorm:
+            return VK_FORMAT_BC4_UNORM_BLOCK;
+        case texture_format::bc5_rg_unorm:
+            return VK_FORMAT_BC5_UNORM_BLOCK;
+        case texture_format::bc7_rgba_unorm:
+            return VK_FORMAT_BC7_UNORM_BLOCK;
+        case texture_format::bc7_rgba_srgb:
+            return VK_FORMAT_BC7_SRGB_BLOCK;
+        case texture_format::astc_4x4_unorm:
+            return VK_FORMAT_ASTC_4x4_UNORM_BLOCK;
+        case texture_format::astc_4x4_srgb:
+            return VK_FORMAT_ASTC_4x4_SRGB_BLOCK;
         }
         return VK_FORMAT_R8G8B8A8_UNORM;
     }

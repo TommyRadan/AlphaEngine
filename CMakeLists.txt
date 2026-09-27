@@ -409,6 +409,45 @@ set_source_files_properties(
         COMPILE_OPTIONS "$<TARGET_PROPERTY:Jolt,INTERFACE_COMPILE_OPTIONS>"
         INCLUDE_DIRECTORIES "$<TARGET_PROPERTY:Jolt,INTERFACE_INCLUDE_DIRECTORIES>")
 
+# KTX-Software — libktx's read-only library (ktx_read), fetched and built
+# statically behind the asset cache's KTX2 loader
+# (rendering_engine/assets/texture_decode): the KTX2 container, its zstd /
+# zlib supercompression, the Basis Universal transcoder (ETC1S / UASTC to
+# BC1-7, ASTC 4x4 or RGBA8) and the ASTC decoder it links. The tools, tests,
+# docs, bindings, ETC unpacking and the GL / Vulkan upload helpers are
+# off (the engine uploads through its own gpu device), and the directory is
+# excluded from `all`, so the full libktx with the Basis and ASTC encoders is
+# configured but never built. The FetchContent name is `ktx`, so an offline
+# build points FETCHCONTENT_SOURCE_DIR_KTX at a checkout; the CTS test
+# submodule is not cloned. KTX's configure needs CMake 3.22 and bash (Git
+# for Windows' on Windows) and reads its version from the checkout's tag.
+# astc-encoder is capped at SSE4.1 for the same reason as Jolt above (KTX
+# defaults it to AVX2), and BUILD_SHARED_LIBS is held off only around the
+# fetch because KTX defaults to a shared libktx.
+set(KTX_FEATURE_TESTS OFF CACHE BOOL "" FORCE)
+set(KTX_FEATURE_TOOLS OFF CACHE BOOL "" FORCE)
+set(KTX_FEATURE_DOC OFF CACHE BOOL "" FORCE)
+set(KTX_FEATURE_JNI OFF CACHE BOOL "" FORCE)
+set(KTX_FEATURE_PY OFF CACHE BOOL "" FORCE)
+set(KTX_FEATURE_ETC_UNPACK OFF CACHE BOOL "" FORCE)
+set(KTX_FEATURE_GL_UPLOAD OFF CACHE BOOL "" FORCE)
+set(KTX_FEATURE_VK_UPLOAD OFF CACHE BOOL "" FORCE)
+set(BASISU_SUPPORT_OPENCL OFF CACHE BOOL "" FORCE)
+set(ASTCENC_ISA_SSE41 ON CACHE BOOL "" FORCE)
+set(ALPHAENGINE_BUILD_SHARED_LIBS_SAVED ${BUILD_SHARED_LIBS})
+set(BUILD_SHARED_LIBS OFF)
+FetchContent_Declare(
+    ktx
+    GIT_REPOSITORY https://github.com/KhronosGroup/KTX-Software.git
+    GIT_TAG v4.4.2
+    GIT_SHALLOW TRUE
+    GIT_SUBMODULES ""
+)
+FetchContent_MakeAvailable(ktx)
+set(BUILD_SHARED_LIBS ${ALPHAENGINE_BUILD_SHARED_LIBS_SAVED})
+set_property(DIRECTORY ${ktx_SOURCE_DIR} PROPERTY EXCLUDE_FROM_ALL TRUE)
+target_link_libraries(AlphaEngine ktx_read)
+
 # Post-build
 if(APPLE)
     target_link_libraries(AlphaEngine "-framework CoreFoundation -framework IOKit -framework CoreVideo")

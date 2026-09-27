@@ -24,6 +24,22 @@
 
 namespace rendering_engine::gpu::backend::opengl
 {
+    namespace
+    {
+        // The S3TC (BC1 / BC3) and ASTC internal formats come from
+        // extensions (EXT_texture_compression_s3tc with its sRGB twin, and
+        // KHR_texture_compression_astc_ldr) that the core-profile loader
+        // does not declare, so their registry values are spelled here; BPTC
+        // (BC7) and RGTC (BC4 / BC5) are core. Whether the context can
+        // sample them is asked at run time (gl_device::format_support).
+        constexpr GLenum k_compressed_rgba_s3tc_dxt1 = 0x83F1;
+        constexpr GLenum k_compressed_rgba_s3tc_dxt5 = 0x83F3;
+        constexpr GLenum k_compressed_srgb_alpha_s3tc_dxt1 = 0x8C4D;
+        constexpr GLenum k_compressed_srgb_alpha_s3tc_dxt5 = 0x8C4F;
+        constexpr GLenum k_compressed_rgba_astc_4x4 = 0x93B0;
+        constexpr GLenum k_compressed_srgb8_alpha8_astc_4x4 = 0x93D0;
+    } // namespace
+
     GLenum to_gl_primitive(primitive_topology topology)
     {
         switch (topology)
@@ -437,6 +453,29 @@ namespace rendering_engine::gpu::backend::opengl
             return {GL_DEPTH_COMPONENT32F, GL_DEPTH_COMPONENT, GL_FLOAT};
         case texture_format::depth24_stencil8:
             return {GL_DEPTH24_STENCIL8, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8};
+        // Block-compressed: uploaded through glCompressedTextureSubImage*,
+        // which takes the internal format and a byte count, not a client
+        // format / type.
+        case texture_format::bc1_rgba_unorm:
+            return {k_compressed_rgba_s3tc_dxt1, GL_NONE, GL_NONE};
+        case texture_format::bc1_rgba_srgb:
+            return {k_compressed_srgb_alpha_s3tc_dxt1, GL_NONE, GL_NONE};
+        case texture_format::bc3_rgba_unorm:
+            return {k_compressed_rgba_s3tc_dxt5, GL_NONE, GL_NONE};
+        case texture_format::bc3_rgba_srgb:
+            return {k_compressed_srgb_alpha_s3tc_dxt5, GL_NONE, GL_NONE};
+        case texture_format::bc4_r_unorm:
+            return {GL_COMPRESSED_RED_RGTC1, GL_NONE, GL_NONE};
+        case texture_format::bc5_rg_unorm:
+            return {GL_COMPRESSED_RG_RGTC2, GL_NONE, GL_NONE};
+        case texture_format::bc7_rgba_unorm:
+            return {GL_COMPRESSED_RGBA_BPTC_UNORM, GL_NONE, GL_NONE};
+        case texture_format::bc7_rgba_srgb:
+            return {GL_COMPRESSED_SRGB_ALPHA_BPTC_UNORM, GL_NONE, GL_NONE};
+        case texture_format::astc_4x4_unorm:
+            return {k_compressed_rgba_astc_4x4, GL_NONE, GL_NONE};
+        case texture_format::astc_4x4_srgb:
+            return {k_compressed_srgb8_alpha8_astc_4x4, GL_NONE, GL_NONE};
         }
         return {GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE};
     }
@@ -462,8 +501,10 @@ namespace rendering_engine::gpu::backend::opengl
         case texture_format::depth32_float:
         case texture_format::depth24_stencil8:
             return 4;
+        default:
+            // A compressed format uploads whole blocks (texture_image_bytes).
+            return texel_size_bytes(format);
         }
-        return 4;
     }
 
     gl_texture_format to_gl_copy_format(texture_format format)

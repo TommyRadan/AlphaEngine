@@ -38,6 +38,7 @@
 #include <core/vfs/vfs.hpp>
 #include <rendering_engine/assets/asset_cache.hpp>
 #include <rendering_engine/assets/asset_device.hpp>
+#include <rendering_engine/assets/gltf_material_factory.hpp>
 #include <rendering_engine/debug_ui/imgui_layer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/rendering_engine.hpp>
@@ -190,6 +191,14 @@ namespace runtime
         // engine global.
         rendering_engine::set_asset_device(gpu.get());
         assets->init();
+        // Asynchronous glTF loads build their materials against the live
+        // renderer through the standard factory.
+        assets->set_gltf_material_factory(std::make_shared<rendering_engine::gltf_standard_material_factory>());
+#if _DEBUG
+        // Debug builds reload a texture whose file under the asset root
+        // changes on disk (polled from assets->pump()).
+        assets->enable_hot_reload(asset_root);
+#endif
         // After the renderer: debug builds give the physics world a line
         // helper that draws its colliders.
         physics->init();

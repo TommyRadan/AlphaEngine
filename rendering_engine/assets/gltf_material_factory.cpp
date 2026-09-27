@@ -68,15 +68,30 @@ namespace rendering_engine
         material->set_emissive(to_color(description.emissive_factor));
         material->set_emissive_intensity(std::max(description.emissive_strength, 0.0f));
 
-        if (description.base_color_map != nullptr)
+        // Each map binds the cache's texture when the importer supplies one
+        // (shared with model.textures, followed by a debug hot reload) and
+        // falls back to uploading the decoded image otherwise.
+        if (description.base_color_texture != nullptr)
+        {
+            material->set_albedo_map(description.base_color_texture);
+        }
+        else if (description.base_color_map != nullptr)
         {
             material->set_albedo_map(*description.base_color_map, description.base_color_space);
         }
-        if (description.normal_map != nullptr)
+        if (description.normal_texture != nullptr)
+        {
+            material->set_normal_map(description.normal_texture);
+        }
+        else if (description.normal_map != nullptr)
         {
             material->set_normal_map(*description.normal_map, gpu::color_space::linear);
         }
-        if (description.emissive_map != nullptr)
+        if (description.emissive_texture != nullptr)
+        {
+            material->set_emissive_map(description.emissive_texture);
+        }
+        else if (description.emissive_map != nullptr)
         {
             material->set_emissive_map(*description.emissive_map, gpu::color_space::srgb);
         }
@@ -88,13 +103,24 @@ namespace rendering_engine
         // the packed R already is the occlusion source.
         const bool has_packed = description.metallic_roughness_map != nullptr;
         const bool has_occlusion = description.occlusion_map != nullptr;
-        if (has_packed)
+        if (description.metallic_roughness_texture != nullptr)
+        {
+            material->set_orm_map(description.metallic_roughness_texture);
+        }
+        else if (has_packed)
         {
             material->set_orm_map(*description.metallic_roughness_map, gpu::color_space::linear);
         }
         if (has_occlusion && description.occlusion_map != description.metallic_roughness_map)
         {
-            material->set_occlusion_map(*description.occlusion_map, gpu::color_space::linear);
+            if (description.occlusion_texture != nullptr)
+            {
+                material->set_occlusion_map(description.occlusion_texture);
+            }
+            else
+            {
+                material->set_occlusion_map(*description.occlusion_map, gpu::color_space::linear);
+            }
         }
         // Without an occlusion texture the packed map's R channel holds
         // whatever the author left there (often, not always, white), so
@@ -115,5 +141,10 @@ namespace rendering_engine
     {
         gltf_standard_material_factory factory;
         return load_gltf(path, *runtime::current_engine().assets, factory, options);
+    }
+
+    std::shared_ptr<gltf_asset> load_gltf_async(const std::filesystem::path& path, const gltf_import_options& options)
+    {
+        return runtime::current_engine().assets->load_gltf_async(path, options);
     }
 } // namespace rendering_engine

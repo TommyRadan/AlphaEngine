@@ -32,6 +32,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 
 namespace rendering_engine::gpu
@@ -59,9 +60,18 @@ namespace rendering_engine::gpu
     // decoded values, so a colour image authored in sRGB (albedo, base
     // colour, emissive, sprites) enters shading linear. @c rgba8_unorm is
     // for data that is already linear (normals, metalness, roughness,
-    // AO) or for images that must round-trip unchanged. Compressed
-    // families (BC1-7 / ASTC) slot in here later, each with the same
-    // unorm / srgb pairing.
+    // AO) or for images that must round-trip unchanged.
+    //
+    // The block-compressed formats store 4x4 texel blocks (8 bytes for
+    // BC1 / BC4, 16 for the rest) and are sampled only: they cannot be
+    // attached, bound as storage images or given a generated mip chain,
+    // so every level is uploaded (see @ref is_compressed_texture_format
+    // and @ref texture_image_bytes). None is guaranteed: BCn is a desktop
+    // family and ASTC a mobile one, so a loader asks
+    // @c device::format_support before it picks one (the KTX2 loader in
+    // the asset cache transcodes to the best sampleable one). The colour
+    // families keep the unorm / srgb pairing; BC4 (one channel) and BC5
+    // (two) are data formats with no sRGB form.
     enum class texture_format
     {
         rgba8_unorm,
@@ -73,6 +83,16 @@ namespace rendering_engine::gpu
         depth24,
         depth32_float,
         depth24_stencil8,
+        bc1_rgba_unorm,
+        bc1_rgba_srgb,
+        bc3_rgba_unorm,
+        bc3_rgba_srgb,
+        bc4_r_unorm,
+        bc5_rg_unorm,
+        bc7_rgba_unorm,
+        bc7_rgba_srgb,
+        astc_4x4_unorm,
+        astc_4x4_srgb,
     };
 
     // The colour space an 8-bit RGBA image was authored in. Callers pass
@@ -259,11 +279,25 @@ namespace rendering_engine::gpu
     // region of the format measures. It is the storage layout, so
     // @c rgba16_float is eight bytes (four halves) and the packed depth
     // formats are four; the upload paths (@c write_texture and friends)
-    // document their own client layouts per backend.
+    // document their own client layouts per backend. For a
+    // block-compressed format it is the size of one 4x4 block (see
+    // @ref texture_block_extent).
     constexpr uint32_t texel_size_bytes(texture_format format)
     {
         switch (format)
         {
+        case texture_format::bc1_rgba_unorm:
+        case texture_format::bc1_rgba_srgb:
+        case texture_format::bc4_r_unorm:
+            return 8;
+        case texture_format::bc3_rgba_unorm:
+        case texture_format::bc3_rgba_srgb:
+        case texture_format::bc5_rg_unorm:
+        case texture_format::bc7_rgba_unorm:
+        case texture_format::bc7_rgba_srgb:
+        case texture_format::astc_4x4_unorm:
+        case texture_format::astc_4x4_srgb:
+            return 16;
         case texture_format::rgba8_unorm:
         case texture_format::rgba8_srgb:
             return 4;
@@ -281,6 +315,48 @@ namespace rendering_engine::gpu
             return 4;
         }
         return 4;
+    }
+
+    // True for the block-compressed formats (BCn, ASTC): sampled only,
+    // uploaded a whole block row at a time, every level supplied by the
+    // caller.
+    constexpr bool is_compressed_texture_format(texture_format format)
+    {
+        switch (format)
+        {
+        case texture_format::bc1_rgba_unorm:
+        case texture_format::bc1_rgba_srgb:
+        case texture_format::bc3_rgba_unorm:
+        case texture_format::bc3_rgba_srgb:
+        case texture_format::bc4_r_unorm:
+        case texture_format::bc5_rg_unorm:
+        case texture_format::bc7_rgba_unorm:
+        case texture_format::bc7_rgba_srgb:
+        case texture_format::astc_4x4_unorm:
+        case texture_format::astc_4x4_srgb:
+            return true;
+        default:
+            return false;
+        }
+    }
+
+    // Width and height, in texels, of the unit @ref texel_size_bytes
+    // measures: 4 for the block-compressed formats, 1 otherwise.
+    constexpr uint32_t texture_block_extent(texture_format format)
+    {
+        return is_compressed_texture_format(format) ? 4u : 1u;
+    }
+
+    // Bytes of a tightly packed @p width x @p height x @p depth image of
+    // @p format: whole blocks for a compressed format (a level smaller
+    // than a block still occupies one), texels otherwise. The storage
+    // layout, like @ref texel_size_bytes.
+    constexpr size_t texture_image_bytes(texture_format format, uint32_t width, uint32_t height, uint32_t depth = 1)
+    {
+        const uint32_t block = texture_block_extent(format);
+        const size_t blocks_x = (static_cast<size_t>(width) + block - 1) / block;
+        const size_t blocks_y = (static_cast<size_t>(height) + block - 1) / block;
+        return blocks_x * blocks_y * depth * texel_size_bytes(format);
     }
 
     // True for the depth and depth-stencil formats: what a target's

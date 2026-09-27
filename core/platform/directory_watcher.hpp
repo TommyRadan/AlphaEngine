@@ -61,7 +61,7 @@ namespace core::platform
      * every regular file's size and modification time with the snapshot the
      * previous call took. That is portable and dependency-free at the cost of
      * a directory scan per poll, so callers poll at a modest cadence (the
-     * debug hot-reload path polls every few hundred frames); an OS-notified
+     * asset cache's debug hot reload polls about once a second); an OS-notified
      * implementation can replace the body without changing the interface.
      *
      * The constructor takes the baseline snapshot, so the first @ref poll

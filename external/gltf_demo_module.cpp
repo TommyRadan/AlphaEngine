@@ -27,13 +27,15 @@
  *        own and frames it with the camera.
  *
  * Set ALPHAENGINE_GLTF to a model path before launching. The model is loaded
- * through rendering_engine::load_gltf (meshes and textures through the asset
- * cache, one standard_material per glTF material) and instantiated with
- * runtime::instantiate_gltf, which rotates the +Y-up file into the engine's
- * +Z-up world. A directional key light plus a dim ambient fill light it. The
- * @c gltf_showcase behaviour on the demo's root node owns the model and, on
- * the first frame a camera is rendering, puts that camera in front of the
- * model's bounds looking at its centre; WASD / mouse-look take over from there.
+ * in the background through rendering_engine::load_gltf_async (parsed and
+ * decoded on the worker pool; meshes and textures through the asset cache,
+ * one standard_material per glTF material) and, once it is ready,
+ * instantiated with runtime::instantiate_gltf_when_ready, which rotates the
+ * +Y-up file into the engine's +Z-up world. A directional key light plus a
+ * dim ambient fill light it. The @c gltf_showcase behaviour on the demo's
+ * root node owns the model and, on the first frame after it spawned with a
+ * camera rendering, puts that camera in front of the model's bounds looking
+ * at its centre; WASD / mouse-look take over from there.
  */
 
 #include "api/game_module.hpp"
@@ -53,9 +55,11 @@
 
 #include <algorithm>
 #include <cstdlib>
-#include <exception>
 #include <memory>
 #include <utility>
+#include <vector>
+
+#include <core/subscription.hpp>
 
 namespace
 {
@@ -136,19 +140,23 @@ namespace
         return found;
     }
 
-    // The demo's root: owns the loaded model, whose materials the spawned
-    // nodes (its descendants, freed first) draw with, and frames the model
-    // with the rendering camera once there is one.
+    // The demo's root: owns the model loading in the background, spawns it
+    // under its node once it is ready, and frames it with the rendering
+    // camera once there is one. The spawned nodes are its descendants, so
+    // they are freed before the model whose materials they draw with.
     struct gltf_showcase final : runtime::behavior
     {
-        explicit gltf_showcase(std::unique_ptr<rendering_engine::gltf_model> model) : m_model{std::move(model)}
-        {
-            m_has_bounds = compute_bounds(*m_model, m_bounds);
-        }
+        explicit gltf_showcase(std::shared_ptr<rendering_engine::gltf_asset> asset) : m_asset{std::move(asset)} {}
 
-        const rendering_engine::gltf_model& model() const noexcept
+        // Spawns the model under @p root when its load resolves; the pending
+        // spawn is this behaviour's, so it goes with the node.
+        void spawn_when_ready(runtime::node& root)
         {
-            return *m_model;
+            m_spawn = runtime::instantiate_gltf_when_ready(m_asset,
+                                                           root,
+                                                           [this](const std::vector<runtime::node*>&) {
+                                                               m_has_bounds = compute_bounds(m_asset->model, m_bounds);
+                                                           });
         }
 
         void on_update(float delta_time) override
@@ -195,7 +203,8 @@ namespace
         }
 
     private:
-        std::unique_ptr<rendering_engine::gltf_model> m_model;
+        std::shared_ptr<rendering_engine::gltf_asset> m_asset;
+        core::subscription m_spawn;
         math::aabb m_bounds{};
         bool m_has_bounds{false};
         bool m_camera_placed{false};
@@ -211,16 +220,11 @@ GAME_MODULE()
         return;
     }
 
-    std::unique_ptr<rendering_engine::gltf_model> model;
-    try
-    {
-        model = std::make_unique<rendering_engine::gltf_model>(rendering_engine::load_gltf(path));
-    }
-    catch (const std::exception& error)
-    {
-        LOG_ERR("gltf_demo_module: could not load '%s': %s", path, error.what());
-        return;
-    }
+    // Parsed, decoded and built on the worker pool; the uploads and the
+    // materials follow on the main thread in the asset cache's pump, and the
+    // showcase spawns the nodes on the first tick after that. A load that
+    // fails is logged by the cache and spawns nothing.
+    std::shared_ptr<rendering_engine::gltf_asset> model = rendering_engine::load_gltf_async(path);
 
     // The model goes into a scene of its own, which the engine unloads on
     // shutdown: the spawned nodes first, then the showcase holding the model
@@ -232,7 +236,7 @@ GAME_MODULE()
     {
         return;
     }
-    runtime::instantiate_gltf(showcase->model(), root);
+    showcase->spawn_when_ready(root);
 
     auto ambient = std::make_unique<rendering_engine::ambient_light>();
     ambient->color = math::vec3{1.0f, 1.0f, 1.0f};

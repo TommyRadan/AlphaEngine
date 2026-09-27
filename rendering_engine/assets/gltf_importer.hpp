@@ -163,6 +163,20 @@ namespace rendering_engine
         // occlusionTexture.strength; 1 when @ref occlusion_map is null.
         float occlusion_strength{1.0f};
 
+        // The same maps as cached textures, each uploaded in the colour
+        // space its slot samples it in (base colour in @ref
+        // base_color_space, emissive sRGB, the rest linear): what a factory
+        // binds so the material shares the cache's upload — and follows a
+        // debug hot reload of an external image file — instead of
+        // uploading a copy of the decoded image. Null exactly where the
+        // matching image pointer is; the occlusion texture is the very
+        // metallic-roughness one when the two slots name one image.
+        std::shared_ptr<texture_asset> base_color_texture;
+        std::shared_ptr<texture_asset> normal_texture;
+        std::shared_ptr<texture_asset> metallic_roughness_texture;
+        std::shared_ptr<texture_asset> occlusion_texture;
+        std::shared_ptr<texture_asset> emissive_texture;
+
         // Build the instance for skinned primitives
         // (@ref standard_material::set_skinned): the same surface, drawn
         // through the skinning variant.
@@ -256,6 +270,83 @@ namespace rendering_engine
     };
 
     /**
+     * @brief A glTF model loading in the background, from
+     *        @ref asset_cache::load_gltf_async.
+     *
+     * Starts @c loading; the cache's @c pump resolves it on the main thread
+     * to @c ready, with @ref model filled in, or to @c failed, with
+     * @ref error saying why (already logged). Read it from the main thread.
+     * The model obeys the same lifetime rules as one @ref load_gltf
+     * returns: tear down any nodes instantiated from it before the asset
+     * goes (see @c runtime::instantiate_gltf_when_ready for spawning one
+     * as soon as it is ready).
+     */
+    struct gltf_asset
+    {
+        enum class load_state
+        {
+            loading, /**< Parsing and decoding on a worker, or waiting for @c pump. */
+            ready,   /**< @ref model is complete. */
+            failed,  /**< The file could not be loaded; see @ref error. */
+        };
+
+        load_state state{load_state::loading};
+
+        // The imported model; empty until @ref state is ready.
+        gltf_model model;
+
+        // Why the load failed; empty otherwise.
+        std::string error;
+
+        bool is_ready() const noexcept
+        {
+            return state == load_state::ready;
+        }
+    };
+
+    /**
+     * @brief The CPU half of an import, from @ref begin_gltf_import to
+     *        @ref finish_gltf_import: the parsed file with its buffers, the
+     *        decoded images, the prebuilt geometry and the node, skeleton
+     *        and animation data. Opaque.
+     */
+    struct gltf_import;
+
+    /** @brief Frees a @ref gltf_import (where its type is complete). */
+    struct gltf_import_deleter
+    {
+        void operator()(gltf_import* import) const noexcept;
+    };
+
+    using gltf_import_ptr = std::unique_ptr<gltf_import, gltf_import_deleter>;
+
+    /**
+     * @brief The device-free half of @ref load_gltf: parses and validates
+     *        the file (and its buffers) through the VFS and builds the node
+     *        tree, the skeleton and the animation clips.
+     *
+     * With @p prebuild it also decodes every image a texture references and
+     * builds every primitive's geometry now, which is how
+     * @ref asset_cache::load_gltf_async runs it on a worker; without it both
+     * are left to @ref finish_gltf_import, which then builds only the
+     * geometry the cache does not already hold (the synchronous path).
+     * Touches neither the device nor the asset cache, so it is safe on any
+     * thread. Throws @c std::runtime_error (after logging) when the file
+     * cannot be parsed, its buffers cannot be loaded, or it fails
+     * validation.
+     */
+    gltf_import_ptr
+    begin_gltf_import(const std::filesystem::path& path, const gltf_import_options& options = {}, bool prebuild = true);
+
+    /**
+     * @brief The main-thread half of @ref load_gltf: uploads the geometry
+     *        and textures through @p cache, builds the materials through
+     *        @p materials and returns the finished model. @p import is
+     *        spent afterwards.
+     */
+    gltf_model finish_gltf_import(gltf_import& import, asset_cache& cache, gltf_material_factory& materials);
+
+    /**
      * @brief Loads the .gltf / .glb at @p path.
      *
      * Handles external buffer and image files (resolved relative to the glTF
@@ -273,6 +364,9 @@ namespace rendering_engine
      * @ref gltf_model::node_skeleton and @ref gltf_model::animations. Throws @c std::runtime_error (after
      * logging) when the file cannot be parsed, its buffers cannot be loaded, or
      * it fails validation; an undecodable image is warned about and skipped.
+     * @ref begin_gltf_import followed by @ref finish_gltf_import on the
+     * calling thread; @ref asset_cache::load_gltf_async runs the first half
+     * on the worker pool instead.
      */
     gltf_model load_gltf(const std::filesystem::path& path,
                          asset_cache& cache,
@@ -287,4 +381,13 @@ namespace rendering_engine
      * unit that reaches the live renderer.
      */
     gltf_model load_gltf(const std::filesystem::path& path, const gltf_import_options& options = {});
+
+    /**
+     * @brief Starts loading the .gltf / .glb at @p path in the background
+     *        against the running engine's asset cache (and the
+     *        @ref gltf_standard_material_factory the engine installs in it).
+     *        See @ref asset_cache::load_gltf_async.
+     */
+    std::shared_ptr<gltf_asset> load_gltf_async(const std::filesystem::path& path,
+                                                const gltf_import_options& options = {});
 } // namespace rendering_engine

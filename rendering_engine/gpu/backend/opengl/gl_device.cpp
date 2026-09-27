@@ -318,7 +318,21 @@ namespace rendering_engine::gpu::backend::opengl
 
     texture_usage gl_device::format_support(texture_format format) const
     {
-        // Every engine format is a required sampled / renderable
+        // The block-compressed formats are sampled and uploaded, never
+        // attached or stored to; BPTC and RGTC are core, S3TC and ASTC
+        // extensions, so the context is asked (ARB_internalformat_query2,
+        // core since 4.3) rather than assumed.
+        if (is_compressed_texture_format(format))
+        {
+            GLint supported = GL_FALSE;
+            glGetInternalformativ(GL_TEXTURE_2D,
+                                  to_gl_texture_format(format).internal_format,
+                                  GL_INTERNALFORMAT_SUPPORTED,
+                                  1,
+                                  &supported);
+            return supported == GL_TRUE ? texture_usage_sampled | texture_usage_copy_dst : 0u;
+        }
+        // Every other engine format is a required sampled / renderable
         // internal format in 4.6. Image load/store needs a format with
         // a GLSL image layout qualifier: the sRGB and three-channel
         // formats have none, and a depth image cannot be bound.

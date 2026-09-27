@@ -1223,6 +1223,12 @@ namespace rendering_engine::gpu::backend::vulkan
                 features.independentBlend,
                 m_features.independent_blend,
                 "independentBlend (every colour attachment of a pipeline blends alike)");
+        // The block-compressed families are enabled wherever the device
+        // has them, without a warning when it does not: a desktop GPU
+        // lacks ASTC and a mobile one BCn as a matter of course, and
+        // format_support steers the texture loaders to what is there.
+        features.textureCompressionBC = supported.textureCompressionBC;
+        features.textureCompressionASTC_LDR = supported.textureCompressionASTC_LDR;
 
         std::vector<const char*> device_extensions{VK_KHR_SWAPCHAIN_EXTENSION_NAME};
         if (m_depth_clip_control_enabled)

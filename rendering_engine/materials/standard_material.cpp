@@ -22,10 +22,13 @@
 
 #include <rendering_engine/materials/standard_material.hpp>
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
+#include <initializer_list>
 #include <utility>
 
+#include <rendering_engine/assets/texture_asset.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/gpu/shader_bindings.hpp>
@@ -162,13 +165,13 @@ namespace rendering_engine
         // Drop the bind group before the buffers / textures it
         // references.
         release_per_material_bind_group();
-        release_map(m_orm_map);
-        release_map(m_occlusion_map);
-        release_map(m_emissive_map);
-        release_map(m_roughness_map);
-        release_map(m_metalness_map);
-        release_map(m_normal_map);
-        release_map(m_albedo_map);
+        release_slot(m_orm_map);
+        release_slot(m_occlusion_map);
+        release_slot(m_emissive_map);
+        release_slot(m_roughness_map);
+        release_slot(m_metalness_map);
+        release_slot(m_normal_map);
+        release_slot(m_albedo_map);
         if (m_material_ubo.valid())
         {
             device().destroy(m_material_ubo);
@@ -208,104 +211,92 @@ namespace rendering_engine
 
     void standard_material::set_albedo_map(const util::image& image, gpu::color_space space)
     {
-        release_map(m_albedo_map);
-        m_albedo_map = upload_map(image, space);
-        rebuild_bind_group();
+        set_slot_image(m_albedo_map, image, space);
+    }
+
+    void standard_material::set_albedo_map(std::shared_ptr<texture_asset> texture)
+    {
+        set_slot_asset(m_albedo_map, std::move(texture));
     }
 
     void standard_material::clear_albedo_map()
     {
-        if (!m_albedo_map.valid())
-        {
-            return;
-        }
-        release_map(m_albedo_map);
-        rebuild_bind_group();
+        clear_slot(m_albedo_map);
     }
 
     void standard_material::set_normal_map(const util::image& image, gpu::color_space space)
     {
-        release_map(m_normal_map);
-        m_normal_map = upload_map(image, space);
-        rebuild_bind_group();
+        set_slot_image(m_normal_map, image, space);
+    }
+
+    void standard_material::set_normal_map(std::shared_ptr<texture_asset> texture)
+    {
+        set_slot_asset(m_normal_map, std::move(texture));
     }
 
     void standard_material::clear_normal_map()
     {
-        if (!m_normal_map.valid())
-        {
-            return;
-        }
-        release_map(m_normal_map);
-        rebuild_bind_group();
+        clear_slot(m_normal_map);
     }
 
     void standard_material::set_metalness_map(const util::image& image, gpu::color_space space)
     {
-        release_map(m_metalness_map);
-        m_metalness_map = upload_map(image, space);
-        rebuild_bind_group();
+        set_slot_image(m_metalness_map, image, space);
+    }
+
+    void standard_material::set_metalness_map(std::shared_ptr<texture_asset> texture)
+    {
+        set_slot_asset(m_metalness_map, std::move(texture));
     }
 
     void standard_material::clear_metalness_map()
     {
-        if (!m_metalness_map.valid())
-        {
-            return;
-        }
-        release_map(m_metalness_map);
-        rebuild_bind_group();
+        clear_slot(m_metalness_map);
     }
 
     void standard_material::set_roughness_map(const util::image& image, gpu::color_space space)
     {
-        release_map(m_roughness_map);
-        m_roughness_map = upload_map(image, space);
-        rebuild_bind_group();
+        set_slot_image(m_roughness_map, image, space);
+    }
+
+    void standard_material::set_roughness_map(std::shared_ptr<texture_asset> texture)
+    {
+        set_slot_asset(m_roughness_map, std::move(texture));
     }
 
     void standard_material::clear_roughness_map()
     {
-        if (!m_roughness_map.valid())
-        {
-            return;
-        }
-        release_map(m_roughness_map);
-        rebuild_bind_group();
+        clear_slot(m_roughness_map);
     }
 
     void standard_material::set_occlusion_map(const util::image& image, gpu::color_space space)
     {
-        release_map(m_occlusion_map);
-        m_occlusion_map = upload_map(image, space);
-        rebuild_bind_group();
+        set_slot_image(m_occlusion_map, image, space);
+    }
+
+    void standard_material::set_occlusion_map(std::shared_ptr<texture_asset> texture)
+    {
+        set_slot_asset(m_occlusion_map, std::move(texture));
     }
 
     void standard_material::clear_occlusion_map()
     {
-        if (!m_occlusion_map.valid())
-        {
-            return;
-        }
-        release_map(m_occlusion_map);
-        rebuild_bind_group();
+        clear_slot(m_occlusion_map);
     }
 
     void standard_material::set_orm_map(const util::image& image, gpu::color_space space)
     {
-        release_map(m_orm_map);
-        m_orm_map = upload_map(image, space);
-        rebuild_bind_group();
+        set_slot_image(m_orm_map, image, space);
+    }
+
+    void standard_material::set_orm_map(std::shared_ptr<texture_asset> texture)
+    {
+        set_slot_asset(m_orm_map, std::move(texture));
     }
 
     void standard_material::clear_orm_map()
     {
-        if (!m_orm_map.valid())
-        {
-            return;
-        }
-        release_map(m_orm_map);
-        rebuild_bind_group();
+        clear_slot(m_orm_map);
     }
 
     void standard_material::set_occlusion_strength(float strength)
@@ -316,19 +307,84 @@ namespace rendering_engine
 
     void standard_material::set_emissive_map(const util::image& image, gpu::color_space space)
     {
-        release_map(m_emissive_map);
-        m_emissive_map = upload_map(image, space);
-        rebuild_bind_group();
+        set_slot_image(m_emissive_map, image, space);
+    }
+
+    void standard_material::set_emissive_map(std::shared_ptr<texture_asset> texture)
+    {
+        set_slot_asset(m_emissive_map, std::move(texture));
     }
 
     void standard_material::clear_emissive_map()
     {
-        if (!m_emissive_map.valid())
+        clear_slot(m_emissive_map);
+    }
+
+    gpu::texture standard_material::map_slot::handle() const
+    {
+        return asset != nullptr ? asset->texture : owned;
+    }
+
+    bool standard_material::map_slot::bound() const
+    {
+        return asset != nullptr || owned.valid();
+    }
+
+    void standard_material::release_slot(map_slot& slot)
+    {
+        release_map(slot.owned);
+        slot.asset.reset();
+        slot.generation = 0;
+    }
+
+    void standard_material::set_slot_image(map_slot& slot, const util::image& image, gpu::color_space space)
+    {
+        release_slot(slot);
+        slot.owned = upload_map(image, space);
+        rebuild_bind_group();
+    }
+
+    void standard_material::set_slot_asset(map_slot& slot, std::shared_ptr<texture_asset> texture)
+    {
+        if (texture == nullptr)
+        {
+            clear_slot(slot);
+            return;
+        }
+        release_slot(slot);
+        slot.asset = std::move(texture);
+        rebuild_bind_group();
+    }
+
+    void standard_material::clear_slot(map_slot& slot)
+    {
+        if (!slot.bound())
         {
             return;
         }
-        release_map(m_emissive_map);
+        release_slot(slot);
         rebuild_bind_group();
+    }
+
+    bool standard_material::refresh_texture_assets()
+    {
+        const std::array<const map_slot*, 7> slots = {&m_albedo_map,
+                                                      &m_normal_map,
+                                                      &m_metalness_map,
+                                                      &m_roughness_map,
+                                                      &m_emissive_map,
+                                                      &m_occlusion_map,
+                                                      &m_orm_map};
+        const bool stale = std::any_of(
+            slots.begin(),
+            slots.end(),
+            [](const map_slot* slot) { return slot->asset != nullptr && slot->asset->generation != slot->generation; });
+        if (!stale)
+        {
+            return false;
+        }
+        rebuild_bind_group();
+        return true;
     }
 
     void standard_material::set_environment(const environment& env)
@@ -399,17 +455,17 @@ namespace rendering_engine
         {
             mask |= keyword_bit(material_keyword::skinned);
         }
-        if (m_albedo_map.valid())
+        if (m_albedo_map.bound())
         {
             mask |= keyword_bit(material_keyword::use_albedo_map);
         }
         // Normal mapping needs the tangent frame; without it the map
         // stays bound but the variant has no code to sample it.
-        if (m_normal_map.valid() && m_tangents)
+        if (m_normal_map.bound() && m_tangents)
         {
             mask |= keyword_bit(material_keyword::use_normal_map);
         }
-        if (m_orm_map.valid())
+        if (m_orm_map.bound())
         {
             // The packed map supersedes the two single-channel ones, so
             // their keywords stay off and no extra variant is compiled.
@@ -417,22 +473,22 @@ namespace rendering_engine
         }
         else
         {
-            if (m_metalness_map.valid())
+            if (m_metalness_map.bound())
             {
                 mask |= keyword_bit(material_keyword::use_metallic_map);
             }
-            if (m_roughness_map.valid())
+            if (m_roughness_map.bound())
             {
                 mask |= keyword_bit(material_keyword::use_roughness_map);
             }
         }
         // A separate occlusion map overrides the packed map's R channel,
         // so it stays independent of the ORM keyword.
-        if (m_occlusion_map.valid())
+        if (m_occlusion_map.bound())
         {
             mask |= keyword_bit(material_keyword::use_occlusion_map);
         }
-        if (m_emissive_map.valid())
+        if (m_emissive_map.bound())
         {
             mask |= keyword_bit(material_keyword::use_emissive_map);
         }
@@ -457,13 +513,26 @@ namespace rendering_engine
         // bound; the USE_ORM_MAP variant reads roughness, metalness and
         // (absent a separate occlusion map) occlusion from it.
         const std::array<std::pair<uint32_t, gpu::texture>, 6> maps = {{
-            {gpu::shader_bindings::material_albedo_map, m_albedo_map},
-            {gpu::shader_bindings::material_normal_map, m_normal_map},
-            {gpu::shader_bindings::material_metalness_map, m_orm_map.valid() ? m_orm_map : m_metalness_map},
-            {gpu::shader_bindings::material_roughness_map, m_roughness_map},
-            {gpu::shader_bindings::material_emissive_map, m_emissive_map},
-            {gpu::shader_bindings::material_occlusion_map, m_occlusion_map},
+            {gpu::shader_bindings::material_albedo_map, m_albedo_map.handle()},
+            {gpu::shader_bindings::material_normal_map, m_normal_map.handle()},
+            {gpu::shader_bindings::material_metalness_map,
+             m_orm_map.bound() ? m_orm_map.handle() : m_metalness_map.handle()},
+            {gpu::shader_bindings::material_roughness_map, m_roughness_map.handle()},
+            {gpu::shader_bindings::material_emissive_map, m_emissive_map.handle()},
+            {gpu::shader_bindings::material_occlusion_map, m_occlusion_map.handle()},
         }};
+        // Remember which texture of each shared asset the group now
+        // samples, so refresh_texture_assets notices when it is replaced.
+        for (map_slot* slot : {&m_albedo_map,
+                               &m_normal_map,
+                               &m_metalness_map,
+                               &m_roughness_map,
+                               &m_emissive_map,
+                               &m_occlusion_map,
+                               &m_orm_map})
+        {
+            slot->generation = slot->asset != nullptr ? slot->asset->generation : 0;
+        }
         for (const auto& [binding, texture] : maps)
         {
             gpu::binding_value tex_slot{};
