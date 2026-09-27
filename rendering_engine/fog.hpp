@@ -63,12 +63,11 @@ namespace rendering_engine
         // exp(-height_falloff * (z - reference_height)), so it reads as
         // height_density right at reference_height and thins out above
         // it. height_density of 0 (the default) disables the term
-        // entirely, whatever @ref mode is, keeping today's distance-only
-        // output bit-identical. The engine is +Z up, so "height" is
-        // world Z. This is also the medium the volumetric fog pass
-        // (@ref post_settings::volumetric) raymarches and lights; while
-        // it runs, the analytic term only covers the part of each view
-        // ray beyond its max distance.
+        // entirely, whatever @ref mode is. The engine is +Z up, so
+        // "height" is world Z. This is also the medium the volumetric fog
+        // pass (@ref post_settings::volumetric) raymarches and lights;
+        // while it runs, the analytic term only covers the part of each
+        // view ray beyond its max distance.
         float height_density{0.0f};
         float height_falloff{0.1f};
         float reference_height{0.0f};

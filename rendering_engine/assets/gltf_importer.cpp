@@ -1029,7 +1029,7 @@ namespace rendering_engine
                 description.occlusion_strength = material.occlusion_texture.scale;
             }
 
-            // What standard_material cannot take yet, named once per material
+            // What standard_material does not take, named once per material
             // so a dull-looking import is not a mystery.
             if (material.alpha_mode != cgltf_alpha_mode_opaque)
             {

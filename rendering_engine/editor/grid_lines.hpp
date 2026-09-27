@@ -3,8 +3,8 @@
 
 /**
  * @file grid_lines.hpp
- * @brief Line layout of the finite @ref grid_helper, kept device-free so
- *        the centre-line placement is unit-testable.
+ * @brief Line layout of the finite @ref grid_helper: a pure, device-free
+ *        function that works out the centre-line placement.
  */
 
 #pragma once

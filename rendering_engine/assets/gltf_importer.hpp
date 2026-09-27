@@ -167,19 +167,19 @@ namespace rendering_engine
     /**
      * @brief Turns a @ref gltf_material_description into a material.
      *
-     * The importer's geometry and texture paths need only the asset cache and
-     * its (fake-able) device, but a real @ref standard_material can only be
-     * built against the live renderer. Routing material creation through
-     * this interface keeps that dependency out of the importer: production
-     * passes @ref gltf_standard_material_factory, tests pass a recorder.
+     * A real @ref standard_material can only be built against the live
+     * renderer, while the importer's geometry and texture paths need only
+     * the asset cache. Routing material creation through this interface
+     * keeps that dependency out of the importer: the engine-backed loaders
+     * pass @ref gltf_standard_material_factory.
      *
      * The material comes back as a @c shared_ptr on purpose: a shared_ptr
      * captures its deleter where the object is created (inside the
-     * renderer-side factory), so the importer and the headless test binary
-     * never instantiate @c delete on a @ref standard_material. With a
-     * @c unique_ptr they would, and the undefined-behaviour sanitizer's vptr
-     * check then emits a static reference to the material's typeinfo, which
-     * only links when @c standard_material.cpp is part of the binary.
+     * renderer-side factory), so the importer never instantiates @c delete
+     * on a @ref standard_material. With a @c unique_ptr it would, and the
+     * undefined-behaviour sanitizer's vptr check then emits a static
+     * reference to the material's typeinfo, which only links when
+     * @c standard_material.cpp is part of the binary.
      */
     struct gltf_material_factory
     {

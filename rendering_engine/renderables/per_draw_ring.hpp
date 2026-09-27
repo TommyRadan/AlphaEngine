@@ -68,13 +68,13 @@ namespace rendering_engine
      * one region per frame the device keeps in flight
      * (@c device::frames_in_flight) and a frame writes the region of its
      * @c device::frame_slot: the Vulkan backend waits that slot's fence in
-     * @c device::begin_frame before the renderer records anything (the
-     * frame-top wait of #189), so the region a frame rewrites is one the
-     * GPU is done with; OpenGL keeps one frame in flight and orders
-     * @c glBufferSubData against earlier draws itself. Because the ring
-     * partitions the buffer per slot itself, it is created with the
-     * @c stream_data hint and the backend keeps a single copy of it
-     * rather than one per slot as it does for @c dynamic_data buffers.
+     * @c device::begin_frame before the renderer records anything, so the
+     * region a frame rewrites is one the GPU is done with; OpenGL keeps
+     * one frame in flight and orders @c glBufferSubData against earlier
+     * draws itself. Because the ring partitions the buffer per slot
+     * itself, it is created with the @c stream_data hint and the backend
+     * keeps a single copy of it rather than one per slot as it does for
+     * @c dynamic_data buffers.
      *
      * Overflow. A frame that draws more than a region holds spills into
      * extra buffers of the same slot count for the rest of that frame
