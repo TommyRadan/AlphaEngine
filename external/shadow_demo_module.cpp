@@ -34,6 +34,7 @@
 #include <runtime/components/light_component.hpp>
 #include <runtime/components/renderable_component.hpp>
 #include <runtime/engine.hpp>
+#include <runtime/scripting/lua_behavior.hpp>
 
 #include <cmath>
 #include <memory>
@@ -73,7 +74,8 @@
 //   shadow_demo     (shadow_field: the materials; the ambient light)
 //   ├── ground      (plane)
 //   ├── 15 spheres  (sphere each)
-//   ├── 3 pillars   (box each)
+//   ├── 3 pillars   (box each; the first also runs scripts/bob.lua, a Lua
+//   │                script under the asset root, so it rises, sinks and turns)
 //   └── sun         (orbiting_sun: the shadow-casting directional light)
 
 namespace
@@ -155,13 +157,14 @@ namespace
 
     // Uploads @p shape and hangs it on a new child of @p parent at @p position.
     template<typename Shape>
-    void
+    runtime::node&
     spawn_prop(runtime::context& scene, runtime::node& parent, const math::vec3& position, std::unique_ptr<Shape> shape)
     {
         shape->upload();
         runtime::node& prop = scene.create_node({}, &parent);
         prop.transform.set_position(position);
         prop.add_component(runtime::renderable_component{std::move(shape)});
+        return prop;
     }
 } // namespace
 
@@ -235,13 +238,21 @@ GAME_MODULE()
         math::vec3{11.0f, -3.0f, 0.0f},
     };
     constexpr float pillar_height = 5.0f;
+    runtime::node* scripted_pillar = nullptr;
     for (const math::vec3& spot : pillar_spots)
     {
-        spawn_prop(scene,
-                   demo,
-                   math::vec3{spot.x, spot.y, ground_z + pillar_height * 0.5f},
-                   std::make_unique<rendering_engine::box>(pillar_material, 0.8f, 0.8f, pillar_height));
+        runtime::node& pillar =
+            spawn_prop(scene,
+                       demo,
+                       math::vec3{spot.x, spot.y, ground_z + pillar_height * 0.5f},
+                       std::make_unique<rendering_engine::box>(pillar_material, 0.8f, 0.8f, pillar_height));
+        if (scripted_pillar == nullptr)
+        {
+            scripted_pillar = &pillar;
+        }
     }
+    // The first pillar's logic is a Lua script (runtime/scripting).
+    runtime::add_behavior<runtime::lua_behavior>(*scripted_pillar, "scripts/bob.lua");
 
     runtime::node& sun = scene.create_node("sun", &demo);
     runtime::add_behavior<orbiting_sun>(sun);

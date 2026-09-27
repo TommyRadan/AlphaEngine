@@ -24,3 +24,4 @@ target_sources(AlphaEngine PRIVATE
 
 add_subdirectory(components)
 add_subdirectory(physics)
+add_subdirectory(scripting)

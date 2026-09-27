@@ -46,6 +46,7 @@
 #include <runtime/game_module.hpp>
 #include <runtime/physics/physics_world.hpp>
 #include <runtime/scene_manager.hpp>
+#include <runtime/scripting/script_host.hpp>
 
 namespace runtime
 {
@@ -125,6 +126,7 @@ namespace runtime
         // need the GL context to be live first.
         renderer = std::make_unique<rendering_engine::context>();
         physics = std::make_unique<runtime::physics::world>();
+        scripts = std::make_unique<runtime::script_host>();
         scenes = std::make_unique<runtime::scene_manager>();
     }
 
@@ -134,6 +136,7 @@ namespace runtime
         // current-engine pointer last so any destructor side effects
         // that reach for current_engine() still see a valid engine.
         scenes.reset();
+        scripts.reset();
         physics.reset();
         renderer.reset();
         // Destroyed after its consumers (renderer / scenes) so their handles
@@ -202,6 +205,10 @@ namespace runtime
         // After the renderer: debug builds give the physics world a line
         // helper that draws its colliders.
         physics->init();
+        // Before the scenes, so the game modules' bootstraps and scene files
+        // can attach scripted behaviours; scripts read through the VFS
+        // mounted above.
+        scripts->init(*events);
         scenes->init();
 
         // Register our own quit_requested listener now that the event
@@ -222,6 +229,8 @@ namespace runtime
         // renderer, light and camera registration and releases its GPU
         // buffers, which needs the renderer and the asset cache still up.
         scenes->quit();
+        // Every scripted behaviour went with its scene; close the Lua state.
+        scripts->quit();
         // Every physics component has unregistered with its scene; the world
         // goes before the renderer its debug helper draws through.
         physics->quit();

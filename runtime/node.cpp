@@ -46,6 +46,12 @@ runtime::node::~node()
     // node, so leaving handles dangling would leak pooled slots.
     release_components();
 
+    // Whoever holds this node's lifetime cell now reads it as gone.
+    if (m_lifetime)
+    {
+        *m_lifetime = nullptr;
+    }
+
     // Detach from the parent so its child list never references freed memory.
     detach_from_parent();
 
@@ -235,6 +241,15 @@ runtime::context* runtime::node::owning_scene() const noexcept
 bool runtime::node::is_destroy_pending() const noexcept
 {
     return m_destroy_pending;
+}
+
+std::shared_ptr<runtime::node* const> runtime::node::lifetime_cell()
+{
+    if (!m_lifetime)
+    {
+        m_lifetime = std::make_shared<node*>(this);
+    }
+    return m_lifetime;
 }
 
 void runtime::node::remove_all_components()
