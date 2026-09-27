@@ -22,28 +22,36 @@
 
 #pragma once
 
-#include <core/math/aabb.hpp>
-#include <rendering_engine/assets/color.hpp>
-#include <rendering_engine/debug/line_helper.hpp>
+#include <core/math/math.hpp>
+#include <rendering_engine/editor/line_helper.hpp>
 
-namespace rendering_engine::debug
+namespace rendering_engine
 {
-    // Wireframe of an axis-aligned bounding box.
-    // The twelve edges are baked in world space, so
-    // the inherited @ref transform is left at identity; call
-    // @ref set_box to follow a box that moves.
-    struct box_helper : public line_helper
-    {
-        explicit box_helper(const core::math::aabb& box = core::math::aabb{},
-                            color color = rendering_engine::color{255, 255, 0, 255});
+    struct directional_light;
+}
 
-        // Replace the box and rebuild the wireframe.
-        void set_box(const core::math::aabb& box);
+namespace rendering_engine::editor
+{
+    // Gizmo for a directional light. Draws a small square facing the
+    // light's travel direction at the world origin plus a ray along that
+    // direction, both tinted with the light's colour. The geometry tracks
+    // the light's direction / colour every frame, so the helper must not
+    // outlive the light it points at.
+    struct directional_light_helper : public line_helper
+    {
+        explicit directional_light_helper(const directional_light* light, float size = 1.0f);
+
+    protected:
+        void refresh() override;
 
     private:
-        void rebuild();
+        const directional_light* m_light;
+        float m_size;
 
-        core::math::aabb m_box;
-        color m_color;
+        // Last state the geometry was built from, so refresh() only
+        // rebuilds when the light actually moves or changes colour.
+        core::math::vec3 m_last_direction{0.0f, 0.0f, 0.0f};
+        core::math::vec3 m_last_color{0.0f, 0.0f, 0.0f};
+        bool m_built{false};
     };
-} // namespace rendering_engine::debug
+} // namespace rendering_engine::editor

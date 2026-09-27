@@ -20,18 +20,18 @@
  * SOFTWARE.
  */
 
-#include <rendering_engine/passes/debug_pass.hpp>
+#include <rendering_engine/editor/debug_pass.hpp>
 
 #include <algorithm>
 #include <functional>
 
-#include <rendering_engine/debug_ui/imgui_layer.hpp>
+#include <rendering_engine/editor/imgui_layer.hpp>
 #include <rendering_engine/gpu/render_target.hpp>
 #include <rendering_engine/materials/material.hpp>
 #include <rendering_engine/renderables/per_draw_ubo.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
 
-namespace rendering_engine
+namespace rendering_engine::editor
 {
     debug_pass::debug_pass(std::vector<renderable*>* registry, gpu::bind_group frame_bind_group)
         : m_registry(registry), m_frame_bind_group(frame_bind_group)
@@ -118,10 +118,10 @@ namespace rendering_engine
         }
 
         // The ImGui overlay's draw data was built on the main thread in
-        // debug_ui::begin_frame before the passes ran; replaying it here
+        // editor::begin_frame before the passes ran; replaying it here
         // is pure GPU recording against the still-open pass, so no event
         // listener runs inside record(). No-op without ImGui.
-        debug_ui::record_draw_data(*pass_encoder);
+        record_draw_data(*pass_encoder);
         pass_encoder->end();
     }
-} // namespace rendering_engine
+} // namespace rendering_engine::editor

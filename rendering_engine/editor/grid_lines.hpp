@@ -30,7 +30,7 @@
 
 #include <vector>
 
-namespace rendering_engine::debug
+namespace rendering_engine::editor
 {
     // One line of the finite grid along one axis: where it sits (the
     // coordinate along the perpendicular axis) and whether it is the
@@ -78,4 +78,4 @@ namespace rendering_engine::debug
         }
         return lines;
     }
-} // namespace rendering_engine::debug
+} // namespace rendering_engine::editor

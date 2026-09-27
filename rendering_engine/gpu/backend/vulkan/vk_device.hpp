@@ -502,7 +502,7 @@ namespace rendering_engine::gpu::backend::vulkan
         // vkDeviceWaitIdle in @c quit; and under @c flush_pending_destroys
         // for a caller with the same problem outside this queue (the
         // ImGui Vulkan backend's own descriptor sets — see its use in
-        // debug_ui). A transfer batch may reference the resource as well
+        // the editor overlay). A transfer batch may reference the resource as well
         // — a copy into a buffer or image destroyed before the batch ran
         // — so each entry also records the newest batch id at enqueue
         // time and runs only once every batch up to that id has retired.

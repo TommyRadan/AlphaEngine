@@ -68,7 +68,7 @@
 #include <core/event_engine.hpp>
 #include <core/log.hpp>
 #include <core/math/math.hpp>
-#include <rendering_engine/debug/box_edges.hpp>
+#include <rendering_engine/editor/box_edges.hpp>
 #include <rendering_engine/renderables/model.hpp>
 #include <runtime/components/mesh_component.hpp>
 #include <runtime/components/renderable_component.hpp>
@@ -1910,7 +1910,7 @@ namespace runtime::physics
                 {
                     corners[i] = origin + rotation * local[i];
                 }
-                rendering_engine::debug::build_box_edges(corners, color, positions, colors);
+                rendering_engine::editor::build_box_edges(corners, color, positions, colors);
                 break;
             }
             case collider_shape::sphere:

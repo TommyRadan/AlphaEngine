@@ -20,13 +20,13 @@
  * SOFTWARE.
  */
 
-#include <rendering_engine/debug/line_helper.hpp>
+#include <rendering_engine/editor/line_helper.hpp>
 
 #include <rendering_engine/materials/line_material.hpp>
 #include <rendering_engine/renderer.hpp>
 #include <runtime/engine.hpp>
 
-namespace rendering_engine::debug
+namespace rendering_engine::editor
 {
     line_helper::line_helper(const char* name)
         : helper(name, helper_layer::overlay), m_line(&runtime::current_engine().renderer->get_debug_line_material())
@@ -67,4 +67,4 @@ namespace rendering_engine::debug
         m_line.transform = transform;
         m_line.collect_draw_items(out);
     }
-} // namespace rendering_engine::debug
+} // namespace rendering_engine::editor

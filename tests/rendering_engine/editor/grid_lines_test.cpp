@@ -1,4 +1,4 @@
-// Unit tests for rendering_engine/debug/grid_lines.hpp: the line layout of
+// Unit tests for rendering_engine/editor/grid_lines.hpp: the line layout of
 // the finite grid_helper. An even division count has a spaced line through
 // the origin, which is the accented centre line; an odd count puts the origin
 // mid-cell, so a centre line is added at 0 (and the lines stay in ascending
@@ -9,12 +9,12 @@
 #include <cstddef>
 #include <vector>
 
-#include <rendering_engine/debug/grid_lines.hpp>
+#include <rendering_engine/editor/grid_lines.hpp>
 
 namespace
 {
-    using rendering_engine::debug::grid_line;
-    using rendering_engine::debug::grid_lines;
+    using rendering_engine::editor::grid_line;
+    using rendering_engine::editor::grid_lines;
 
     std::size_t center_count(const std::vector<grid_line>& lines)
     {

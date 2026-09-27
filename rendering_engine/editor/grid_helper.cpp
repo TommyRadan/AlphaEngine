@@ -20,14 +20,14 @@
  * SOFTWARE.
  */
 
-#include <rendering_engine/debug/grid_helper.hpp>
+#include <rendering_engine/editor/grid_helper.hpp>
 
 #include <vector>
 
 #include <core/math/math.hpp>
-#include <rendering_engine/debug/grid_lines.hpp>
+#include <rendering_engine/editor/grid_lines.hpp>
 
-namespace rendering_engine::debug
+namespace rendering_engine::editor
 {
     grid_helper::grid_helper(float size, int divisions, color color, rendering_engine::color center_color)
         : line_helper("Grid")
@@ -69,4 +69,4 @@ namespace rendering_engine::debug
 
         set_segments(positions, colors);
     }
-} // namespace rendering_engine::debug
+} // namespace rendering_engine::editor

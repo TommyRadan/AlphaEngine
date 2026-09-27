@@ -188,7 +188,7 @@ set(ALPHAENGINE_TEST_SOURCES
     rendering_engine/materials/material_template_test.cpp
     rendering_engine/materials/pipeline_variant_test.cpp
     rendering_engine/sdl_input_test.cpp
-    rendering_engine/debug/grid_lines_test.cpp
+    rendering_engine/editor/grid_lines_test.cpp
     rendering_engine/passes/projection_jitter_test.cpp
     rendering_engine/render_graph/frame_graph_test.cpp
     rendering_engine/render_stats_test.cpp

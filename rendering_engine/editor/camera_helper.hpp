@@ -23,38 +23,39 @@
 #pragma once
 
 #include <core/math/math.hpp>
-#include <rendering_engine/debug/line_helper.hpp>
+#include <rendering_engine/assets/color.hpp>
+#include <rendering_engine/editor/line_helper.hpp>
 
 namespace rendering_engine
 {
-    struct spot_light;
+    struct camera;
 }
 
-namespace rendering_engine::debug
+namespace rendering_engine::editor
 {
-    // Gizmo for a spot light. Draws a wireframe cone from the light's
-    // world position along its direction, opening to the outer cone
-    // half-angle at a fixed visual length, tinted with the light's
-    // colour. The geometry tracks the light's position / direction /
-    // colour / outer angle every frame, so the helper must not outlive
-    // the light it points at.
-    struct spot_light_helper : public line_helper
+    // Wireframe of a camera's view frustum.
+    // The eight clip-space corners are unprojected
+    // through the inverse view-projection into world space and drawn as a
+    // hexahedron, so the gizmo shows exactly what the camera sees. The
+    // geometry tracks the camera's view-projection every frame, so the
+    // helper must not outlive the camera it points at.
+    //
+    // Visualising the active camera's own frustum is degenerate (it fills
+    // the screen); this is meant for a secondary / inactive camera.
+    struct camera_helper : public line_helper
     {
-        explicit spot_light_helper(const spot_light* light, float size = 1.0f);
+        explicit camera_helper(const camera* cam, color color = rendering_engine::color{200, 200, 80, 255});
 
     protected:
         void refresh() override;
 
     private:
-        const spot_light* m_light;
-        float m_size;
+        const camera* m_camera;
+        color m_color;
 
-        // Last state the geometry was built from, so refresh() only
-        // rebuilds when the light actually moves, turns or changes look.
-        core::math::vec3 m_last_position{0.0f, 0.0f, 0.0f};
-        core::math::vec3 m_last_direction{0.0f, 0.0f, 0.0f};
-        core::math::vec3 m_last_color{0.0f, 0.0f, 0.0f};
-        float m_last_outer_angle{0.0f};
+        // Last view-projection the geometry was built from, so refresh()
+        // only rebuilds when the camera moves.
+        core::math::mat4 m_last_view_projection{};
         bool m_built{false};
     };
-} // namespace rendering_engine::debug
+} // namespace rendering_engine::editor

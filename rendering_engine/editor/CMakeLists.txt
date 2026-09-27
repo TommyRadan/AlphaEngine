@@ -6,6 +6,8 @@ target_sources(AlphaEngine PRIVATE
     box_helper.hpp
     camera_helper.cpp
     camera_helper.hpp
+    debug_pass.cpp
+    debug_pass.hpp
     directional_light_helper.cpp
     directional_light_helper.hpp
     grid_helper.cpp
@@ -13,6 +15,8 @@ target_sources(AlphaEngine PRIVATE
     grid_lines.hpp
     helper.cpp
     helper.hpp
+    imgui_layer.cpp
+    imgui_layer.hpp
     infinite_grid.cpp
     infinite_grid.hpp
     line_helper.cpp

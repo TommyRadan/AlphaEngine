@@ -20,31 +20,30 @@
  * SOFTWARE.
  */
 
-#include <rendering_engine/debug/axes_helper.hpp>
+#pragma once
 
-#include <vector>
+#include <core/math/aabb.hpp>
+#include <rendering_engine/assets/color.hpp>
+#include <rendering_engine/editor/line_helper.hpp>
 
-#include <core/math/math.hpp>
-
-namespace rendering_engine::debug
+namespace rendering_engine::editor
 {
-    axes_helper::axes_helper(float size) : line_helper("Axes")
+    // Wireframe of an axis-aligned bounding box.
+    // The twelve edges are baked in world space, so
+    // the inherited @ref transform is left at identity; call
+    // @ref set_box to follow a box that moves.
+    struct box_helper : public line_helper
     {
-        namespace math = core::math;
+        explicit box_helper(const core::math::aabb& box = core::math::aabb{},
+                            color color = rendering_engine::color{255, 255, 0, 255});
 
-        const math::vec3 origin{0.0f, 0.0f, 0.0f};
-        const math::vec3 red{1.0f, 0.0f, 0.0f};
-        const math::vec3 green{0.0f, 1.0f, 0.0f};
-        const math::vec3 blue{0.0f, 0.0f, 1.0f};
+        // Replace the box and rebuild the wireframe.
+        void set_box(const core::math::aabb& box);
 
-        const std::vector<math::vec3> positions{origin,
-                                                math::vec3{size, 0.0f, 0.0f},
-                                                origin,
-                                                math::vec3{0.0f, size, 0.0f},
-                                                origin,
-                                                math::vec3{0.0f, 0.0f, size}};
-        const std::vector<math::vec3> colors{red, red, green, green, blue, blue};
+    private:
+        void rebuild();
 
-        set_segments(positions, colors);
-    }
-} // namespace rendering_engine::debug
+        core::math::aabb m_box;
+        color m_color;
+    };
+} // namespace rendering_engine::editor

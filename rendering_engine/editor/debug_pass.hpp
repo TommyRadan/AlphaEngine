@@ -31,13 +31,16 @@
 namespace rendering_engine
 {
     struct renderable;
+}
 
+namespace rendering_engine::editor
+{
     /**
      * @brief Debug-overlay pass. Loads the previous colour, disables
      *        depth, collects draw items from the debug-renderable
      *        registry, sorts them by pipeline, and dispatches them;
      *        then records the Dear ImGui overlay's draw data into the
-     *        same open pass through @ref debug_ui::record_draw_data.
+     *        same open pass through @ref record_draw_data.
      *
      * Everything the pass records is either a registered renderable's
      * @ref draw_item or ImGui draw data built earlier in the frame, so
@@ -99,4 +102,4 @@ namespace rendering_engine
         // Reused across frames so the underlying allocation persists.
         std::vector<draw_item> m_items;
     };
-} // namespace rendering_engine
+} // namespace rendering_engine::editor

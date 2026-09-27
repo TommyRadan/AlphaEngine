@@ -30,7 +30,7 @@
 #include <core/settings.hpp>
 #include <core/time.hpp>
 #include <rendering_engine/assets/color.hpp>
-#include <rendering_engine/debug_ui/imgui_layer.hpp>
+#include <rendering_engine/editor/imgui_layer.hpp>
 #include <rendering_engine/sdl_input.hpp>
 #include <rendering_engine/window.hpp>
 #include <runtime/engine.hpp>
@@ -385,9 +385,9 @@ namespace rendering_engine
             // has focus it captures the matching input class so the same
             // click / keystroke does not also drive the camera or game
             // modules. Both calls are no-ops in release builds.
-            debug_ui::process_event(&event);
-            const bool ui_wants_keyboard = debug_ui::wants_keyboard();
-            const bool ui_wants_mouse = debug_ui::wants_mouse();
+            editor::process_event(&event);
+            const bool ui_wants_keyboard = editor::wants_keyboard();
+            const bool ui_wants_mouse = editor::wants_mouse();
 
             switch (event.type)
             {

@@ -1,6 +1,4 @@
 target_sources(AlphaEngine PRIVATE
-    debug_pass.cpp
-    debug_pass.hpp
     depth_prepass.cpp
     depth_prepass.hpp
     pass.hpp
