@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2015-2026 Tomislav Radanovic
+
 #version 450
 
 // Auto exposure (auto_exposure_pass), stage 4: copies this frame's 1 x 1

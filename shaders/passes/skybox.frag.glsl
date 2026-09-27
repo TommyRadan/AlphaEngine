@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2015-2026 Tomislav Radanovic
+
 #version 450
 
 // Sample the environment cube along the unprojected view ray.

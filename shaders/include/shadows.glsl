@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2015-2026 Tomislav Radanovic
+
 // Shadow lookups against the directional, omni and spot shadow maps the
 // scene pass binds in set 0. Every function returns 1.0 for fully lit and
 // 0.0 for fully shadowed, and only the caster light index is ever

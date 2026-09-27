@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2015-2026 Tomislav Radanovic
+
 // The view-globals block the scene pass uploads once per frame into set 0,
 // binding BINDING_PER_FRAME: everything a scene shader knows about the
 // view it renders, in one buffer. This is the one declaration of that

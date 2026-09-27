@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2015-2026 Tomislav Radanovic
+
 #version 450
 
 // Unlit line list with a per-vertex colour.

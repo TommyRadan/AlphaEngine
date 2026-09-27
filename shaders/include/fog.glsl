@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2015-2026 Tomislav Radanovic
+
 // Distance fog driven by the per-frame block's fogColor / fogParams.
 #ifndef AE_FOG_GLSL
 #define AE_FOG_GLSL

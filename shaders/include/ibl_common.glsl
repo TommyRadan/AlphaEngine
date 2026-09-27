@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2015-2026 Tomislav Radanovic
+
 // Helpers shared by the three IBL compute kernels: the cube-face
 // direction mapping, the Hammersley sequence and GGX importance sampling.
 // dir_for_face mirrors the CPU dir_for_face_uv in ibl/environment.cpp so

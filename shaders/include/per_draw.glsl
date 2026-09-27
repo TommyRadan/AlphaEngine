@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2015-2026 Tomislav Radanovic
+
 // The per-draw block of every 3D renderable: the model matrix and its
 // normal matrix, 128 bytes (rendering_engine::per_draw_payload). The
 // depth-only shadow pipelines read the same block, so a renderable's
