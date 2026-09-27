@@ -223,7 +223,7 @@ namespace rendering_engine
 
         // Whether the depth pre-pass is enabled, copied from
         // @ref renderer::set_depth_prepass each frame (seeded at init from
-        // @c core::settings::graphics.depth_prepass). @ref depth_prepass
+        // @c rendering_engine::graphics_settings::depth_prepass). @ref depth_prepass
         // records nothing while it is off or no camera is active, and the
         // scene pass then clears the scene depth itself.
         bool depth_prepass{false};

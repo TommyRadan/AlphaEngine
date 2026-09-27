@@ -6,7 +6,6 @@
 #include <core/event_engine.hpp>
 #include <core/log.hpp>
 #include <core/os/os.hpp>
-#include <core/settings.hpp>
 #include <core/time.hpp>
 #include <platform/window.hpp>
 #include <rendering_engine/camera/camera_registry.hpp>
@@ -21,6 +20,7 @@
 #include <rendering_engine/gpu/shader_compiler.hpp>
 #include <rendering_engine/gpu/shader_hot_reload.hpp>
 #include <rendering_engine/gpu/shader_library.hpp>
+#include <rendering_engine/graphics_settings.hpp>
 #include <rendering_engine/lighting/environment_probe.hpp>
 #include <rendering_engine/materials/grid_material.hpp>
 #include <rendering_engine/materials/standard_material.hpp>
@@ -38,13 +38,16 @@
 #include <rendering_engine/passes/projection_jitter.hpp>
 #include <rendering_engine/passes/scene_pass.hpp>
 #include <rendering_engine/passes/shadow_pass.hpp>
+#include <rendering_engine/passes/shadow_settings.hpp>
 #include <rendering_engine/passes/skybox_pass.hpp>
 #include <rendering_engine/passes/spot_shadow_pass.hpp>
 #include <rendering_engine/passes/ui_pass.hpp>
+#include <rendering_engine/post_process_settings.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
 #include <rendering_engine/resources/asset_cache.hpp>
 #include <rendering_engine/resources/texture_asset.hpp>
 #include <runtime/engine.hpp>
+#include <runtime/engine_settings.hpp>
 
 #include <algorithm>
 #include <cassert>
@@ -53,23 +56,24 @@
 
 namespace
 {
-    // The renderer's post settings for the values core::settings resolved
+    // The renderer's post settings for the values core::load_settings resolved
     // at startup (settings.json, the ALPHAENGINE_* variables, the command
-    // line). The two structs mirror each other field for field; core keeps
-    // its own flat copy because it cannot depend on the renderer.
-    rendering_engine::post_settings startup_post_settings(const core::post_process_settings& source)
+    // line). The two structs mirror each other field for field; post_settings
+    // is the live-tunable surface (renderer::set_post_settings), while
+    // post_process_settings is just the resolved startup configuration.
+    rendering_engine::post_settings startup_post_settings(const rendering_engine::post_process_settings& source)
     {
         rendering_engine::post_settings settings{};
         settings.exposure = source.exposure;
         switch (source.tonemap)
         {
-        case core::tonemap_curve::none:
+        case rendering_engine::tonemap_curve::none:
             settings.tonemap_op = rendering_engine::tonemap_operator::none;
             break;
-        case core::tonemap_curve::reinhard:
+        case rendering_engine::tonemap_curve::reinhard:
             settings.tonemap_op = rendering_engine::tonemap_operator::reinhard;
             break;
-        case core::tonemap_curve::aces:
+        case rendering_engine::tonemap_curve::aces:
             settings.tonemap_op = rendering_engine::tonemap_operator::aces;
             break;
         }
@@ -179,8 +183,8 @@ void rendering_engine::renderer::init()
     // ahead of the scene pass, which reads their maps and each frame's
     // fitted matrices through the frame context (render() publishes the
     // passes there), so no pass is handed another at construction.
-    const core::shadow_settings shadow_config =
-        eng.settings != nullptr ? eng.settings->shadows : core::shadow_settings{};
+    const rendering_engine::shadow_settings shadow_config =
+        eng.settings != nullptr ? eng.settings->shadows : rendering_engine::shadow_settings{};
     auto shadow = std::make_unique<shadow_pass>(&m_world.scene_renderables(), shadow_config);
     m_shadow = shadow.get();
     // The omni shadow pass renders six depth faces from the first shadow-casting
@@ -270,7 +274,7 @@ void rendering_engine::renderer::init()
         taa = std::make_unique<taa_pass>(width, height);
         m_taa = taa.get();
     }
-    // Start the post chain from the persisted values core::settings
+    // Start the post chain from the persisted values core::load_settings
     // resolved (settings.json, ALPHAENGINE_* variables, command line).
     // set_post_settings forwards exposure / operator to the tonemap pass
     // just built and overwrites post_settings::taa.enabled with the TAA

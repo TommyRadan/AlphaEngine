@@ -38,7 +38,6 @@
 #include <core/audio/audio_clip.hpp>
 #include <core/math/math.hpp>
 #include <core/os/os.hpp>
-#include <core/settings.hpp>
 #include <rendering_engine/camera/camera_registry.hpp>
 #include <rendering_engine/camera/orthographic_camera.hpp>
 #include <rendering_engine/camera/perspective_camera.hpp>
@@ -62,6 +61,7 @@
 #include <runtime/components/renderable_component.hpp>
 #include <runtime/components/rigidbody_component.hpp>
 #include <runtime/engine.hpp>
+#include <runtime/engine_settings.hpp>
 #include <runtime/reflection.hpp>
 #include <runtime/scene_assets.hpp>
 
@@ -144,7 +144,7 @@ namespace
         {
         case projection::perspective:
         {
-            const core::settings& settings = *runtime::current_engine().settings;
+            const runtime::engine_settings& settings = *runtime::current_engine().settings;
             const float reported = rendering_engine::drawable_aspect();
             return std::make_unique<rendering_engine::perspective_camera>(
                 settings.camera.field_of_view, reported > 0.0f ? reported : settings.window.aspect_ratio());

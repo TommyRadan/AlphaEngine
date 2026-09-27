@@ -7,7 +7,7 @@
  *
  * Each concrete backend lives behind a small @c make_*_device free
  * function in its own translation unit (@c vk_factory.cpp). The engine
- * picks the backend from @c core::settings::graphics.backend at
+ * picks the backend from @c rendering_engine::graphics_settings::backend at
  * construction time.
  */
 

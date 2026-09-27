@@ -29,7 +29,7 @@ namespace rendering_engine::gpu::backend::vulkan
     // Most frames the backend can keep in flight; the per-frame rings
     // (sync objects, command pools, swapchain depth images, the copies
     // of a dynamic buffer, a bind group's descriptor sets) are sized by
-    // it and the runtime count (core::graphics_settings::frames_in_flight)
+    // it and the runtime count (rendering_engine::graphics_settings::frames_in_flight)
     // is clamped to it.
     inline constexpr uint32_t k_max_frames_in_flight = 2;
 

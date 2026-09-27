@@ -6,6 +6,7 @@ target_sources(AlphaEngine PRIVATE
     camera.hpp
     camera_registry.cpp
     camera_registry.hpp
+    camera_settings.hpp
     orthographic_camera.cpp
     orthographic_camera.hpp
     perspective_camera.cpp

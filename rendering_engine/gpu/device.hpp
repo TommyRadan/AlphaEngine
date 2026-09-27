@@ -31,7 +31,7 @@
 namespace rendering_engine::gpu
 {
     // Backends supported by @ref create_device. The engine picks one
-    // from @c core::settings::graphics.backend at construction.
+    // from @c rendering_engine::graphics_settings::backend at construction.
     enum class backend_type
     {
         vulkan,
@@ -348,7 +348,7 @@ namespace rendering_engine::gpu
         // Frames the backend may have in flight at once: how many
         // frames' command buffers can be executing or queued while the
         // renderer records the next: the count @ref init was given
-        // (the engine passes @c core::graphics_settings::frames_in_flight),
+        // (the engine passes @c rendering_engine::graphics_settings::frames_in_flight),
         // clamped to the backend's ring. Fixed for the device's lifetime.
         virtual uint32_t frames_in_flight() const noexcept = 0;
 

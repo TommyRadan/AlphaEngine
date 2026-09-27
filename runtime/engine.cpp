@@ -14,7 +14,6 @@
 #include <core/job_pool.hpp>
 #include <core/log.hpp>
 #include <core/os/os.hpp>
-#include <core/settings.hpp>
 #include <core/time.hpp>
 #include <core/vfs/vfs.hpp>
 #include <platform/audio_device.hpp>
@@ -25,6 +24,7 @@
 #include <rendering_engine/gpu/surface.hpp>
 #include <rendering_engine/renderer.hpp>
 #include <rendering_engine/resources/asset_cache.hpp>
+#include <runtime/engine_settings.hpp>
 #include <runtime/game_module.hpp>
 #include <runtime/physics/physics_debug_draw.hpp>
 #include <runtime/physics/physics_world.hpp>
@@ -38,11 +38,11 @@ namespace runtime
         // Published by the engine constructor, cleared by its destructor.
         engine* g_current_engine = nullptr;
 
-        rendering_engine::gpu::backend_type to_backend_type(core::graphics_backend b)
+        rendering_engine::gpu::backend_type to_backend_type(rendering_engine::graphics_backend b)
         {
             switch (b)
             {
-            case core::graphics_backend::vulkan:
+            case rendering_engine::graphics_backend::vulkan:
                 return rendering_engine::gpu::backend_type::vulkan;
             }
             throw std::logic_error{"to_backend_type: unknown graphics_backend"};
@@ -52,7 +52,7 @@ namespace runtime
         // platform's Vulkan surface factory, the drawable's pixel size (the
         // logical settings size while the window cannot report one) and the
         // vsync preference.
-        rendering_engine::gpu::surface_desc surface_for(const platform::window& window, const core::settings& settings)
+        rendering_engine::gpu::surface_desc surface_for(const platform::window& window, const engine_settings& settings)
         {
             rendering_engine::gpu::surface_desc surface{};
             surface.native_window = window.sdl_window();
@@ -86,7 +86,7 @@ namespace runtime
         return *g_current_engine;
     }
 
-    engine::engine(core::settings values)
+    engine::engine(engine_settings values)
     {
         // Install ourselves first so subsystem constructors can observe
         // the engine.
@@ -101,7 +101,7 @@ namespace runtime
         // The settings arrive resolved (defaults, file, environment, command
         // line — see core::load_settings), so every subsystem below reads a
         // final value.
-        settings = std::make_unique<core::settings>(std::move(values));
+        settings = std::make_unique<engine_settings>(std::move(values));
         time = std::make_unique<core::time>();
         // The worker pool has no dependencies and is brought up early so any
         // subsystem can hand it work during init or per frame. Its threads

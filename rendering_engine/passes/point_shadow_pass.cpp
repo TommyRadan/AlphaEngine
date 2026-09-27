@@ -44,7 +44,7 @@ namespace
 
     // Constant term of the depth-only pipeline's rasteriser depth bias
     // (see shadow_pass for the rationale): one depth step. The slope term
-    // is core::shadow_settings::slope_bias times the caster's slope.
+    // is rendering_engine::shadow_settings::slope_bias times the caster's slope.
     constexpr float shadow_depth_bias_constant = 1.0f;
 
     constexpr uint32_t light_frame_binding = 0;
@@ -76,7 +76,7 @@ namespace
 namespace rendering_engine
 {
     point_shadow_pass::point_shadow_pass(const std::vector<renderable*>* registry,
-                                         const core::shadow_settings& settings)
+                                         const rendering_engine::shadow_settings& settings)
         : m_registry(registry)
     {
         auto& gpu = *runtime::current_engine().gpu;

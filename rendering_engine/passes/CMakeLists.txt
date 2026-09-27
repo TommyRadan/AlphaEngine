@@ -17,6 +17,7 @@ target_sources(AlphaEngine PRIVATE
     shadow_casters.hpp
     shadow_pass.cpp
     shadow_pass.hpp
+    shadow_settings.hpp
     skybox_pass.cpp
     skybox_pass.hpp
     spot_shadow_pass.cpp
