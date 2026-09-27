@@ -21,9 +21,9 @@
 
 // A row of spheres marching away from the camera over a long ground
 // plane, with linear distance fog: the near spheres read at full colour
-// while the far ones dissolve into the haze, showcasing the fog added in
-// issue #122. Every object is a node under one "fog_demo" node, whose
-// behaviour turns the fog on while the showcase is enabled.
+// while the far ones dissolve into the haze. Every object is a node under
+// one "fog_demo" node, whose behaviour turns the fog on while the showcase
+// is enabled.
 
 namespace
 {

@@ -9,21 +9,17 @@ target_sources(AlphaEngine PRIVATE
     ui_demo_module.cpp
 )
 
-# The FPS counter used to live here as a label-rendering game module; it
-# now ships as a built-in ImGui debug panel (rendering_engine/editor),
-# so the standalone fps_overlay_module was removed.
-
 # Only one scene-owning demo module is compiled at a time because each
 # places its showcase geometry at the origin. shadow_demo_module.cpp is the
 # active one: a field of PBR spheres and tall pillars spread over a wide
 # ground plane under a slowly orbiting shadow-casting sun, showcasing the
-# auto-fit directional shadow frustum from issue #146 (crisp shadows across
-# the whole field, not just near the origin). physics_demo_module.cpp is
-# compiled beside it: a few crates dropped onto a pedestal that stands in
-# a gap of that field, on its ground plane (issue #177).
+# auto-fit directional shadow frustum (crisp shadows across the whole
+# field, not just near the origin). physics_demo_module.cpp is compiled
+# beside it: a few crates dropped onto a pedestal that stands in a gap of
+# that field, on its ground plane.
 #
 # fog_demo_module.cpp (Blinn-Phong spheres receding into linear distance
-# fog, issue #122), instanced_demo_module.cpp (a grid_side^3 lattice of
+# fog), instanced_demo_module.cpp (a grid_side^3 lattice of
 # cubes in one instanced draw call), scene_graph_demo_module.cpp
 # (parent/child node hierarchy with orbiting cube mesh_components and a
 # point light), line_demo_module.cpp (coloured helix line strip),

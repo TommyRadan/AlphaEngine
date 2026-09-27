@@ -19,7 +19,7 @@
 #include <utility>
 #include <vector>
 
-// Physics showcase (issue #177), sized to sit beside the shadow demo: a
+// Physics showcase, sized to sit beside the shadow demo: a
 // few boxes dropped onto a pedestal that stands on the shadow demo's
 // ground plane, just left of the camera's starting line of sight. Nothing
 // here says what shape anything is — every collider is fitted to the

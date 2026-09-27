@@ -118,10 +118,9 @@ namespace
      * node (a demo framing its model) simply hands over to the controls.
      * Movement and mouse-look are both applied per rendered frame, so they
      * stay smooth at the render rate; @c core::input keeps the state polled
-     * here live rather than latched to the fixed step (see core/input.hpp),
-     * which is what keeps the mouse-look feel unchanged from when it ran off
-     * a per-event subscription. The node moves in its parent's frame, which
-     * is world space under the scene root.
+     * here live rather than latched to the fixed step (see core/input.hpp).
+     * The node moves in its parent's frame, which is world space under the
+     * scene root.
      */
     struct fly_camera final : runtime::behavior
     {
