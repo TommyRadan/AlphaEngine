@@ -50,7 +50,7 @@ namespace rendering_engine
     //  - the @ref brdf_lut, the split-sum environment BRDF integration
     //    (a 2D scale/bias table independent of the environment).
     //
-    // When the backend reports @c supports_compute_prefilter the three
+    // When the device reports @c device_features::compute_prefilter the three
     // derived tables are convolved on the GPU through compute shaders;
     // otherwise they are built on the CPU and the prefiltered specular
     // falls back to the source cube's box-filtered mip chain.

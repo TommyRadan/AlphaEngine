@@ -27,19 +27,21 @@
  * The backend is written against 4.6 core throughout — direct state
  * access for buffers, textures, framebuffers and vertex arrays,
  * immutable texture storage, sampler objects, SPIR-V shader binaries,
- * compute and indirect draws — which is the profile the glad loader in
- * @c vendor/glad was generated for. @ref init refuses an older context
- * with a message the launcher shows instead of crashing on the first
- * missing entry point.
+ * compute and indirect draws, KHR_debug labels, timestamp queries —
+ * which is the profile the glad loader in @c vendor/glad was generated
+ * for. @ref init refuses an older context with a message the launcher
+ * shows instead of crashing on the first missing entry point.
  *
  * The @c gl_device class is declared here in full; its member function
  * definitions are split across translation units by resource family.
  * Each split file is named @c gl_device_<resource>.cpp so the parent
  * class is explicit:
  *
- *   - gl_device.cpp           ctor/dtor, init/quit, swapchain, encoders, lookup_*
+ *   - gl_device.cpp           ctor/dtor, init/quit, capabilities, swapchain,
+ *                             render targets, queries, debug names, encoders,
+ *                             lookup_*
  *   - gl_device_buffer.cpp    buffer create/destroy/write
- *   - gl_device_texture.cpp   texture/sampler create/destroy/write/mipmaps
+ *   - gl_device_texture.cpp   texture/sampler create/destroy/write/mipmaps/readback
  *   - gl_device_shader.cpp    shader_module create/destroy
  *   - gl_device_pipeline.cpp  pipeline + bind_group_layout + bind_group
  *
@@ -70,13 +72,7 @@ namespace rendering_engine::gpu::backend::opengl
         void init() override;
         void quit() override;
 
-        // The OpenGL backend has core compute shaders, image load/store
-        // into cube-map mip levels, and glGenerateMipmap, so it convolves
-        // the IBL tables on the GPU.
-        bool supports_compute_prefilter() const override
-        {
-            return true;
-        }
+        texture_usage format_support(texture_format format) const override;
 
         buffer create_buffer(const buffer_descriptor& descriptor) override;
         texture create_texture(const texture_descriptor& descriptor) override;
@@ -86,6 +82,7 @@ namespace rendering_engine::gpu::backend::opengl
         pipeline create_pipeline(const pipeline_descriptor& descriptor) override;
         pipeline create_compute_pipeline(const compute_pipeline_descriptor& descriptor) override;
         bind_group create_bind_group(const bind_group_descriptor& descriptor) override;
+        query_set create_query_set(const query_set_descriptor& descriptor) override;
 
         void destroy(buffer handle) override;
         void destroy(texture handle) override;
@@ -94,6 +91,13 @@ namespace rendering_engine::gpu::backend::opengl
         void destroy(bind_group_layout handle) override;
         void destroy(pipeline handle) override;
         void destroy(bind_group handle) override;
+        void destroy(query_set handle) override;
+
+        void set_debug_name(buffer handle, const char* name) override;
+        void set_debug_name(texture handle, const char* name) override;
+        void set_debug_name(sampler handle, const char* name) override;
+        void set_debug_name(pipeline handle, const char* name) override;
+        void set_debug_name(render_target handle, const char* name) override;
 
         void write_buffer(buffer buffer_handle, const void* data, size_t size, size_t offset) override;
         void write_texture(texture texture_handle, const void* data, size_t size) override;
@@ -101,6 +105,7 @@ namespace rendering_engine::gpu::backend::opengl
                                   const texture_write_region& region,
                                   const void* data,
                                   size_t size) override;
+        bool read_texture(texture texture_handle, const texture_copy_region& region, void* out, size_t size) override;
         void write_texture_3d(texture texture_handle, const void* data, size_t size) override;
         void write_cube_face(texture texture_handle, cube_face face, const void* data, size_t size) override;
         void generate_mipmaps(texture texture_handle) override;
@@ -109,8 +114,10 @@ namespace rendering_engine::gpu::backend::opengl
         void resize_swapchain(uint32_t width, uint32_t height) override;
         render_target create_render_target(const render_target_descriptor& descriptor) override;
         void destroy(render_target handle) override;
-        texture render_target_color_texture(render_target handle) override;
+        texture render_target_color_texture(render_target handle, uint32_t index = 0) override;
         texture render_target_depth_texture(render_target handle) override;
+
+        bool resolve_queries(query_set set, uint32_t first, uint32_t count, uint64_t* out_ticks) override;
 
         std::unique_ptr<command_encoder> create_command_encoder() override;
         void submit(std::unique_ptr<command_encoder> encoder) override;
@@ -156,8 +163,12 @@ namespace rendering_engine::gpu::backend::opengl
         gl_bind_group* lookup_bind_group(bind_group h);
         gl_render_target* lookup_render_target(render_target h);
         gl_bind_group_layout* lookup_bind_group_layout(bind_group_layout h);
+        gl_query_set* lookup_query_set(query_set h);
 
     private:
+        // Fill m_features / m_limits from the live context (init).
+        void query_capabilities();
+
         handle_pool<gl_buffer> m_buffers;
         handle_pool<gl_texture> m_textures;
         handle_pool<gl_sampler> m_samplers;
@@ -166,6 +177,7 @@ namespace rendering_engine::gpu::backend::opengl
         handle_pool<gl_pipeline> m_pipelines;
         handle_pool<gl_bind_group> m_bind_groups;
         handle_pool<gl_render_target> m_render_targets;
+        handle_pool<gl_query_set> m_query_sets;
 
         render_target m_swapchain{};
 

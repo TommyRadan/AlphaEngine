@@ -28,18 +28,21 @@
  * @ref command_encoder begins zero or more @ref render_pass_encoder
  * scopes and is then submitted through the device. The OpenGL backend
  * implements both interfaces with immediate-mode GL calls — there is no
- * actual command buffer — but the explicit begin/end scope, typed
- * resource binding and pipeline binding match what a Vulkan/D3D12
- * backend would need verbatim.
+ * actual command buffer — while the Vulkan backend records every call
+ * into a @c VkCommandBuffer that @c device::submit queues; the explicit
+ * begin/end scope, typed resource binding and pipeline binding are the
+ * same for both.
  */
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/gpu/render_target.hpp>
+#include <rendering_engine/gpu/texture.hpp>
 #include <rendering_engine/gpu/types.hpp>
 
 namespace rendering_engine::gpu
@@ -74,9 +77,24 @@ namespace rendering_engine::gpu
         virtual void set_bind_group(uint32_t group, bind_group bind_group_handle) = 0;
 
         // Override the pass-default viewport. Most callers can leave
-        // this alone — @c device::begin_render_pass sets the viewport
-        // to the target's full extent automatically.
+        // this alone — @c command_encoder::begin_render_pass sets the
+        // viewport to the target's full extent automatically. @p x /
+        // @p y are the rectangle's bottom-left corner in window
+        // (OpenGL) convention on both backends. Also resets the scissor
+        // rectangle to the same extent.
         virtual void set_viewport(int x, int y, int width, int height) = 0;
+
+        // Restrict rasterisation to the given rectangle (bottom-left
+        // origin, like @ref set_viewport). The pass begins with the
+        // scissor covering the whole target; a rectangle of zero
+        // width or height discards every fragment.
+        virtual void set_scissor(int x, int y, int width, int height) = 0;
+
+        // The reference value the active pipeline's stencil test
+        // compares against (both faces). Dynamic state: it may change
+        // between draws without a new pipeline. Ignored by pipelines
+        // whose @c stencil_state is disabled.
+        virtual void set_stencil_reference(uint32_t reference) = 0;
 
         // Issue an unindexed draw of @p vertex_count vertices,
         // starting at vertex index @p first_vertex.
@@ -162,10 +180,11 @@ namespace rendering_engine::gpu
         // Open a new render pass scope. The returned encoder is
         // single-use: call its methods to record draws, then
         // @ref render_pass_encoder::end before opening another pass.
-        // The return type is @c unique_ptr so the OpenGL backend can
-        // allocate a small per-pass state object on the heap; on a
-        // future Vulkan backend the encoder would be a thin handle
-        // wrapping a @c VkCommandBuffer scope.
+        // The return type is @c unique_ptr so each backend can keep a
+        // small per-pass state object: the OpenGL encoder shadows the
+        // bound framebuffer and vertex state, the Vulkan one wraps the
+        // @c vkCmdBeginRenderPass / @c vkCmdEndRenderPass scope on the
+        // frame's command buffer.
         virtual std::unique_ptr<render_pass_encoder> begin_render_pass(const render_pass_descriptor& descriptor) = 0;
 
         // Open a new compute pass scope. Compute passes never carry
@@ -199,5 +218,54 @@ namespace rendering_engine::gpu
         // arguments map verbatim.
         virtual void
         barrier(pipeline_stage src_stage, pipeline_stage dst_stage, access_flag src_access, access_flag dst_access) = 0;
+
+        // Copy @p region of @p dst from the tightly packed texels at
+        // @p src_offset in @p src (see @ref texture_copy_region for the
+        // layout). The buffer must have been created with
+        // @c buffer_usage_copy_src and the texture with
+        // @c texture_usage_copy_dst. Must not be recorded while a pass
+        // is open. Vulkan records the copy, with the layout
+        // transitions around it, into the frame's command buffer so it
+        // is ordered against the passes recorded before and after it.
+        virtual void
+        copy_buffer_to_texture(buffer src, size_t src_offset, texture dst, const texture_copy_region& region) = 0;
+
+        // Copy @p region of @p src into @p dst at @p dst_offset as
+        // tightly packed texels. The texture must have been created
+        // with @c texture_usage_copy_src (render-target attachments
+        // the device allocates have it) and the buffer with
+        // @c buffer_usage_copy_dst; a host-visible destination
+        // (@c dynamic_data / @c stream_data hint) can then be read
+        // back once the frame's work has completed. Must not be
+        // recorded while a pass is open.
+        virtual void
+        copy_texture_to_buffer(texture src, const texture_copy_region& region, buffer dst, size_t dst_offset) = 0;
+
+        // Open / close a named region in the recorded stream for
+        // graphics debuggers and the driver's debug output
+        // (@c glPushDebugGroup / @c glPopDebugGroup;
+        // @c vkCmdBeginDebugUtilsLabelEXT / @c vkCmdEndDebugUtilsLabelEXT
+        // when @c VK_EXT_debug_utils was enabled). Groups nest; every
+        // push is balanced by a pop before the encoder is submitted.
+        // No-ops on a device without @c device_features::debug_labels.
+        virtual void push_debug_group(const char* name) = 0;
+        virtual void pop_debug_group() = 0;
+
+        // Reset @p count queries of @p set from @p first so they can be
+        // written again this frame. Vulkan requires a reset before
+        // every write (@c vkCmdResetQueryPool, recorded outside a render
+        // pass); OpenGL query objects need none, so this is a no-op
+        // there. Record it before the frame's first @ref write_timestamp
+        // into the set.
+        virtual void reset_queries(query_set set, uint32_t first, uint32_t count) = 0;
+
+        // Write the GPU's timestamp into query @p index of @p set once
+        // every command recorded before this point has completed
+        // (@c glQueryCounter; @c vkCmdWriteTimestamp at the bottom of the
+        // pipe). Read back through @c device::resolve_queries after the
+        // frame's work has retired; @c device_limits::timestamp_period_ns
+        // converts the ticks. No-op on a device without
+        // @c device_features::timestamp_queries.
+        virtual void write_timestamp(query_set set, uint32_t index) = 0;
     };
 } // namespace rendering_engine::gpu

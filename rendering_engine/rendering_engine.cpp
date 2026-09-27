@@ -298,6 +298,10 @@ void rendering_engine::context::init()
                 "mis-ordered (see the frame_graph errors above)");
     }
 
+    // Per-pass GPU timings over the compiled graph; disabled on a device
+    // without timestamp queries.
+    m_gpu_profiler.init(*eng.gpu, m_frame_graph.pass_names());
+
     // Bring the ImGui debug overlay up now that the window, GL context
     // and passes are live. No-op in release builds.
     debug_ui::init();
@@ -336,6 +340,9 @@ void rendering_engine::context::quit()
     // debug-renderable registry and free their line buffers. Empty in
     // release. Game-owned helpers must likewise be released before quit.
     m_debug_helpers.clear();
+
+    // The profiler's query sets go before the device does.
+    m_gpu_profiler.shutdown(*eng.gpu);
 
     // Drop the frame graph before the passes: its execute callbacks hold
     // raw pointers into m_passes.
@@ -393,6 +400,10 @@ void rendering_engine::context::render()
     gpu.begin_frame();
     m_in_frame = true;
 
+    // The previous frame's work has retired (or its queries are polled
+    // without waiting), so its per-pass timestamps can be read now.
+    m_gpu_profiler.resolve(gpu);
+
     // Capture per-frame state once so passes cannot disagree about
     // which camera or backbuffer is active mid-frame, and so they
     // do not have to re-run the camera arbitration on every entry.
@@ -431,9 +442,12 @@ void rendering_engine::context::render()
     ctx.taa_resolve_texture = (m_taa != nullptr) ? m_taa->output_texture() : gpu::texture{};
     ctx.fog = m_fog;
 
-    // One encoder records the frame graph's passes in order, then submits.
+    // One encoder records the frame graph's passes in order — each in a
+    // debug group and between the profiler's timestamps — then submits.
     auto encoder = gpu.create_command_encoder();
-    m_frame_graph.execute(*encoder, ctx);
+    m_gpu_profiler.begin_frame(*encoder);
+    m_frame_graph.execute(*encoder, ctx, &m_gpu_profiler);
+    m_gpu_profiler.end_frame(*encoder);
     gpu.submit(std::move(encoder));
 
     // Carry this frame's camera state over for the next frame's
@@ -531,11 +545,11 @@ void rendering_engine::context::create_color_targets(uint32_t width, uint32_t he
     // instead of straight to the swapchain so tonemap, bloom and any
     // other post effect can sample real HDR luminance.
     gpu::render_target_descriptor scene_color_descriptor{};
-    scene_color_descriptor.color_format = gpu::texture_format::rgba16_float;
+    scene_color_descriptor.color = {{gpu::texture_format::rgba16_float}};
     scene_color_descriptor.width = width;
     scene_color_descriptor.height = height;
     scene_color_descriptor.with_depth = true;
-    scene_color_descriptor.depth_format = gpu::texture_format::depth24;
+    scene_color_descriptor.depth.format = gpu::texture_format::depth24;
     m_scene_color_target = gpu.create_render_target(scene_color_descriptor);
     m_scene_color_texture = gpu.render_target_color_texture(m_scene_color_target);
 
@@ -545,7 +559,7 @@ void rendering_engine::context::create_color_targets(uint32_t width, uint32_t he
     // rgba8 intermediate and writes to the swapchain. No depth: the post
     // chain runs depth-disabled.
     gpu::render_target_descriptor ldr_color_descriptor{};
-    ldr_color_descriptor.color_format = gpu::texture_format::rgba8_unorm;
+    ldr_color_descriptor.color = {{gpu::texture_format::rgba8_unorm}};
     ldr_color_descriptor.width = width;
     ldr_color_descriptor.height = height;
     ldr_color_descriptor.with_depth = false;
@@ -682,6 +696,11 @@ rendering_engine::tonemap_pass& rendering_engine::context::tonemap()
 const rendering_engine::render_stats& rendering_engine::context::get_render_stats() const
 {
     return m_render_stats;
+}
+
+const rendering_engine::gpu_profiler& rendering_engine::context::get_gpu_profiler() const
+{
+    return m_gpu_profiler;
 }
 
 std::unique_ptr<rendering_engine::standard_material> rendering_engine::context::create_standard_material()

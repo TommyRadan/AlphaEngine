@@ -73,13 +73,14 @@ namespace rendering_engine
         constexpr size_t shadow_ubo_size = sizeof(core::math::mat4) + 4 * sizeof(float);
 
         // Omni (point-light) shadow data also shares the per-frame group:
-        // the UBO plus six face depth maps at consecutive bindings.
+        // the UBO plus the depth cube map.
         constexpr uint32_t point_shadow_binding = gpu::shader_bindings::point_shadow;
-        constexpr uint32_t point_shadow_map_binding_0 = gpu::shader_bindings::point_shadow_map_0;
+        constexpr uint32_t point_shadow_map_binding = gpu::shader_bindings::point_shadow_map;
 
         // std140 layout of the PointShadow block: mat4 faceViewProj[6] at
-        // offset 0 (384 bytes), vec4 lightPos at 384, vec4 params at 400
-        // (x enabled, y bias, z caster point index). 416 bytes total.
+        // offset 0 (384 bytes), vec4 lightPos at 384 (xyz position, w the
+        // faces' near plane), vec4 params at 400 (x enabled, y bias,
+        // z caster point index, w the faces' far plane). 416 bytes total.
         constexpr size_t point_shadow_ubo_size =
             point_shadow_face_count * sizeof(core::math::mat4) + 2 * 4 * sizeof(float);
     } // namespace
@@ -99,11 +100,12 @@ namespace rendering_engine
         frame_layout_descriptor.entries.push_back({shadow_binding, gpu::binding_kind::uniform_buffer});
         frame_layout_descriptor.entries.push_back({shadow_map_binding, gpu::binding_kind::texture});
         frame_layout_descriptor.entries.push_back({point_shadow_binding, gpu::binding_kind::uniform_buffer});
-        for (int face = 0; face < point_shadow_face_count; ++face)
-        {
-            frame_layout_descriptor.entries.push_back(
-                {point_shadow_map_binding_0 + static_cast<uint32_t>(face), gpu::binding_kind::texture});
-        }
+        // The omni shadow is a depth cube (samplerCube in the shaders), so
+        // the layout says so and a device that substitutes a placeholder
+        // for an unset slot picks a cube.
+        gpu::bind_group_layout_entry point_shadow_map_entry{point_shadow_map_binding, gpu::binding_kind::texture};
+        point_shadow_map_entry.dimension = gpu::texture_dimension::cube;
+        frame_layout_descriptor.entries.push_back(point_shadow_map_entry);
         m_frame_layout = gpu.create_bind_group_layout(frame_layout_descriptor);
 
         gpu::buffer_descriptor ubo_descriptor{};
@@ -173,18 +175,14 @@ namespace rendering_engine
         point_shadow_slot.buffer_value = m_point_shadow_ubo;
         frame_bind_group_descriptor.entries.push_back(point_shadow_slot);
 
-        // The six omni face maps are owned by the point shadow pass; their
-        // handles are stable across frames. An invalid handle (no pass) binds
-        // nothing and the lit shader's enabled flag keeps it unsampled.
-        for (int face = 0; face < point_shadow_face_count; ++face)
-        {
-            gpu::binding_value point_map_slot{};
-            point_map_slot.binding = point_shadow_map_binding_0 + static_cast<uint32_t>(face);
-            point_map_slot.kind = gpu::binding_kind::texture;
-            point_map_slot.texture_value =
-                m_point_shadow != nullptr ? m_point_shadow->shadow_map(face) : gpu::texture{};
-            frame_bind_group_descriptor.entries.push_back(point_map_slot);
-        }
+        // The omni depth cube is owned by the point shadow pass; its handle
+        // is stable across frames. An invalid handle (no pass) binds nothing
+        // and the lit shader's enabled flag keeps it unsampled.
+        gpu::binding_value point_map_slot{};
+        point_map_slot.binding = point_shadow_map_binding;
+        point_map_slot.kind = gpu::binding_kind::texture;
+        point_map_slot.texture_value = m_point_shadow != nullptr ? m_point_shadow->shadow_map() : gpu::texture{};
+        frame_bind_group_descriptor.entries.push_back(point_map_slot);
 
         m_frame_bind_group = gpu.create_bind_group(frame_bind_group_descriptor);
 
@@ -284,8 +282,8 @@ namespace rendering_engine
         // result onto the swapchain before the UI composites.
         gpu::render_pass_descriptor descriptor{};
         descriptor.target = ctx.scene_color_target;
-        descriptor.color.load = gpu::load_op::clear;
-        descriptor.color.clear_color = {0.0f, 0.0f, 0.0f, 1.0f};
+        descriptor.color[0].load = gpu::load_op::clear;
+        descriptor.color[0].clear_color = {0.0f, 0.0f, 0.0f, 1.0f};
         descriptor.use_depth = true;
         descriptor.depth.load = gpu::load_op::clear;
         descriptor.depth.clear_depth = 1.0f;
@@ -368,9 +366,10 @@ namespace rendering_engine
         }
         gpu.write_buffer(m_shadow_ubo, shadow_payload.data(), shadow_ubo_size, 0);
 
-        // Upload the omni shadow block: six face matrices, the light position,
-        // and {enabled, bias, caster point index}. enabled stays 0 with no
-        // caster so the lit shader skips the (cleared) maps.
+        // Upload the omni shadow block: six face matrices, the light position
+        // with the faces' near plane, and {enabled, bias, caster point index,
+        // far plane}. enabled stays 0 with no caster so the lit shader skips
+        // the (cleared) cube.
         std::array<float, 104> point_shadow_payload{};
         if (m_point_shadow != nullptr && m_point_shadow->has_shadow())
         {
@@ -384,9 +383,11 @@ namespace rendering_engine
             point_shadow_payload[96] = pos.x;
             point_shadow_payload[97] = pos.y;
             point_shadow_payload[98] = pos.z;
+            point_shadow_payload[99] = m_point_shadow->shadow_near();
             point_shadow_payload[100] = 1.0f; // enabled
             point_shadow_payload[101] = m_point_shadow->depth_bias();
             point_shadow_payload[102] = static_cast<float>(m_point_shadow->shadow_point_index());
+            point_shadow_payload[103] = m_point_shadow->shadow_far();
         }
         gpu.write_buffer(m_point_shadow_ubo, point_shadow_payload.data(), point_shadow_ubo_size, 0);
 

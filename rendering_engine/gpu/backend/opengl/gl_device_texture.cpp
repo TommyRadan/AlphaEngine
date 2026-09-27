@@ -26,15 +26,16 @@
  *        sampler objects: @c create_texture, @c create_sampler,
  *        @c destroy(texture), @c destroy(sampler), @c write_texture,
  *        @c write_texture_region, @c write_texture_3d,
- *        @c write_cube_face, @c generate_mipmaps.
+ *        @c write_cube_face, @c read_texture, @c generate_mipmaps.
  *
  * Textures are created with immutable storage (@c glTextureStorage2D /
- * @c 3D): the whole mip chain — and all six faces of a cube — is
- * allocated once at create time, so every level is addressable by
- * @c generate_mipmaps and the storage-image bindings and the driver
- * never re-validates completeness per draw. Uploads and parameters go
- * through the named entry points, so nothing here binds a texture or
- * touches the active texture unit a pass may be using.
+ * @c 3D and their multisample twins): the whole mip chain — and all
+ * six faces of a cube, every layer of an array — is allocated once at
+ * create time, so every level is addressable by @c generate_mipmaps
+ * and the storage-image bindings and the driver never re-validates
+ * completeness per draw. Uploads and parameters go through the named
+ * entry points, so nothing here binds a texture or touches the active
+ * texture unit a pass may be using.
  */
 
 #include <rendering_engine/gpu/backend/opengl/gl_device.hpp>
@@ -51,19 +52,6 @@ namespace rendering_engine::gpu::backend::opengl
 {
     namespace
     {
-        // Level count of a full chain from the base extent down to 1.
-        uint32_t full_mip_chain(uint32_t width, uint32_t height, uint32_t depth)
-        {
-            uint32_t levels = 1;
-            uint32_t extent = std::max(width, std::max(height, depth));
-            while (extent > 1)
-            {
-                extent >>= 1;
-                ++levels;
-            }
-            return levels;
-        }
-
         uint32_t level_extent(uint32_t base, uint32_t level)
         {
             return std::max(1u, base >> level);
@@ -101,53 +89,147 @@ namespace rendering_engine::gpu::backend::opengl
             }
             return true;
         }
+
+        // True when @p region addresses texels that exist in @p record:
+        // a level the storage has, a layer / slice range within it and
+        // a box inside that level's extent. Logs the first problem.
+        bool region_fits(const char* where, const gl_texture& record, const texture_copy_region& region)
+        {
+            if (region.mip_level >= record.mip_levels)
+            {
+                LOG_WRN("%s: level %u of a %u-level texture", where, region.mip_level, record.mip_levels);
+                return false;
+            }
+            if (region.layer >= record.array_layers)
+            {
+                LOG_WRN("%s: layer %u of a %u-layer texture", where, region.layer, record.array_layers);
+                return false;
+            }
+            const uint32_t level_width = level_extent(record.width, region.mip_level);
+            const uint32_t level_height = level_extent(record.height, region.mip_level);
+            const uint32_t level_depth = level_extent(record.depth, region.mip_level);
+            const uint64_t right = static_cast<uint64_t>(region.x) + region.width;
+            const uint64_t bottom = static_cast<uint64_t>(region.y) + region.height;
+            const uint64_t back = static_cast<uint64_t>(region.z) + region.depth;
+            if (region.width == 0 || region.height == 0 || region.depth == 0 || right > level_width ||
+                bottom > level_height || back > level_depth)
+            {
+                LOG_WRN("%s: %ux%ux%u at %u,%u,%u does not fit level %u (%ux%ux%u)",
+                        where,
+                        region.width,
+                        region.height,
+                        region.depth,
+                        region.x,
+                        region.y,
+                        region.z,
+                        region.mip_level,
+                        level_width,
+                        level_height,
+                        level_depth);
+                return false;
+            }
+            return true;
+        }
     } // namespace
 
     texture gl_device::create_texture(const texture_descriptor& descriptor)
     {
+        const bool multisampled = descriptor.sample_count > 1;
         const uint32_t depth = descriptor.dimension == texture_dimension::d3 ? descriptor.depth : 1u;
         if (descriptor.width == 0 || descriptor.height == 0 || depth == 0)
         {
             LOG_ERR("create_texture: zero-sized texture (%ux%ux%u)", descriptor.width, descriptor.height, depth);
             return {};
         }
+        if (multisampled)
+        {
+            // Only the 2D targets have a multisample form, and a
+            // multisampled image is an attachment: single-level, never
+            // uploaded to. The count has to be one the context offers
+            // for the attachment class the format belongs to.
+            if (descriptor.dimension != texture_dimension::d2 && descriptor.dimension != texture_dimension::d2_array)
+            {
+                LOG_ERR("create_texture: only 2D and 2D-array textures can be multisampled");
+                return {};
+            }
+            const sample_count_mask supported = is_depth_texture_format(descriptor.format)
+                                                    ? m_limits.depth_sample_counts
+                                                    : m_limits.color_sample_counts;
+            if (!sample_count_supported(supported, descriptor.sample_count))
+            {
+                LOG_ERR("create_texture: %u samples per texel are not supported for this format",
+                        descriptor.sample_count);
+                return {};
+            }
+        }
+        if ((descriptor.usage & texture_usage_storage) != 0u &&
+            (format_support(descriptor.format) & texture_usage_storage) == 0u)
+        {
+            LOG_WRN("create_texture: the format has no image load/store layout; storage bindings will fail");
+        }
 
         gl_texture record{};
-        record.target = to_gl_texture_target(descriptor.dimension);
+        record.target = to_gl_texture_target(descriptor.dimension, multisampled);
         record.format = descriptor.format;
         record.width = descriptor.width;
         record.height = descriptor.height;
         record.depth = depth;
-        record.mip_levels = descriptor.mipmaps ? full_mip_chain(record.width, record.height, record.depth) : 1u;
+        record.array_layers = effective_array_layers(descriptor.dimension, descriptor.array_layers);
+        record.mip_levels = effective_mip_level_count(descriptor);
         record.mipmaps = record.mip_levels > 1;
+        record.samples = descriptor.sample_count;
+        record.usage = descriptor.usage;
+        record.layered =
+            descriptor.dimension == texture_dimension::cube || descriptor.dimension == texture_dimension::d2_array;
 
         glCreateTextures(record.target, 1, &record.object_id);
-        apply_texture_sampler_state(record.object_id, descriptor, record.mipmaps);
+        if (!multisampled)
+        {
+            // A multisample texture has no sampler state to bake.
+            apply_texture_sampler_state(record.object_id, descriptor, record.mipmaps);
+        }
 
         // Immutable storage for every level. The caller fills level 0
-        // via @ref write_texture, @ref write_texture_3d or
-        // @ref write_cube_face and derives the rest with
-        // @ref generate_mipmaps (or writes them through storage-image
-        // bindings, as the IBL prefilter does).
+        // via @ref write_texture, @ref write_texture_region,
+        // @ref write_texture_3d or @ref write_cube_face and derives the
+        // rest with @ref generate_mipmaps (or writes them through
+        // storage-image bindings, as the IBL prefilter does).
         const auto fmt = to_gl_texture_format(descriptor.format);
         const auto levels = static_cast<GLsizei>(record.mip_levels);
-        if (record.target == GL_TEXTURE_3D)
+        const auto width = static_cast<GLsizei>(record.width);
+        const auto height = static_cast<GLsizei>(record.height);
+        const auto samples = static_cast<GLsizei>(record.samples);
+        switch (record.target)
         {
+        case GL_TEXTURE_3D:
+            GL_CHECK(glTextureStorage3D(
+                record.object_id, levels, fmt.internal_format, width, height, static_cast<GLsizei>(record.depth)));
+            break;
+        case GL_TEXTURE_2D_ARRAY:
             GL_CHECK(glTextureStorage3D(record.object_id,
                                         levels,
                                         fmt.internal_format,
-                                        static_cast<GLsizei>(record.width),
-                                        static_cast<GLsizei>(record.height),
-                                        static_cast<GLsizei>(record.depth)));
-        }
-        else
-        {
+                                        width,
+                                        height,
+                                        static_cast<GLsizei>(record.array_layers)));
+            break;
+        case GL_TEXTURE_2D_MULTISAMPLE:
+            GL_CHECK(
+                glTextureStorage2DMultisample(record.object_id, samples, fmt.internal_format, width, height, GL_TRUE));
+            break;
+        case GL_TEXTURE_2D_MULTISAMPLE_ARRAY:
+            GL_CHECK(glTextureStorage3DMultisample(record.object_id,
+                                                   samples,
+                                                   fmt.internal_format,
+                                                   width,
+                                                   height,
+                                                   static_cast<GLsizei>(record.array_layers),
+                                                   GL_TRUE));
+            break;
+        default:
             // For a cube map this allocates all six faces of each level.
-            GL_CHECK(glTextureStorage2D(record.object_id,
-                                        levels,
-                                        fmt.internal_format,
-                                        static_cast<GLsizei>(record.width),
-                                        static_cast<GLsizei>(record.height)));
+            GL_CHECK(glTextureStorage2D(record.object_id, levels, fmt.internal_format, width, height));
+            break;
         }
 
         texture h{};
@@ -198,14 +280,22 @@ namespace rendering_engine::gpu::backend::opengl
     gl_device::write_texture_region(texture handle, const texture_write_region& region, const void* data, size_t size)
     {
         auto* record = m_textures.lookup(handle.id);
-        if (record == nullptr || record->object_id == 0 || record->target != GL_TEXTURE_2D)
+        const bool two_dimensional =
+            record != nullptr && (record->target == GL_TEXTURE_2D || record->target == GL_TEXTURE_2D_ARRAY ||
+                                  record->target == GL_TEXTURE_CUBE_MAP);
+        if (record == nullptr || record->object_id == 0 || !two_dimensional)
         {
-            LOG_WRN("write_texture_region: invalid 2D texture handle");
+            LOG_WRN("write_texture_region: invalid 2D / 2D-array / cube texture handle");
             return false;
         }
         if (region.mip_level >= record->mip_levels)
         {
             LOG_WRN("write_texture_region: level %u of a %u-level texture", region.mip_level, record->mip_levels);
+            return false;
+        }
+        if (region.layer >= record->array_layers)
+        {
+            LOG_WRN("write_texture_region: layer %u of a %u-layer texture", region.layer, record->array_layers);
             return false;
         }
         const uint32_t level_width = level_extent(record->width, region.mip_level);
@@ -230,6 +320,23 @@ namespace rendering_engine::gpu::backend::opengl
             return false;
         }
         const auto fmt = to_gl_texture_format(record->format);
+        if (record->layered)
+        {
+            // The named upload addresses a cube map or an array like a
+            // 3D texture: the layer / face is the z offset.
+            GL_CHECK(glTextureSubImage3D(record->object_id,
+                                         static_cast<GLint>(region.mip_level),
+                                         static_cast<GLint>(region.x),
+                                         static_cast<GLint>(region.y),
+                                         static_cast<GLint>(region.layer),
+                                         static_cast<GLsizei>(region.width),
+                                         static_cast<GLsizei>(region.height),
+                                         1,
+                                         fmt.upload_format,
+                                         fmt.upload_type,
+                                         data));
+            return true;
+        }
         GL_CHECK(glTextureSubImage2D(record->object_id,
                                      static_cast<GLint>(region.mip_level),
                                      static_cast<GLint>(region.x),
@@ -302,6 +409,59 @@ namespace rendering_engine::gpu::backend::opengl
                                      data));
     }
 
+    bool gl_device::read_texture(texture handle, const texture_copy_region& region, void* out, size_t size)
+    {
+        auto* record = m_textures.lookup(handle.id);
+        if (record == nullptr || record->object_id == 0 || out == nullptr)
+        {
+            LOG_WRN("read_texture: invalid texture handle or destination");
+            return false;
+        }
+        if (record->samples > 1)
+        {
+            LOG_WRN("read_texture: a multisampled texture cannot be read back directly");
+            return false;
+        }
+        if ((record->usage & texture_usage_copy_src) == 0u)
+        {
+            LOG_WRN("read_texture: the texture was created without texture_usage_copy_src");
+            return false;
+        }
+        if (!region_fits("read_texture", *record, region))
+        {
+            return false;
+        }
+        const size_t required = texture_region_bytes(record->format, region);
+        if (size < required)
+        {
+            LOG_WRN("read_texture: %zu bytes supplied, %zu needed", size, required);
+            return false;
+        }
+        // Layered textures and cubes read like a 3D texture whose z is
+        // the layer; a real 3D texture uses the region's own z range.
+        // The pack buffer is unbound so the texels land in client
+        // memory; glGetTextureSubImage then blocks until the reads
+        // that produced them are done.
+        const GLint z =
+            record->target == GL_TEXTURE_3D ? static_cast<GLint>(region.z) : static_cast<GLint>(region.layer);
+        const GLsizei depth = record->target == GL_TEXTURE_3D ? static_cast<GLsizei>(region.depth) : 1;
+        const auto fmt = to_gl_copy_format(record->format);
+        glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+        GL_CHECK(glGetTextureSubImage(record->object_id,
+                                      static_cast<GLint>(region.mip_level),
+                                      static_cast<GLint>(region.x),
+                                      static_cast<GLint>(region.y),
+                                      z,
+                                      static_cast<GLsizei>(region.width),
+                                      static_cast<GLsizei>(region.height),
+                                      depth,
+                                      fmt.upload_format,
+                                      fmt.upload_type,
+                                      static_cast<GLsizei>(required),
+                                      out));
+        return true;
+    }
+
     void gl_device::generate_mipmaps(texture handle)
     {
         auto* record = m_textures.lookup(handle.id);
@@ -338,6 +498,19 @@ namespace rendering_engine::gpu::backend::opengl
         glSamplerParameteri(id, GL_TEXTURE_WRAP_S, static_cast<GLint>(to_gl_address_mode(descriptor.address_u)));
         glSamplerParameteri(id, GL_TEXTURE_WRAP_T, static_cast<GLint>(to_gl_address_mode(descriptor.address_v)));
         glSamplerParameteri(id, GL_TEXTURE_WRAP_R, static_cast<GLint>(to_gl_address_mode(descriptor.address_w)));
+        // Anisotropy is core in 4.6; a request past the context's limit
+        // is clamped, and a context reporting a limit of 1 keeps the
+        // default (the feature flag is off there).
+        if (m_features.sampler_anisotropy && descriptor.max_anisotropy > 1.0f)
+        {
+            glSamplerParameterf(
+                id, GL_TEXTURE_MAX_ANISOTROPY, std::min(descriptor.max_anisotropy, m_limits.max_anisotropy));
+        }
+        glSamplerParameterf(id, GL_TEXTURE_MIN_LOD, descriptor.lod_min_clamp);
+        glSamplerParameterf(id, GL_TEXTURE_MAX_LOD, descriptor.lod_max_clamp);
+        glSamplerParameterf(id, GL_TEXTURE_LOD_BIAS, descriptor.lod_bias);
+        const std::array<GLfloat, 4> border = to_gl_border_color(descriptor.border);
+        glSamplerParameterfv(id, GL_TEXTURE_BORDER_COLOR, border.data());
         glSamplerParameteri(
             id, GL_TEXTURE_COMPARE_MODE, descriptor.compare_enabled ? GL_COMPARE_REF_TO_TEXTURE : GL_NONE);
         GL_CHECK(

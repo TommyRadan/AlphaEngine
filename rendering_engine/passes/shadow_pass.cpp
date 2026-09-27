@@ -79,6 +79,13 @@ namespace
     // without detaching contact shadows.
     constexpr float shadow_bias = 0.0015f;
 
+    // Rasteriser depth bias of the depth-only pipeline: a constant of
+    // one resolvable depth step plus 1.5 times the caster's depth
+    // slope, the usual conservative pair — it lifts grazing casters
+    // clear of their own samples without detaching contact shadows.
+    constexpr float shadow_depth_bias_constant = 1.0f;
+    constexpr float shadow_depth_bias_slope = 1.5f;
+
     // Binding numbers within the depth-only pipeline. Both are UBOs and
     // share OpenGL's global UBO namespace, so they mirror the lit
     // pipeline: the per-light view-projection takes 0 and the per-draw
@@ -177,28 +184,20 @@ namespace rendering_engine
     {
         auto& gpu = *runtime::current_engine().gpu;
 
-        // Off-screen target: a throwaway single-channel colour buffer
-        // plus the sampled depth32_float attachment the lit materials
-        // read. begin_render_pass clears and z-tests against the depth
-        // attachment automatically.
-        gpu::render_target_descriptor target_descriptor{};
-        target_descriptor.color_format = gpu::texture_format::r8_unorm;
-        target_descriptor.width = shadow_map_size;
-        target_descriptor.height = shadow_map_size;
-        target_descriptor.with_depth = true;
-        target_descriptor.depth_format = gpu::texture_format::depth32_float;
-        m_target = gpu.create_render_target(target_descriptor);
+        // Off-screen depth-only target: the sampled depth32_float
+        // attachment the lit materials read is its only attachment.
+        // begin_render_pass clears and z-tests against it automatically.
+        m_target = gpu.create_render_target(gpu::render_target_descriptor::depth_only(
+            gpu::texture_format::depth32_float, shadow_map_size, shadow_map_size));
         m_depth_texture = gpu.render_target_depth_texture(m_target);
 
+        // Vertex stage only: with no colour attachment there is nothing
+        // for a fragment stage to write, and the rasteriser writes the
+        // depth the lit materials sample.
         gpu::shader_module_descriptor vs_descriptor{};
         vs_descriptor.stage = gpu::shader_stage::vertex;
         vs_descriptor.spirv = gpu::compile_library_shader("passes/shadow.vert.glsl", gpu::shader_stage::vertex);
         m_vertex_shader = gpu.create_shader_module(vs_descriptor);
-
-        gpu::shader_module_descriptor fs_descriptor{};
-        fs_descriptor.stage = gpu::shader_stage::fragment;
-        fs_descriptor.spirv = gpu::compile_library_shader("passes/shadow.frag.glsl", gpu::shader_stage::fragment);
-        m_fragment_shader = gpu.create_shader_module(fs_descriptor);
 
         // Light-frame layout (slot 0): the view-projection UBO.
         gpu::bind_group_layout_descriptor light_layout{};
@@ -231,7 +230,11 @@ namespace rendering_engine
         // Depth-only opaque draw: position-only vertex stream (offset 0
         // of every renderable's vertex record), depth tested and
         // written, no blend, no culling so single-sided geometry such
-        // as the ground plane still occludes.
+        // as the ground plane still occludes. The rasteriser's
+        // slope-scaled depth bias pushes each caster's stored depth
+        // away from the light in proportion to its slope, so grazing
+        // faces do not self-shadow; the lit shader's receiver-side
+        // bias (@ref depth_bias) stays on top of it for the PCF kernel.
         gpu::vertex_buffer_layout vertex_layout{};
         vertex_layout.stride = 0;
         vertex_layout.attributes.push_back({0, 3, gpu::scalar_type::float32, 0});
@@ -249,20 +252,25 @@ namespace rendering_engine
         rasterizer.front = gpu::front_face::counter_clockwise;
         rasterizer.polygon = gpu::polygon_mode::fill;
 
+        gpu::depth_bias_state depth_bias{};
+        depth_bias.enabled = true;
+        depth_bias.constant = shadow_depth_bias_constant;
+        depth_bias.slope = shadow_depth_bias_slope;
+
         gpu::pipeline_descriptor pipeline_descriptor{};
         pipeline_descriptor.vertex_shader = m_vertex_shader;
-        pipeline_descriptor.fragment_shader = m_fragment_shader;
         pipeline_descriptor.vertex_buffers.push_back(vertex_layout);
         pipeline_descriptor.depth = depth;
         pipeline_descriptor.blend = blend;
         pipeline_descriptor.rasterizer = rasterizer;
+        pipeline_descriptor.depth_bias = depth_bias;
         pipeline_descriptor.bind_group_layouts.push_back(m_light_layout);
         pipeline_descriptor.bind_group_layouts.push_back(m_draw_layout);
         m_pipeline = gpu.create_pipeline(pipeline_descriptor);
 
         // Instanced casters rasterize with the same state through the
         // pipeline that reads their per-instance transform stream.
-        m_instanced = create_instanced_shadow_pipeline(m_fragment_shader, m_light_layout, depth, blend, rasterizer);
+        m_instanced = create_instanced_shadow_pipeline(m_light_layout, depth, blend, rasterizer, depth_bias);
     }
 
     shadow_pass::~shadow_pass()
@@ -294,18 +302,13 @@ namespace rendering_engine
             gpu.destroy(m_light_layout);
             m_light_layout = {};
         }
-        if (m_fragment_shader.valid())
-        {
-            gpu.destroy(m_fragment_shader);
-            m_fragment_shader = {};
-        }
         if (m_vertex_shader.valid())
         {
             gpu.destroy(m_vertex_shader);
             m_vertex_shader = {};
         }
         // The depth texture is owned by the render target, so destroying
-        // the target releases both attachments.
+        // the target releases it.
         if (m_target.valid())
         {
             gpu.destroy(m_target);
@@ -380,11 +383,10 @@ namespace rendering_engine
 
         // Always open the pass so the depth map is cleared even on
         // no-caster frames; the lit shader keys off has_shadow rather
-        // than the (possibly stale) contents.
+        // than the (possibly stale) contents. The target has no colour
+        // attachment, so only the depth ops matter.
         gpu::render_pass_descriptor descriptor{};
         descriptor.target = m_target;
-        descriptor.color.load = gpu::load_op::clear;
-        descriptor.color.clear_color = {1.0f, 1.0f, 1.0f, 1.0f};
         descriptor.use_depth = true;
         descriptor.depth.load = gpu::load_op::clear;
         descriptor.depth.clear_depth = 1.0f;

@@ -148,8 +148,12 @@ namespace rendering_engine::gpu::backend::opengl
         record.topology = descriptor.topology;
         record.patch_control_points = descriptor.patch_control_points;
         record.blend = descriptor.blend;
+        record.attachment_blend = descriptor.attachment_blend;
         record.depth = descriptor.depth;
+        record.stencil = descriptor.stencil;
+        record.depth_bias = descriptor.depth_bias;
         record.rasterizer = descriptor.rasterizer;
+        record.sample_count = descriptor.sample_count;
         record.vertex_buffers = descriptor.vertex_buffers;
         record.bind_group_layouts = descriptor.bind_group_layouts;
 

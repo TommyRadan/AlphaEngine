@@ -17,10 +17,15 @@ layout(set = 0, binding = BINDING_SHADOW, std140) uniform Shadow
 
 layout(set = 0, binding = BINDING_SHADOW_MAP) uniform sampler2D shadowMap;
 
-// Omni (point-light) shadow data, also owned by the scene pass. The six
-// face view-projections, the caster's world position, and
-// params: x enabled, y bias, z caster point-light index. The six face
-// depth maps follow, selected by the major axis of (fragment - light).
+// Omni (point-light) shadow data, also owned by the scene pass: the six
+// face view-projections the point shadow pass rendered with, the
+// caster's world position (w = the faces' near plane) and params:
+// x enabled, y bias, z caster point-light index, w the faces' far plane.
+// The depth cube map follows: one face per +-X / +-Y / +-Z, each a
+// 90-degree perspective from the light, so a lookup direction selects
+// the face the hardware way and the receiver's depth in that face is
+// reconstructed from the near / far planes (point_face_depth) rather
+// than through the matrix.
 layout(set = 0, binding = BINDING_POINT_SHADOW, std140) uniform PointShadow
 {
     mat4 faceViewProj[6];
@@ -28,12 +33,7 @@ layout(set = 0, binding = BINDING_POINT_SHADOW, std140) uniform PointShadow
     vec4 params;
 } u_point_shadow;
 
-layout(set = 0, binding = BINDING_POINT_SHADOW_MAP_0) uniform sampler2D pointShadowMap0;
-layout(set = 0, binding = BINDING_POINT_SHADOW_MAP_1) uniform sampler2D pointShadowMap1;
-layout(set = 0, binding = BINDING_POINT_SHADOW_MAP_2) uniform sampler2D pointShadowMap2;
-layout(set = 0, binding = BINDING_POINT_SHADOW_MAP_3) uniform sampler2D pointShadowMap3;
-layout(set = 0, binding = BINDING_POINT_SHADOW_MAP_4) uniform sampler2D pointShadowMap4;
-layout(set = 0, binding = BINDING_POINT_SHADOW_MAP_5) uniform sampler2D pointShadowMap5;
+layout(set = 0, binding = BINDING_POINT_SHADOW_MAP) uniform samplerCube pointShadowMap;
 
 // Directional shadow term for the fragment at worldPosition, lit by
 // directional light lightIndex along L with shading normal N. A 5x5 PCF
@@ -68,22 +68,49 @@ float directional_shadow(vec3 worldPosition, int lightIndex, vec3 N, vec3 L)
     return lit / 25.0;
 }
 
-// Dynamic indexing of a sampler array by a non-uniform expression is
-// disallowed, so pick the face's 2D map with a branch.
-float sample_point_face(int face, vec2 uv)
+// The window-space depth a face of the omni cube stores for a point at
+// distance z along that face's axis: the 90-degree perspective with the
+// pass's near / far planes, through the GL-convention projection both
+// backends share (0.5 * z_ndc + 0.5, see depth_utils.glsl). Every face
+// has the same near and far, so the depth depends only on the distance
+// along the face axis, never on which face or where within it.
+float point_face_depth(float z)
 {
-    if (face == 0) return texture(pointShadowMap0, uv).r;
-    if (face == 1) return texture(pointShadowMap1, uv).r;
-    if (face == 2) return texture(pointShadowMap2, uv).r;
-    if (face == 3) return texture(pointShadowMap3, uv).r;
-    if (face == 4) return texture(pointShadowMap4, uv).r;
-    return texture(pointShadowMap5, uv).r;
+    float n = u_point_shadow.lightPos.w;
+    float f = u_point_shadow.params.w;
+    float zNdc = (f + n) / (f - n) - (2.0 * f * n) / ((f - n) * max(z, n));
+    return zNdc * 0.5 + 0.5;
+}
+
+// The receiver's depth in the face a lookup direction lands on. The
+// cube map picks the face by the major axis of the direction, so the
+// receiver's coordinate along that axis is what the face compared
+// against; a kernel tap that crosses a face edge is then compared in
+// the neighbour's terms rather than mismatched.
+float point_receiver_depth(vec3 toFrag, vec3 dir)
+{
+    vec3 a = abs(dir);
+    float z;
+    if (a.x >= a.y && a.x >= a.z)
+    {
+        z = abs(toFrag.x);
+    }
+    else if (a.y >= a.z)
+    {
+        z = abs(toFrag.y);
+    }
+    else
+    {
+        z = abs(toFrag.z);
+    }
+    return point_face_depth(z);
 }
 
 // Omni shadow term for the fragment at worldPosition, lit by point light
-// lightIndex along L with shading normal N. Selects the cube face by the
-// major axis of (fragment - light), then projects with that face's
-// view-projection and does 3x3 PCF.
+// lightIndex along L with shading normal N. Samples the depth cube along
+// (fragment - light) with a 3x3 PCF kernel stepped one face texel at a
+// time across the face the fragment lands on, and compares each tap
+// against the receiver depth reconstructed for the face the tap hits.
 float point_shadow(vec3 worldPosition, int lightIndex, vec3 N, vec3 L)
 {
     if (u_point_shadow.params.x == 0.0 || lightIndex != int(u_point_shadow.params.z))
@@ -92,36 +119,46 @@ float point_shadow(vec3 worldPosition, int lightIndex, vec3 N, vec3 L)
     }
     vec3 toFrag = worldPosition - u_point_shadow.lightPos.xyz;
     vec3 a = abs(toFrag);
-    int face;
-    if (a.x >= a.y && a.x >= a.z)
-    {
-        face = toFrag.x > 0.0 ? 0 : 1;
-    }
-    else if (a.y >= a.z)
-    {
-        face = toFrag.y > 0.0 ? 2 : 3;
-    }
-    else
-    {
-        face = toFrag.z > 0.0 ? 4 : 5;
-    }
-
-    vec4 clip = u_point_shadow.faceViewProj[face] * vec4(worldPosition, 1.0);
-    vec3 proj = clip.xyz / clip.w;
-    proj = proj * 0.5 + 0.5;
-    if (proj.z > 1.0 || proj.x < 0.0 || proj.x > 1.0 || proj.y < 0.0 || proj.y > 1.0)
+    float major = max(a.x, max(a.y, a.z));
+    // Past the far plane no face holds the receiver: unshadowed, as
+    // the clipped projection was before.
+    if (major >= u_point_shadow.params.w)
     {
         return 1.0;
     }
+
+    // The two axes spanning the face the fragment lands on. A face
+    // texel spans 2 * major / size world units at the fragment's
+    // distance, so the taps step by that much along them.
+    vec3 u;
+    vec3 v;
+    if (a.x >= a.y && a.x >= a.z)
+    {
+        u = vec3(0.0, 1.0, 0.0);
+        v = vec3(0.0, 0.0, 1.0);
+    }
+    else if (a.y >= a.z)
+    {
+        u = vec3(1.0, 0.0, 0.0);
+        v = vec3(0.0, 0.0, 1.0);
+    }
+    else
+    {
+        u = vec3(1.0, 0.0, 0.0);
+        v = vec3(0.0, 1.0, 0.0);
+    }
+    float texel = 2.0 * major / float(textureSize(pointShadowMap, 0).x);
+
     float bias = max(u_point_shadow.params.y * (1.0 - dot(N, L)), u_point_shadow.params.y * 0.1);
-    vec2 texelSize = 1.0 / vec2(textureSize(pointShadowMap0, 0));
     float lit = 0.0;
     for (int x = -1; x <= 1; ++x)
     {
         for (int y = -1; y <= 1; ++y)
         {
-            float closest = sample_point_face(face, proj.xy + vec2(x, y) * texelSize);
-            lit += (proj.z - bias > closest) ? 0.0 : 1.0;
+            vec3 dir = toFrag + (float(x) * u + float(y) * v) * texel;
+            float closest = texture(pointShadowMap, dir).r;
+            float receiver = point_receiver_depth(toFrag, dir);
+            lit += (receiver - bias > closest) ? 0.0 : 1.0;
         }
     }
     return lit / 9.0;

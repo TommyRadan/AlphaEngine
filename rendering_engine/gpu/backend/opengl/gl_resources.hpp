@@ -60,18 +60,30 @@ namespace rendering_engine::gpu::backend::opengl
     struct gl_texture
     {
         GLuint object_id{0};
-        // @c GL_TEXTURE_2D, @c GL_TEXTURE_3D, or
-        // @c GL_TEXTURE_CUBE_MAP.
+        // @c GL_TEXTURE_2D, @c GL_TEXTURE_2D_ARRAY, @c GL_TEXTURE_3D,
+        // @c GL_TEXTURE_CUBE_MAP, or the multisample twins of the 2D
+        // and array targets.
         GLenum target{0};
         texture_format format{texture_format::rgba8_unorm};
         uint32_t width{0};
         uint32_t height{0};
-        // Slice count for 3D textures; 1 for 2D / cube.
+        // Slice count for 3D textures; 1 otherwise.
         uint32_t depth{1};
+        // Layers the storage holds: six for a cube, the descriptor's
+        // count for an array, 1 for a 2D / 3D texture.
+        uint32_t array_layers{1};
         // Levels allocated by the immutable storage: the full chain
-        // when the descriptor asked for mipmaps, otherwise 1.
+        // when the descriptor asked for mipmaps, the explicit count
+        // when it gave one, otherwise 1.
         uint32_t mip_levels{1};
+        // Samples per texel; above 1 the target is a multisample one
+        // and the texture has no sampler state and no uploads.
+        uint32_t samples{1};
+        texture_usage usage{texture_usage_default};
         bool mipmaps{false};
+        // Cube maps and arrays attach to a framebuffer one layer at a
+        // time (glNamedFramebufferTextureLayer); the others whole.
+        bool layered{false};
     };
 
     struct gl_sampler
@@ -125,8 +137,14 @@ namespace rendering_engine::gpu::backend::opengl
         uint32_t patch_control_points{0};
 
         blend_state blend;
+        // Per colour attachment overrides of @c blend (see
+        // pipeline_descriptor::attachment_blend).
+        std::vector<blend_state> attachment_blend;
         depth_state depth;
+        stencil_state stencil;
+        depth_bias_state depth_bias;
         rasterizer_state rasterizer;
+        uint32_t sample_count{1};
 
         std::vector<vertex_buffer_layout> vertex_buffers;
         std::vector<bind_group_layout> bind_group_layouts;
@@ -153,23 +171,42 @@ namespace rendering_engine::gpu::backend::opengl
         std::vector<binding_value> entries;
     };
 
+    // One attachment of an off-screen target: the texture it renders
+    // into (allocated by the device and released with the target when
+    // @c owned, otherwise imported and left to its owner) and the
+    // level / layer it is attached at.
+    struct gl_attachment
+    {
+        texture tex{};
+        bool owned{false};
+        uint32_t mip_level{0};
+        uint32_t layer{0};
+    };
+
     struct gl_render_target
     {
         GLuint framebuffer_id{0}; // 0 == default swapchain
         uint32_t width{0};
         uint32_t height{0};
+        uint32_t samples{1};
         bool has_depth{true};
         // True when the depth attachment is a packed depth-stencil
         // format (or the window backbuffer carries stencil bits), so a
         // depth clear / invalidate covers the stencil plane too.
         bool has_stencil{false};
 
-        // Texture handles for the attachments owned by this target.
-        // Both invalid for the swapchain (FBO 0); for an off-screen
-        // target the colour handle is exposed to callers via
-        // @ref device::render_target_color_texture so the next pass
-        // can sample the colour attachment as input.
-        texture color_attachment{};
-        texture depth_attachment{};
+        // Colour attachments in draw-buffer order (GL_COLOR_ATTACHMENT0
+        // + i), empty for the swapchain (FBO 0, whose one colour plane
+        // has no texture) and for a depth-only target. The textures are
+        // exposed to callers via @ref device::render_target_color_texture
+        // so the next pass can sample them as input.
+        std::vector<gl_attachment> color;
+        gl_attachment depth;
+    };
+
+    // Timestamp query objects, one per slot of the set.
+    struct gl_query_set
+    {
+        std::vector<GLuint> ids;
     };
 } // namespace rendering_engine::gpu::backend::opengl

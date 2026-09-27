@@ -26,6 +26,7 @@
 #include <utility>
 
 #include <core/log.hpp>
+#include <rendering_engine/gpu/command_encoder.hpp>
 
 namespace rendering_engine::render_graph
 {
@@ -81,15 +82,39 @@ namespace rendering_engine::render_graph
         return hazard_free;
     }
 
-    void frame_graph::execute(gpu::command_encoder& encoder, const frame_context& ctx) const
+    void frame_graph::execute(gpu::command_encoder& encoder, const frame_context& ctx, pass_hooks* hooks) const
     {
-        for (const auto& n : m_nodes)
+        for (size_t i = 0; i < m_nodes.size(); ++i)
         {
+            const node& n = m_nodes[i];
+            // The debug group names the pass in a graphics debugger's
+            // command tree; the hooks (the GPU profiler) bracket it.
+            encoder.push_debug_group(n.name.c_str());
+            if (hooks != nullptr)
+            {
+                hooks->before_pass(encoder, i, n.name);
+            }
             if (n.execute)
             {
                 n.execute(encoder, ctx);
             }
+            if (hooks != nullptr)
+            {
+                hooks->after_pass(encoder, i, n.name);
+            }
+            encoder.pop_debug_group();
         }
+    }
+
+    std::vector<std::string> frame_graph::pass_names() const
+    {
+        std::vector<std::string> names;
+        names.reserve(m_nodes.size());
+        for (const node& n : m_nodes)
+        {
+            names.push_back(n.name);
+        }
+        return names;
     }
 
     void frame_graph::clear()

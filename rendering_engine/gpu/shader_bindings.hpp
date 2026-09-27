@@ -55,18 +55,14 @@ namespace rendering_engine::gpu::shader_bindings
 {
     // Set 0, owned by the scene pass: the per-view block (camera
     // matrices + fog), the packed lights, the directional and omni
-    // shadow data and their depth maps.
+    // shadow data and their depth maps (the omni map is one depth
+    // cube, sampled as a samplerCube).
     constexpr uint32_t per_frame = 0;
     constexpr uint32_t lights = 2;
     constexpr uint32_t shadow_map = 9;
     constexpr uint32_t shadow = 10;
     constexpr uint32_t point_shadow = 14;
-    constexpr uint32_t point_shadow_map_0 = 15;
-    constexpr uint32_t point_shadow_map_1 = 16;
-    constexpr uint32_t point_shadow_map_2 = 17;
-    constexpr uint32_t point_shadow_map_3 = 18;
-    constexpr uint32_t point_shadow_map_4 = 19;
-    constexpr uint32_t point_shadow_map_5 = 20;
+    constexpr uint32_t point_shadow_map = 15;
 
     // Set 1, owned by each renderable: the per-draw model matrix. Every
     // 3D renderable builds its per-draw bind group against this number,

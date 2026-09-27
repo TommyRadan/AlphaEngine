@@ -54,6 +54,8 @@ namespace rendering_engine::gpu::backend::vulkan
         // scissor are flipped into Vulkan's top-left framebuffer
         // space here; off-screen passes keep Vulkan's orientation.
         void set_viewport(int x, int y, int width, int height) override;
+        void set_scissor(int x, int y, int width, int height) override;
+        void set_stencil_reference(uint32_t reference) override;
         void draw(uint32_t vertex_count, uint32_t first_vertex) override;
         void draw_indexed(uint32_t index_count, uint32_t first_index) override;
         void draw_indexed_indirect(buffer indirect_buffer, size_t offset) override;
@@ -78,6 +80,10 @@ namespace rendering_engine::gpu::backend::vulkan
         // Generation of m_render_pass (see vk_render_target::variant);
         // part of the pipeline-cache key passed to graphics_pipeline_for.
         uint64_t m_render_pass_generation{0};
+        // What a pipeline built against the open pass must match: the
+        // colour attachments it blends into and the sample count.
+        uint32_t m_color_count{0};
+        VkSampleCountFlagBits m_samples{VK_SAMPLE_COUNT_1_BIT};
         uint32_t m_target_width{0};
         uint32_t m_target_height{0};
         pipeline m_pipeline_handle{};
@@ -90,6 +96,10 @@ namespace rendering_engine::gpu::backend::vulkan
         // so a downstream sampler (tonemap) sees its texels at the
         // texCoord origin the OpenGL-style shader expects.
         bool m_y_flipped{false};
+        // The dynamic stencil reference: every graphics pipeline
+        // declares it dynamic, so it is supplied after each bind and
+        // whenever set_stencil_reference changes it.
+        uint32_t m_stencil_reference{0};
         // Bind-group handles set_bind_group has already reported as
         // not live, so a broken handle logs once per pass rather than
         // once per draw.
@@ -135,6 +145,14 @@ namespace rendering_engine::gpu::backend::vulkan
                      pipeline_stage dst_stage,
                      access_flag src_access,
                      access_flag dst_access) override;
+        void
+        copy_buffer_to_texture(buffer src, size_t src_offset, texture dst, const texture_copy_region& region) override;
+        void
+        copy_texture_to_buffer(texture src, const texture_copy_region& region, buffer dst, size_t dst_offset) override;
+        void push_debug_group(const char* name) override;
+        void pop_debug_group() override;
+        void reset_queries(query_set set, uint32_t first, uint32_t count) override;
+        void write_timestamp(query_set set, uint32_t index) override;
 
         // Hand the recorded command buffer over to @c vk_device::submit.
         // Returns the buffer and clears the encoder's reference. The
@@ -147,5 +165,7 @@ namespace rendering_engine::gpu::backend::vulkan
         vk_device& m_device;
         VkCommandBuffer m_cmd{VK_NULL_HANDLE};
         bool m_began{false};
+        // Open debug labels, so a pop never underflows.
+        uint32_t m_debug_label_depth{0};
     };
 } // namespace rendering_engine::gpu::backend::vulkan

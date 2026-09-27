@@ -1,0 +1,136 @@
+/**
+ * Copyright (c) 2015-2026 Tomislav Radanovic
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+/**
+ * @file gpu_profiler.hpp
+ * @brief Per-pass GPU timings from the device's timestamp queries.
+ *
+ * The profiler brackets every frame-graph pass (and the whole frame)
+ * with @c command_encoder::write_timestamp through the graph's
+ * @ref render_graph::pass_hooks. Two query sets alternate: the one
+ * written this frame and the one written last frame, which is read
+ * back with @c device::resolve_queries at the top of the next frame —
+ * on Vulkan the frame fence wait in @c begin_frame has retired it by
+ * then, on OpenGL the results are simply polled and the previous
+ * values kept when a query is still pending. The overlay's profiler
+ * panel shows the result. On a device without
+ * @c device_features::timestamp_queries the profiler stays disabled
+ * and records nothing.
+ */
+
+#pragma once
+
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <string>
+#include <string_view>
+#include <vector>
+
+#include <rendering_engine/gpu/handle.hpp>
+#include <rendering_engine/render_graph/frame_graph.hpp>
+
+namespace rendering_engine
+{
+    namespace gpu
+    {
+        struct command_encoder;
+        struct device;
+    } // namespace gpu
+
+    // GPU time of one frame-graph pass, in milliseconds, from the last
+    // frame whose queries resolved.
+    struct gpu_pass_timing
+    {
+        std::string name;
+        float gpu_ms{0.0f};
+    };
+
+    class gpu_profiler final : public render_graph::pass_hooks
+    {
+    public:
+        // Create the query sets for @p pass_names passes. No-op, leaving
+        // the profiler disabled, when the device writes no timestamps.
+        void init(gpu::device& device, const std::vector<std::string>& pass_names);
+
+        // Release the query sets.
+        void shutdown(gpu::device& device);
+
+        // Read back the set written by the previous frame. Call once per
+        // frame after @c device::begin_frame and before @ref begin_frame.
+        void resolve(gpu::device& device);
+
+        // Reset this frame's set and stamp the frame start; record it
+        // before the graph executes on @p encoder.
+        void begin_frame(gpu::command_encoder& encoder);
+
+        // Stamp the frame end and swap sets; record it after the graph
+        // executed on @p encoder.
+        void end_frame(gpu::command_encoder& encoder);
+
+        // render_graph::pass_hooks — stamps around each pass.
+        void before_pass(gpu::command_encoder& encoder, size_t index, std::string_view name) override;
+        void after_pass(gpu::command_encoder& encoder, size_t index, std::string_view name) override;
+
+        bool enabled() const noexcept
+        {
+            return m_enabled;
+        }
+
+        // Per-pass timings of the last resolved frame, in pass order.
+        const std::vector<gpu_pass_timing>& timings() const noexcept
+        {
+            return m_timings;
+        }
+
+        // GPU time of the last resolved frame, first pass start to last
+        // pass end, in milliseconds.
+        float frame_gpu_ms() const noexcept
+        {
+            return m_frame_ms;
+        }
+
+    private:
+        // Query slots of one set: the frame's begin / end stamps, then
+        // two per pass.
+        static constexpr uint32_t frame_begin_slot = 0;
+        static constexpr uint32_t frame_end_slot = 1;
+        static constexpr uint32_t first_pass_slot = 2;
+
+        uint32_t pass_begin_slot(size_t index) const noexcept
+        {
+            return first_pass_slot + static_cast<uint32_t>(index) * 2u;
+        }
+
+        std::array<gpu::query_set, 2> m_sets{};
+        // Whether each set holds a frame's stamps to resolve.
+        std::array<bool, 2> m_written{false, false};
+        uint32_t m_write_set{0};
+        uint32_t m_query_count{0};
+        float m_timestamp_period_ns{1.0f};
+        bool m_enabled{false};
+
+        std::vector<uint64_t> m_ticks;
+        std::vector<gpu_pass_timing> m_timings;
+        float m_frame_ms{0.0f};
+    };
+} // namespace rendering_engine

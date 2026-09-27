@@ -45,7 +45,7 @@ namespace rendering_engine
         // backbuffer); either way the UI overlay is drawn on top
         // without re-clearing the colour, and depth is disabled so
         // the overlay always wins.
-        descriptor.color.load = gpu::load_op::load;
+        descriptor.color[0].load = gpu::load_op::load;
         descriptor.use_depth = false;
 
         auto& eng = runtime::current_engine();

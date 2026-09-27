@@ -288,18 +288,58 @@ namespace rendering_engine::gpu::backend::opengl
         return GL_TEXTURE_CUBE_MAP_POSITIVE_X;
     }
 
-    GLenum to_gl_texture_target(texture_dimension dimension)
+    GLenum to_gl_texture_target(texture_dimension dimension, bool multisampled)
     {
         switch (dimension)
         {
         case texture_dimension::d2:
-            return GL_TEXTURE_2D;
+            return multisampled ? GL_TEXTURE_2D_MULTISAMPLE : GL_TEXTURE_2D;
         case texture_dimension::d3:
             return GL_TEXTURE_3D;
         case texture_dimension::cube:
             return GL_TEXTURE_CUBE_MAP;
+        case texture_dimension::d2_array:
+            return multisampled ? GL_TEXTURE_2D_MULTISAMPLE_ARRAY : GL_TEXTURE_2D_ARRAY;
         }
         return GL_TEXTURE_2D;
+    }
+
+    GLenum to_gl_stencil_op(stencil_op op)
+    {
+        switch (op)
+        {
+        case stencil_op::keep:
+            return GL_KEEP;
+        case stencil_op::zero:
+            return GL_ZERO;
+        case stencil_op::replace:
+            return GL_REPLACE;
+        case stencil_op::increment_clamp:
+            return GL_INCR;
+        case stencil_op::decrement_clamp:
+            return GL_DECR;
+        case stencil_op::invert:
+            return GL_INVERT;
+        case stencil_op::increment_wrap:
+            return GL_INCR_WRAP;
+        case stencil_op::decrement_wrap:
+            return GL_DECR_WRAP;
+        }
+        return GL_KEEP;
+    }
+
+    std::array<GLfloat, 4> to_gl_border_color(border_color color)
+    {
+        switch (color)
+        {
+        case border_color::transparent_black:
+            return {0.0f, 0.0f, 0.0f, 0.0f};
+        case border_color::opaque_black:
+            return {0.0f, 0.0f, 0.0f, 1.0f};
+        case border_color::opaque_white:
+            return {1.0f, 1.0f, 1.0f, 1.0f};
+        }
+        return {0.0f, 0.0f, 0.0f, 1.0f};
     }
 
     GLenum to_gl_storage_access(storage_access access)
@@ -424,6 +464,16 @@ namespace rendering_engine::gpu::backend::opengl
             return 4;
         }
         return 4;
+    }
+
+    gl_texture_format to_gl_copy_format(texture_format format)
+    {
+        gl_texture_format triple = to_gl_texture_format(format);
+        if (format == texture_format::rgba16_float)
+        {
+            triple.upload_type = GL_HALF_FLOAT;
+        }
+        return triple;
     }
 
     bool is_gl_depth_stencil_format(texture_format format)

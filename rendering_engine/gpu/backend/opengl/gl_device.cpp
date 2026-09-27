@@ -22,13 +22,17 @@
 
 /**
  * @file gl_device.cpp
- * @brief @c gl_device lifecycle, swapchain, command-encoder, and the
- *        @c lookup_* accessors. Per-resource @c gl_device member
- *        functions live in their own translation units.
+ * @brief @c gl_device lifecycle, capabilities, swapchain, render
+ *        targets, query sets, debug names, command-encoder factory
+ *        and the @c lookup_* accessors. Per-resource @c gl_device
+ *        member functions live in their own translation units.
  */
 
 #include <rendering_engine/gpu/backend/opengl/gl_device.hpp>
 
+#include <algorithm>
+#include <array>
+#include <cstring>
 #include <stdexcept>
 #include <string>
 
@@ -59,6 +63,10 @@ namespace rendering_engine::gpu::backend::opengl
         // is also what vendor/glad was generated for.
         constexpr int required_major = 4;
         constexpr int required_minor = 6;
+
+        // glObjectLabel rejects a label longer than GL_MAX_LABEL_LENGTH
+        // (at least 256, including the terminator).
+        constexpr size_t max_label_length = 255;
 
 #if _DEBUG
         void GLAPIENTRY gl_debug_callback(GLenum source,
@@ -105,6 +113,35 @@ namespace rendering_engine::gpu::backend::opengl
             GLint bits = 0;
             glGetNamedFramebufferAttachmentParameteriv(0, attachment, size_parameter, &bits);
             return bits;
+        }
+
+        GLint get_integer(GLenum parameter)
+        {
+            GLint value = 0;
+            glGetIntegerv(parameter, &value);
+            return value;
+        }
+
+        // Every power-of-two sample count up to @p max_samples, as the
+        // bitmask device_limits reports.
+        sample_count_mask sample_counts_up_to(GLint max_samples)
+        {
+            sample_count_mask mask = 0;
+            for (uint32_t count = 1; static_cast<GLint>(count) <= max_samples && count != 0; count <<= 1)
+            {
+                mask |= count;
+            }
+            return mask == 0 ? 1u : mask;
+        }
+
+        void label_object(GLenum identifier, GLuint name, const char* label)
+        {
+            if (name == 0 || label == nullptr)
+            {
+                return;
+            }
+            const size_t length = std::min(std::strlen(label), max_label_length);
+            glObjectLabel(identifier, name, static_cast<GLsizei>(length), label);
         }
     } // namespace
 
@@ -166,8 +203,10 @@ namespace rendering_engine::gpu::backend::opengl
 
         // Every texture upload hands over tightly packed rows, so an
         // r8 / rgb8 image with an odd width must not have its rows
-        // padded to the default 4-byte alignment.
+        // padded to the default 4-byte alignment; readbacks and the
+        // buffer <-> texture copies are tightly packed the same way.
         glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        glPixelStorei(GL_PACK_ALIGNMENT, 1);
 
         // Filter cube-map samples across face boundaries instead of
         // clamping within each face. Without this, sampling near a face
@@ -183,6 +222,8 @@ namespace rendering_engine::gpu::backend::opengl
         // Core since OpenGL 3.2; on Vulkan @c gl_PointSize is always
         // honoured, so this keeps both backends in agreement.
         glEnable(GL_PROGRAM_POINT_SIZE);
+
+        query_capabilities();
 
         // The default swapchain target is just framebuffer 0 with the
         // window's current dimensions; the engine updates dimensions
@@ -207,6 +248,88 @@ namespace rendering_engine::gpu::backend::opengl
 
         m_state.invalidate();
         m_initialised = true;
+    }
+
+    void gl_device::query_capabilities()
+    {
+        m_limits = {};
+        m_limits.max_texture_size_2d = static_cast<uint32_t>(get_integer(GL_MAX_TEXTURE_SIZE));
+        m_limits.max_texture_size_3d = static_cast<uint32_t>(get_integer(GL_MAX_3D_TEXTURE_SIZE));
+        m_limits.max_texture_size_cube = static_cast<uint32_t>(get_integer(GL_MAX_CUBE_MAP_TEXTURE_SIZE));
+        m_limits.max_array_layers = static_cast<uint32_t>(get_integer(GL_MAX_ARRAY_TEXTURE_LAYERS));
+        m_limits.max_color_attachments = static_cast<uint32_t>(get_integer(GL_MAX_COLOR_ATTACHMENTS));
+        m_limits.uniform_buffer_offset_alignment =
+            static_cast<uint32_t>(get_integer(GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT));
+        m_limits.storage_buffer_offset_alignment =
+            static_cast<uint32_t>(get_integer(GL_SHADER_STORAGE_BUFFER_OFFSET_ALIGNMENT));
+        m_limits.color_sample_counts = sample_counts_up_to(get_integer(GL_MAX_COLOR_TEXTURE_SAMPLES));
+        m_limits.depth_sample_counts = sample_counts_up_to(get_integer(GL_MAX_DEPTH_TEXTURE_SAMPLES));
+        // Anisotropic filtering is core in 4.6.
+        GLfloat max_anisotropy = 1.0f;
+        glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY, &max_anisotropy);
+        m_limits.max_anisotropy = std::max(1.0f, max_anisotropy);
+        // glQueryCounter(GL_TIMESTAMP) reports nanoseconds.
+        m_limits.timestamp_period_ns = 1.0f;
+        for (GLuint axis = 0; axis < 3; ++axis)
+        {
+            GLint count = 0;
+            glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_COUNT, axis, &count);
+            m_limits.max_compute_workgroup_count[axis] = static_cast<uint32_t>(count);
+        }
+        m_limits.max_compute_workgroup_invocations =
+            static_cast<uint32_t>(get_integer(GL_MAX_COMPUTE_WORK_GROUP_INVOCATIONS));
+
+        // A timestamp query with zero counter bits never resolves.
+        GLint timestamp_bits = 0;
+        glGetQueryiv(GL_TIMESTAMP, GL_QUERY_COUNTER_BITS, &timestamp_bits);
+
+        // Everything below is core in the 4.6 profile init already
+        // required, so the only real gates are the queried ones.
+        m_features = {};
+        m_features.compute = true;
+        m_features.indirect_draw = true;
+        m_features.multi_draw_indirect = true;
+        m_features.geometry_shader = true;
+        m_features.tessellation_shader = true;
+        m_features.fill_mode_non_solid = true;
+        m_features.sampler_anisotropy = m_limits.max_anisotropy > 1.0f;
+        m_features.depth_bias_clamp = true;
+        m_features.independent_blend = true;
+        m_features.timestamp_queries = timestamp_bits > 0;
+        m_features.debug_labels = true;
+        m_features.portability_subset = false;
+        // Core compute shaders, image load/store into cube-map mip
+        // levels and glGenerateTextureMipmap: the IBL tables convolve
+        // on the GPU.
+        m_features.compute_prefilter = true;
+
+        LOG_INF("OpenGL limits: texture %u / 3d %u / cube %u, %u array layers, %u colour attachments, "
+                "anisotropy %.0f, msaa colour 0x%x depth 0x%x, timestamps %s",
+                m_limits.max_texture_size_2d,
+                m_limits.max_texture_size_3d,
+                m_limits.max_texture_size_cube,
+                m_limits.max_array_layers,
+                m_limits.max_color_attachments,
+                static_cast<double>(m_limits.max_anisotropy),
+                m_limits.color_sample_counts,
+                m_limits.depth_sample_counts,
+                m_features.timestamp_queries ? "on" : "off");
+    }
+
+    texture_usage gl_device::format_support(texture_format format) const
+    {
+        // Every engine format is a required sampled / renderable
+        // internal format in 4.6. Image load/store needs a format with
+        // a GLSL image layout qualifier: the sRGB and three-channel
+        // formats have none, and a depth image cannot be bound.
+        texture_usage usage =
+            texture_usage_sampled | texture_usage_render_attachment | texture_usage_copy_src | texture_usage_copy_dst;
+        if (!is_depth_texture_format(format) && format != texture_format::rgba8_srgb &&
+            format != texture_format::rgb8_unorm)
+        {
+            usage |= texture_usage_storage;
+        }
+        return usage;
     }
 
     void gl_device::quit()
@@ -278,6 +401,15 @@ namespace rendering_engine::gpu::backend::opengl
                     rt.framebuffer_id = 0;
                 }
             });
+        m_query_sets.for_each(
+            [](gl_query_set& q)
+            {
+                if (!q.ids.empty())
+                {
+                    glDeleteQueries(static_cast<GLsizei>(q.ids.size()), q.ids.data());
+                    q.ids.clear();
+                }
+            });
 
         // The pools keep their generation counters across clear(), so
         // a handle from this lifetime never resolves in the next one.
@@ -289,6 +421,7 @@ namespace rendering_engine::gpu::backend::opengl
         m_textures.clear();
         m_buffers.clear();
         m_render_targets.clear();
+        m_query_sets.clear();
         m_swapchain = {};
 
         invalidate_state_cache();
@@ -320,74 +453,220 @@ namespace rendering_engine::gpu::backend::opengl
 
     render_target gl_device::create_render_target(const render_target_descriptor& descriptor)
     {
-        // Allocate the colour attachment as a regular sampled texture
-        // so post passes can read it as input. clamp_edge keeps the
-        // fullscreen pass from wrapping at the seam.
-        texture_descriptor color_descriptor{};
-        color_descriptor.dimension = texture_dimension::d2;
-        color_descriptor.format = descriptor.color_format;
-        color_descriptor.width = descriptor.width;
-        color_descriptor.height = descriptor.height;
-        color_descriptor.mipmaps = false;
-        color_descriptor.min_filter = filter_mode::linear;
-        color_descriptor.mag_filter = filter_mode::linear;
-        color_descriptor.mipmap_filter = mipmap_mode::none;
-        color_descriptor.address_u = address_mode::clamp_edge;
-        color_descriptor.address_v = address_mode::clamp_edge;
-        color_descriptor.address_w = address_mode::clamp_edge;
-        const texture color = create_texture(color_descriptor);
-
-        texture depth{};
-        if (descriptor.with_depth)
+        if (const char* problem = validate_render_target_descriptor(descriptor); problem != nullptr)
         {
-            texture_descriptor depth_descriptor{};
-            depth_descriptor.dimension = texture_dimension::d2;
-            depth_descriptor.format = descriptor.depth_format;
-            depth_descriptor.width = descriptor.width;
-            depth_descriptor.height = descriptor.height;
-            depth_descriptor.mipmaps = false;
-            depth_descriptor.min_filter = filter_mode::nearest;
-            depth_descriptor.mag_filter = filter_mode::nearest;
-            depth_descriptor.mipmap_filter = mipmap_mode::none;
-            depth_descriptor.address_u = address_mode::clamp_edge;
-            depth_descriptor.address_v = address_mode::clamp_edge;
-            depth_descriptor.address_w = address_mode::clamp_edge;
-            depth = create_texture(depth_descriptor);
+            LOG_ERR("create_render_target: %s", problem);
+            return {};
+        }
+        if (descriptor.color.size() > m_limits.max_color_attachments)
+        {
+            LOG_ERR("create_render_target: %zu colour attachments, the device allows %u",
+                    descriptor.color.size(),
+                    m_limits.max_color_attachments);
+            return {};
+        }
+        const sample_count_mask sample_counts =
+            descriptor.color.empty()
+                ? m_limits.depth_sample_counts
+                : (m_limits.color_sample_counts & (descriptor.with_depth ? m_limits.depth_sample_counts : ~0u));
+        if (!sample_count_supported(sample_counts, descriptor.sample_count))
+        {
+            LOG_ERR("create_render_target: %u samples per pixel are not supported for these attachments",
+                    descriptor.sample_count);
+            return {};
         }
 
         gl_render_target record{};
         record.width = descriptor.width;
         record.height = descriptor.height;
+        record.samples = descriptor.sample_count;
         record.has_depth = descriptor.with_depth;
-        record.has_stencil = descriptor.with_depth && is_gl_depth_stencil_format(descriptor.depth_format);
-        record.color_attachment = color;
-        record.depth_attachment = depth;
 
-        // Wired through the named entry points, so the framebuffer
-        // binding the current pass (if any) may hold is untouched.
-        glCreateFramebuffers(1, &record.framebuffer_id);
-
-        if (auto* color_record = m_textures.lookup(color.id))
+        // Textures allocated so far, released if a later step fails so
+        // nothing half-built is handed out.
+        std::vector<texture> allocated;
+        const auto release_allocated = [&]
         {
-            GL_CHECK(
-                glNamedFramebufferTexture(record.framebuffer_id, GL_COLOR_ATTACHMENT0, color_record->object_id, 0));
+            for (const texture t : allocated)
+            {
+                destroy(t);
+            }
+            if (record.framebuffer_id != 0)
+            {
+                glDeleteFramebuffers(1, &record.framebuffer_id);
+            }
+        };
+
+        // Resolve one attachment: check an imported texture against the
+        // target, or allocate a fresh single-mip texture of the target's
+        // shape (colour attachments sample linearly, depth attachments
+        // nearest, both clamped so a fullscreen pass never wraps at the
+        // seam).
+        const auto resolve = [&](const attachment_desc& desc, bool depth, gl_attachment& out) -> bool
+        {
+            if (desc.texture.valid())
+            {
+                const gl_texture* tex = m_textures.lookup(desc.texture.id);
+                if (tex == nullptr || tex->object_id == 0)
+                {
+                    LOG_ERR("create_render_target: imported attachment is not a live texture");
+                    return false;
+                }
+                if ((tex->usage & texture_usage_render_attachment) == 0u)
+                {
+                    LOG_ERR("create_render_target: imported texture was created without "
+                            "texture_usage_render_attachment");
+                    return false;
+                }
+                if (is_depth_texture_format(tex->format) != depth)
+                {
+                    LOG_ERR("create_render_target: imported texture format does not fit a %s attachment",
+                            depth ? "depth" : "colour");
+                    return false;
+                }
+                if (desc.mip_level >= tex->mip_levels || desc.layer >= tex->array_layers)
+                {
+                    LOG_ERR("create_render_target: level %u / layer %u is outside the imported texture (%u levels, "
+                            "%u layers)",
+                            desc.mip_level,
+                            desc.layer,
+                            tex->mip_levels,
+                            tex->array_layers);
+                    return false;
+                }
+                if (tex->samples != descriptor.sample_count)
+                {
+                    LOG_ERR("create_render_target: imported texture has %u samples, the target %u",
+                            tex->samples,
+                            descriptor.sample_count);
+                    return false;
+                }
+                const uint32_t level_width = std::max(1u, tex->width >> desc.mip_level);
+                const uint32_t level_height = std::max(1u, tex->height >> desc.mip_level);
+                if (level_width != descriptor.width || level_height != descriptor.height)
+                {
+                    LOG_ERR("create_render_target: imported level measures %ux%u, the target %ux%u",
+                            level_width,
+                            level_height,
+                            descriptor.width,
+                            descriptor.height);
+                    return false;
+                }
+                out.tex = desc.texture;
+                out.owned = false;
+                out.mip_level = desc.mip_level;
+                out.layer = desc.layer;
+                return true;
+            }
+
+            texture_descriptor td{};
+            td.dimension = descriptor.dimension;
+            td.format = desc.format;
+            td.width = descriptor.width;
+            td.height = descriptor.height;
+            td.array_layers = descriptor.array_layers;
+            td.sample_count = descriptor.sample_count;
+            td.mipmaps = false;
+            td.usage = texture_usage_default | texture_usage_render_attachment;
+            td.min_filter = depth ? filter_mode::nearest : filter_mode::linear;
+            td.mag_filter = td.min_filter;
+            td.mipmap_filter = mipmap_mode::none;
+            td.address_u = address_mode::clamp_edge;
+            td.address_v = address_mode::clamp_edge;
+            td.address_w = address_mode::clamp_edge;
+            const texture t = create_texture(td);
+            if (!t.valid())
+            {
+                return false;
+            }
+            allocated.push_back(t);
+            out.tex = t;
+            out.owned = true;
+            out.mip_level = 0;
+            out.layer = desc.layer;
+            return true;
+        };
+
+        record.color.resize(descriptor.color.size());
+        for (size_t i = 0; i < descriptor.color.size(); ++i)
+        {
+            if (!resolve(descriptor.color[i], false, record.color[i]))
+            {
+                release_allocated();
+                return {};
+            }
         }
         if (descriptor.with_depth)
         {
-            if (auto* depth_record = m_textures.lookup(depth.id))
+            if (!resolve(descriptor.depth, true, record.depth))
             {
-                // A packed depth-stencil texture must go on the combined
-                // attachment point; GL_DEPTH_ATTACHMENT alone leaves the
-                // stencil plane unattached.
-                const GLenum attachment = record.has_stencil ? GL_DEPTH_STENCIL_ATTACHMENT : GL_DEPTH_ATTACHMENT;
-                GL_CHECK(glNamedFramebufferTexture(record.framebuffer_id, attachment, depth_record->object_id, 0));
+                release_allocated();
+                return {};
             }
+            if (const gl_texture* depth_tex = m_textures.lookup(record.depth.tex.id))
+            {
+                record.has_stencil = has_stencil_plane(depth_tex->format);
+            }
+        }
+
+        // Wired through the named entry points, so the framebuffer
+        // binding the current pass (if any) may hold is untouched. A
+        // layered texture (cube, array) attaches one layer; the rest
+        // attach whole.
+        glCreateFramebuffers(1, &record.framebuffer_id);
+        const auto attach = [&](GLenum attachment_point, const gl_attachment& attachment)
+        {
+            const gl_texture* tex = m_textures.lookup(attachment.tex.id);
+            if (tex == nullptr)
+            {
+                return;
+            }
+            if (tex->layered)
+            {
+                GL_CHECK(glNamedFramebufferTextureLayer(record.framebuffer_id,
+                                                        attachment_point,
+                                                        tex->object_id,
+                                                        static_cast<GLint>(attachment.mip_level),
+                                                        static_cast<GLint>(attachment.layer)));
+            }
+            else
+            {
+                GL_CHECK(glNamedFramebufferTexture(
+                    record.framebuffer_id, attachment_point, tex->object_id, static_cast<GLint>(attachment.mip_level)));
+            }
+        };
+        std::array<GLenum, max_color_attachments> draw_buffers{};
+        for (size_t i = 0; i < record.color.size(); ++i)
+        {
+            draw_buffers[i] = GL_COLOR_ATTACHMENT0 + static_cast<GLenum>(i);
+            attach(draw_buffers[i], record.color[i]);
+        }
+        if (record.color.empty())
+        {
+            // A depth-only framebuffer is complete once it draws to and
+            // reads from no colour buffer.
+            glNamedFramebufferDrawBuffer(record.framebuffer_id, GL_NONE);
+            glNamedFramebufferReadBuffer(record.framebuffer_id, GL_NONE);
+        }
+        else
+        {
+            GL_CHECK(glNamedFramebufferDrawBuffers(
+                record.framebuffer_id, static_cast<GLsizei>(record.color.size()), draw_buffers.data()));
+        }
+        if (record.has_depth)
+        {
+            // A packed depth-stencil texture must go on the combined
+            // attachment point; GL_DEPTH_ATTACHMENT alone leaves the
+            // stencil plane unattached.
+            attach(record.has_stencil ? GL_DEPTH_STENCIL_ATTACHMENT : GL_DEPTH_ATTACHMENT, record.depth);
         }
 
         const GLenum status = glCheckNamedFramebufferStatus(record.framebuffer_id, GL_FRAMEBUFFER);
         if (status != GL_FRAMEBUFFER_COMPLETE)
         {
             LOG_ERR("create_render_target: incomplete framebuffer (status 0x%x)", status);
+            release_allocated();
+            return {};
         }
 
         render_target h{};
@@ -409,26 +688,34 @@ namespace rendering_engine::gpu::backend::opengl
                 glDeleteFramebuffers(1, &record->framebuffer_id);
                 record->framebuffer_id = 0;
             }
-            if (record->color_attachment.valid())
+            // Only the attachments the target allocated go with it; an
+            // imported texture stays with its owner.
+            for (gl_attachment& attachment : record->color)
             {
-                destroy(record->color_attachment);
-                record->color_attachment = {};
+                if (attachment.owned && attachment.tex.valid())
+                {
+                    destroy(attachment.tex);
+                }
+                attachment = {};
             }
-            if (record->depth_attachment.valid())
+            if (record->depth.owned && record->depth.tex.valid())
             {
-                destroy(record->depth_attachment);
-                record->depth_attachment = {};
+                destroy(record->depth.tex);
             }
+            record->depth = {};
             m_render_targets.remove(handle.id);
             invalidate_state_cache();
         }
     }
 
-    texture gl_device::render_target_color_texture(render_target handle)
+    texture gl_device::render_target_color_texture(render_target handle, uint32_t index)
     {
         if (auto* record = m_render_targets.lookup(handle.id))
         {
-            return record->color_attachment;
+            if (index < record->color.size())
+            {
+                return record->color[index].tex;
+            }
         }
         return {};
     }
@@ -437,9 +724,118 @@ namespace rendering_engine::gpu::backend::opengl
     {
         if (auto* record = m_render_targets.lookup(handle.id))
         {
-            return record->depth_attachment;
+            return record->depth.tex;
         }
         return {};
+    }
+
+    // -- Queries ------------------------------------------------------
+
+    query_set gl_device::create_query_set(const query_set_descriptor& descriptor)
+    {
+        if (!m_features.timestamp_queries)
+        {
+            LOG_WRN("create_query_set: the context has no timestamp counter; no query set created");
+            return {};
+        }
+        if (descriptor.count == 0)
+        {
+            LOG_ERR("create_query_set: a query set needs at least one query");
+            return {};
+        }
+        gl_query_set record{};
+        record.ids.resize(descriptor.count, 0);
+        GL_CHECK(glCreateQueries(GL_TIMESTAMP, static_cast<GLsizei>(descriptor.count), record.ids.data()));
+        query_set h{};
+        h.id = m_query_sets.insert(record);
+        return h;
+    }
+
+    void gl_device::destroy(query_set handle)
+    {
+        if (auto* record = m_query_sets.lookup(handle.id))
+        {
+            if (!record->ids.empty())
+            {
+                glDeleteQueries(static_cast<GLsizei>(record->ids.size()), record->ids.data());
+            }
+            m_query_sets.remove(handle.id);
+        }
+    }
+
+    bool gl_device::resolve_queries(query_set set, uint32_t first, uint32_t count, uint64_t* out_ticks)
+    {
+        auto* record = m_query_sets.lookup(set.id);
+        if (record == nullptr || out_ticks == nullptr)
+        {
+            return false;
+        }
+        if (first > record->ids.size() || count > record->ids.size() - first)
+        {
+            LOG_WRN("resolve_queries: %u queries from %u exceed the %zu-query set", count, first, record->ids.size());
+            return false;
+        }
+        // All or nothing: a caller that mixes this frame's and last
+        // frame's values would report nonsense intervals.
+        for (uint32_t i = 0; i < count; ++i)
+        {
+            GLint available = GL_FALSE;
+            glGetQueryObjectiv(record->ids[first + i], GL_QUERY_RESULT_AVAILABLE, &available);
+            if (available == GL_FALSE)
+            {
+                return false;
+            }
+        }
+        for (uint32_t i = 0; i < count; ++i)
+        {
+            GLuint64 ticks = 0;
+            glGetQueryObjectui64v(record->ids[first + i], GL_QUERY_RESULT, &ticks);
+            out_ticks[i] = ticks;
+        }
+        return true;
+    }
+
+    // -- Debug names --------------------------------------------------
+
+    void gl_device::set_debug_name(buffer handle, const char* name)
+    {
+        if (const auto* record = m_buffers.lookup(handle.id))
+        {
+            label_object(GL_BUFFER, record->object_id, name);
+        }
+    }
+
+    void gl_device::set_debug_name(texture handle, const char* name)
+    {
+        if (const auto* record = m_textures.lookup(handle.id))
+        {
+            label_object(GL_TEXTURE, record->object_id, name);
+        }
+    }
+
+    void gl_device::set_debug_name(sampler handle, const char* name)
+    {
+        if (const auto* record = m_samplers.lookup(handle.id))
+        {
+            label_object(GL_SAMPLER, record->object_id, name);
+        }
+    }
+
+    void gl_device::set_debug_name(pipeline handle, const char* name)
+    {
+        if (const auto* record = m_pipelines.lookup(handle.id))
+        {
+            label_object(GL_PROGRAM, record->program_id, name);
+        }
+    }
+
+    void gl_device::set_debug_name(render_target handle, const char* name)
+    {
+        // Framebuffer 0 (the swapchain) cannot be labelled.
+        if (const auto* record = m_render_targets.lookup(handle.id))
+        {
+            label_object(GL_FRAMEBUFFER, record->framebuffer_id, name);
+        }
     }
 
     // -- Command recording ----------------------------------------
@@ -505,5 +901,10 @@ namespace rendering_engine::gpu::backend::opengl
     gl_bind_group_layout* gl_device::lookup_bind_group_layout(bind_group_layout h)
     {
         return m_bind_group_layouts.lookup(h.id);
+    }
+
+    gl_query_set* gl_device::lookup_query_set(query_set h)
+    {
+        return m_query_sets.lookup(h.id);
     }
 } // namespace rendering_engine::gpu::backend::opengl

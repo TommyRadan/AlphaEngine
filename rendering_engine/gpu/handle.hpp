@@ -83,6 +83,9 @@ namespace rendering_engine::gpu
     struct render_target_tag
     {
     };
+    struct query_set_tag
+    {
+    };
 
     using buffer = handle<buffer_tag>;
     using texture = handle<texture_tag>;
@@ -92,4 +95,5 @@ namespace rendering_engine::gpu
     using bind_group_layout = handle<bind_group_layout_tag>;
     using bind_group = handle<bind_group_tag>;
     using render_target = handle<render_target_tag>;
+    using query_set = handle<query_set_tag>;
 } // namespace rendering_engine::gpu

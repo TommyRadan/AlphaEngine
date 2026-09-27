@@ -29,6 +29,7 @@
 
 #pragma once
 
+#include <array>
 #include <cstdint>
 
 #include <glad/gl.h>
@@ -61,8 +62,13 @@ namespace rendering_engine::gpu::backend::opengl
     bool is_gl_integer_scalar(scalar_type type);
     GLenum to_gl_buffer_usage_hint(buffer_usage_hint hint);
     GLenum to_gl_cube_face(cube_face face);
-    GLenum to_gl_texture_target(texture_dimension dimension);
+    // The texture target for @p dimension; @p multisampled selects the
+    // multisample twin of the 2D and 2D-array targets.
+    GLenum to_gl_texture_target(texture_dimension dimension, bool multisampled = false);
     GLenum to_gl_storage_access(storage_access access);
+    GLenum to_gl_stencil_op(stencil_op op);
+    // The RGBA border colour a @c clamp_border lookup returns.
+    std::array<GLfloat, 4> to_gl_border_color(border_color color);
 
     // Translate the engine's @c access_flag bitmask into the
     // matching @c GL_*_BARRIER_BIT bitmask consumed by
@@ -88,6 +94,13 @@ namespace rendering_engine::gpu::backend::opengl
     // @ref to_gl_texture_format's upload format / type describe, for
     // validating the byte count handed to a texture write.
     uint32_t to_gl_texel_bytes(texture_format format);
+
+    // The client format / type of the *native* texel layout the copy
+    // commands and readbacks move (@c texel_size_bytes per texel):
+    // the same as the upload triple except that @c rgba16_float moves
+    // as half floats rather than the floats the upload path widens
+    // from.
+    gl_texture_format to_gl_copy_format(texture_format format);
 
     // True for the packed depth-stencil format, which attaches to
     // @c GL_DEPTH_STENCIL_ATTACHMENT rather than @c GL_DEPTH_ATTACHMENT.

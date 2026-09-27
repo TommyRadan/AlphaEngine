@@ -22,9 +22,12 @@
 
 #include <rendering_engine/gpu/backend/opengl/gl_command_encoder.hpp>
 
+#include <algorithm>
 #include <array>
+#include <cstdint>
 
 #include <core/log.hpp>
+#include <rendering_engine/gpu/backend/opengl/gl_check.hpp>
 #include <rendering_engine/gpu/backend/opengl/gl_device.hpp>
 #include <rendering_engine/gpu/backend/opengl/gl_state_cache.hpp>
 #include <rendering_engine/gpu/backend/opengl/gl_translate.hpp>
@@ -49,16 +52,24 @@ namespace rendering_engine::gpu::backend::opengl
         // Tell the driver the named planes of @p target hold nothing
         // worth keeping: at pass begin for load_op::dont_care (no
         // load, no clear) and at pass end for store_op::dont_care (the
-        // results are never read back). A tile-based GPU skips the
-        // load / store traffic; a desktop driver treats it as a hint.
-        void invalidate_attachments(const gl_render_target& target, bool color, bool depth)
+        // results are never read back). @p color flags each of the
+        // target's @p color_count colour attachments. A tile-based GPU
+        // skips the load / store traffic; a desktop driver treats it as
+        // a hint.
+        void invalidate_attachments(const gl_render_target& target,
+                                    const std::array<bool, max_color_attachments>& color,
+                                    uint32_t color_count,
+                                    bool depth)
         {
-            std::array<GLenum, 3> attachments{};
+            std::array<GLenum, max_color_attachments + 2> attachments{};
             GLsizei count = 0;
             const bool default_framebuffer = target.framebuffer_id == 0;
-            if (color)
+            for (uint32_t i = 0; i < color_count && i < max_color_attachments; ++i)
             {
-                attachments[count++] = default_framebuffer ? GL_COLOR : GL_COLOR_ATTACHMENT0;
+                if (color[i])
+                {
+                    attachments[count++] = default_framebuffer ? GL_COLOR : GL_COLOR_ATTACHMENT0 + i;
+                }
             }
             if (depth && target.has_depth)
             {
@@ -168,11 +179,11 @@ namespace rendering_engine::gpu::backend::opengl
                         break;
                     }
                     const auto fmt = to_gl_texture_format(entry->storage_format);
-                    const GLboolean layered =
-                        (tex->target == GL_TEXTURE_3D || tex->target == GL_TEXTURE_CUBE_MAP) ? GL_TRUE : GL_FALSE;
+                    const GLboolean layered = (tex->target == GL_TEXTURE_3D || tex->layered) ? GL_TRUE : GL_FALSE;
                     // Bind the requested mip level; layered binds every
-                    // cube face / volume slice so a compute shader writes
-                    // the whole level through an imageCube / image3D.
+                    // cube face / array layer / volume slice so a compute
+                    // shader writes the whole level through an imageCube
+                    // / image2DArray / image3D.
                     glBindImageTexture(value.binding,
                                        tex->object_id,
                                        static_cast<GLint>(value.storage_level),
@@ -197,12 +208,55 @@ namespace rendering_engine::gpu::backend::opengl
             }
         }
 
-        void apply_pipeline_state(gl_state_cache& cache, const gl_pipeline& pipe, bool use_depth)
+        // The blend state pipeline @p pipe applies to colour attachment
+        // @p index: its override for that attachment, else its default.
+        const blend_state& blend_for_attachment(const gl_pipeline& pipe, uint32_t index)
         {
-            cache.set_blend(pipe.blend.enabled,
-                            to_gl_blend_factor(pipe.blend.src),
-                            to_gl_blend_factor(pipe.blend.dst),
-                            to_gl_blend_op(pipe.blend.op));
+            return index < pipe.attachment_blend.size() ? pipe.attachment_blend[index] : pipe.blend;
+        }
+
+        void apply_stencil_face(gl_state_cache& cache,
+                                GLenum face,
+                                const stencil_face_state& state,
+                                uint32_t reference,
+                                const stencil_state& stencil)
+        {
+            cache.set_stencil_func(
+                face, to_gl_compare(state.compare), static_cast<GLint>(reference), stencil.read_mask);
+            cache.set_stencil_op(face,
+                                 to_gl_stencil_op(state.fail_op),
+                                 to_gl_stencil_op(state.depth_fail_op),
+                                 to_gl_stencil_op(state.pass_op));
+            cache.set_stencil_mask(face, stencil.write_mask);
+        }
+
+        // Every piece of fixed-function state a pipeline bakes, applied
+        // for a pass over a target with @p color_count colour
+        // attachments. Depth and stencil follow the pass's use_depth
+        // (a pass without depth neither tests nor writes it, whatever
+        // the pipeline asked for — the target may carry a plane another
+        // pass owns) and the target's stencil plane.
+        void apply_pipeline_state(gl_state_cache& cache,
+                                  const gl_pipeline& pipe,
+                                  bool use_depth,
+                                  bool has_stencil,
+                                  uint32_t color_count,
+                                  uint32_t stencil_reference)
+        {
+            for (uint32_t i = 0; i < color_count && i < max_color_attachments; ++i)
+            {
+                const blend_state& blend = blend_for_attachment(pipe, i);
+                cache.set_blend(i,
+                                blend.enabled,
+                                to_gl_blend_factor(blend.src),
+                                to_gl_blend_factor(blend.dst),
+                                to_gl_blend_op(blend.op));
+                cache.set_color_mask(i,
+                                     (blend.write_mask & color_write_red) != 0u ? GL_TRUE : GL_FALSE,
+                                     (blend.write_mask & color_write_green) != 0u ? GL_TRUE : GL_FALSE,
+                                     (blend.write_mask & color_write_blue) != 0u ? GL_TRUE : GL_FALSE,
+                                     (blend.write_mask & color_write_alpha) != 0u ? GL_TRUE : GL_FALSE);
+            }
 
             if (use_depth)
             {
@@ -212,16 +266,73 @@ namespace rendering_engine::gpu::backend::opengl
             }
             else
             {
-                // A pass without depth (UI, post) neither tests nor
-                // writes it, whatever the pipeline asked for — the
-                // target may carry a depth plane another pass owns.
                 cache.set_depth_test(false);
                 cache.set_depth_write(false);
             }
 
+            if (use_depth && has_stencil && pipe.stencil.test_enabled)
+            {
+                cache.set_stencil_test(true);
+                apply_stencil_face(cache, GL_FRONT, pipe.stencil.front, stencil_reference, pipe.stencil);
+                apply_stencil_face(cache, GL_BACK, pipe.stencil.back, stencil_reference, pipe.stencil);
+            }
+            else
+            {
+                cache.set_stencil_test(false);
+            }
+
+            // glPolygonOffset takes (factor, units): the slope scale
+            // first, then the constant in resolvable depth steps.
+            cache.set_polygon_offset(
+                pipe.depth_bias.enabled, pipe.depth_bias.slope, pipe.depth_bias.constant, pipe.depth_bias.clamp);
+
             cache.set_cull(pipe.rasterizer.cull != cull_mode::none, to_gl_cull_face(pipe.rasterizer.cull));
             cache.set_front_face(to_gl_front_face(pipe.rasterizer.front));
             cache.set_polygon_mode(to_gl_polygon_mode(pipe.rasterizer.polygon));
+        }
+
+        // True when @p region lies inside level / layer of @p record and
+        // @p size bytes from @p offset stay inside @p buffer; logs the
+        // first problem otherwise.
+        bool copy_region_fits(const char* where,
+                              const gl_texture& record,
+                              const texture_copy_region& region,
+                              const gl_buffer& buffer,
+                              size_t offset)
+        {
+            if (record.samples > 1)
+            {
+                LOG_WRN("%s: a multisampled texture cannot be copied", where);
+                return false;
+            }
+            if (region.mip_level >= record.mip_levels || region.layer >= record.array_layers)
+            {
+                LOG_WRN("%s: level %u / layer %u is outside the texture (%u levels, %u layers)",
+                        where,
+                        region.mip_level,
+                        region.layer,
+                        record.mip_levels,
+                        record.array_layers);
+                return false;
+            }
+            const uint32_t level_width = std::max(1u, record.width >> region.mip_level);
+            const uint32_t level_height = std::max(1u, record.height >> region.mip_level);
+            const uint32_t level_depth = std::max(1u, record.depth >> region.mip_level);
+            if (region.width == 0 || region.height == 0 || region.depth == 0 ||
+                static_cast<uint64_t>(region.x) + region.width > level_width ||
+                static_cast<uint64_t>(region.y) + region.height > level_height ||
+                static_cast<uint64_t>(region.z) + region.depth > level_depth)
+            {
+                LOG_WRN("%s: region does not fit level %u", where, region.mip_level);
+                return false;
+            }
+            const size_t bytes = texture_region_bytes(record.format, region);
+            if (offset > buffer.size || bytes > buffer.size - offset)
+            {
+                LOG_WRN("%s: %zu bytes at offset %zu exceed the %zu-byte buffer", where, bytes, offset, buffer.size);
+                return false;
+            }
+            return true;
         }
     } // namespace
 
@@ -239,7 +350,13 @@ namespace rendering_engine::gpu::backend::opengl
         }
 
         m_target = descriptor.target;
-        m_color_store = descriptor.color.store;
+        // The window backbuffer has one colour plane with no texture
+        // behind it; an off-screen target has as many as it attached.
+        m_color_count = target->framebuffer_id == 0 ? 1u : static_cast<uint32_t>(target->color.size());
+        for (uint32_t i = 0; i < m_color_count && i < max_color_attachments; ++i)
+        {
+            m_color_store[i] = descriptor.color[i].store;
+        }
         m_depth_store = descriptor.depth.store;
         m_use_depth = descriptor.use_depth;
 
@@ -260,40 +377,48 @@ namespace rendering_engine::gpu::backend::opengl
 
         // load_op::dont_care: neither loaded nor cleared, so tell the
         // driver the previous contents are dead.
-        invalidate_attachments(*target,
-                               descriptor.color.load == load_op::dont_care,
-                               depth_active && descriptor.depth.load == load_op::dont_care);
-
-        GLbitfield clear_mask = 0;
-        if (descriptor.color.load == load_op::clear)
+        std::array<bool, max_color_attachments> discard{};
+        for (uint32_t i = 0; i < m_color_count && i < max_color_attachments; ++i)
         {
-            glClearColor(descriptor.color.clear_color[0],
-                         descriptor.color.clear_color[1],
-                         descriptor.color.clear_color[2],
-                         descriptor.color.clear_color[3]);
-            clear_mask |= GL_COLOR_BUFFER_BIT;
+            discard[i] = descriptor.color[i].load == load_op::dont_care;
+        }
+        invalidate_attachments(
+            *target, discard, m_color_count, depth_active && descriptor.depth.load == load_op::dont_care);
+
+        // Clears go through the named per-attachment entry points, so
+        // each colour attachment takes its own value and the depth /
+        // stencil planes clear together. Like glClear they honour the
+        // write masks (and the scissor, disabled above), so the masks
+        // are opened first — a previous pass's pipeline may have closed
+        // them.
+        const GLuint fbo = target->framebuffer_id;
+        for (uint32_t i = 0; i < m_color_count && i < max_color_attachments; ++i)
+        {
+            if (descriptor.color[i].load != load_op::clear)
+            {
+                continue;
+            }
+            cache.set_color_mask(i, GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+            GL_CHECK(glClearNamedFramebufferfv(
+                fbo, GL_COLOR, static_cast<GLint>(i), descriptor.color[i].clear_color.data()));
         }
         if (depth_active && descriptor.depth.load == load_op::clear)
         {
-            glClearDepth(static_cast<GLdouble>(descriptor.depth.clear_depth));
-            clear_mask |= GL_DEPTH_BUFFER_BIT;
+            cache.set_depth_write(true);
             if (target->has_stencil)
             {
-                // A packed attachment clears both planes together.
-                glClearStencil(0);
-                clear_mask |= GL_STENCIL_BUFFER_BIT;
+                cache.set_stencil_mask(GL_FRONT, 0xFFFFFFFFu);
+                cache.set_stencil_mask(GL_BACK, 0xFFFFFFFFu);
+                GL_CHECK(glClearNamedFramebufferfi(fbo,
+                                                   GL_DEPTH_STENCIL,
+                                                   0,
+                                                   descriptor.depth.clear_depth,
+                                                   static_cast<GLint>(descriptor.depth.clear_stencil)));
             }
-        }
-        if (clear_mask != 0)
-        {
-            if ((clear_mask & GL_DEPTH_BUFFER_BIT) != 0)
+            else
             {
-                // glClear honours the depth mask, so make sure depth
-                // writes are open before clearing — the pipeline state
-                // may have flipped it off in a previous pass.
-                cache.set_depth_write(true);
+                GL_CHECK(glClearNamedFramebufferfv(fbo, GL_DEPTH, 0, &descriptor.depth.clear_depth));
             }
-            glClear(clear_mask);
         }
     }
 
@@ -318,6 +443,13 @@ namespace rendering_engine::gpu::backend::opengl
             LOG_WRN("set_pipeline: compute pipeline bound on render pass encoder");
             return;
         }
+        const auto* target = m_device.lookup_render_target(m_target);
+        if (target != nullptr && pipe->sample_count != target->samples)
+        {
+            LOG_WRN("set_pipeline: pipeline rasterises at %u samples, the target has %u",
+                    pipe->sample_count,
+                    target->samples);
+        }
         m_pipeline_handle = pipeline_handle;
         m_program_id = pipe->program_id;
         m_vao_id = pipe->vao_id;
@@ -326,7 +458,8 @@ namespace rendering_engine::gpu::backend::opengl
         auto& cache = m_device.state_cache();
         cache.use_program(m_program_id);
         cache.bind_vertex_array(m_vao_id);
-        apply_pipeline_state(cache, *pipe, m_use_depth);
+        apply_pipeline_state(
+            cache, *pipe, m_use_depth, target != nullptr && target->has_stencil, m_color_count, m_stencil_reference);
         if (pipe->topology == primitive_topology::patches && pipe->patch_control_points > 0)
         {
             glPatchParameteri(GL_PATCH_VERTICES, static_cast<GLint>(pipe->patch_control_points));
@@ -422,7 +555,35 @@ namespace rendering_engine::gpu::backend::opengl
 
     void gl_render_pass_encoder::set_viewport(int x, int y, int width, int height)
     {
-        m_device.state_cache().set_viewport(x, y, static_cast<GLsizei>(width), static_cast<GLsizei>(height));
+        auto& cache = m_device.state_cache();
+        cache.set_viewport(x, y, static_cast<GLsizei>(width), static_cast<GLsizei>(height));
+        // The scissor follows the viewport, as it does on Vulkan where
+        // both are set together.
+        cache.set_scissor_test(true);
+        cache.set_scissor(x, y, static_cast<GLsizei>(width), static_cast<GLsizei>(height));
+    }
+
+    void gl_render_pass_encoder::set_scissor(int x, int y, int width, int height)
+    {
+        auto& cache = m_device.state_cache();
+        cache.set_scissor_test(true);
+        cache.set_scissor(x, y, static_cast<GLsizei>(std::max(width, 0)), static_cast<GLsizei>(std::max(height, 0)));
+    }
+
+    void gl_render_pass_encoder::set_stencil_reference(uint32_t reference)
+    {
+        m_stencil_reference = reference;
+        // The reference is part of glStencilFuncSeparate, so a bound
+        // stencil pipeline has its funcs re-issued with the new value.
+        const auto* pipe = m_device.lookup_pipeline(m_pipeline_handle);
+        const auto* target = m_device.lookup_render_target(m_target);
+        if (pipe == nullptr || target == nullptr || !pipe->stencil.test_enabled || !m_use_depth || !target->has_stencil)
+        {
+            return;
+        }
+        auto& cache = m_device.state_cache();
+        apply_stencil_face(cache, GL_FRONT, pipe->stencil.front, reference, pipe->stencil);
+        apply_stencil_face(cache, GL_BACK, pipe->stencil.back, reference, pipe->stencil);
     }
 
     void gl_render_pass_encoder::draw(uint32_t vertex_count, uint32_t first_vertex)
@@ -495,8 +656,13 @@ namespace rendering_engine::gpu::backend::opengl
         // so the driver may drop them instead of resolving them.
         if (const auto* target = m_device.lookup_render_target(m_target))
         {
+            std::array<bool, max_color_attachments> discard{};
+            for (uint32_t i = 0; i < m_color_count && i < max_color_attachments; ++i)
+            {
+                discard[i] = m_color_store[i] == store_op::dont_care;
+            }
             invalidate_attachments(
-                *target, m_color_store == store_op::dont_care, m_use_depth && m_depth_store == store_op::dont_care);
+                *target, discard, m_color_count, m_use_depth && m_depth_store == store_op::dont_care);
         }
 
         // Leave the context with nothing of this pass bound: the next
@@ -640,5 +806,149 @@ namespace rendering_engine::gpu::backend::opengl
         // memory-barrier bitmask; the @c src / @c dst stages are
         // present for Vulkan portability and ignored here.
         glMemoryBarrier(to_gl_memory_barrier_bits(dst_access));
+    }
+
+    void gl_command_encoder::copy_buffer_to_texture(buffer src,
+                                                    size_t src_offset,
+                                                    texture dst,
+                                                    const texture_copy_region& region)
+    {
+        auto* src_record = m_device.lookup_buffer(src);
+        auto* dst_record = m_device.lookup_texture(dst);
+        if (src_record == nullptr || src_record->object_id == 0 || dst_record == nullptr || dst_record->object_id == 0)
+        {
+            LOG_WRN("copy_buffer_to_texture: invalid src buffer / dst texture");
+            return;
+        }
+        if ((dst_record->usage & texture_usage_copy_dst) == 0u)
+        {
+            LOG_WRN("copy_buffer_to_texture: the texture was created without texture_usage_copy_dst");
+            return;
+        }
+        if (!copy_region_fits("copy_buffer_to_texture", *dst_record, region, *src_record, src_offset))
+        {
+            return;
+        }
+        // With a pixel unpack buffer bound the data pointer is an offset
+        // into it; the rows are tightly packed (GL_UNPACK_ALIGNMENT 1).
+        const auto fmt = to_gl_copy_format(dst_record->format);
+        const auto* offset_pointer = reinterpret_cast<const void*>(static_cast<uintptr_t>(src_offset));
+        glBindBuffer(GL_PIXEL_UNPACK_BUFFER, src_record->object_id);
+        if (dst_record->target == GL_TEXTURE_2D)
+        {
+            GL_CHECK(glTextureSubImage2D(dst_record->object_id,
+                                         static_cast<GLint>(region.mip_level),
+                                         static_cast<GLint>(region.x),
+                                         static_cast<GLint>(region.y),
+                                         static_cast<GLsizei>(region.width),
+                                         static_cast<GLsizei>(region.height),
+                                         fmt.upload_format,
+                                         fmt.upload_type,
+                                         offset_pointer));
+        }
+        else
+        {
+            // Layered textures and cubes address the layer as z; a 3D
+            // texture uses the region's own z range.
+            const bool volume = dst_record->target == GL_TEXTURE_3D;
+            GL_CHECK(glTextureSubImage3D(dst_record->object_id,
+                                         static_cast<GLint>(region.mip_level),
+                                         static_cast<GLint>(region.x),
+                                         static_cast<GLint>(region.y),
+                                         volume ? static_cast<GLint>(region.z) : static_cast<GLint>(region.layer),
+                                         static_cast<GLsizei>(region.width),
+                                         static_cast<GLsizei>(region.height),
+                                         volume ? static_cast<GLsizei>(region.depth) : 1,
+                                         fmt.upload_format,
+                                         fmt.upload_type,
+                                         offset_pointer));
+        }
+        glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+    }
+
+    void gl_command_encoder::copy_texture_to_buffer(texture src,
+                                                    const texture_copy_region& region,
+                                                    buffer dst,
+                                                    size_t dst_offset)
+    {
+        auto* src_record = m_device.lookup_texture(src);
+        auto* dst_record = m_device.lookup_buffer(dst);
+        if (src_record == nullptr || src_record->object_id == 0 || dst_record == nullptr || dst_record->object_id == 0)
+        {
+            LOG_WRN("copy_texture_to_buffer: invalid src texture / dst buffer");
+            return;
+        }
+        if ((src_record->usage & texture_usage_copy_src) == 0u)
+        {
+            LOG_WRN("copy_texture_to_buffer: the texture was created without texture_usage_copy_src");
+            return;
+        }
+        if (!copy_region_fits("copy_texture_to_buffer", *src_record, region, *dst_record, dst_offset))
+        {
+            return;
+        }
+        // With a pixel pack buffer bound the destination pointer is an
+        // offset into it, and the read is asynchronous like every other
+        // recorded command (GL_PACK_ALIGNMENT 1 keeps rows tight).
+        const bool volume = src_record->target == GL_TEXTURE_3D;
+        const auto fmt = to_gl_copy_format(src_record->format);
+        const size_t bytes = texture_region_bytes(src_record->format, region);
+        glBindBuffer(GL_PIXEL_PACK_BUFFER, dst_record->object_id);
+        GL_CHECK(glGetTextureSubImage(src_record->object_id,
+                                      static_cast<GLint>(region.mip_level),
+                                      static_cast<GLint>(region.x),
+                                      static_cast<GLint>(region.y),
+                                      volume ? static_cast<GLint>(region.z) : static_cast<GLint>(region.layer),
+                                      static_cast<GLsizei>(region.width),
+                                      static_cast<GLsizei>(region.height),
+                                      volume ? static_cast<GLsizei>(region.depth) : 1,
+                                      fmt.upload_format,
+                                      fmt.upload_type,
+                                      static_cast<GLsizei>(bytes),
+                                      reinterpret_cast<void*>(static_cast<uintptr_t>(dst_offset))));
+        glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+    }
+
+    void gl_command_encoder::push_debug_group(const char* name)
+    {
+        if (name == nullptr)
+        {
+            name = "";
+        }
+        // KHR_debug groups are core in 4.3; a graphics debugger shows
+        // them as a tree around the draws recorded inside.
+        glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 0, -1, name);
+        ++m_debug_group_depth;
+    }
+
+    void gl_command_encoder::pop_debug_group()
+    {
+        if (m_debug_group_depth == 0)
+        {
+            return;
+        }
+        glPopDebugGroup();
+        --m_debug_group_depth;
+    }
+
+    void gl_command_encoder::reset_queries(query_set /*set*/, uint32_t /*first*/, uint32_t /*count*/)
+    {
+        // A query object is rewritten by the next glQueryCounter; there
+        // is nothing to reset between frames.
+    }
+
+    void gl_command_encoder::write_timestamp(query_set set, uint32_t index)
+    {
+        auto* record = m_device.lookup_query_set(set);
+        if (record == nullptr)
+        {
+            return;
+        }
+        if (index >= record->ids.size())
+        {
+            LOG_WRN("write_timestamp: query %u of a %zu-query set", index, record->ids.size());
+            return;
+        }
+        glQueryCounter(record->ids[index], GL_TIMESTAMP);
     }
 } // namespace rendering_engine::gpu::backend::opengl

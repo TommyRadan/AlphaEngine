@@ -43,6 +43,18 @@ namespace rendering_engine::gpu::backend::opengl
                 glDisable(capability);
             }
         }
+
+        void set_indexed_capability(GLenum capability, GLuint index, bool enabled)
+        {
+            if (enabled)
+            {
+                glEnablei(capability, index);
+            }
+            else
+            {
+                glDisablei(capability, index);
+            }
+        }
     } // namespace
 
     void gl_state_cache::invalidate()
@@ -51,16 +63,42 @@ namespace rendering_engine::gpu::backend::opengl
         m_vertex_array.reset();
         m_framebuffer.reset();
         m_draw_indirect_buffer.reset();
-        m_blend_enabled.reset();
-        m_blend_func.reset();
+        for (auto& entry : m_blend_enabled)
+        {
+            entry.reset();
+        }
+        for (auto& entry : m_blend_func)
+        {
+            entry.reset();
+        }
+        for (auto& entry : m_color_mask)
+        {
+            entry.reset();
+        }
         m_depth_test.reset();
         m_depth_write.reset();
         m_depth_func.reset();
+        m_stencil_test.reset();
+        for (auto& entry : m_stencil_func)
+        {
+            entry.reset();
+        }
+        for (auto& entry : m_stencil_op)
+        {
+            entry.reset();
+        }
+        for (auto& entry : m_stencil_mask)
+        {
+            entry.reset();
+        }
+        m_polygon_offset_enabled.reset();
+        m_polygon_offset.reset();
         m_cull_enabled.reset();
         m_cull_face.reset();
         m_front_face.reset();
         m_polygon_mode.reset();
         m_scissor_test.reset();
+        m_scissor.reset();
         m_viewport.reset();
         for (auto& unit : m_textures)
         {
@@ -112,20 +150,36 @@ namespace rendering_engine::gpu::backend::opengl
         }
     }
 
-    void gl_state_cache::set_blend(bool enabled, GLenum src, GLenum dst, GLenum equation)
+    void gl_state_cache::set_blend(GLuint index, bool enabled, GLenum src, GLenum dst, GLenum equation)
     {
-        if (m_blend_enabled.update(enabled))
+        if (index >= max_color_attachments)
         {
-            set_capability(GL_BLEND, enabled);
+            return;
+        }
+        if (m_blend_enabled[index].update(enabled))
+        {
+            set_indexed_capability(GL_BLEND, index, enabled);
         }
         if (!enabled)
         {
             return;
         }
-        if (m_blend_func.update(blend_func{src, dst, equation}))
+        if (m_blend_func[index].update(blend_func{src, dst, equation}))
         {
-            glBlendFunc(src, dst);
-            glBlendEquation(equation);
+            glBlendFunci(index, src, dst);
+            glBlendEquationi(index, equation);
+        }
+    }
+
+    void gl_state_cache::set_color_mask(GLuint index, GLboolean red, GLboolean green, GLboolean blue, GLboolean alpha)
+    {
+        if (index >= max_color_attachments)
+        {
+            return;
+        }
+        if (m_color_mask[index].update(color_mask{red, green, blue, alpha}))
+        {
+            glColorMaski(index, red, green, blue, alpha);
         }
     }
 
@@ -150,6 +204,58 @@ namespace rendering_engine::gpu::backend::opengl
         if (m_depth_func.update(func))
         {
             glDepthFunc(func);
+        }
+    }
+
+    void gl_state_cache::set_stencil_test(bool enabled)
+    {
+        if (m_stencil_test.update(enabled))
+        {
+            set_capability(GL_STENCIL_TEST, enabled);
+        }
+    }
+
+    void gl_state_cache::set_stencil_func(GLenum face, GLenum func, GLint reference, GLuint mask)
+    {
+        if (m_stencil_func[face_index(face)].update(stencil_func{func, reference, mask}))
+        {
+            glStencilFuncSeparate(face, func, reference, mask);
+        }
+    }
+
+    void gl_state_cache::set_stencil_op(GLenum face, GLenum fail, GLenum depth_fail, GLenum depth_pass)
+    {
+        if (m_stencil_op[face_index(face)].update(stencil_ops{fail, depth_fail, depth_pass}))
+        {
+            glStencilOpSeparate(face, fail, depth_fail, depth_pass);
+        }
+    }
+
+    void gl_state_cache::set_stencil_mask(GLenum face, GLuint mask)
+    {
+        if (m_stencil_mask[face_index(face)].update(mask))
+        {
+            glStencilMaskSeparate(face, mask);
+        }
+    }
+
+    void gl_state_cache::set_polygon_offset(bool enabled, float factor, float units, float clamp)
+    {
+        if (m_polygon_offset_enabled.update(enabled))
+        {
+            set_capability(GL_POLYGON_OFFSET_FILL, enabled);
+            set_capability(GL_POLYGON_OFFSET_LINE, enabled);
+            set_capability(GL_POLYGON_OFFSET_POINT, enabled);
+        }
+        if (!enabled)
+        {
+            return;
+        }
+        if (m_polygon_offset.update(polygon_offset{factor, units, clamp}))
+        {
+            // Core in 4.6 (ARB_polygon_offset_clamp); a clamp of 0
+            // disables the clamp, matching the abstract state.
+            glPolygonOffsetClamp(factor, units, clamp);
         }
     }
 
@@ -189,9 +295,17 @@ namespace rendering_engine::gpu::backend::opengl
         }
     }
 
+    void gl_state_cache::set_scissor(GLint x, GLint y, GLsizei width, GLsizei height)
+    {
+        if (m_scissor.update(rect{x, y, width, height}))
+        {
+            glScissor(x, y, width, height);
+        }
+    }
+
     void gl_state_cache::set_viewport(GLint x, GLint y, GLsizei width, GLsizei height)
     {
-        if (m_viewport.update(viewport_rect{x, y, width, height}))
+        if (m_viewport.update(rect{x, y, width, height}))
         {
             glViewport(x, y, width, height);
         }

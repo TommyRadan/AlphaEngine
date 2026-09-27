@@ -26,8 +26,9 @@
  *
  * Mirrors @c gl_device.hpp: the @c vk_device class is declared in
  * full and member functions are split across translation units by
- * resource family (vk_device.cpp for lifecycle / swapchain /
- * encoders / lookup_*, vk_device_buffer.cpp for buffers, etc.).
+ * resource family (vk_device.cpp for lifecycle / capabilities /
+ * swapchain / render targets / queries / encoders / lookup_*,
+ * vk_device_buffer.cpp for buffers, etc.).
  *
  * The backend ships with a single frame in flight, runtime SPIR-V
  * via @ref gpu::compile_glsl_to_spirv (already used by the GL
@@ -40,9 +41,9 @@
  * with its own fence ahead of the frame (see stage_upload); the frame
  * command buffers live in a per-frame command pool that is reset at
  * begin_frame. Compute pipelines and storage-image bind groups are
- * implemented (the IBL convolution runs on the GPU just like OpenGL);
- * indirect and barrier methods remain focused stubs that the engine's
- * existing pass set does not lean on.
+ * implemented (the IBL convolution runs on the GPU just like OpenGL),
+ * as are indirect draws, memory barriers, the buffer <-> texture
+ * copies, timestamp queries and the VK_EXT_debug_utils labels.
  */
 
 #pragma once
@@ -76,27 +77,16 @@ namespace rendering_engine::gpu::backend::vulkan
     // (VK_SUBOPTIMAL_KHR, VK_INCOMPLETE) inspects its result itself.
     bool vk_check(VkResult result, const char* what);
 
-    // The optional core features the backend asked for and was
-    // granted. Populated by create_logical_device from
-    // vkGetPhysicalDeviceFeatures: a feature is requested only when
-    // the physical device reports it, and what is missing is logged
-    // once at warning level. Consumers gate on these rather than
+    // The optional core features the backend asks for are requested
+    // only when vkGetPhysicalDeviceFeatures reports them, and the
+    // grants land in the base class's device_features (see
+    // gpu::device::features): a feature is requested only when the
+    // physical device reports it, and what is missing is logged once
+    // at warning level. Consumers gate on the grants rather than
     // assuming: a wireframe material falls back to filled polygons
     // without fill_mode_non_solid, multi-draw indirect is unrolled
     // into single draws without multi_draw_indirect, and a pipeline
     // that attaches a stage whose feature is missing is refused.
-    struct vk_device_features
-    {
-        bool fill_mode_non_solid{false};
-        bool geometry_shader{false};
-        bool tessellation_shader{false};
-        bool multi_draw_indirect{false};
-        bool sampler_anisotropy{false};
-        // VK_KHR_portability_subset was listed by the physical device
-        // (MoltenVK and other layered implementations) and enabled.
-        bool portability_subset{false};
-    };
-
     struct vk_device : public device
     {
         vk_device();
@@ -105,13 +95,7 @@ namespace rendering_engine::gpu::backend::vulkan
         void init() override;
         void quit() override;
 
-        // The backend implements compute pipelines, storage-image
-        // bind groups and the layout transitions the IBL convolution
-        // needs, so the GPU prefilter path is taken just like OpenGL.
-        bool supports_compute_prefilter() const override
-        {
-            return true;
-        }
+        texture_usage format_support(texture_format format) const override;
 
         buffer create_buffer(const buffer_descriptor& descriptor) override;
         texture create_texture(const texture_descriptor& descriptor) override;
@@ -121,6 +105,7 @@ namespace rendering_engine::gpu::backend::vulkan
         pipeline create_pipeline(const pipeline_descriptor& descriptor) override;
         pipeline create_compute_pipeline(const compute_pipeline_descriptor& descriptor) override;
         bind_group create_bind_group(const bind_group_descriptor& descriptor) override;
+        query_set create_query_set(const query_set_descriptor& descriptor) override;
 
         void destroy(buffer handle) override;
         void destroy(texture handle) override;
@@ -129,9 +114,21 @@ namespace rendering_engine::gpu::backend::vulkan
         void destroy(bind_group_layout handle) override;
         void destroy(pipeline handle) override;
         void destroy(bind_group handle) override;
+        void destroy(query_set handle) override;
+
+        void set_debug_name(buffer handle, const char* name) override;
+        void set_debug_name(texture handle, const char* name) override;
+        void set_debug_name(sampler handle, const char* name) override;
+        void set_debug_name(pipeline handle, const char* name) override;
+        void set_debug_name(render_target handle, const char* name) override;
 
         void write_buffer(buffer buffer_handle, const void* data, size_t size, size_t offset) override;
         void write_texture(texture texture_handle, const void* data, size_t size) override;
+        bool write_texture_region(texture texture_handle,
+                                  const texture_write_region& region,
+                                  const void* data,
+                                  size_t size) override;
+        bool read_texture(texture texture_handle, const texture_copy_region& region, void* out, size_t size) override;
         void write_texture_3d(texture texture_handle, const void* data, size_t size) override;
         void write_cube_face(texture texture_handle, cube_face face, const void* data, size_t size) override;
         void generate_mipmaps(texture texture_handle) override;
@@ -146,8 +143,10 @@ namespace rendering_engine::gpu::backend::vulkan
         bool swapchain_suspended() const noexcept override;
         render_target create_render_target(const render_target_descriptor& descriptor) override;
         void destroy(render_target handle) override;
-        texture render_target_color_texture(render_target handle) override;
+        texture render_target_color_texture(render_target handle, uint32_t index = 0) override;
         texture render_target_depth_texture(render_target handle) override;
+
+        bool resolve_queries(query_set set, uint32_t first, uint32_t count, uint64_t* out_ticks) override;
 
         std::unique_ptr<command_encoder> create_command_encoder() override;
         // Queue the encoder's command buffer, after flushing the open
@@ -187,6 +186,7 @@ namespace rendering_engine::gpu::backend::vulkan
         vk_bind_group* lookup_bind_group(bind_group h);
         vk_render_target* lookup_render_target(render_target h);
         vk_bind_group_layout* lookup_bind_group_layout(bind_group_layout h);
+        vk_query_set* lookup_query_set(query_set h);
 
         // Vulkan handles + helpers exposed to per-resource TUs.
         VkInstance instance() const noexcept;
@@ -197,8 +197,6 @@ namespace rendering_engine::gpu::backend::vulkan
         // The memory allocator every buffer and image is allocated
         // from; alive from create_logical_device until quit.
         VmaAllocator allocator() const noexcept;
-        // See vk_device_features.
-        const vk_device_features& features() const noexcept;
         // True once a queue operation reported VK_ERROR_DEVICE_LOST.
         // From then on every submit, acquire and present is a no-op
         // and the next end_frame throws, once, so the main loop's
@@ -234,9 +232,22 @@ namespace rendering_engine::gpu::backend::vulkan
         // when the flag is on.
         bool extended_dynamic_state_enabled() const noexcept;
         PFN_vkCmdBindVertexBuffers2EXT cmd_bind_vertex_buffers2() const noexcept;
+        // The VK_EXT_debug_utils label entry points, null when the
+        // extension was not enabled (the encoder then records no
+        // labels).
+        PFN_vkCmdBeginDebugUtilsLabelEXT cmd_begin_debug_label() const noexcept;
+        PFN_vkCmdEndDebugUtilsLabelEXT cmd_end_debug_label() const noexcept;
 
-        // Acquire (or rebuild) the render pass + framebuffers
-        // compatible with @p target for the requested load ops.
+        // Acquire (or lazily build) the render pass + framebuffers of
+        // @p target for @p key: the per-attachment load / store ops
+        // and whether depth takes part. Entries of the key past the
+        // target's colour attachment count are ignored.
+        VkRenderPass acquire_render_pass(vk_render_target& target, const vk_render_pass_key& key);
+
+        // The single-colour convenience: every colour attachment loads
+        // with @p color_load and stores, depth loads with @p depth_load
+        // and stores. What the debug overlay asks for to match the
+        // debug pass.
         VkRenderPass acquire_render_pass(vk_render_target& target,
                                          VkAttachmentLoadOp color_load,
                                          VkAttachmentLoadOp depth_load,
@@ -256,10 +267,29 @@ namespace rendering_engine::gpu::backend::vulkan
         // @p y_flipped selects the front-face mapping: swapchain
         // passes render through a negative-height viewport (CCW
         // → CW), off-screen passes don't (CCW stays CCW).
+        // @p color_count and @p samples describe the pass's
+        // attachments, which the blend and multisample state must
+        // match.
         VkPipeline graphics_pipeline_for(pipeline handle,
                                          VkRenderPass render_pass,
                                          uint64_t render_pass_generation,
-                                         bool y_flipped);
+                                         bool y_flipped,
+                                         uint32_t color_count,
+                                         VkSampleCountFlagBits samples);
+
+        // Lazily create (and cache on the texture) the single-level,
+        // single-layer 2D view a framebuffer attaches @p tex through
+        // at @p mip / @p layer, carrying every aspect of the format.
+        // Returns VK_NULL_HANDLE when the subresource is out of range
+        // or the view cannot be created.
+        VkImageView attachment_image_view(vk_texture& tex, uint32_t mip, uint32_t layer);
+
+        // Record a whole-image layout transition of @p tex into
+        // @p cmd and update the tracked layout. No-op when the image
+        // is already in @p new_layout. Used by the encoder's copies,
+        // which need the transfer layouts around a copy and the
+        // resting layout back afterwards.
+        void record_layout_transition(VkCommandBuffer cmd, vk_texture& tex, VkImageLayout new_layout);
 
         // Acquire the next swapchain image for the current frame.
         // Called lazily by the render-pass encoder when the first
@@ -359,10 +389,10 @@ namespace rendering_engine::gpu::backend::vulkan
         allocate_descriptor_set(VkDescriptorSetLayout layout, VkDescriptorSet& out_set, VkDescriptorPool& out_pool);
 
         // Lazily create (and cache on the texture) the single-mip image
-        // view used to bind @p tex as a storage image at @p level. Cube
-        // and 3D textures bind every layer through one view; the level
-        // selects the subresource. Returns VK_NULL_HANDLE if the level
-        // is out of range or the view cannot be created.
+        // view used to bind @p tex as a storage image at @p level. Cube,
+        // array and 3D textures bind every layer through one view; the
+        // level selects the subresource. Returns VK_NULL_HANDLE if the
+        // level is out of range or the view cannot be created.
         VkImageView storage_image_view(vk_texture& tex, uint32_t level);
 
         // Record a layout transition for a storage-capable texture into
@@ -420,9 +450,17 @@ namespace rendering_engine::gpu::backend::vulkan
         void create_default_textures();
         void create_debug_messenger();
         void destroy_debug_messenger();
+        // Resolve the VK_EXT_debug_utils label / object-name entry
+        // points once the instance exists; leaves them null (and the
+        // debug_labels feature off) when the extension is not enabled.
+        void load_debug_utils_functions();
         void create_surface();
         void pick_physical_device();
         void create_logical_device();
+        // Fill the base class's device_features / device_limits from
+        // the physical device's properties and the grants recorded by
+        // create_logical_device.
+        void query_capabilities();
         // The VMA allocator over the logical device, told the API
         // version the instance and the physical device agree on.
         // Throws when VMA refuses; destroyed after every allocation.
@@ -461,6 +499,10 @@ namespace rendering_engine::gpu::backend::vulkan
         // that code goes through mark_device_lost, any other failure is
         // logged through vk_check. Returns true on VK_SUCCESS.
         bool check_queue_result(VkResult result, const char* what);
+        // Name @p object_handle of @p type for debuggers and validation
+        // messages through vkSetDebugUtilsObjectNameEXT; no-op without
+        // the extension.
+        void name_object(VkObjectType type, uint64_t object_handle, const char* name);
         // Build the swapchain for @p extent plus everything hanging off
         // it (image views, the shared depth buffer, the per-image
         // render-finished semaphores). The previous swapchain, if any,
@@ -574,6 +616,7 @@ namespace rendering_engine::gpu::backend::vulkan
         handle_pool<vk_pipeline> m_pipelines;
         handle_pool<vk_bind_group> m_bind_groups;
         handle_pool<vk_render_target> m_render_targets;
+        handle_pool<vk_query_set> m_query_sets;
 
         VkInstance m_instance{VK_NULL_HANDLE};
         VkDebugUtilsMessengerEXT m_debug_messenger{VK_NULL_HANDLE};
@@ -587,6 +630,9 @@ namespace rendering_engine::gpu::backend::vulkan
         VkQueue m_present_queue{VK_NULL_HANDLE};
         uint32_t m_graphics_queue_family{0};
         uint32_t m_present_queue_family{0};
+        // timestampValidBits of the graphics queue family: 0 means the
+        // queue writes no usable timestamps.
+        uint32_t m_timestamp_valid_bits{0};
         VmaAllocator m_allocator{VK_NULL_HANDLE};
 
         // Frame command buffers. Each slot is a command pool plus the
@@ -640,7 +686,6 @@ namespace rendering_engine::gpu::backend::vulkan
         std::vector<VkDescriptorPool> m_descriptor_pools;
         VkSampler m_fallback_sampler{VK_NULL_HANDLE};
 
-        vk_device_features m_features{};
         // Resolved depth formats, indexed depth24 / depth32_float /
         // depth24_stencil8; see vk_format_for.
         std::array<VkFormat, 3> m_depth_formats{VK_FORMAT_UNDEFINED, VK_FORMAT_UNDEFINED, VK_FORMAT_UNDEFINED};
@@ -714,6 +759,12 @@ namespace rendering_engine::gpu::backend::vulkan
         uint64_t m_next_render_pass_generation{1};
 
         bool m_validation_enabled{false};
+        // VK_EXT_debug_utils is enabled on the instance: labels and
+        // object names reach validation messages and debuggers.
+        bool m_debug_utils_enabled{false};
+        PFN_vkCmdBeginDebugUtilsLabelEXT m_cmd_begin_debug_label{nullptr};
+        PFN_vkCmdEndDebugUtilsLabelEXT m_cmd_end_debug_label{nullptr};
+        PFN_vkSetDebugUtilsObjectNameEXT m_set_debug_object_name{nullptr};
         bool m_initialised{false};
 
         // Placeholder textures for unset sampler bindings; see

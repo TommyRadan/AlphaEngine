@@ -308,6 +308,136 @@ namespace rendering_engine::gpu::backend::vulkan
         return VK_FORMAT_R8G8B8A8_UNORM;
     }
 
+    VkStencilOp to_vk_stencil_op(stencil_op op)
+    {
+        switch (op)
+        {
+        case stencil_op::keep:
+            return VK_STENCIL_OP_KEEP;
+        case stencil_op::zero:
+            return VK_STENCIL_OP_ZERO;
+        case stencil_op::replace:
+            return VK_STENCIL_OP_REPLACE;
+        case stencil_op::increment_clamp:
+            return VK_STENCIL_OP_INCREMENT_AND_CLAMP;
+        case stencil_op::decrement_clamp:
+            return VK_STENCIL_OP_DECREMENT_AND_CLAMP;
+        case stencil_op::invert:
+            return VK_STENCIL_OP_INVERT;
+        case stencil_op::increment_wrap:
+            return VK_STENCIL_OP_INCREMENT_AND_WRAP;
+        case stencil_op::decrement_wrap:
+            return VK_STENCIL_OP_DECREMENT_AND_WRAP;
+        }
+        return VK_STENCIL_OP_KEEP;
+    }
+
+    VkBorderColor to_vk_border_color(border_color color)
+    {
+        switch (color)
+        {
+        case border_color::transparent_black:
+            return VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK;
+        case border_color::opaque_black:
+            return VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK;
+        case border_color::opaque_white:
+            return VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
+        }
+        return VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK;
+    }
+
+    VkColorComponentFlags to_vk_color_write_mask(color_write_mask mask)
+    {
+        VkColorComponentFlags out = 0;
+        if ((mask & color_write_red) != 0u)
+        {
+            out |= VK_COLOR_COMPONENT_R_BIT;
+        }
+        if ((mask & color_write_green) != 0u)
+        {
+            out |= VK_COLOR_COMPONENT_G_BIT;
+        }
+        if ((mask & color_write_blue) != 0u)
+        {
+            out |= VK_COLOR_COMPONENT_B_BIT;
+        }
+        if ((mask & color_write_alpha) != 0u)
+        {
+            out |= VK_COLOR_COMPONENT_A_BIT;
+        }
+        return out;
+    }
+
+    VkSampleCountFlagBits to_vk_sample_count(uint32_t count)
+    {
+        switch (count)
+        {
+        case 2:
+            return VK_SAMPLE_COUNT_2_BIT;
+        case 4:
+            return VK_SAMPLE_COUNT_4_BIT;
+        case 8:
+            return VK_SAMPLE_COUNT_8_BIT;
+        case 16:
+            return VK_SAMPLE_COUNT_16_BIT;
+        case 32:
+            return VK_SAMPLE_COUNT_32_BIT;
+        case 64:
+            return VK_SAMPLE_COUNT_64_BIT;
+        default:
+            return VK_SAMPLE_COUNT_1_BIT;
+        }
+    }
+
+    VkImageUsageFlags to_vk_image_usage(texture_usage usage, bool depth)
+    {
+        // The transfer bits are unconditional: every upload, mip blit
+        // and readback the device records needs them, whatever the
+        // caller asked for.
+        VkImageUsageFlags out = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        if ((usage & texture_usage_sampled) != 0u)
+        {
+            out |= VK_IMAGE_USAGE_SAMPLED_BIT;
+        }
+        if ((usage & texture_usage_render_attachment) != 0u)
+        {
+            out |= depth ? VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT : VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+        }
+        if ((usage & texture_usage_storage) != 0u)
+        {
+            out |= VK_IMAGE_USAGE_STORAGE_BIT;
+        }
+        return out;
+    }
+
+    texture_usage to_texture_usage(VkFormatFeatureFlags features, bool depth)
+    {
+        texture_usage out = 0;
+        if ((features & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) != 0u)
+        {
+            out |= texture_usage_sampled;
+        }
+        const VkFormatFeatureFlags attachment_bit =
+            depth ? VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT : VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT;
+        if ((features & attachment_bit) != 0u)
+        {
+            out |= texture_usage_render_attachment;
+        }
+        if ((features & VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT) != 0u)
+        {
+            out |= texture_usage_storage;
+        }
+        if ((features & VK_FORMAT_FEATURE_TRANSFER_SRC_BIT) != 0u)
+        {
+            out |= texture_usage_copy_src;
+        }
+        if ((features & VK_FORMAT_FEATURE_TRANSFER_DST_BIT) != 0u)
+        {
+            out |= texture_usage_copy_dst;
+        }
+        return out;
+    }
+
     bool is_depth_format(texture_format format)
     {
         switch (format)
