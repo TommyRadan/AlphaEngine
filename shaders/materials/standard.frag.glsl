@@ -103,7 +103,7 @@ vec3 shading_normal()
 // edge. Estimate the screen-space variance of N from its
 // derivatives, fold it into the GGX alpha as extra lobe width, and
 // hand back a widened perceptual roughness. The result is always
-// >= the input, so it acts as a per-pixel roughness floor. See #144.
+// >= the input, so it acts as a per-pixel roughness floor.
 float specular_aa_roughness(vec3 N, float roughness)
 {
     const float screenVariance = 0.25; // SIGMA^2, kernel strength
@@ -188,8 +188,8 @@ void main()
 
     vec3 N = shading_normal();
     // Widen roughness by the sub-pixel normal variance so sharp
-    // metals stop shimmering as the camera moves (issue #144).
-    // Runs after the clamp so it can only ever roughen further.
+    // metals stop shimmering as the camera moves. Runs after the
+    // clamp so it can only ever roughen further.
     roughness = specular_aa_roughness(N, roughness);
     vec3 V = normalize(cameraPosition - worldPosition);
     vec3 F0 = mix(vec3(0.04), albedo, metalness);

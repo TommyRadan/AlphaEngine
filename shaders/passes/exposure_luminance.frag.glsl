@@ -24,8 +24,8 @@ layout(location = 0) out vec4 fragColor;
 
 layout(set = 0, binding = 0) uniform sampler2D hdrColor;
 
-// The pass bakes its target size in; the fallback only serves a compile
-// without the define (the headless every-shader test).
+// The pass bakes its target size in; the fallback only keeps the file
+// compiling on its own.
 #ifndef LUMINANCE_SIZE
 #define LUMINANCE_SIZE 64
 #endif
