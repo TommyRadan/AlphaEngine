@@ -1,67 +1,75 @@
 # AlphaEngine
 
-AlphaEngine is a simulation engine written in C++ that uses OpenGL for rendering. It is designed to be modular and extensible.
+AlphaEngine is a C++20 3D game engine with a Vulkan renderer, with DirectX 12
+and Metal backends planned. It includes a scene graph with components, Jolt
+physics, Lua scripting, an audio subsystem, and a debug editor overlay. It
+targets Windows and Linux and builds with CMake.
 
 ## Requirements
 
-- CMake 3.16 or higher
-- A C++20 compatible compiler
-- OpenGL 4.6 (Core profile)
+- A C++20 compiler: MSVC from Visual Studio 2022 or later, GCC 13+, or
+  Clang 18+ with libc++. These are what CI builds against.
+- CMake 3.22 or newer.
+- Ninja on Linux.
+- The Vulkan SDK (LunarG) on Windows; on Linux, these development packages:
+  `libgl1-mesa-dev libvulkan-dev libx11-dev libxext-dev libxrandr-dev
+  libxcursor-dev libxi-dev libxfixes-dev libxss-dev`.
+- Supported platforms: Windows and Linux. macOS is not supported yet (Metal
+  is on the roadmap).
 
-SDL3 is fetched and built statically by CMake via `FetchContent`, so no system SDL package is required.
+## Dependencies
 
-## Building the Project
+CMake fetches these automatically via `FetchContent`; no system packages are
+required for them:
 
-To build the project, follow these steps:
+- SDL3 (`release-3.2.0`)
+- GLM (`1.0.1`)
+- nlohmann/json (`v3.11.3`)
+- glslang (`15.0.0`)
+- Vulkan Memory Allocator (`v3.4.0`)
+- Dear ImGui (`v1.92.8-docking`, Debug builds only)
+- ImGuizmo
+- Jolt Physics (`v5.6.0`)
+- KTX-Software (`v4.4.2`)
+- Lua (`v5.4.8`)
+- sol2 (`v3.5.0`)
 
-1. Clone the repository
+Vendored under `vendor/`: stb and cgltf.
 
-2. Create a build directory:
-    ```sh
-    mkdir build
-    ```
+## Building
 
-3. Navigate to the build directory:
-    ```sh
-    cd build
-    ```
+**Windows**
 
-4. Run CMake from the build directory to generate the cache:
-    ```sh
-    cmake ..
-    ```
+```
+.\scripts\setup-windows.ps1
+.\scripts\build.ps1 -Configuration Debug
+```
 
-5. Build the project:
-    ```sh
-    cmake --build .
-    ```
+`build.ps1` also takes `-Configuration Release` (the default) and `-Clean`.
 
-6. Binary will be created in `Binaries` folder of the repository.
+**Linux**
 
-## Project Components
+```
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
+cmake --build build
+```
 
-### Event Engine
+The binary is written to `Binaries/` (`Binaries/<Configuration>/` with the
+Visual Studio generator). Run it from the repository root:
 
-The Event Engine handles all input events, such as keyboard and mouse events. It provides a flexible system for managing and responding to user input.
+```
+./Binaries/AlphaEngine --help
+```
 
-### Rendering Engine
+`--help` lists every setting.
 
-The Rendering Engine is responsible for all graphical output. It uses OpenGL for rendering and supports various rendering techniques and optimizations. The engine is divided into several subcomponents:
+Formatting and naming checks:
 
-- **Mesh**: Handles the creation and management of 3D models.
-- **Renderables**: Manages objects that can be rendered, including 2D and 3D objects.
-- **Renderers**: Contains different rendering strategies and techniques.
-- **Camera**: Manages the camera view and projection.
-- **OpenGL**: Contains OpenGL-specific code and utilities.
-
-### Scene Graph
-
-The Scene Graph manages the hierarchical organization of objects in the scene. It allows for efficient updates and rendering of complex scenes by organizing objects into a tree structure.
-
-## Logging
-
-AlphaEngine uses a thin wrapper over SDL's logging API exposed via `core/log.hpp`. Six levels are available: `LOG_TRC`, `LOG_DBG`, `LOG_INF`, `LOG_WRN`, `LOG_ERR`, and `LOG_FTL`; the runtime level is set with the `ALPHAENGINE_LOG_LEVEL` environment variable. See [docs/logging.md](./docs/logging.md) for the conventions used across subsystems and guidance on picking a level when adding new log statements.
+```
+./scripts/check-style.ps1
+./scripts/check-naming.ps1
+```
 
 ## License
 
-AlphaEngine is licensed under the MIT License. See the [LICENSE](./LICENSE.txt) file for more details.
+MIT. See [LICENSE](./LICENSE).

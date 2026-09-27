@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2015-2026 Tomislav Radanovic
 
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.22)
 project(AlphaEngine C CXX)
 
 if(NOT CMAKE_BUILD_TYPE)
