@@ -119,17 +119,20 @@ void rendering_engine::context::init()
     // Construct the built-in passes first — each pass owns the
     // per-frame bind-group layout its matching material reads at
     // pipeline-create time. The shadow pass is built before the scene
-    // pass so the latter can bake the shadow map into its per-frame
-    // bind group and query the light-space matrix each frame; it walks
-    // the same scene-renderable registry.
-    auto shadow = std::make_unique<shadow_pass>(&m_scene_renderables);
+    // pass so the latter can bake the cascade array into its per-frame
+    // bind group and query the cascade matrices each frame; it walks
+    // the same scene-renderable registry. The shadow passes size their
+    // maps and biases from the shadow settings, fixed at startup.
+    const core::shadow_settings shadow_config =
+        eng.settings != nullptr ? eng.settings->shadows : core::shadow_settings{};
+    auto shadow = std::make_unique<shadow_pass>(&m_scene_renderables, shadow_config);
     // The omni shadow pass renders six depth faces from the first shadow-casting
     // point light; like the directional shadow it runs before the scene pass so
     // its maps are ready for the per-frame bind group.
-    auto point_shadow = std::make_unique<point_shadow_pass>(&m_scene_renderables);
+    auto point_shadow = std::make_unique<point_shadow_pass>(&m_scene_renderables, shadow_config);
     // The spot shadow pass renders a single perspective depth map from the
     // first shadow-casting spot light; also runs before the scene pass.
-    auto spot_shadow = std::make_unique<spot_shadow_pass>(&m_scene_renderables);
+    auto spot_shadow = std::make_unique<spot_shadow_pass>(&m_scene_renderables, shadow_config);
     auto scene = std::make_unique<scene_pass>(
         &m_scene_renderables, shadow.get(), point_shadow.get(), spot_shadow.get(), &m_render_stats, taa_enabled);
     // The material templates below are built against the same per-frame

@@ -200,6 +200,13 @@ namespace core
                 on_off(s.input.mouse_reversed),
                 s.window.title.c_str(),
                 s.assets.root.empty() ? "(discover)" : s.assets.root.c_str());
+        LOG_INF("Shadow settings: resolution=%u distance=%.1f cascades=%u bias=%.5f slope_bias=%.2f pcf_kernel=%u",
+                s.shadows.resolution,
+                static_cast<double>(s.shadows.distance),
+                s.shadows.cascade_count,
+                static_cast<double>(s.shadows.bias),
+                static_cast<double>(s.shadows.slope_bias),
+                s.shadows.pcf_kernel);
         return result;
     }
 } // namespace core

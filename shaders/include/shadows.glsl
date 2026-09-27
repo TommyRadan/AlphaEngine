@@ -6,16 +6,36 @@
 #define AE_SHADOWS_GLSL
 
 #include "include/bindings.glsl"
+#include "include/per_frame.glsl"
 
-// Directional shadow data, owned by the scene pass alongside the
-// lights block. params: x enabled, y bias, z caster light index.
+// Upper bounds of the directional cascades and of the PCF kernel's taps
+// per side, matching rendering_engine::max_shadow_cascades and
+// core::shadow_settings::max_pcf_kernel.
+#define SHADOW_MAX_CASCADES 4
+#define SHADOW_MAX_PCF_TAPS 8
+
+// Directional (cascaded) shadow data, owned by the scene pass alongside
+// the lights block. std140, 320 bytes, matching the scene pass:
+//     0   mat4 lightViewProj[4]  each cascade's light-space view-projection
+//   256   vec4 splitDepths       view depth at which each cascade ends
+//   272   vec4 cascadeBias       each cascade's receiver bias, [0, 1] depth
+//   288   vec4 params            x enabled, y cascade count, z caster light
+//                                index, w PCF taps per side
+//   304   vec4 blend             x cross-fade band before each split, as a
+//                                fraction of the cascade's depth range
 layout(set = 0, binding = BINDING_SHADOW, std140) uniform Shadow
 {
-    mat4 lightViewProj;
+    mat4 lightViewProj[SHADOW_MAX_CASCADES];
+    vec4 splitDepths;
+    vec4 cascadeBias;
     vec4 params;
+    vec4 blend;
 } u_shadow;
 
-layout(set = 0, binding = BINDING_SHADOW_MAP) uniform sampler2D shadowMap;
+// The cascades, one layer each, read through a depth-comparison sampler:
+// every lookup compares the reference depth against the four nearest
+// texels in hardware and returns the bilinearly weighted lit fraction.
+layout(set = 0, binding = BINDING_SHADOW_MAP) uniform sampler2DArrayShadow shadowMap;
 
 // Omni (point-light) shadow data, also owned by the scene pass: the six
 // face view-projections the point shadow pass rendered with, the
@@ -46,37 +66,78 @@ layout(set = 0, binding = BINDING_SPOT_SHADOW, std140) uniform SpotShadow
 
 layout(set = 0, binding = BINDING_SPOT_SHADOW_MAP) uniform sampler2D spotShadowMap;
 
-// Directional shadow term for the fragment at worldPosition, lit by
-// directional light lightIndex along L with shading normal N. A 5x5 PCF
-// kernel softens the shadow edge: a wider kernel keeps the penumbra
-// smooth even where the light-space texel-to-world ratio is coarse. The
-// shadow pass auto-fits the light box to the view frustum; a
-// resolution-independent filter (PCSS) and cascades remain a follow-on.
-float directional_shadow(vec3 worldPosition, int lightIndex, vec3 N, vec3 L)
+// The shadow term of one cascade for the fragment at worldPosition, with
+// slope = 1 - dot(N, L) scaling the cascade's receiver bias. The kernel
+// is params.w x params.w hardware-filtered taps one texel apart, so n
+// taps span (n + 1) x (n + 1) texels with tent-weighted edges. A point
+// outside the cascade's box has no occluder data there and is lit.
+float cascade_shadow(int cascade, vec3 worldPosition, float slope)
 {
-    if (u_shadow.params.x == 0.0 || lightIndex != int(u_shadow.params.z))
-    {
-        return 1.0;
-    }
-    vec4 lightClip = u_shadow.lightViewProj * vec4(worldPosition, 1.0);
+    vec4 lightClip = u_shadow.lightViewProj[cascade] * vec4(worldPosition, 1.0);
     vec3 proj = lightClip.xyz / lightClip.w;
     proj = proj * 0.5 + 0.5;
     if (proj.z > 1.0 || proj.x < 0.0 || proj.x > 1.0 || proj.y < 0.0 || proj.y > 1.0)
     {
         return 1.0;
     }
-    float bias = max(u_shadow.params.y * (1.0 - dot(N, L)), u_shadow.params.y * 0.1);
-    vec2 texelSize = 1.0 / vec2(textureSize(shadowMap, 0));
+    float bias = u_shadow.cascadeBias[cascade];
+    float reference = proj.z - max(bias * slope, bias * 0.1);
+    int taps = clamp(int(u_shadow.params.w), 1, SHADOW_MAX_PCF_TAPS);
+    vec2 texelSize = 1.0 / vec2(textureSize(shadowMap, 0).xy);
+    float start = -0.5 * float(taps - 1);
+    float layer = float(cascade);
     float lit = 0.0;
-    for (int x = -2; x <= 2; ++x)
+    for (int x = 0; x < taps; ++x)
     {
-        for (int y = -2; y <= 2; ++y)
+        for (int y = 0; y < taps; ++y)
         {
-            float closest = texture(shadowMap, proj.xy + vec2(x, y) * texelSize).r;
-            lit += (proj.z - bias > closest) ? 0.0 : 1.0;
+            vec2 uv = proj.xy + (vec2(float(x), float(y)) + start) * texelSize;
+            lit += texture(shadowMap, vec4(uv, layer, reference));
         }
     }
-    return lit / 25.0;
+    return lit / float(taps * taps);
+}
+
+// Directional shadow term for the fragment at worldPosition, lit by
+// directional light lightIndex along L with shading normal N. The
+// cascade is the first whose split lies at or beyond the fragment's view
+// depth (past the last split the last cascade still covers what its box
+// holds). Across a band before each split the term cross-fades into the
+// next cascade, whose box the shadow pass fits to cover the band, so the
+// change in texel density never shows as a seam.
+float directional_shadow(vec3 worldPosition, int lightIndex, vec3 N, vec3 L)
+{
+    if (u_shadow.params.x == 0.0 || lightIndex != int(u_shadow.params.z))
+    {
+        return 1.0;
+    }
+    int count = clamp(int(u_shadow.params.y), 1, SHADOW_MAX_CASCADES);
+    float viewDepth = -(u_frame.viewMatrix * vec4(worldPosition, 1.0)).z;
+    int cascade = count - 1;
+    for (int i = 0; i < count - 1; ++i)
+    {
+        if (viewDepth <= u_shadow.splitDepths[i])
+        {
+            cascade = i;
+            break;
+        }
+    }
+
+    float slope = 1.0 - dot(N, L);
+    float shadow = cascade_shadow(cascade, worldPosition, slope);
+    if (cascade < count - 1)
+    {
+        float end = u_shadow.splitDepths[cascade];
+        float begin = cascade > 0 ? u_shadow.splitDepths[cascade - 1] : 0.0;
+        float band = u_shadow.blend.x * (end - begin);
+        float fade = band > 0.0 ? (end - viewDepth) / band : 1.0;
+        if (fade < 1.0)
+        {
+            float next = cascade_shadow(cascade + 1, worldPosition, slope);
+            shadow = mix(next, shadow, clamp(fade, 0.0, 1.0));
+        }
+    }
+    return shadow;
 }
 
 // The window-space depth a face of the omni cube stores for a point at
@@ -176,9 +237,8 @@ float point_shadow(vec3 worldPosition, int lightIndex, vec3 N, vec3 L)
 }
 
 // Spot shadow term for the fragment at worldPosition, lit by spot light
-// lightIndex along L with shading normal N. The perspective projection
-// divides the same way an orthographic one does, so this is the
-// directional path's 5x5 PCF kernel against the spot's own map.
+// lightIndex along L with shading normal N: the spot's perspective
+// projection, divided through, and a 5x5 PCF kernel against its map.
 float spot_shadow(vec3 worldPosition, int lightIndex, vec3 N, vec3 L)
 {
     if (u_spot_shadow.params.x == 0.0 || lightIndex != int(u_spot_shadow.params.z))

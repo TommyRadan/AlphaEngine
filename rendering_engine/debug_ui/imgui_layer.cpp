@@ -272,9 +272,9 @@ namespace rendering_engine::debug_ui
                             stats.spot_shadow_culled);
                 if (ImGui::IsItemHovered())
                 {
-                    ImGui::SetTooltip("Casters skipped by the directional shadow pass, caster/face pairs\n"
-                                      "skipped across the six omni shadow faces, and casters skipped by\n"
-                                      "the spot shadow pass.");
+                    ImGui::SetTooltip("Caster/cascade pairs skipped across the directional shadow cascades,\n"
+                                      "caster/face pairs skipped across the six omni shadow faces, and\n"
+                                      "casters skipped by the spot shadow pass.");
                 }
                 ImGui::Text("Draw calls: %u", stats.draw_calls);
                 ImGui::Text("Instances: %u", stats.instances);

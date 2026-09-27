@@ -53,20 +53,23 @@ namespace rendering_engine
      *
      * Owns the per-frame bind-group layout (camera @c viewMatrix /
      * @c projectionMatrix at binding 0 and the packed lights block at
-     * binding 2, both in slot 0; plus the directional shadow matrix at
-     * binding 4 and the shadow map at binding 9). The matching lit
-     * materials read the layout via @ref frame_bind_group_layout so the
-     * pipeline and the runtime bind group agree on slot shape.
+     * binding 2, both in slot 0; plus the directional cascade block and
+     * its depth array with the comparison sampler, and the omni and spot
+     * shadow blocks and maps, at the numbers in gpu/shader_bindings.hpp).
+     * The matching lit materials read the layout via
+     * @ref frame_bind_group_layout so the pipeline and the runtime bind
+     * group agree on slot shape.
      *
      * Skipped when no camera is attached (matches the previous
      * @c if (camera != nullptr) gate).
      */
     struct scene_pass : pass
     {
-        // @p shadow is the shadow pass that runs ahead of this one; the
-        // scene pass bakes its depth map into the per-frame bind group
-        // and uploads its light-space matrix each frame so the lit
-        // materials can sample it. May be null to disable shadowing.
+        // @p shadow is the directional shadow pass that runs ahead of this
+        // one; the scene pass bakes its cascade array and comparison
+        // sampler into the per-frame bind group and uploads its cascade
+        // matrices and splits each frame so the lit materials can sample
+        // it. May be null to disable shadowing.
         // @p point_shadow is the omni shadow pass for the first shadow-casting
         // point light; its six depth maps are baked into the per-frame bind
         // group and its matrices uploaded each frame. May be null.

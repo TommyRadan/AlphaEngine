@@ -49,6 +49,12 @@ namespace core
     inline constexpr float k_max_field_of_view = 179.0f;
     inline constexpr float k_min_mouse_sensitivity = 0.0001f;
     inline constexpr float k_max_mouse_sensitivity = 10.0f;
+    inline constexpr unsigned int k_min_shadow_resolution = 256;
+    inline constexpr unsigned int k_max_shadow_resolution = 8192;
+    inline constexpr float k_min_shadow_distance = 1.0f;
+    inline constexpr float k_max_shadow_distance = 10000.0f;
+    inline constexpr float k_max_shadow_bias = 0.1f;
+    inline constexpr float k_max_shadow_slope_bias = 16.0f;
 
     /** @brief Parses `true` / `false`, `1` / `0`, `yes` / `no`, `on` / `off`; trimmed, case-insensitive. */
     std::optional<bool> parse_bool(std::string_view text);
@@ -77,9 +83,10 @@ namespace core
     using environment_getter = std::function<const char*(const char* name)>;
 
     /**
-     * @brief Applies the `ALPHAENGINE_WIDTH`, `_HEIGHT`, `_WINDOW_MODE`, `_VSYNC`, `_GRAPHICS_BACKEND`, `_TAA`
-     *        and `_ASSET_ROOT` variables on top of @p out. An unset or empty variable leaves its setting as it is.
-     *        (`ALPHAENGINE_LOG_LEVEL` belongs to @ref core::logging::init.)
+     * @brief Applies the `ALPHAENGINE_WIDTH`, `_HEIGHT`, `_WINDOW_MODE`, `_VSYNC`, `_GRAPHICS_BACKEND`, `_TAA`,
+     *        `_SHADOW_RESOLUTION`, `_SHADOW_DISTANCE`, `_SHADOW_CASCADES`, `_SHADOW_BIAS`, `_SHADOW_SLOPE_BIAS`,
+     *        `_SHADOW_PCF_KERNEL` and `_ASSET_ROOT` variables on top of @p out. An unset or empty variable leaves
+     *        its setting as it is. (`ALPHAENGINE_LOG_LEVEL` belongs to @ref core::logging::init.)
      */
     void apply_environment(settings& out, const environment_getter& get);
 
@@ -91,6 +98,14 @@ namespace core
         std::optional<window_mode> mode;
         std::optional<graphics_backend> backend;
         std::optional<bool> vsync;
+
+        /** @brief The `--shadow-*` overrides of @ref shadow_settings. */
+        std::optional<unsigned int> shadow_resolution;
+        std::optional<float> shadow_distance;
+        std::optional<unsigned int> shadow_cascades;
+        std::optional<float> shadow_bias;
+        std::optional<float> shadow_slope_bias;
+        std::optional<unsigned int> shadow_pcf_kernel;
 
         /** @brief The `--log-level` specification, for @ref core::logging::configure_levels. */
         std::optional<std::string> log_level;
@@ -111,7 +126,7 @@ namespace core
      */
     command_line_options parse_command_line(std::span<const char* const> args);
 
-    /** @brief Applies the window / graphics / asset options present in @p options on top of @p out. */
+    /** @brief Applies the window / graphics / shadow / asset options present in @p options on top of @p out. */
     void apply_command_line(settings& out, const command_line_options& options);
 
     /** @brief The `--help` text. */
