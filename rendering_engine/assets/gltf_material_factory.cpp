@@ -61,6 +61,7 @@ namespace rendering_engine
         // shared control block in this renderer-side translation unit; see
         // gltf_material_factory::create for why that matters.
         std::shared_ptr<standard_material> material = runtime::current_engine().renderer->create_standard_material();
+        material->set_skinned(description.skinned);
         material->set_base_color(to_color(description.base_color_factor));
         material->set_metalness(std::clamp(description.metallic_factor, 0.0f, 1.0f));
         material->set_roughness(std::clamp(description.roughness_factor, 0.0f, 1.0f));

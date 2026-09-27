@@ -80,6 +80,23 @@ namespace rendering_engine
         core::math::vec4 tangent;
     };
 
+    // A skinned record: the tangent record plus the four joints that move
+    // the vertex and how much each one pulls. @c joints index the skin's
+    // joint palette (the joint-matrix buffer the renderable binds; glTF's
+    // JOINTS_0), read as a @c uvec4; @c weights (WEIGHTS_0) sum to 1, and
+    // an unused slot carries weight 0. Linear blend skinning moves the
+    // position, normal and tangent by the weighted sum of the four joint
+    // matrices.
+    struct vertex_position_uv_normal_tangent_skin
+    {
+        core::math::vec3 pos;
+        core::math::vec2 uv;
+        core::math::vec3 normal;
+        core::math::vec4 tangent;
+        std::array<uint16_t, 4> joints;
+        core::math::vec4 weights;
+    };
+
     // Names the interleaved record layout of a vertex stream so a mesh and
     // the material drawing it can be checked against each other before a
     // draw is issued. Each named value maps one-to-one onto the vertex
@@ -95,6 +112,7 @@ namespace rendering_engine
         position_color_normal,
         position_uv_normal,
         position_uv_normal_tangent,
+        position_uv_normal_tangent_skin,
         custom,
     };
 
@@ -118,6 +136,8 @@ namespace rendering_engine
             return sizeof(vertex_position_uv_normal);
         case vertex_format::position_uv_normal_tangent:
             return sizeof(vertex_position_uv_normal_tangent);
+        case vertex_format::position_uv_normal_tangent_skin:
+            return sizeof(vertex_position_uv_normal_tangent_skin);
         case vertex_format::custom:
             return 0;
         }
@@ -143,6 +163,8 @@ namespace rendering_engine
             return "position_uv_normal";
         case vertex_format::position_uv_normal_tangent:
             return "position_uv_normal_tangent";
+        case vertex_format::position_uv_normal_tangent_skin:
+            return "position_uv_normal_tangent_skin";
         case vertex_format::custom:
             return "custom";
         }
@@ -160,35 +182,39 @@ namespace rendering_engine
             uv,
             normal,
             tangent,
+            joints,
+            weights,
         };
 
         // The channel sequence of each named format. Every named record is a
         // leading run of these channels with no padding, so two formats agree
         // on the offset of every attribute they both carry exactly when one
         // sequence is a prefix of the other. @c custom has no sequence.
-        constexpr std::array<vertex_channel, 4> vertex_format_channels(vertex_format format)
+        constexpr std::array<vertex_channel, 6> vertex_format_channels(vertex_format format)
         {
             using c = vertex_channel;
             switch (format)
             {
             case vertex_format::position:
-                return {c::position, c::none, c::none, c::none};
+                return {c::position, c::none, c::none, c::none, c::none, c::none};
             case vertex_format::position_color:
-                return {c::position, c::color, c::none, c::none};
+                return {c::position, c::color, c::none, c::none, c::none, c::none};
             case vertex_format::position_uv:
-                return {c::position, c::uv, c::none, c::none};
+                return {c::position, c::uv, c::none, c::none, c::none, c::none};
             case vertex_format::position_normal:
-                return {c::position, c::normal, c::none, c::none};
+                return {c::position, c::normal, c::none, c::none, c::none, c::none};
             case vertex_format::position_color_normal:
-                return {c::position, c::color, c::normal, c::none};
+                return {c::position, c::color, c::normal, c::none, c::none, c::none};
             case vertex_format::position_uv_normal:
-                return {c::position, c::uv, c::normal, c::none};
+                return {c::position, c::uv, c::normal, c::none, c::none, c::none};
             case vertex_format::position_uv_normal_tangent:
-                return {c::position, c::uv, c::normal, c::tangent};
+                return {c::position, c::uv, c::normal, c::tangent, c::none, c::none};
+            case vertex_format::position_uv_normal_tangent_skin:
+                return {c::position, c::uv, c::normal, c::tangent, c::joints, c::weights};
             case vertex_format::custom:
-                return {c::none, c::none, c::none, c::none};
+                return {c::none, c::none, c::none, c::none, c::none, c::none};
             }
-            return {c::none, c::none, c::none, c::none};
+            return {c::none, c::none, c::none, c::none, c::none, c::none};
         }
     } // namespace detail
 
@@ -276,6 +302,12 @@ namespace rendering_engine
         static constexpr vertex_format value = vertex_format::position_uv_normal_tangent;
     };
 
+    template<>
+    struct vertex_format_of<vertex_position_uv_normal_tangent_skin>
+    {
+        static constexpr vertex_format value = vertex_format::position_uv_normal_tangent_skin;
+    };
+
     template<typename VertexT>
     inline constexpr vertex_format vertex_format_of_v = vertex_format_of<VertexT>::value;
 
@@ -290,4 +322,5 @@ namespace rendering_engine
     static_assert(vertex_format_stride(vertex_format::position_color_normal) == 36);
     static_assert(vertex_format_stride(vertex_format::position_uv_normal) == 32);
     static_assert(vertex_format_stride(vertex_format::position_uv_normal_tangent) == 48);
+    static_assert(vertex_format_stride(vertex_format::position_uv_normal_tangent_skin) == 72);
 } // namespace rendering_engine

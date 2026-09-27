@@ -106,6 +106,11 @@ namespace rendering_engine
             }
         }
         m_shaders.clear();
+        if (m_skinned_per_draw_layout.valid())
+        {
+            m_device->destroy(m_skinned_per_draw_layout);
+            m_skinned_per_draw_layout = {};
+        }
         if (m_per_material_layout.valid())
         {
             m_device->destroy(m_per_material_layout);
@@ -155,7 +160,7 @@ namespace rendering_engine
         {
             pipeline_descriptor.bind_group_layouts.push_back(m_descriptor.frame_layout);
         }
-        pipeline_descriptor.bind_group_layouts.push_back(m_per_draw_layout);
+        pipeline_descriptor.bind_group_layouts.push_back(per_draw_layout(key.keywords));
         if (m_per_material_layout.valid())
         {
             pipeline_descriptor.bind_group_layouts.push_back(m_per_material_layout);
@@ -190,6 +195,24 @@ namespace rendering_engine
         return m_per_draw_layout;
     }
 
+    gpu::bind_group_layout material_template::per_draw_layout(uint32_t keywords) const
+    {
+        if (!skins(keywords))
+        {
+            return m_per_draw_layout;
+        }
+        if (!m_skinned_per_draw_layout.valid())
+        {
+            m_skinned_per_draw_layout = m_device->create_bind_group_layout(m_descriptor.skinned_draw_layout);
+        }
+        return m_skinned_per_draw_layout;
+    }
+
+    bool material_template::skins(uint32_t keywords) const
+    {
+        return (keywords & keyword_bit(material_keyword::skinned)) != 0 && !m_descriptor.skin_attributes.empty();
+    }
+
     gpu::bind_group_layout material_template::per_material_layout() const
     {
         return m_per_material_layout;
@@ -217,6 +240,12 @@ namespace rendering_engine
 
     vertex_format material_template::required_vertex_format(uint32_t keywords) const
     {
+        // A skinned record carries the tangent whether or not the variant
+        // reads it, so the skin format stands for both.
+        if (skins(keywords))
+        {
+            return m_descriptor.skinned_vertex_format;
+        }
         return reads_tangents(keywords) ? m_descriptor.required_vertex_format
                                         : m_descriptor.vertex_format_without_tangents;
     }
@@ -273,20 +302,31 @@ namespace rendering_engine
     std::vector<gpu::vertex_buffer_layout> material_template::vertex_layouts_for(uint32_t keywords) const
     {
         std::vector<gpu::vertex_buffer_layout> layouts = m_descriptor.vertex_layouts;
-        if (reads_tangents(keywords) ||
-            m_descriptor.tangent_location == material_template_descriptor::no_tangent_location || layouts.empty())
+        if (layouts.empty())
         {
             return layouts;
         }
-        // A tangent-less variant must not declare the tangent attribute:
-        // the record it draws is narrower, and the attribute would fetch
-        // past every vertex.
         auto& attributes = layouts.front().attributes;
-        attributes.erase(std::remove_if(attributes.begin(),
-                                        attributes.end(),
-                                        [this](const gpu::vertex_attribute& attribute)
-                                        { return attribute.location == m_descriptor.tangent_location; }),
-                         attributes.end());
+        if (!reads_tangents(keywords) &&
+            m_descriptor.tangent_location != material_template_descriptor::no_tangent_location)
+        {
+            // A tangent-less variant must not declare the tangent
+            // attribute: the record it draws is narrower, and the
+            // attribute would fetch past every vertex.
+            attributes.erase(std::remove_if(attributes.begin(),
+                                            attributes.end(),
+                                            [this](const gpu::vertex_attribute& attribute)
+                                            { return attribute.location == m_descriptor.tangent_location; }),
+                             attributes.end());
+        }
+        if (skins(keywords))
+        {
+            // The joints and weights sit after the tangent in the skinned
+            // record, which keeps them in place whether or not the tangent
+            // attribute itself is read.
+            attributes.insert(
+                attributes.end(), m_descriptor.skin_attributes.begin(), m_descriptor.skin_attributes.end());
+        }
         return layouts;
     }
 

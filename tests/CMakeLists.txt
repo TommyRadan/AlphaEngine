@@ -16,12 +16,14 @@
 set(ALPHAENGINE_TEST_SOURCES_UNDER_TEST
     # core (device-free)
     ${CMAKE_SOURCE_DIR}/core/math/aabb.cpp
+    ${CMAKE_SOURCE_DIR}/core/math/easing.cpp
     ${CMAKE_SOURCE_DIR}/core/math/frustum.cpp
     ${CMAKE_SOURCE_DIR}/core/math/mat3.cpp
     ${CMAKE_SOURCE_DIR}/core/math/mat4.cpp
     ${CMAKE_SOURCE_DIR}/core/math/math.cpp
     ${CMAKE_SOURCE_DIR}/core/math/quat.cpp
     ${CMAKE_SOURCE_DIR}/core/math/sphere.cpp
+    ${CMAKE_SOURCE_DIR}/core/math/trs.cpp
     ${CMAKE_SOURCE_DIR}/core/math/vec2.cpp
     ${CMAKE_SOURCE_DIR}/core/math/vec3.cpp
     ${CMAKE_SOURCE_DIR}/core/math/vec4.cpp
@@ -95,6 +97,10 @@ set(ALPHAENGINE_TEST_SOURCES_UNDER_TEST
     # the gltf_material_factory interface, so the tests pass a recorder and
     # the renderer-backed factory (gltf_material_factory.cpp) stays out.
     ${CMAKE_SOURCE_DIR}/rendering_engine/assets/gltf_importer.cpp
+    # The skeleton and clip assets the importer builds from skins and
+    # animations (math only).
+    ${CMAKE_SOURCE_DIR}/rendering_engine/animation/animation_clip.cpp
+    ${CMAKE_SOURCE_DIR}/rendering_engine/animation/skeleton.cpp
     # mesh — the CPU-side vertex store behind model::upload_mesh (math only).
     ${CMAKE_SOURCE_DIR}/rendering_engine/mesh/mesh.cpp
     # sdl_input — the SDL keycode / button / axis -> engine enum translation

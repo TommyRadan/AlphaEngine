@@ -39,6 +39,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <span>
 
 #include <core/math/mat4.hpp>
 #include <rendering_engine/gpu/handle.hpp>
@@ -84,4 +85,24 @@ namespace rendering_engine
     // Upload the block for @p model into @p ubo; returns
     // @ref is_mirrored(model) so the caller can flag its draw item.
     bool write_per_draw_ubo(gpu::device& device, gpu::buffer ubo, const core::math::mat4& model);
+
+    // std430 stride of one joint-palette entry: a column-major mat4.
+    constexpr size_t joint_matrix_size = sizeof(core::math::mat4);
+    static_assert(joint_matrix_size == 64, "a joint matrix must be one std430 mat4");
+
+    // A dynamic storage buffer for a skinned draw's joint palette with
+    // room for @p joint_count matrices (at least one).
+    gpu::buffer create_joint_buffer(gpu::device& device, size_t joint_count);
+
+    // The per-draw bind group of a skinning variant: the PerDraw block
+    // @p ubo at @c shader_bindings::per_draw_model plus the joint palette
+    // @p joints at @c shader_bindings::per_draw_joints, against @p layout.
+    gpu::bind_group create_skinned_per_draw_bind_group(gpu::device& device,
+                                                       gpu::bind_group_layout layout,
+                                                       gpu::buffer ubo,
+                                                       gpu::buffer joints);
+
+    // Upload @p matrices into the palette @p joints, which must have room
+    // for all of them.
+    void write_joint_buffer(gpu::device& device, gpu::buffer joints, std::span<const core::math::mat4> matrices);
 } // namespace rendering_engine

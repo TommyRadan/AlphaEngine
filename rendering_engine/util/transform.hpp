@@ -42,6 +42,14 @@ namespace rendering_engine::util
         core::math::quat get_quaternion() const;
         core::math::vec3 get_scale() const;
 
+        // The local position, orientation and scale as one pose, and the
+        // setter that replaces all three at once (the rotation normalised,
+        // as @ref set_quaternion does). Two transforms blend as
+        // @c core::math::lerp(a.get_trs(), b.get_trs(), t): position and
+        // scale linearly, orientation by shortest-arc slerp.
+        core::math::trs get_trs() const;
+        void set_trs(const core::math::trs& pose);
+
         // Orients the transform so its forward (+X) axis points from the
         // current position towards @p target, with @p up as the reference for
         // its up (+Z) axis — the engine convention (core/math/math.hpp). A

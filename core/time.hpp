@@ -54,10 +54,11 @@ namespace core
      * time into @ref accumulate, drain whole fixed steps with
      * @ref next_fixed_step (one game-logic update per step), then render
      * once. @ref interpolation_alpha exposes the fractional remainder for
-     * blending between the last two simulated states, but nothing consumes
-     * it yet — no subsystem keeps a previous fixed state to blend from. The
-     * smooth path today is the per-render @c core::render_update event, which
-     * carries @ref delta_time directly.
+     * blending between the last two simulated states: @c core::tween and
+     * @c runtime::animator_component keep the previous fixed step's state
+     * and sample between the two at render time. The other smooth path is
+     * the per-render @c core::render_update event, which carries
+     * @ref delta_time directly.
      *
      * Not thread-safe.
      */
@@ -152,9 +153,8 @@ namespace core
         /**
          * @brief Fractional progress toward the next fixed step.
          * @return Accumulator remainder divided by @ref fixed_delta_time,
-         *         in [0, 1). Intended for interpolating render-time state
-         *         between the previous and current fixed update; no consumer
-         *         exists yet (see the class note).
+         *         in [0, 1). For interpolating render-time state between the
+         *         previous and current fixed update (see the class note).
          */
         double interpolation_alpha() const;
 
