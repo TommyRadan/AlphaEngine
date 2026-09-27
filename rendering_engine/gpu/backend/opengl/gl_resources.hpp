@@ -99,6 +99,10 @@ namespace rendering_engine::gpu::backend::opengl
     {
         GLuint object_id{0};
         shader_stage stage{shader_stage::vertex};
+        // FNV-1a digest of the SPIR-V the object was specialised from
+        // (entry point "main", no specialisation constants): part of the
+        // program-binary cache key of every program linked from it.
+        uint64_t spirv_digest{0};
     };
 
     struct gl_bind_group_layout
@@ -119,6 +123,9 @@ namespace rendering_engine::gpu::backend::opengl
     struct gl_pipeline
     {
         GLuint program_id{0};
+        // The modules the program was linked from, in attach order, so
+        // the debug hot reload can relink it when one of them changes.
+        std::vector<shader_module> shader_modules;
         // The vertex array with the pipeline's vertex format baked in
         // (attribute formats, binding slots, divisors); the encoder only
         // attaches buffers to its binding points. 0 for compute

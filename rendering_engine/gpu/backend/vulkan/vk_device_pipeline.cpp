@@ -49,11 +49,17 @@
 #include <rendering_engine/gpu/backend/vulkan/vk_device.hpp>
 
 #include <array>
+#include <cstdint>
+#include <filesystem>
 #include <stdexcept>
+#include <string>
+#include <utility>
 #include <vector>
 
 #include <core/log.hpp>
+#include <rendering_engine/gpu/backend/vulkan/vk_pipeline_cache.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_translate.hpp>
+#include <rendering_engine/gpu/shader_compiler.hpp>
 
 namespace rendering_engine::gpu::backend::vulkan
 {
@@ -494,7 +500,8 @@ namespace rendering_engine::gpu::backend::vulkan
             gpi.renderPass = render_pass;
 
             VkPipeline result = VK_NULL_HANDLE;
-            const VkResult r = vkCreateGraphicsPipelines(device.vk_handle(), VK_NULL_HANDLE, 1, &gpi, nullptr, &result);
+            const VkResult r =
+                vkCreateGraphicsPipelines(device.vk_handle(), device.pipeline_cache(), 1, &gpi, nullptr, &result);
             if (r != VK_SUCCESS)
             {
                 LOG_ERR("vkCreateGraphicsPipelines failed: %s (stages=%u dcc=%s)",
@@ -557,7 +564,8 @@ namespace rendering_engine::gpu::backend::vulkan
             LOG_ERR("vk_device::graphics_pipeline_for: vkCreateGraphicsPipelines failed");
             return VK_NULL_HANDLE;
         }
-        record->graphics_variants.push_back({render_pass, render_pass_generation, pipe, y_flipped});
+        record->graphics_variants.push_back(
+            {render_pass, render_pass_generation, pipe, y_flipped, color_count, samples});
         return pipe;
     }
 
@@ -579,18 +587,9 @@ namespace rendering_engine::gpu::backend::vulkan
             return {};
         }
 
-        VkPipelineShaderStageCreateInfo stage{};
-        stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        stage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
-        stage.module = sm->object;
-        stage.pName = "main";
-
-        VkComputePipelineCreateInfo cpi{};
-        cpi.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
-        cpi.stage = stage;
-        cpi.layout = record.layout;
-        if (!vk_check(vkCreateComputePipelines(m_device, VK_NULL_HANDLE, 1, &cpi, nullptr, &record.compute_object),
-                      "vkCreateComputePipelines"))
+        record.compute_shader = descriptor.compute_shader;
+        record.compute_object = build_compute_pipeline(sm->object, record.layout);
+        if (record.compute_object == VK_NULL_HANDLE)
         {
             vkDestroyPipelineLayout(m_device, record.layout, nullptr);
             return {};
@@ -599,6 +598,27 @@ namespace rendering_engine::gpu::backend::vulkan
         pipeline h{};
         h.id = m_pipelines.insert(record);
         return h;
+    }
+
+    VkPipeline vk_device::build_compute_pipeline(VkShaderModule module, VkPipelineLayout layout)
+    {
+        VkPipelineShaderStageCreateInfo stage{};
+        stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        stage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+        stage.module = module;
+        stage.pName = "main";
+
+        VkComputePipelineCreateInfo cpi{};
+        cpi.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+        cpi.stage = stage;
+        cpi.layout = layout;
+        VkPipeline result = VK_NULL_HANDLE;
+        if (!vk_check(vkCreateComputePipelines(m_device, m_pipeline_cache, 1, &cpi, nullptr, &result),
+                      "vkCreateComputePipelines"))
+        {
+            return VK_NULL_HANDLE;
+        }
+        return result;
     }
 
     void vk_device::destroy(pipeline handle)
@@ -939,4 +959,344 @@ namespace rendering_engine::gpu::backend::vulkan
         record->set_count = 0;
         m_bind_groups.remove(handle.id);
     }
+
+    // -- Pipeline cache --------------------------------------------------
+
+    void vk_device::create_pipeline_cache()
+    {
+        VkPhysicalDeviceProperties properties{};
+        vkGetPhysicalDeviceProperties(m_physical_device, &properties);
+
+        std::vector<uint8_t> seed;
+        m_pipeline_cache = VK_NULL_HANDLE;
+        m_pipeline_cache_digest = 0;
+        m_pipeline_cache_file.clear();
+        // The shader cache switch covers this cache too: with the
+        // SPIR-V cache off, every pipeline is built from scratch.
+        const std::filesystem::path& directory = gpu::shader_cache_directory();
+        if (directory.empty())
+        {
+            LOG_INF("Vulkan pipeline cache: disabled with the shader cache");
+            return;
+        }
+
+        m_pipeline_cache_file = pipeline_cache_path(directory, properties);
+        const std::string file = m_pipeline_cache_file.string();
+        switch (read_pipeline_cache(m_pipeline_cache_file, properties, seed))
+        {
+        case pipeline_cache_read::loaded:
+            m_pipeline_cache_digest = pipeline_cache_digest(seed);
+            LOG_INF("Vulkan pipeline cache: read %zu bytes from %s", seed.size(), file.c_str());
+            break;
+        case pipeline_cache_read::missing:
+            LOG_INF("Vulkan pipeline cache: %s does not exist yet; starting empty", file.c_str());
+            break;
+        case pipeline_cache_read::corrupt:
+            LOG_WRN("Vulkan pipeline cache: %s is truncated or malformed; ignoring it", file.c_str());
+            break;
+        case pipeline_cache_read::foreign:
+            LOG_INF("Vulkan pipeline cache: %s was written by another GPU or driver; ignoring it", file.c_str());
+            break;
+        }
+
+        VkPipelineCacheCreateInfo info{};
+        info.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
+        info.initialDataSize = seed.size();
+        info.pInitialData = seed.empty() ? nullptr : seed.data();
+        VkResult result = vkCreatePipelineCache(m_device, &info, nullptr, &m_pipeline_cache);
+        if (result != VK_SUCCESS && !seed.empty())
+        {
+            // The header matched, yet the driver refused the rest; an
+            // empty cache is always accepted.
+            LOG_WRN("Vulkan pipeline cache: the driver refused the stored data (%s); starting empty",
+                    vk_result_to_string(result));
+            m_pipeline_cache_digest = 0;
+            info.initialDataSize = 0;
+            info.pInitialData = nullptr;
+            result = vkCreatePipelineCache(m_device, &info, nullptr, &m_pipeline_cache);
+        }
+        if (result != VK_SUCCESS)
+        {
+            LOG_WRN("Vulkan pipeline cache: vkCreatePipelineCache failed (%s); pipelines are built without one",
+                    vk_result_to_string(result));
+            m_pipeline_cache = VK_NULL_HANDLE;
+            m_pipeline_cache_file.clear();
+        }
+    }
+
+    void vk_device::save_and_destroy_pipeline_cache()
+    {
+        if (m_pipeline_cache == VK_NULL_HANDLE)
+        {
+            return;
+        }
+        // After a device loss the cache may hold whatever the driver was
+        // building when it died; the file from the last good run stays.
+        if (!m_pipeline_cache_file.empty() && !m_device_lost)
+        {
+            const std::string file = m_pipeline_cache_file.string();
+            size_t size = 0;
+            VkResult result = vkGetPipelineCacheData(m_device, m_pipeline_cache, &size, nullptr);
+            std::vector<uint8_t> data;
+            if (result == VK_SUCCESS && size > 0)
+            {
+                data.resize(size);
+                result = vkGetPipelineCacheData(m_device, m_pipeline_cache, &size, data.data());
+                data.resize(size);
+            }
+            if (result != VK_SUCCESS)
+            {
+                LOG_WRN("Vulkan pipeline cache: vkGetPipelineCacheData failed (%s); %s not updated",
+                        vk_result_to_string(result),
+                        file.c_str());
+            }
+            else if (data.empty())
+            {
+                LOG_INF("Vulkan pipeline cache: the driver returned no data; %s not updated", file.c_str());
+            }
+            else if (m_pipeline_cache_digest != 0 && pipeline_cache_digest(data) == m_pipeline_cache_digest)
+            {
+                LOG_INF("Vulkan pipeline cache: unchanged (%zu bytes); %s left as it is", data.size(), file.c_str());
+            }
+            else if (write_pipeline_cache(m_pipeline_cache_file, data))
+            {
+                LOG_INF("Vulkan pipeline cache: wrote %zu bytes to %s", data.size(), file.c_str());
+            }
+        }
+        vkDestroyPipelineCache(m_device, m_pipeline_cache, nullptr);
+        m_pipeline_cache = VK_NULL_HANDLE;
+        m_pipeline_cache_file.clear();
+        m_pipeline_cache_digest = 0;
+    }
+
+#if defined(_DEBUG)
+    // -- Shader hot reload -------------------------------------------------
+
+    bool vk_device::shader_module_live(shader_module module)
+    {
+        return m_shader_modules.lookup(module.id) != nullptr;
+    }
+
+    bool vk_device::reload_shader_modules(const std::vector<shader_module_update>& updates)
+    {
+        if (!m_initialised || m_device_lost)
+        {
+            return false;
+        }
+
+        // 1. A new VkShaderModule for every live module of the batch
+        //    (a module its owner destroyed meanwhile is skipped).
+        struct staged_module
+        {
+            shader_module handle{};
+            VkShaderModule object{VK_NULL_HANDLE};
+            // The object the record held before the swap below.
+            VkShaderModule previous{VK_NULL_HANDLE};
+        };
+        std::vector<staged_module> staged;
+        const auto is_staged = [&staged](shader_module handle)
+        {
+            for (const staged_module& module : staged)
+            {
+                if (handle.valid() && module.handle == handle)
+                {
+                    return true;
+                }
+            }
+            return false;
+        };
+        const auto discard_new_modules = [this, &staged]
+        {
+            for (const staged_module& module : staged)
+            {
+                vkDestroyShaderModule(m_device, module.object, nullptr);
+            }
+        };
+        for (const shader_module_update& update : updates)
+        {
+            if (m_shader_modules.lookup(update.module.id) == nullptr || is_staged(update.module))
+            {
+                continue;
+            }
+            if (update.spirv.empty())
+            {
+                LOG_ERR("vk_device::reload_shader_modules: empty SPIR-V");
+                discard_new_modules();
+                return false;
+            }
+            VkShaderModuleCreateInfo info{};
+            info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+            info.codeSize = update.spirv.size() * sizeof(uint32_t);
+            info.pCode = update.spirv.data();
+            VkShaderModule object = VK_NULL_HANDLE;
+            if (!vk_check(vkCreateShaderModule(m_device, &info, nullptr, &object), "vkCreateShaderModule (hot reload)"))
+            {
+                discard_new_modules();
+                return false;
+            }
+            staged.push_back(staged_module{update.module, object, VK_NULL_HANDLE});
+        }
+        if (staged.empty())
+        {
+            return true;
+        }
+
+        // 2. Swap the new objects in, so every pipeline build below
+        //    resolves the replaced handles to the new code; undone if
+        //    any build fails.
+        for (staged_module& module : staged)
+        {
+            vk_shader_module* record = m_shader_modules.lookup(module.handle.id);
+            module.previous = record->object;
+            record->object = module.object;
+        }
+        const auto uses_staged = [&is_staged](const pipeline_descriptor& descriptor)
+        {
+            return is_staged(descriptor.vertex_shader) || is_staged(descriptor.fragment_shader) ||
+                   is_staged(descriptor.geometry_shader) || is_staged(descriptor.tessellation_control_shader) ||
+                   is_staged(descriptor.tessellation_evaluation_shader);
+        };
+
+        // 3. Rebuild every pipeline built from a replaced module: the
+        //    compute object, and each graphics variant for the render
+        //    pass, orientation and attachments it was built for.
+        struct rebuilt_graphics
+        {
+            vk_pipeline* record{nullptr};
+            std::vector<VkPipeline> objects;
+        };
+        struct rebuilt_compute
+        {
+            vk_pipeline* record{nullptr};
+            VkPipeline object{VK_NULL_HANDLE};
+        };
+        std::vector<rebuilt_graphics> graphics;
+        std::vector<rebuilt_compute> computes;
+        bool failed = false;
+        m_pipelines.for_each(
+            [&](vk_pipeline& record)
+            {
+                if (failed)
+                {
+                    return;
+                }
+                if (record.is_compute)
+                {
+                    if (!is_staged(record.compute_shader))
+                    {
+                        return;
+                    }
+                    const VkShaderModule module = m_shader_modules.lookup(record.compute_shader.id)->object;
+                    const VkPipeline object = build_compute_pipeline(module, record.layout);
+                    failed = object == VK_NULL_HANDLE;
+                    if (!failed)
+                    {
+                        computes.push_back(rebuilt_compute{&record, object});
+                    }
+                    return;
+                }
+                if (!uses_staged(record.descriptor))
+                {
+                    return;
+                }
+                rebuilt_graphics rebuilt{&record, {}};
+                for (const auto& variant : record.graphics_variants)
+                {
+                    const VkPipeline object = build_graphics_pipeline(*this,
+                                                                      record.descriptor,
+                                                                      record.layout,
+                                                                      variant.render_pass,
+                                                                      variant.y_flipped,
+                                                                      variant.color_count,
+                                                                      variant.samples);
+                    if (object == VK_NULL_HANDLE)
+                    {
+                        failed = true;
+                        break;
+                    }
+                    rebuilt.objects.push_back(object);
+                }
+                // Kept even after a failed build, so the objects that did
+                // build are released below.
+                graphics.push_back(std::move(rebuilt));
+            });
+
+        if (failed)
+        {
+            for (const rebuilt_graphics& rebuilt : graphics)
+            {
+                for (VkPipeline object : rebuilt.objects)
+                {
+                    vkDestroyPipeline(m_device, object, nullptr);
+                }
+            }
+            for (const rebuilt_compute& rebuilt : computes)
+            {
+                vkDestroyPipeline(m_device, rebuilt.object, nullptr);
+            }
+            for (const staged_module& module : staged)
+            {
+                m_shader_modules.lookup(module.handle.id)->object = module.previous;
+            }
+            discard_new_modules();
+            LOG_WRN("vk_device: a pipeline failed to rebuild with the reloaded shaders; the previous ones stay");
+            return false;
+        }
+
+        // 4. Commit: install the rebuilt objects and retire the old ones,
+        //    and the old modules, behind every frame that may still use
+        //    them.
+        std::vector<VkShaderModule> retired_modules;
+        std::vector<VkPipeline> retired_pipelines;
+        for (const staged_module& module : staged)
+        {
+            if (module.previous != VK_NULL_HANDLE)
+            {
+                retired_modules.push_back(module.previous);
+            }
+        }
+        size_t variant_count = 0;
+        for (rebuilt_graphics& rebuilt : graphics)
+        {
+            auto& variants = rebuilt.record->graphics_variants;
+            for (size_t i = 0; i < variants.size(); ++i)
+            {
+                if (variants[i].object != VK_NULL_HANDLE)
+                {
+                    retired_pipelines.push_back(variants[i].object);
+                }
+                variants[i].object = rebuilt.objects[i];
+                ++variant_count;
+            }
+        }
+        for (const rebuilt_compute& rebuilt : computes)
+        {
+            if (rebuilt.record->compute_object != VK_NULL_HANDLE)
+            {
+                retired_pipelines.push_back(rebuilt.record->compute_object);
+            }
+            rebuilt.record->compute_object = rebuilt.object;
+        }
+        const VkDevice dev = m_device;
+        enqueue_destroy(
+            [dev, retired_modules = std::move(retired_modules), retired_pipelines = std::move(retired_pipelines)]
+            {
+                for (VkPipeline object : retired_pipelines)
+                {
+                    vkDestroyPipeline(dev, object, nullptr);
+                }
+                for (VkShaderModule object : retired_modules)
+                {
+                    vkDestroyShaderModule(dev, object, nullptr);
+                }
+            });
+        LOG_DBG("vk_device: hot reload replaced %zu shader module(s) used by %zu graphics pipeline(s) (%zu "
+                "render-pass variant(s) rebuilt; the rest build on first bind) and rebuilt %zu compute pipeline(s)",
+                staged.size(),
+                graphics.size(),
+                variant_count,
+                computes.size());
+        return true;
+    }
+#endif
 } // namespace rendering_engine::gpu::backend::vulkan

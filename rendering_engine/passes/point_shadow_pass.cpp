@@ -31,7 +31,7 @@
 #include <rendering_engine/gpu/pipeline.hpp>
 #include <rendering_engine/gpu/render_target.hpp>
 #include <rendering_engine/gpu/shader.hpp>
-#include <rendering_engine/gpu/shader_compiler.hpp>
+#include <rendering_engine/gpu/shader_hot_reload.hpp>
 #include <rendering_engine/lighting/light.hpp>
 #include <rendering_engine/lighting/lights_ubo.hpp>
 #include <rendering_engine/lighting/point_light.hpp>
@@ -140,10 +140,7 @@ namespace rendering_engine
 
         // Vertex stage only: the faces have no colour attachment, and
         // the rasteriser writes the depth the lit materials sample.
-        gpu::shader_module_descriptor vs_descriptor{};
-        vs_descriptor.stage = gpu::shader_stage::vertex;
-        vs_descriptor.spirv = gpu::compile_library_shader("passes/shadow.vert.glsl", gpu::shader_stage::vertex);
-        m_vertex_shader = gpu.create_shader_module(vs_descriptor);
+        m_vertex_shader = gpu::create_library_shader_module(gpu, "passes/shadow.vert.glsl", gpu::shader_stage::vertex);
 
         gpu::bind_group_layout_descriptor light_layout{};
         light_layout.entries.push_back({light_frame_binding, gpu::binding_kind::uniform_buffer});

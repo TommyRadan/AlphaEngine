@@ -37,8 +37,9 @@
  * variable, else the source tree's @c shaders/ directory baked in at
  * build time) and @c <root>/<path> exists, its contents win over the
  * embedded copy. That is what lets a shader be edited without a C++
- * rebuild; the file is read once per process, so a running engine has
- * to be restarted to pick the edit up (live reload is a follow-on). The
+ * rebuild; the file is read once and kept until @ref refresh drops it,
+ * which the debug hot reload (shader_hot_reload.hpp) does for every file
+ * it sees change, so the next compile picks the edit up. The
  * generated @c include/bindings.glsl is never on disk and always comes
  * from the embedded registry. Release builds ignore the override and
  * touch no files.
@@ -85,6 +86,16 @@ namespace rendering_engine::gpu::shader_library
      *        are off (always empty in release builds).
      */
     const std::filesystem::path& override_root();
+
+    /**
+     * @brief Forget the on-disk text read for @p path, so the next
+     *        lookup reads the file again (or falls back to the embedded
+     *        copy when it is gone). Debug builds only; a no-op in release
+     *        builds and for a path whose text was never read. Views
+     *        returned earlier stay valid: the old text is retired, not
+     *        freed.
+     */
+    void refresh(std::string_view path);
 
     namespace detail
     {

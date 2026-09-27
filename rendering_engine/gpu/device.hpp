@@ -34,6 +34,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <vector>
 
 #include <rendering_engine/gpu/bind_group.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
@@ -422,6 +423,29 @@ namespace rendering_engine::gpu
         // Submit the encoder's recorded work for execution. After
         // this call the encoder is consumed.
         virtual void submit(std::unique_ptr<command_encoder> encoder) = 0;
+
+#if defined(_DEBUG)
+        // -- Shader hot reload (debug builds) ------------------------------
+
+        // Swap @c spirv in behind each live module of @p updates, keeping
+        // every handle, and rebuild every pipeline created from one of
+        // them, so the draws and dispatches recorded afterwards run the
+        // new code while the callers keep the handles they hold. All or
+        // nothing: when a new stage fails to create or a dependent
+        // pipeline fails to rebuild, the reason is logged, nothing
+        // changes and false is returned. A module whose handle is no
+        // longer live is skipped. Call between frames; the replaced
+        // backend objects may still be referenced by frames in flight
+        // and are released through the backend's deferred destroy. The
+        // default (a device without hot reload) changes nothing and
+        // returns false.
+        virtual bool reload_shader_modules(const std::vector<shader_module_update>& updates);
+
+        // Whether @p module still names a live shader module on this
+        // device, so a registry of modules can drop the ones their owner
+        // has destroyed. False by default.
+        virtual bool shader_module_live(shader_module module);
+#endif
 
     protected:
         // Filled by the backend in @c init; see @ref features /

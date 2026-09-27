@@ -23,7 +23,8 @@
 /**
  * @file gl_device_pipeline.cpp
  * @brief @c gl_device member functions that build pipeline state
- *        objects, bind-group layouts, and bind groups.
+ *        objects, bind-group layouts, and bind groups, and link the
+ *        programs behind them (through the program-binary cache).
  */
 
 #include <rendering_engine/gpu/backend/opengl/gl_device.hpp>
@@ -31,6 +32,7 @@
 #include <algorithm>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 #include <glad/gl.h>
 
@@ -56,14 +58,9 @@ namespace rendering_engine::gpu::backend::opengl
 
     namespace
     {
-        void check_program_link(GLuint program_id)
+        // The driver's info log of @p program_id after a failed link.
+        std::string program_link_log(GLuint program_id)
         {
-            GLint linked = 0;
-            glGetProgramiv(program_id, GL_LINK_STATUS, &linked);
-            if (linked == GL_TRUE)
-            {
-                return;
-            }
             GLint log_length = 0;
             glGetProgramiv(program_id, GL_INFO_LOG_LENGTH, &log_length);
             std::string info_log(log_length > 0 ? static_cast<size_t>(log_length) : 1u, '\0');
@@ -71,9 +68,29 @@ namespace rendering_engine::gpu::backend::opengl
             {
                 glGetProgramInfoLog(program_id, log_length, nullptr, info_log.data());
             }
-            LOG_ERR("Program link failed: %s", info_log.c_str());
-            glDeleteProgram(program_id);
-            throw std::runtime_error{info_log};
+            return info_log;
+        }
+
+        // Append @p module to the program's module list and its stage
+        // (object + SPIR-V digest, what the link attaches and the
+        // program-binary cache keys) to @p stages. An invalid or dead
+        // handle attaches nothing.
+        void append_program_stage(shader_module module,
+                                  handle_pool<gl_shader_module>& modules,
+                                  std::vector<shader_module>& handles,
+                                  std::vector<gl_program_stage>& stages)
+        {
+            if (!module.valid())
+            {
+                return;
+            }
+            const gl_shader_module* record = modules.lookup(module.id);
+            if (record == nullptr || record->object_id == 0)
+            {
+                return;
+            }
+            handles.push_back(module);
+            stages.push_back(gl_program_stage{record->stage, record->object_id, record->spirv_digest});
         }
 
         // The narrowest vertex record @p layout reads: the end of its
@@ -157,33 +174,22 @@ namespace rendering_engine::gpu::backend::opengl
         record.vertex_buffers = descriptor.vertex_buffers;
         record.bind_group_layouts = descriptor.bind_group_layouts;
 
-        record.program_id = glCreateProgram();
+        // Every live stage the descriptor names, in attach order.
+        std::vector<gl_program_stage> stages;
+        append_program_stage(descriptor.vertex_shader, m_shader_modules, record.shader_modules, stages);
+        append_program_stage(descriptor.fragment_shader, m_shader_modules, record.shader_modules, stages);
+        append_program_stage(descriptor.geometry_shader, m_shader_modules, record.shader_modules, stages);
+        append_program_stage(descriptor.tessellation_control_shader, m_shader_modules, record.shader_modules, stages);
+        append_program_stage(
+            descriptor.tessellation_evaluation_shader, m_shader_modules, record.shader_modules, stages);
+
+        std::string error;
+        bool from_cache = false;
+        record.program_id = link_program(stages, error, from_cache);
         if (record.program_id == 0)
         {
-            LOG_FTL("create_pipeline: glCreateProgram returned 0");
-            throw std::runtime_error{"program creation failed"};
+            throw std::runtime_error{error};
         }
-
-        const auto attach = [&](shader_module module)
-        {
-            if (!module.valid())
-            {
-                return;
-            }
-            auto* shader_record = m_shader_modules.lookup(module.id);
-            if (shader_record != nullptr && shader_record->object_id != 0)
-            {
-                glAttachShader(record.program_id, shader_record->object_id);
-            }
-        };
-        attach(descriptor.vertex_shader);
-        attach(descriptor.fragment_shader);
-        attach(descriptor.geometry_shader);
-        attach(descriptor.tessellation_control_shader);
-        attach(descriptor.tessellation_evaluation_shader);
-
-        glLinkProgram(record.program_id);
-        check_program_link(record.program_id);
 
         // The VAO owns the vertex format declared by the pipeline;
         // draws only attach buffers to its binding points.
@@ -197,7 +203,10 @@ namespace rendering_engine::gpu::backend::opengl
         }
         record.vertex_binding_shadows.resize(descriptor.vertex_buffers.size());
 
-        LOG_INF("Pipeline linked id=%u vao=%u", record.program_id, record.vao_id);
+        LOG_INF("Pipeline linked id=%u vao=%u%s",
+                record.program_id,
+                record.vao_id,
+                from_cache ? " (from the program binary cache)" : "");
 
         pipeline h{};
         h.id = m_pipelines.insert(record);
@@ -210,36 +219,92 @@ namespace rendering_engine::gpu::backend::opengl
         record.is_compute = true;
         record.bind_group_layouts = descriptor.bind_group_layouts;
 
-        record.program_id = glCreateProgram();
-        if (record.program_id == 0)
-        {
-            LOG_FTL("create_compute_pipeline: glCreateProgram returned 0");
-            throw std::runtime_error{"program creation failed"};
-        }
-
         if (!descriptor.compute_shader.valid())
         {
             LOG_FTL("create_compute_pipeline: compute_shader is required");
-            glDeleteProgram(record.program_id);
             throw std::runtime_error{"compute_shader missing"};
         }
-        auto* shader_record = m_shader_modules.lookup(descriptor.compute_shader.id);
-        if (shader_record == nullptr || shader_record->object_id == 0)
+        std::vector<gl_program_stage> stages;
+        append_program_stage(descriptor.compute_shader, m_shader_modules, record.shader_modules, stages);
+        if (stages.empty())
         {
             LOG_FTL("create_compute_pipeline: invalid compute shader handle");
-            glDeleteProgram(record.program_id);
             throw std::runtime_error{"invalid compute shader handle"};
         }
-        glAttachShader(record.program_id, shader_record->object_id);
 
-        glLinkProgram(record.program_id);
-        check_program_link(record.program_id);
+        std::string error;
+        bool from_cache = false;
+        record.program_id = link_program(stages, error, from_cache);
+        if (record.program_id == 0)
+        {
+            throw std::runtime_error{error};
+        }
 
-        LOG_INF("Compute pipeline linked id=%u", record.program_id);
+        LOG_INF(
+            "Compute pipeline linked id=%u%s", record.program_id, from_cache ? " (from the program binary cache)" : "");
 
         pipeline h{};
         h.id = m_pipelines.insert(record);
         return h;
+    }
+
+    GLuint gl_device::link_program(const std::vector<gl_program_stage>& stages, std::string& error, bool& from_cache)
+    {
+        from_cache = false;
+        const bool cached = m_program_cache.enabled();
+        const uint64_t key = cached ? m_program_cache.program_key(stages) : 0;
+
+        // A binary an earlier run stored for exactly these stages on this
+        // driver skips the link. A refused binary leaves the program
+        // object unlinked, so it is dropped and the link below starts
+        // from a fresh one.
+        if (cached)
+        {
+            const GLuint program = glCreateProgram();
+            if (program != 0)
+            {
+                if (m_program_cache.load(program, key))
+                {
+                    from_cache = true;
+                    return program;
+                }
+                glDeleteProgram(program);
+            }
+        }
+
+        const GLuint program = glCreateProgram();
+        if (program == 0)
+        {
+            error = "glCreateProgram returned 0";
+            LOG_ERR("Program creation failed: %s", error.c_str());
+            return 0;
+        }
+        if (cached)
+        {
+            // Lets the driver keep what glGetProgramBinary needs after
+            // the link.
+            glProgramParameteri(program, GL_PROGRAM_BINARY_RETRIEVABLE_HINT, GL_TRUE);
+        }
+        for (const gl_program_stage& stage : stages)
+        {
+            glAttachShader(program, stage.object);
+        }
+        glLinkProgram(program);
+
+        GLint linked = 0;
+        glGetProgramiv(program, GL_LINK_STATUS, &linked);
+        if (linked != GL_TRUE)
+        {
+            error = program_link_log(program);
+            LOG_ERR("Program link failed: %s", error.c_str());
+            glDeleteProgram(program);
+            return 0;
+        }
+        if (cached)
+        {
+            m_program_cache.store(program, key);
+        }
+        return program;
     }
 
     void gl_device::destroy(pipeline handle)

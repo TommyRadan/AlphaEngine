@@ -1695,7 +1695,10 @@ namespace rendering_engine::debug_ui
             init_info.DescriptorPoolSize = 64;
             init_info.MinImageCount = image_count < 2 ? 2 : image_count;
             init_info.ImageCount = image_count < 2 ? 2 : image_count;
-            init_info.PipelineCache = VK_NULL_HANDLE;
+            // The device's pipeline cache, so the overlay's pipeline (and
+            // its rebuild after every swapchain rebuild) is served from
+            // and persisted with the engine's own.
+            init_info.PipelineCache = device->pipeline_cache();
             init_info.PipelineInfoMain.RenderPass = ui_render_pass;
             init_info.PipelineInfoMain.Subpass = 0;
             init_info.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;

@@ -34,7 +34,7 @@
 #include <rendering_engine/gpu/pipeline.hpp>
 #include <rendering_engine/gpu/render_target.hpp>
 #include <rendering_engine/gpu/shader.hpp>
-#include <rendering_engine/gpu/shader_compiler.hpp>
+#include <rendering_engine/gpu/shader_hot_reload.hpp>
 #include <rendering_engine/passes/post/fullscreen_triangle.hpp>
 #include <runtime/engine.hpp>
 
@@ -61,18 +61,13 @@ namespace rendering_engine
         auto& gpu = *runtime::current_engine().gpu;
 
         // -- Shaders --------------------------------------------------
-        const auto fragment_module = [&gpu](const char* path, const gpu::shader_defines& defines)
-        {
-            gpu::shader_module_descriptor descriptor{};
-            descriptor.stage = gpu::shader_stage::fragment;
-            descriptor.spirv = gpu::compile_library_shader(path, gpu::shader_stage::fragment, defines);
-            return gpu.create_shader_module(descriptor);
+        const auto fragment_module = [&gpu](const char* path, const gpu::shader_defines& defines) {
+            return gpu::create_library_shader_module(
+                gpu, gpu::shader_variant{path, defines}, gpu::shader_stage::fragment);
         };
 
-        gpu::shader_module_descriptor vs_descriptor{};
-        vs_descriptor.stage = gpu::shader_stage::vertex;
-        vs_descriptor.spirv = gpu::compile_library_shader("passes/fullscreen.vert.glsl", gpu::shader_stage::vertex);
-        m_vertex_shader = gpu.create_shader_module(vs_descriptor);
+        m_vertex_shader =
+            gpu::create_library_shader_module(gpu, "passes/fullscreen.vert.glsl", gpu::shader_stage::vertex);
 
         gpu::shader_defines luminance_defines;
         luminance_defines.emplace_back("LUMINANCE_SIZE", std::to_string(luminance_size));

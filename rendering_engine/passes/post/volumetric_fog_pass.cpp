@@ -37,7 +37,7 @@
 #include <rendering_engine/gpu/render_target.hpp>
 #include <rendering_engine/gpu/shader.hpp>
 #include <rendering_engine/gpu/shader_bindings.hpp>
-#include <rendering_engine/gpu/shader_compiler.hpp>
+#include <rendering_engine/gpu/shader_hot_reload.hpp>
 #include <rendering_engine/passes/post/fullscreen_triangle.hpp>
 #include <runtime/engine.hpp>
 
@@ -112,28 +112,14 @@ namespace rendering_engine
         }
 
         // -- Shaders --------------------------------------------------
-        gpu::shader_module_descriptor vs_descriptor{};
-        vs_descriptor.stage = gpu::shader_stage::vertex;
-        vs_descriptor.spirv = gpu::compile_library_shader("passes/fullscreen.vert.glsl", gpu::shader_stage::vertex);
-        m_vertex_shader = gpu.create_shader_module(vs_descriptor);
-
-        gpu::shader_module_descriptor march_descriptor{};
-        march_descriptor.stage = gpu::shader_stage::fragment;
-        march_descriptor.spirv =
-            gpu::compile_library_shader("passes/volumetric_fog.frag.glsl", gpu::shader_stage::fragment);
-        m_march_shader = gpu.create_shader_module(march_descriptor);
-
-        gpu::shader_module_descriptor upsample_descriptor{};
-        upsample_descriptor.stage = gpu::shader_stage::fragment;
-        upsample_descriptor.spirv =
-            gpu::compile_library_shader("passes/volumetric_fog_upsample.frag.glsl", gpu::shader_stage::fragment);
-        m_upsample_shader = gpu.create_shader_module(upsample_descriptor);
-
-        gpu::shader_module_descriptor composite_descriptor{};
-        composite_descriptor.stage = gpu::shader_stage::fragment;
-        composite_descriptor.spirv =
-            gpu::compile_library_shader("passes/volumetric_fog_composite.frag.glsl", gpu::shader_stage::fragment);
-        m_composite_shader = gpu.create_shader_module(composite_descriptor);
+        m_vertex_shader =
+            gpu::create_library_shader_module(gpu, "passes/fullscreen.vert.glsl", gpu::shader_stage::vertex);
+        m_march_shader =
+            gpu::create_library_shader_module(gpu, "passes/volumetric_fog.frag.glsl", gpu::shader_stage::fragment);
+        m_upsample_shader = gpu::create_library_shader_module(
+            gpu, "passes/volumetric_fog_upsample.frag.glsl", gpu::shader_stage::fragment);
+        m_composite_shader = gpu::create_library_shader_module(
+            gpu, "passes/volumetric_fog_composite.frag.glsl", gpu::shader_stage::fragment);
 
         // -- Fullscreen-triangle vertex buffer ------------------------
         gpu::buffer_descriptor vb_descriptor{};

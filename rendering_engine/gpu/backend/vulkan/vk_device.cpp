@@ -384,6 +384,7 @@ namespace rendering_engine::gpu::backend::vulkan
         resolve_depth_formats();
         create_logical_device();
         query_capabilities();
+        create_pipeline_cache();
         create_allocator();
         create_command_pools();
         if (!create_staging_ring())
@@ -477,6 +478,9 @@ namespace rendering_engine::gpu::backend::vulkan
             // may still be destroyed, which is all that follows.
             check_queue_result(vkDeviceWaitIdle(m_device), "vkDeviceWaitIdle (quit)");
         }
+        // Every pipeline this run built is in the cache by now; write it
+        // out before anything is torn down.
+        save_and_destroy_pipeline_cache();
         // Idle or lost: nothing executes any more, so every deferred
         // destroy — including those stamped with a submission that
         // never happened — may run.
@@ -3806,6 +3810,10 @@ namespace rendering_engine::gpu::backend::vulkan
     VmaAllocator vk_device::allocator() const noexcept
     {
         return m_allocator;
+    }
+    VkPipelineCache vk_device::pipeline_cache() const noexcept
+    {
+        return m_pipeline_cache;
     }
     bool vk_device::device_lost() const noexcept
     {

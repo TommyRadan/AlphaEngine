@@ -225,6 +225,10 @@ namespace rendering_engine::gpu::backend::opengl
 
         query_capabilities();
 
+        // Every program the backend links goes through the on-disk
+        // program-binary cache when the driver and the settings allow.
+        m_program_cache.init();
+
         // The default swapchain target is just framebuffer 0 with the
         // window's current dimensions; the engine updates dimensions
         // through @ref resize_swapchain. Its depth / stencil planes are
@@ -438,6 +442,7 @@ namespace rendering_engine::gpu::backend::opengl
         m_query_sets.clear();
         m_swapchain = {};
 
+        m_program_cache.quit();
         invalidate_state_cache();
         m_initialised = false;
         LOG_INF("Quit gpu::backend::opengl::gl_device");

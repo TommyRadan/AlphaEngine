@@ -42,22 +42,27 @@
  *                             lookup_*
  *   - gl_device_buffer.cpp    buffer create/destroy/write
  *   - gl_device_texture.cpp   texture/sampler create/destroy/write/mipmaps/readback
- *   - gl_device_shader.cpp    shader_module create/destroy
- *   - gl_device_pipeline.cpp  pipeline + bind_group_layout + bind_group
+ *   - gl_device_shader.cpp    shader_module create/destroy, debug hot reload
+ *   - gl_device_pipeline.cpp  pipeline + bind_group_layout + bind_group,
+ *                             program linking
  *
  * Each split file can reach the private @c m_buffers, @c m_textures,
  * ... pools because they are defining members of the same class.
  * @c gl_state_cache.cpp holds the redundant-state filter the encoders
- * drive and @c gl_check.cpp the debug-build @c glGetError drain.
+ * drive, @c gl_check.cpp the debug-build @c glGetError drain and
+ * @c gl_program_cache.cpp the on-disk program-binary cache every link
+ * goes through.
  */
 
 #pragma once
 
 #include <cstdint>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include <rendering_engine/gpu/backend/handle_pool.hpp>
+#include <rendering_engine/gpu/backend/opengl/gl_program_cache.hpp>
 #include <rendering_engine/gpu/backend/opengl/gl_resources.hpp>
 #include <rendering_engine/gpu/backend/opengl/gl_state_cache.hpp>
 #include <rendering_engine/gpu/device.hpp>
@@ -128,6 +133,18 @@ namespace rendering_engine::gpu::backend::opengl
         void begin_frame() override;
         void end_frame() override;
 
+#if defined(_DEBUG)
+        // Debug hot reload (see gpu::device). New shader objects are
+        // specialised and every program linked from a replaced module is
+        // relinked against them before anything is installed; a failure
+        // deletes the new objects and leaves every program as it was.
+        // OpenGL keeps a deleted object alive while a submitted command
+        // still uses it, so the old shaders and programs are deleted
+        // right away.
+        bool reload_shader_modules(const std::vector<shader_module_update>& updates) override;
+        bool shader_module_live(shader_module module) override;
+#endif
+
         // -- State cache ---------------------------------------------------
 
         // The shadow of the context state the encoders set; every
@@ -169,6 +186,14 @@ namespace rendering_engine::gpu::backend::opengl
         // Fill m_features / m_limits from the live context (init).
         void query_capabilities();
 
+        // A linked program over @p stages (attach order): loaded from
+        // the program-binary cache when it holds this combination, else
+        // linked from the shader objects and stored there. Returns 0,
+        // with the reason logged and in @p error, when the program cannot
+        // be created or fails to link; @p from_cache reports which path
+        // produced it. Definition in gl_device_pipeline.cpp.
+        GLuint link_program(const std::vector<gl_program_stage>& stages, std::string& error, bool& from_cache);
+
         handle_pool<gl_buffer> m_buffers;
         handle_pool<gl_texture> m_textures;
         handle_pool<gl_sampler> m_samplers;
@@ -183,6 +208,10 @@ namespace rendering_engine::gpu::backend::opengl
 
         gl_state_cache m_state;
         uint64_t m_state_epoch{1};
+
+        // See gl_program_cache.hpp; set up in init, after the context
+        // is known to be 4.6.
+        gl_program_cache m_program_cache;
 
         bool m_initialised{false};
     };

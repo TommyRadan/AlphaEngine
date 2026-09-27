@@ -12,6 +12,8 @@ target_sources(AlphaEngine PRIVATE
     vk_factory.cpp
     vk_negotiate.cpp
     vk_negotiate.hpp
+    vk_pipeline_cache.cpp
+    vk_pipeline_cache.hpp
     vk_resources.hpp
     vk_staging_ring.cpp
     vk_staging_ring.hpp

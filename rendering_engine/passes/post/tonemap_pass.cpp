@@ -34,7 +34,7 @@
 #include <rendering_engine/gpu/pipeline.hpp>
 #include <rendering_engine/gpu/render_target.hpp>
 #include <rendering_engine/gpu/shader.hpp>
-#include <rendering_engine/gpu/shader_compiler.hpp>
+#include <rendering_engine/gpu/shader_hot_reload.hpp>
 #include <rendering_engine/passes/post/fullscreen_triangle.hpp>
 #include <runtime/engine.hpp>
 
@@ -69,30 +69,24 @@ namespace rendering_engine
     {
         auto& gpu = *runtime::current_engine().gpu;
 
-        gpu::shader_module_descriptor vs_descriptor{};
-        vs_descriptor.stage = gpu::shader_stage::vertex;
-        vs_descriptor.spirv = gpu::compile_library_shader("passes/fullscreen.vert.glsl", gpu::shader_stage::vertex);
-        m_vertex_shader = gpu.create_shader_module(vs_descriptor);
+        m_vertex_shader =
+            gpu::create_library_shader_module(gpu, "passes/fullscreen.vert.glsl", gpu::shader_stage::vertex);
 
         // One fragment stage per keyword combination (see the variant_*
         // bits): an effect that is off is compiled out rather than
         // branched around, so it costs nothing.
         for (size_t variant = 0; variant < variant_count; ++variant)
         {
-            gpu::shader_defines defines;
+            gpu::shader_variant fragment{"passes/tonemap.frag.glsl", {}};
             if ((variant & variant_grading) != 0)
             {
-                defines.emplace_back("USE_COLOR_GRADING", "1");
+                fragment.defines.emplace_back("USE_COLOR_GRADING", "1");
             }
             if ((variant & variant_auto_exposure) != 0)
             {
-                defines.emplace_back("USE_AUTO_EXPOSURE", "1");
+                fragment.defines.emplace_back("USE_AUTO_EXPOSURE", "1");
             }
-            gpu::shader_module_descriptor fs_descriptor{};
-            fs_descriptor.stage = gpu::shader_stage::fragment;
-            fs_descriptor.spirv =
-                gpu::compile_library_shader("passes/tonemap.frag.glsl", gpu::shader_stage::fragment, defines);
-            m_fragment_shaders[variant] = gpu.create_shader_module(fs_descriptor);
+            m_fragment_shaders[variant] = gpu::create_library_shader_module(gpu, fragment, gpu::shader_stage::fragment);
         }
 
         // Three vec2 vertices for the oversized fullscreen triangle.

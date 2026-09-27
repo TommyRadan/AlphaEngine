@@ -38,6 +38,8 @@
 #include <rendering_engine/gpu/command_encoder.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/gpu/shader_compiler.hpp>
+#include <rendering_engine/gpu/shader_hot_reload.hpp>
+#include <rendering_engine/gpu/shader_library.hpp>
 #include <rendering_engine/ibl/environment.hpp>
 #include <rendering_engine/materials/basic_material.hpp>
 #include <rendering_engine/materials/grid_material.hpp>
@@ -144,6 +146,18 @@ void rendering_engine::context::init()
     auto& eng = runtime::current_engine();
     eng.window->init();
     eng.gpu->init();
+
+#if _DEBUG
+    // Debug builds watch the directory the shader library reads its
+    // overrides from (the source tree's shaders/, or
+    // ALPHAENGINE_SHADER_DIR) and swap an edited shader into every
+    // pipeline built from it. Installed before the passes and templates
+    // below create their modules, so each registers with it.
+    if (const std::filesystem::path& root = gpu::shader_library::override_root(); !root.empty())
+    {
+        m_shader_hot_reload = std::make_unique<gpu::shader_hot_reload>(*eng.gpu, root);
+    }
+#endif
 
     // The per-draw ring sizes its slots by the device's uniform-buffer
     // offset alignment, so it follows the device's init.
@@ -447,6 +461,12 @@ void rendering_engine::context::quit()
     m_window_resized_subscription.reset();
     set_drawable_aspect(0.0f);
 
+#if _DEBUG
+    // Nothing reloads during teardown; the modules it tracks go with
+    // their owners below.
+    m_shader_hot_reload.reset();
+#endif
+
     // Tear the ImGui overlay down first, while the window and GL context
     // it bound to are still alive. No-op in release builds.
     debug_ui::shutdown();
@@ -519,6 +539,17 @@ void rendering_engine::context::render()
 {
     auto& eng = runtime::current_engine();
     auto& gpu = *eng.gpu;
+
+#if _DEBUG
+    // Pick up shader edits between frames: a rebuilt pipeline replaces
+    // the old one behind its handle before this frame binds anything,
+    // and the old objects are released once the frames using them have
+    // retired. Rescans at most about once a second.
+    if (m_shader_hot_reload != nullptr)
+    {
+        m_shader_hot_reload->poll();
+    }
+#endif
 
     // Resolve a changed colour-grading LUT path through the asset cache
     // first, outside the frame like any other asset load (the upload is

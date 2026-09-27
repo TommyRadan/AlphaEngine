@@ -10,6 +10,8 @@ target_sources(AlphaEngine PRIVATE
     gl_device_shader.cpp
     gl_device_texture.cpp
     gl_factory.cpp
+    gl_program_cache.cpp
+    gl_program_cache.hpp
     gl_resources.hpp
     gl_state_cache.cpp
     gl_state_cache.hpp

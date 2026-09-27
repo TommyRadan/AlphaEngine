@@ -44,7 +44,9 @@
  * lives under @c SDL_GetPrefPath("AlphaEngine", "AlphaEngine")/shader_cache
  * unless @c ALPHAENGINE_SHADER_CACHE names another directory or is
  * @c 0 / @c off / @c false, which disables it; @ref set_shader_cache_directory
- * overrides both.
+ * overrides both. The device backends keep their pipeline caches (the
+ * Vulkan @c VkPipelineCache blob, the OpenGL program binaries) in
+ * @ref shader_cache_directory as well, so the same switch covers them.
  *
  * The compiler is initialised lazily on first use and torn down at
  * process exit; callers may invoke it from any thread-confined context
@@ -123,6 +125,17 @@ namespace rendering_engine::gpu
 
     /** @brief @ref compile_library_shader for a @ref shader_variant. */
     std::vector<uint32_t> compile_library_shader(const shader_variant& variant, shader_stage stage);
+
+    /**
+     * @brief The library files a compile of @p path reads: @p path itself,
+     *        then every file it (transitively) @c #includes, each once.
+     *
+     * Found by the same textual scan the cache key uses, so it may list a
+     * file an @c #if leaves out but never misses one the preprocessor
+     * would pull in: a conservative answer to "does an edit of this file
+     * affect that shader", which is what the debug hot reload asks.
+     */
+    std::vector<std::string> shader_dependencies(std::string_view path);
 
     /**
      * @brief Point the SPIR-V cache at @p directory (created on demand),
