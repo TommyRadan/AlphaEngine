@@ -22,29 +22,20 @@
 #include <utility>
 #include <vector>
 
-// Shadow showcase for the auto-fit directional shadow frustum (issue
-// #146). A field of spheres and tall pillars sits on a wide ground plane,
-// spread past the old fixed light box (+/-6 around the origin) but kept
-// within the shadow distance so the whole field stays crisp. With the
-// auto-fit:
+// Shadow showcase for the auto-fit directional shadow frustum: a field of
+// spheres and tall pillars sits on a wide ground plane, kept within the
+// shadow distance so the whole field stays crisp.
 //
-//   * every object casts a sharp shadow wherever it sits on the plane (the
-//     old fixed box only reached ~6 units from the origin, so objects past
-//     that got no shadow at all);
+//   * every object casts a sharp shadow wherever it sits on the plane;
 //   * the pillars cast long thin shadows whose edges stay smooth instead
-//     of stair-stepping, because the 4096 map's texels now land on the
-//     visible region rather than being spread over empty world space;
+//     of stair-stepping, because the 4096 map's texels land on the visible
+//     region rather than being spread over empty world space;
 //   * the sun slowly orbits, so the shadows sweep across the plane — watch
 //     that the edges stay stable (no crawling) thanks to the texel-snapped,
 //     bounding-sphere fit.
 //
 // This is a single cascade, so the crispness holds out to the shadow
-// distance (shadow_pass.cpp) and then stops; covering a large world
-// sharply is the cascaded-shadow-map follow-on.
-//
-// To A/B test against the old behaviour, temporarily force the fixed-box
-// fallback in rendering_engine/passes/shadow_pass.cpp (skip the camera
-// branch in record()) and rebuild: the far objects lose their shadows.
+// distance (shadow_pass.cpp) and then stops.
 //
 // Controls (from camera_module): WASD to move, hold left mouse to look,
 // space/ctrl to rise/sink, shift to move faster. Roam around — the
@@ -188,8 +179,7 @@ GAME_MODULE()
 
     // A grid of unit spheres spread across the plane. The camera looks
     // from -X, so the grid recedes along +X and spreads across +/-Y. It is
-    // kept inside the shadow distance so the whole field stays crisp, yet
-    // it reaches well past the old fixed light box (+/-6 around the origin).
+    // kept inside the shadow distance so the whole field stays crisp.
     constexpr int depth_rows = 3;   // along +X, away from the camera
     constexpr int lateral_cols = 5; // across +/-Y
     rendering_engine::standard_material* tints[] = {warm, cool, pale};
