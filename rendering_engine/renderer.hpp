@@ -52,7 +52,13 @@ namespace rendering_engine
 
     namespace debug_draw
     {
+        struct debug_pass;
         struct helper;
+    } // namespace debug_draw
+
+    namespace gpu
+    {
+        struct overlay_renderer;
     }
 
 #if _DEBUG
@@ -204,6 +210,16 @@ namespace rendering_engine
 
         /** @brief @ref render_world::unregister_debug_renderable on @ref world. */
         void unregister_debug_renderable(renderable* r);
+
+        /**
+         * @brief Hands the debug pass the overlay it records after the
+         *        debug geometry every frame (see
+         *        @ref debug_draw::debug_pass::set_overlay), or null to stop.
+         *        Non-owning: the caller clears it before the overlay
+         *        renderer goes. Does nothing without a debug pass (release
+         *        builds).
+         */
+        void set_overlay(gpu::overlay_renderer* overlay);
 
         /** @brief @ref material_library::get_basic_material. Valid between @ref init and @ref quit. */
         basic_material& get_basic_material();
@@ -517,6 +533,11 @@ namespace rendering_engine
         shadow_pass* m_shadow{nullptr};
         point_shadow_pass* m_point_shadow{nullptr};
         spot_shadow_pass* m_spot_shadow{nullptr};
+
+        // Non-owning back-pointer to the debug pass owned by
+        // @ref m_passes, which @ref set_overlay forwards to. Null until
+        // @ref init runs, and in release builds, which have no debug pass.
+        debug_draw::debug_pass* m_debug{nullptr};
 
         // Per-pass GPU timer over the pass list, brought up after the list
         // is validated in @ref init and released before the device in

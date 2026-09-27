@@ -12,13 +12,12 @@
 #include <cstdint>
 #include <cstdio>
 #include <ctime>
+#include <memory>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 #include <imgui.h>
 #include <imgui_impl_sdl3.h>
-#include <imgui_impl_vulkan.h>
 #include <imgui_internal.h>
 #include <ImGuizmo.h>
 
@@ -32,10 +31,8 @@
 #include <rendering_engine/camera/orthographic_camera.hpp>
 #include <rendering_engine/camera/perspective_camera.hpp>
 #include <rendering_engine/debug_draw/helper.hpp>
-#include <rendering_engine/gpu/backend/vulkan/vk_device.hpp>
-#include <rendering_engine/gpu/backend/vulkan/vk_resources.hpp>
-#include <rendering_engine/gpu/command_encoder.hpp>
 #include <rendering_engine/gpu/device.hpp>
+#include <rendering_engine/gpu/overlay_renderer.hpp>
 #include <rendering_engine/gpu_profiler.hpp>
 #include <rendering_engine/graphics_settings.hpp>
 #include <rendering_engine/lighting/directional_light.hpp>
@@ -65,22 +62,11 @@ namespace rendering_engine::editor
         // when ImGui is not live.
         bool g_live = false;
 
-        // Set by begin_frame() once ImGui::Render() has produced draw
-        // data, cleared after the draw data is recorded in the debug
-        // pass. Guards against recording a half-built frame.
-        bool g_frame_ready = false;
-
-        // The VkRenderPass the ImGui Vulkan pipeline was last built
-        // for. The debug pass's own render pass can be retired and
-        // rebuilt independently of a swapchain change (any acquire
-        // through vk_device::acquire_render_pass may hand back a
-        // different object); record_draw_data reads the pass it is
-        // actually recording into off the encoder
-        // (gpu::render_pass_encoder::native_render_pass) and rebuilds
-        // the pipeline whenever that differs from this, rather than
-        // re-deriving the pass's load/store arguments and guessing they
-        // still match what the debug pass begins.
-        VkRenderPass g_vulkan_render_pass = VK_NULL_HANDLE;
+        // The GPU backend's half of the overlay: it opens each frame,
+        // registers the render-target viewer's textures and records the
+        // draw data inside the debug pass (see renderer::set_overlay).
+        // Live exactly while g_live is set.
+        std::unique_ptr<gpu::overlay_renderer> g_overlay;
 
         // Visibility toggles for the optional panels, driven from the
         // FPS overlay's right-click context menu.
@@ -130,146 +116,6 @@ namespace rendering_engine::editor
         float g_gizmo_snap_rotate_degrees = 15.0f;
         float g_gizmo_snap_scale = 0.1f;
 
-        void check_vk_result(VkResult result)
-        {
-            if (result != VK_SUCCESS)
-            {
-                LOG_ERR("editor: Vulkan error in ImGui backend (VkResult=%d)", static_cast<int>(result));
-            }
-        }
-
-        // -- Render-target viewer: backend texture-id bridge -----------------
-        //
-        // ImGui::Image wants an ImTextureID, which on Vulkan is a
-        // VkDescriptorSet registered through ImGui_ImplVulkan_AddTexture.
-        // Every off-screen texture in this engine is transitioned to
-        // VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL immediately on creation
-        // and rests there between render passes (see
-        // vk_device::create_texture), so that layout is always the right
-        // one to bake into the descriptor — including on the very first
-        // frame, before any pass has touched the texture.
-        struct vulkan_texture_binding
-        {
-            VkImageView view{VK_NULL_HANDLE};
-            VkDescriptorSet descriptor_set{VK_NULL_HANDLE};
-        };
-
-        // Cached per gpu::texture (keyed by its handle id) so a texture
-        // sampled by several panel frames in a row reuses one descriptor
-        // set; rebuilt when the texture is recreated (its image view
-        // changes, e.g. on a resize) and pruned once nothing asks for it
-        // any more (see prune_vulkan_texture_bindings), so a window
-        // resize does not leak a descriptor set per resize event.
-        std::unordered_map<uint64_t, vulkan_texture_binding> g_vulkan_texture_bindings;
-
-        // Immediate release: only safe once nothing can still be reading
-        // the descriptor set, i.e. with the queue already idle (see
-        // clear_vulkan_texture_bindings).
-        void release_vulkan_texture_binding(vulkan_texture_binding& binding)
-        {
-            if (binding.descriptor_set != VK_NULL_HANDLE)
-            {
-                ImGui_ImplVulkan_RemoveTexture(binding.descriptor_set);
-            }
-            binding = vulkan_texture_binding{};
-        }
-
-        // Same, but for a binding dropped mid-run (a stale render-target
-        // texture the panel no longer shows, or one rebuilt because the
-        // texture it names was recreated by a resize): the draw data of a
-        // frame or two still in flight may reference the descriptor set
-        // through ImGui_ImplVulkan_RenderDrawData, so freeing it right
-        // here — as release_vulkan_texture_binding does — races the GPU
-        // once several frames are in flight (VUID-vkFreeDescriptorSets-
-        // pDescriptorSets-00309). ImGui_ImplVulkan_RemoveTexture runs
-        // instead through the device's own deferred-destroy queue, gated
-        // on the same submission serial every other Vulkan resource is.
-        void defer_release_vulkan_texture_binding(vulkan_texture_binding& binding)
-        {
-            if (binding.descriptor_set != VK_NULL_HANDLE)
-            {
-                auto* device = static_cast<gpu::backend::vulkan::vk_device*>(runtime::current_engine().gpu.get());
-                const VkDescriptorSet descriptor_set = binding.descriptor_set;
-                device->enqueue_destroy([descriptor_set] { ImGui_ImplVulkan_RemoveTexture(descriptor_set); });
-            }
-            binding = vulkan_texture_binding{};
-        }
-
-        // Called once, at shutdown, after the queue has already been
-        // waited idle (see editor::shutdown): nothing can still be
-        // reading the descriptor sets, so releasing them immediately —
-        // ahead of ImGui_ImplVulkan_Shutdown reclaiming the pool they
-        // came from — is safe.
-        void clear_vulkan_texture_bindings()
-        {
-            for (auto& [id, binding] : g_vulkan_texture_bindings)
-            {
-                release_vulkan_texture_binding(binding);
-            }
-            g_vulkan_texture_bindings.clear();
-        }
-
-        // Drops every cached binding whose handle id is not in @p touched.
-        // Runs every frame the viewer is active, so a dropped binding may
-        // still be drawn by a frame or two in flight; the release defers.
-        void prune_vulkan_texture_bindings(const std::vector<uint64_t>& touched)
-        {
-            for (auto it = g_vulkan_texture_bindings.begin(); it != g_vulkan_texture_bindings.end();)
-            {
-                if (std::find(touched.begin(), touched.end(), it->first) == touched.end())
-                {
-                    defer_release_vulkan_texture_binding(it->second);
-                    it = g_vulkan_texture_bindings.erase(it);
-                }
-                else
-                {
-                    ++it;
-                }
-            }
-        }
-
-        // A texture resolved for ImGui::Image: the backend id (0 /
-        // ImTextureID_Invalid when @p handle could not be resolved) plus
-        // its pixel size, so the caller can preserve the aspect ratio.
-        struct resolved_texture
-        {
-            ImTextureID id{0};
-            uint32_t width{0};
-            uint32_t height{0};
-        };
-
-        resolved_texture resolve_texture(gpu::texture handle)
-        {
-            resolved_texture result{};
-            if (!handle.valid())
-            {
-                return result;
-            }
-
-            auto* device = static_cast<gpu::backend::vulkan::vk_device*>(runtime::current_engine().gpu.get());
-            gpu::backend::vulkan::vk_texture* tex = device->lookup_texture(handle);
-            if (tex == nullptr || tex->view == VK_NULL_HANDLE)
-            {
-                return result;
-            }
-            result.width = tex->width;
-            result.height = tex->height;
-
-            vulkan_texture_binding& binding = g_vulkan_texture_bindings[handle.id];
-            if (binding.descriptor_set != VK_NULL_HANDLE && binding.view != tex->view)
-            {
-                defer_release_vulkan_texture_binding(binding);
-            }
-            if (binding.descriptor_set == VK_NULL_HANDLE)
-            {
-                binding.view = tex->view;
-                binding.descriptor_set =
-                    ImGui_ImplVulkan_AddTexture(tex->view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-            }
-            result.id = static_cast<ImTextureID>(reinterpret_cast<uintptr_t>(binding.descriptor_set));
-            return result;
-        }
-
         // One texture the viewer can show, paired with the label it lists
         // it under. Built fresh every frame from the renderer's read-only
         // accessors, so a target that comes and goes (temporal AA off, no
@@ -313,16 +159,16 @@ namespace rendering_engine::editor
             // the descriptor cache always tracks exactly the handles
             // currently in play rather than whatever was last drawn.
             std::vector<uint64_t> touched;
-            std::array<resolved_texture, slots.size()> resolved{};
+            std::array<gpu::overlay_texture, slots.size()> resolved{};
             for (std::size_t i = 0; i < slots.size(); ++i)
             {
                 if (slots[i].texture.valid())
                 {
-                    resolved[i] = resolve_texture(slots[i].texture);
+                    resolved[i] = g_overlay->texture(slots[i].texture);
                     touched.push_back(slots[i].texture.id);
                 }
             }
-            prune_vulkan_texture_bindings(touched);
+            g_overlay->retain_textures(touched);
 
             ImGui::SetNextWindowSize(ImVec2{420.0f, 380.0f}, ImGuiCond_FirstUseEver);
             if (ImGui::Begin("Render Targets", &g_show_render_targets))
@@ -346,7 +192,7 @@ namespace rendering_engine::editor
                     ImGui::EndCombo();
                 }
 
-                const resolved_texture& shown = resolved[static_cast<std::size_t>(selected)];
+                const gpu::overlay_texture& shown = resolved[static_cast<std::size_t>(selected)];
                 if (shown.id == 0)
                 {
                     ImGui::TextDisabled("not active");
@@ -356,7 +202,8 @@ namespace rendering_engine::editor
                     const float aspect =
                         shown.height > 0 ? static_cast<float>(shown.width) / static_cast<float>(shown.height) : 1.0f;
                     const float width = ImGui::GetContentRegionAvail().x;
-                    ImGui::Image(shown.id, ImVec2{width, aspect > 0.0f ? width / aspect : width});
+                    ImGui::Image(static_cast<ImTextureID>(shown.id),
+                                 ImVec2{width, aspect > 0.0f ? width / aspect : width});
                     ImGui::Text("%u x %u", shown.width, shown.height);
                 }
 
@@ -1551,120 +1398,32 @@ namespace rendering_engine::editor
             }
         }
 
-        // The render pass the debug pass draws into: swapchain target,
-        // colour loaded (the UI/scene already composited), no depth.
-        // ImGui builds its pipeline against this pass, so it must match
-        // what the debug pass begins. The debug pass leaves depth.load
-        // at its default (clear) and acquire_render_pass keys on it even
-        // when depth is unused, so the same value is passed here and
-        // the cache hands back the very VkRenderPass the pass records
-        // into. Null when the device has no swapchain target.
-        VkRenderPass acquire_ui_render_pass(gpu::backend::vulkan::vk_device& device)
+        // Brings up the SDL3 platform backend on the live window and the
+        // GPU device's overlay renderer, which draws into the debug
+        // pass's swapchain render pass.
+        bool init_backends(runtime::engine& eng)
         {
-            const gpu::render_target swapchain = device.swapchain_target();
-            auto* target = device.lookup_render_target(swapchain);
-            if (target == nullptr)
-            {
-                LOG_ERR("editor: no swapchain render target for the ImGui Vulkan pipeline");
-                return VK_NULL_HANDLE;
-            }
-            return device.acquire_render_pass(
-                *target, VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_LOAD_OP_CLEAR, /*use_depth=*/false);
-        }
-
-        // Rebuild ImGui's main pipeline against the render pass @p encoder
-        // is actually recording into, if that differs from the one the
-        // pipeline was last built for. Called right before recording,
-        // inside the debug pass: the pass only changes when the swapchain
-        // was rebuilt, which waited the device idle, so no frame in flight
-        // still binds the old pipeline and this frame has not bound it
-        // yet, so ImGui may destroy it here. Only the pipeline is rebuilt
-        // — the font texture, vertex / index buffers and descriptor pool
-        // survive. Returns false when
-        // no pipeline could be built (the pass is not open this frame);
-        // the caller then skips this frame's overlay.
-        bool refresh_vulkan_pipeline(gpu::render_pass_encoder& encoder)
-        {
-            auto native_pass = static_cast<VkRenderPass>(encoder.native_render_pass());
-            if (native_pass == VK_NULL_HANDLE)
-            {
-                return false;
-            }
-            if (native_pass == g_vulkan_render_pass)
-            {
-                return true;
-            }
-            ImGui_ImplVulkan_PipelineInfo pipeline_info{};
-            pipeline_info.RenderPass = native_pass;
-            pipeline_info.Subpass = 0;
-            pipeline_info.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
-            ImGui_ImplVulkan_CreateMainPipeline(&pipeline_info);
-            g_vulkan_render_pass = native_pass;
-            LOG_INF("editor: ImGui Vulkan pipeline rebuilt for a new debug-pass render pass");
-            return true;
-        }
-
-        bool init_vulkan(runtime::engine& eng)
-        {
-            auto* device = static_cast<gpu::backend::vulkan::vk_device*>(eng.gpu.get());
-
-            // Acquire the same render pass the debug pass draws into
-            // (see acquire_ui_render_pass) and remember which swapchain
-            // it belongs to, so a later rebuild is noticed before the
-            // first record against the new one.
-            VkRenderPass ui_render_pass = acquire_ui_render_pass(*device);
-            if (ui_render_pass == VK_NULL_HANDLE)
-            {
-                LOG_ERR("editor: acquire_render_pass returned null for ImGui Vulkan init");
-                return false;
-            }
-            g_vulkan_render_pass = ui_render_pass;
-
             if (!ImGui_ImplSDL3_InitForVulkan(eng.window->sdl_window()))
             {
                 LOG_ERR("editor: ImGui_ImplSDL3_InitForVulkan failed");
                 return false;
             }
 
-            // ImGui cycles its own host-visible vertex / index buffers
-            // through ImageCount sets, one per RenderDrawData call, so the
-            // count must cover every frame the device keeps in flight: a
-            // set is rewritten only once the frame that read it has
-            // retired. The backend also requires at least two.
-            const uint32_t image_count = std::max(device->swapchain_image_count(), device->frames_in_flight());
-            ImGui_ImplVulkan_InitInfo init_info{};
-            init_info.ApiVersion = VK_API_VERSION_1_0;
-            init_info.Instance = device->instance();
-            init_info.PhysicalDevice = device->physical_device();
-            init_info.Device = device->vk_handle();
-            init_info.QueueFamily = device->graphics_queue_family();
-            init_info.Queue = device->graphics_queue();
-            // Leave DescriptorPool null and let the backend own a pool
-            // sized for the font atlas and every render-target texture the
-            // Render Targets panel registers through
-            // ImGui_ImplVulkan_AddTexture (see resolve_texture); avoids
-            // depending on the engine pool's descriptor budget / flags.
-            init_info.DescriptorPool = VK_NULL_HANDLE;
-            init_info.DescriptorPoolSize = 64;
-            init_info.MinImageCount = image_count < 2 ? 2 : image_count;
-            init_info.ImageCount = image_count < 2 ? 2 : image_count;
-            // The device's pipeline cache, so the overlay's pipeline (and
-            // its rebuild after every swapchain rebuild) is served from
-            // and persisted with the engine's own.
-            init_info.PipelineCache = device->pipeline_cache();
-            init_info.PipelineInfoMain.RenderPass = ui_render_pass;
-            init_info.PipelineInfoMain.Subpass = 0;
-            init_info.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
-            init_info.UseDynamicRendering = false;
-            init_info.Allocator = nullptr;
-            init_info.CheckVkResultFn = check_vk_result;
-            if (!ImGui_ImplVulkan_Init(&init_info))
+            g_overlay = eng.gpu->create_overlay_renderer();
+            if (g_overlay == nullptr)
             {
-                LOG_ERR("editor: ImGui_ImplVulkan_Init failed");
+                LOG_ERR("editor: the GPU device has no overlay renderer for ImGui");
+                ImGui_ImplSDL3_Shutdown();
+                return false;
+            }
+            if (!g_overlay->init())
+            {
+                g_overlay.reset();
                 ImGui_ImplSDL3_Shutdown();
                 return false;
             }
 
+            eng.renderer->set_overlay(g_overlay.get());
             return true;
         }
 
@@ -1695,7 +1454,7 @@ namespace rendering_engine::editor
         io.IniFilename = g_ini_path.c_str();
         ImGui::StyleColorsDark();
 
-        if (!init_vulkan(eng))
+        if (!init_backends(eng))
         {
             ImGui::DestroyContext();
             return;
@@ -1727,24 +1486,15 @@ namespace rendering_engine::editor
         auto& eng = runtime::current_engine();
         eng.window->set_event_filter(nullptr);
 
-        // The render queue must be idle before tearing the backend's GPU
-        // resources down, and every descriptor-set release the
-        // render-target viewer deferred while the run was live (see
-        // defer_release_vulkan_texture_binding) must have actually run by
-        // now too, or its captured VkDescriptorSet dangles once
-        // ImGui_ImplVulkan_Shutdown reclaims the pool it came from.
-        auto* device = static_cast<gpu::backend::vulkan::vk_device*>(eng.gpu.get());
-        device->flush_pending_destroys();
-        // Release the render-target viewer's remaining descriptor sets
-        // before the backend's descriptor pool goes with
-        // ImGui_ImplVulkan_Shutdown.
-        clear_vulkan_texture_bindings();
-        ImGui_ImplVulkan_Shutdown();
+        // The debug pass stops recording the overlay before its renderer
+        // releases its GPU resources, which waits for every frame in
+        // flight that could still read them.
+        eng.renderer->set_overlay(nullptr);
+        g_overlay->shutdown();
+        g_overlay.reset();
         ImGui_ImplSDL3_Shutdown();
         ImGui::DestroyContext();
         g_live = false;
-        g_frame_ready = false;
-        g_vulkan_render_pass = VK_NULL_HANDLE;
         g_selected_node = nullptr;
         LOG_INF("editor: ImGui overlay shut down");
     }
@@ -1765,7 +1515,7 @@ namespace rendering_engine::editor
             return;
         }
 
-        ImGui_ImplVulkan_NewFrame();
+        g_overlay->new_frame();
         ImGui_ImplSDL3_NewFrame();
         ImGui::NewFrame();
         ImGuizmo::BeginFrame();
@@ -1773,30 +1523,6 @@ namespace rendering_engine::editor
         build_panels();
 
         ImGui::Render();
-        g_frame_ready = true;
-    }
-
-    void record_draw_data(gpu::render_pass_encoder& encoder)
-    {
-        if (!g_live || !g_frame_ready)
-        {
-            return;
-        }
-        ImDrawData* draw_data = ImGui::GetDrawData();
-        if (draw_data == nullptr)
-        {
-            return;
-        }
-
-        // Null while the debug pass is not open — no swapchain image this
-        // frame (minimised) — so nothing is recorded outside a render
-        // pass.
-        auto* cmd = static_cast<VkCommandBuffer>(encoder.native_command_buffer());
-        if (cmd != VK_NULL_HANDLE && refresh_vulkan_pipeline(encoder))
-        {
-            ImGui_ImplVulkan_RenderDrawData(draw_data, cmd);
-        }
-        g_frame_ready = false;
     }
 
     bool wants_keyboard()
@@ -1820,7 +1546,6 @@ namespace rendering_engine::editor
     void shutdown() {}
     void process_event(const void*) {}
     void begin_frame() {}
-    void record_draw_data(gpu::render_pass_encoder&) {}
 
     bool wants_keyboard()
     {

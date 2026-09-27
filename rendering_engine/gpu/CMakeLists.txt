@@ -10,6 +10,8 @@ target_sources(AlphaEngine PRIVATE
     device.hpp
     factory.cpp
     handle.hpp
+    overlay_renderer.cpp
+    overlay_renderer.hpp
     pipeline.hpp
     render_target.hpp
     shader.hpp

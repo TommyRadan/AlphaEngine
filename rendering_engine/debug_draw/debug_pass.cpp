@@ -6,7 +6,7 @@
 #include <algorithm>
 #include <functional>
 
-#include <rendering_engine/editor/imgui_layer.hpp>
+#include <rendering_engine/gpu/overlay_renderer.hpp>
 #include <rendering_engine/gpu/render_target.hpp>
 #include <rendering_engine/materials/material.hpp>
 #include <rendering_engine/passes/scene_pass.hpp>
@@ -16,6 +16,11 @@
 namespace rendering_engine::debug_draw
 {
     debug_pass::debug_pass(const std::vector<renderable*>* registry) : m_registry(registry) {}
+
+    void debug_pass::set_overlay(gpu::overlay_renderer* overlay)
+    {
+        m_overlay = overlay;
+    }
 
     void debug_pass::prepare(const frame_context& /*ctx*/)
     {
@@ -104,11 +109,14 @@ namespace rendering_engine::debug_draw
             }
         }
 
-        // The ImGui overlay's draw data was built on the main thread in
-        // editor::begin_frame before the passes ran; replaying it here
-        // is pure GPU recording against the still-open pass, so no event
-        // listener runs inside record(). No-op without ImGui.
-        editor::record_draw_data(*pass_encoder);
+        // The ImGui overlay's draw data was built on the main thread
+        // before the passes ran; replaying it here is pure GPU recording
+        // against the still-open pass, so no event listener runs inside
+        // record(). No overlay without ImGui.
+        if (m_overlay != nullptr)
+        {
+            m_overlay->render(*pass_encoder);
+        }
         pass_encoder->end();
     }
 } // namespace rendering_engine::debug_draw
