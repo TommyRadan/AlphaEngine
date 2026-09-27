@@ -170,12 +170,12 @@ namespace rendering_engine
         void rebuild_threshold_bind_group(gpu::texture scene_color);
 
         // The bloom_settings currently baked into m_threshold_ubo and every
-        // level's weight_ubo. Starts at the struct's own defaults, which
-        // match what this pass used to hard-code, so a caller that never
-        // touches frame_context::post sees the exact old behaviour.
-        // create_pyramid bakes the initial UBOs from this (so a resize
-        // rebuilds at whatever was last applied, not the compiled-in
-        // defaults) and record() updates it as it rewrites a UBO.
+        // level's weight_ubo. Starts at the struct's own compiled-in
+        // defaults, so a caller that never touches frame_context::post
+        // sees those. create_pyramid bakes the initial UBOs from this (so
+        // a resize rebuilds at whatever was last applied, not the
+        // compiled-in defaults) and record() updates it as it rewrites a
+        // UBO.
         bloom_settings m_settings{};
 
         // Rewrites m_threshold_ubo from {threshold, knee}; called from
