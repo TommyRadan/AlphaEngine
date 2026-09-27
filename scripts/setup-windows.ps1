@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2015-2026 Tomislav Radanovic
+
 <#
 .SYNOPSIS
     Bootstraps a Windows 11 machine so AlphaEngine can be built and run with MSVC.
