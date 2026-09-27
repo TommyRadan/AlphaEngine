@@ -29,7 +29,7 @@ namespace
 rendering_engine::image::image(const std::string& filename)
 {
     // The file comes through the virtual filesystem — a relative name is
-    // looked up in the mounted asset root — and is decoded from memory, so
+    // looked up in the mounted content root — and is decoded from memory, so
     // stb_image never opens a path of its own.
     std::vector<std::byte> bytes;
     std::string error;

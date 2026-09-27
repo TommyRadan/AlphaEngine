@@ -66,22 +66,22 @@ namespace core::platform
     std::filesystem::path pref_path(const char* organization, const char* application);
 
     /**
-     * @brief Where the engine's loose asset files are: the directory the
+     * @brief Where the engine's loose content files are: the directory the
      *        default VFS mount points at (see core/vfs/vfs.hpp).
-     * Resolved once through @ref locate_asset_root from @ref base_path.
+     * Resolved once through @ref locate_content_root from @ref base_path.
      * This is the discovered default only; the settings layer's
-     * @c assets.root (or @c ALPHAENGINE_ASSET_ROOT) overrides it in the
+     * @c content.root (or @c ALPHAENGINE_CONTENT_ROOT) overrides it in the
      * engine.
      */
-    std::filesystem::path asset_root();
+    std::filesystem::path content_root();
 
     /**
-     * @brief The pure part of @ref asset_root: the first existing
-     *        @c assets directory in @p base_path or any of its parents
+     * @brief The pure part of @ref content_root: the first existing
+     *        @c content directory in @p base_path or any of its parents
      *        (so a binary under @c Binaries/Debug/ finds the repository's),
-     *        else @c <base_path>/assets even though it does not exist.
+     *        else @c <base_path>/content even though it does not exist.
      */
-    std::filesystem::path locate_asset_root(const std::filesystem::path& base_path);
+    std::filesystem::path locate_content_root(const std::filesystem::path& base_path);
 
     /** @brief The process's current working directory, or an empty path on failure. */
     std::filesystem::path current_directory();

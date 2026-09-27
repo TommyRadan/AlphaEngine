@@ -180,7 +180,7 @@ namespace core
         const settings& s = result.values;
         LOG_INF("Settings resolved: window=%ux%u%s mode=%s vsync=%s backend=%s temporal_aa=%s "
                 "depth_prepass=%s frames_in_flight=%u parallel_draw_threshold=%u fov=%.1f mouse_sensitivity=%.4f "
-                "mouse_reversed=%s title='%s' asset_root='%s'",
+                "mouse_reversed=%s title='%s' content_root='%s'",
                 s.window.width,
                 s.window.height,
                 s.window.uses_native_resolution() ? " (match the display)" : "",
@@ -195,7 +195,7 @@ namespace core
                 static_cast<double>(s.input.mouse_sensitivity),
                 on_off(s.input.mouse_reversed),
                 s.window.title.c_str(),
-                s.assets.root.empty() ? "(discover)" : s.assets.root.c_str());
+                s.content.root.empty() ? "(discover)" : s.content.root.c_str());
         LOG_INF("Shadow settings: resolution=%u distance=%.1f cascades=%u bias=%.5f slope_bias=%.2f pcf_kernel=%u",
                 s.shadows.resolution,
                 static_cast<double>(s.shadows.distance),

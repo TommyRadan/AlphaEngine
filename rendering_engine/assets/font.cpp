@@ -58,7 +58,7 @@ rendering_engine::font::font(const std::string& filename, float font_size)
     }
 
     // The file comes through the virtual filesystem: a relative name is
-    // looked up in the mounted asset root.
+    // looked up in the mounted content root.
     std::vector<std::byte> bytes;
     std::string error;
     if (!core::default_vfs().read_file(core::platform::utf8_path(filename), bytes, &error))

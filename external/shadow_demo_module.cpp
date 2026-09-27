@@ -47,7 +47,7 @@
 //   ├── ground      (plane)
 //   ├── 15 spheres  (sphere each)
 //   ├── 3 pillars   (box each; the first also runs scripts/bob.lua, a Lua
-//   │                script under the asset root, so it rises, sinks and turns)
+//   │                script under the content root, so it rises, sinks and turns)
 //   └── sun         (orbiting_sun: the shadow-casting directional light)
 
 namespace

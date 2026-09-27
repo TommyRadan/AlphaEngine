@@ -392,17 +392,17 @@ namespace core
             }
         }
 
-        void apply_assets_section(settings& out, const json& section)
+        void apply_content_section(settings& out, const json& section)
         {
             for (const auto& [key, value] : section.items())
             {
                 if (key == "root")
                 {
-                    set_from_json(out.assets.root, "assets.root", value);
+                    set_from_json(out.content.root, "content.root", value);
                 }
                 else
                 {
-                    warn_unknown_key("assets", key);
+                    warn_unknown_key("content", key);
                 }
             }
         }
@@ -792,7 +792,7 @@ namespace core
             shadow_pcf_kernel,
             log_level,
             settings_path,
-            asset_root,
+            content_root,
             frame_limit
         };
 
@@ -817,7 +817,7 @@ namespace core
             {"--shadow-pcf-kernel", value_option::shadow_pcf_kernel},
             {"--log-level", value_option::log_level},
             {"--settings", value_option::settings_path},
-            {"--asset-root", value_option::asset_root},
+            {"--content-root", value_option::content_root},
             {"--frames", value_option::frame_limit},
         };
 
@@ -908,7 +908,7 @@ Options:
   --shadow-pcf-kernel <n>  hardware pcf taps per side, 1 to 8
   --log-level <spec>       log level, e.g. warn or info,gpu=trace
   --settings <path>        settings file to read instead of the default
-  --asset-root <path>      directory relative asset paths resolve under
+  --content-root <path>    directory relative asset paths resolve under
   --frames <n>             quit after rendering n frames (0 = run forever, the default)
   --fail-on-error          exit non-zero if any [ERR] line is logged, not only [FTL]
   -h, --help               print this text and exit
@@ -1107,9 +1107,9 @@ the ALPHAENGINE_* environment variables, which override the settings file.
             {
                 apply_post_section(out, section);
             }
-            else if (name == "assets")
+            else if (name == "content")
             {
-                apply_assets_section(out, section);
+                apply_content_section(out, section);
             }
             else if (name == "diagnostics")
             {
@@ -1218,9 +1218,9 @@ the ALPHAENGINE_* environment variables, which override the settings file.
                 set_post_from_text(out.post, field, *text, variable.c_str());
             }
         }
-        if (const auto text = read("ALPHAENGINE_ASSET_ROOT"))
+        if (const auto text = read("ALPHAENGINE_CONTENT_ROOT"))
         {
-            out.assets.root = std::string{trim(*text)};
+            out.content.root = std::string{trim(*text)};
         }
         if (const auto text = read("ALPHAENGINE_FRAMES"))
         {
@@ -1369,8 +1369,8 @@ the ALPHAENGINE_* environment variables, which override the settings file.
             case value_option::settings_path:
                 out.settings_path = std::string{trim(*value)};
                 break;
-            case value_option::asset_root:
-                out.asset_root = std::string{trim(*value)};
+            case value_option::content_root:
+                out.content_root = std::string{trim(*value)};
                 break;
             case value_option::frame_limit:
                 store_if(out.frame_limit, parse_unsigned_or_warn(name.c_str(), *value, 0, k_max_frame_limit));
@@ -1402,7 +1402,7 @@ the ALPHAENGINE_* environment variables, which override the settings file.
                 set_post_from_text(out.post, *field, option.value, option.key.c_str());
             }
         }
-        assign_if(out.assets.root, options.asset_root);
+        assign_if(out.content.root, options.content_root);
         assign_if(out.diagnostics.frame_limit, options.frame_limit);
         if (options.fail_on_error)
         {

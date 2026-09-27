@@ -285,15 +285,15 @@ namespace core
         float auto_exposure_compensation{0.0f};
     };
 
-    /** @brief Asset location configuration. */
-    struct asset_settings
+    /** @brief Content location configuration. */
+    struct content_settings
     {
         /**
          * @brief Directory the engine mounts as the root of the virtual filesystem (see core/vfs/vfs.hpp), so
          *        relative asset paths resolve under it. Empty (the default) means "discover it": the first
-         *        @c assets directory beside the executable or in one of its parents
-         *        (@ref core::platform::asset_root). Set from @c assets.root in settings.json,
-         *        @c ALPHAENGINE_ASSET_ROOT or @c --asset-root.
+         *        @c content directory beside the executable or in one of its parents
+         *        (@ref core::platform::content_root). Set from @c content.root in settings.json,
+         *        @c ALPHAENGINE_CONTENT_ROOT or @c --content-root.
          */
         std::string root;
     };
@@ -342,7 +342,7 @@ namespace core
         input_settings input;
         shadow_settings shadows;
         post_process_settings post;
-        asset_settings assets;
+        content_settings content;
         diagnostics_settings diagnostics;
     };
 
