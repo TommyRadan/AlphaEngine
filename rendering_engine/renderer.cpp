@@ -10,11 +10,11 @@
 #include <platform/window.hpp>
 #include <rendering_engine/camera/camera_registry.hpp>
 #include <rendering_engine/camera/perspective_camera.hpp>
-#include <rendering_engine/editor/axes_helper.hpp>
-#include <rendering_engine/editor/debug_pass.hpp>
-#include <rendering_engine/editor/helper.hpp>
+#include <rendering_engine/debug_draw/axes_helper.hpp>
+#include <rendering_engine/debug_draw/debug_pass.hpp>
+#include <rendering_engine/debug_draw/helper.hpp>
+#include <rendering_engine/debug_draw/infinite_grid.hpp>
 #include <rendering_engine/editor/imgui_layer.hpp>
-#include <rendering_engine/editor/infinite_grid.hpp>
 #include <rendering_engine/gpu/command_encoder.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/gpu/shader_compiler.hpp>
@@ -296,7 +296,7 @@ void rendering_engine::renderer::init()
     // It uses the unjittered overlay group: the debug pass paints after the
     // TAA resolve, so the projection jitter would otherwise show up as a
     // sub-pixel wobble on the gizmos rather than being averaged away.
-    auto debug = std::make_unique<editor::debug_pass>(&m_world.debug_renderables());
+    auto debug = std::make_unique<debug_draw::debug_pass>(&m_world.debug_renderables());
 #endif
 
     // Build the material library: one template per built-in type against
@@ -405,8 +405,8 @@ void rendering_engine::renderer::init()
     // box / light / camera helpers against its own objects the same way.
     // The debug pass is dropped in release, so this whole block compiles
     // out there.
-    m_debug_helpers.push_back(std::make_unique<editor::infinite_grid>());
-    m_debug_helpers.push_back(std::make_unique<editor::axes_helper>());
+    m_debug_helpers.push_back(std::make_unique<debug_draw::infinite_grid>());
+    m_debug_helpers.push_back(std::make_unique<debug_draw::axes_helper>());
 #endif
 }
 

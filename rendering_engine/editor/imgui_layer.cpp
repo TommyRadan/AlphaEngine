@@ -31,7 +31,7 @@
 #include <rendering_engine/camera/camera_registry.hpp>
 #include <rendering_engine/camera/orthographic_camera.hpp>
 #include <rendering_engine/camera/perspective_camera.hpp>
-#include <rendering_engine/editor/helper.hpp>
+#include <rendering_engine/debug_draw/helper.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_device.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_resources.hpp>
 #include <rendering_engine/gpu/command_encoder.hpp>
@@ -1480,7 +1480,7 @@ namespace rendering_engine::editor
                 return;
             }
 
-            const auto& helpers = rendering_engine::editor::registered_helpers();
+            const auto& helpers = rendering_engine::debug_draw::registered_helpers();
 
             ImGui::SetNextWindowSize(ImVec2{260.0f, 0.0f}, ImGuiCond_FirstUseEver);
             if (ImGui::Begin("Helpers", &g_show_helpers))

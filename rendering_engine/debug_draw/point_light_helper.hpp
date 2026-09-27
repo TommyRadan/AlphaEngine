@@ -4,14 +4,14 @@
 #pragma once
 
 #include <core/math/math.hpp>
-#include <rendering_engine/editor/line_helper.hpp>
+#include <rendering_engine/debug_draw/line_helper.hpp>
 
 namespace rendering_engine
 {
     struct point_light;
 }
 
-namespace rendering_engine::editor
+namespace rendering_engine::debug_draw
 {
     // Gizmo for a point light.
     // Draws a small octahedron wireframe at the light's world position,
@@ -35,4 +35,4 @@ namespace rendering_engine::editor
         core::math::vec3 m_last_color{0.0f, 0.0f, 0.0f};
         bool m_built{false};
     };
-} // namespace rendering_engine::editor
+} // namespace rendering_engine::debug_draw

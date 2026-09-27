@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2015-2026 Tomislav Radanovic
 
-#include <rendering_engine/editor/directional_light_helper.hpp>
+#include <rendering_engine/debug_draw/directional_light_helper.hpp>
 
 #include <algorithm>
 #include <vector>
@@ -9,7 +9,7 @@
 #include <core/math/math.hpp>
 #include <rendering_engine/lighting/directional_light.hpp>
 
-namespace rendering_engine::editor
+namespace rendering_engine::debug_draw
 {
     namespace
     {
@@ -69,4 +69,4 @@ namespace rendering_engine::editor
 
         set_segments(positions, colors);
     }
-} // namespace rendering_engine::editor
+} // namespace rendering_engine::debug_draw

@@ -4,14 +4,14 @@
 #pragma once
 
 #include <core/math/math.hpp>
-#include <rendering_engine/editor/line_helper.hpp>
+#include <rendering_engine/debug_draw/line_helper.hpp>
 
 namespace rendering_engine
 {
     struct spot_light;
 }
 
-namespace rendering_engine::editor
+namespace rendering_engine::debug_draw
 {
     // Gizmo for a spot light. Draws a wireframe cone from the light's
     // world position along its direction, opening to the outer cone
@@ -38,4 +38,4 @@ namespace rendering_engine::editor
         float m_last_outer_angle{0.0f};
         bool m_built{false};
     };
-} // namespace rendering_engine::editor
+} // namespace rendering_engine::debug_draw

@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2015-2026 Tomislav Radanovic
 
-#include <rendering_engine/editor/line_helper.hpp>
+#include <rendering_engine/debug_draw/line_helper.hpp>
 
 #include <rendering_engine/materials/line_material.hpp>
 #include <rendering_engine/renderer.hpp>
 #include <runtime/engine.hpp>
 
-namespace rendering_engine::editor
+namespace rendering_engine::debug_draw
 {
     line_helper::line_helper(const char* name)
         : helper(name, helper_layer::overlay), m_line(&runtime::current_engine().renderer->get_debug_line_material())
@@ -48,4 +48,4 @@ namespace rendering_engine::editor
         m_line.transform = transform;
         m_line.collect_draw_items(out);
     }
-} // namespace rendering_engine::editor
+} // namespace rendering_engine::debug_draw

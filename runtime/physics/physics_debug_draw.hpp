@@ -12,7 +12,7 @@
 #include <vector>
 
 #include <core/math/vec3.hpp>
-#include <rendering_engine/editor/line_helper.hpp>
+#include <rendering_engine/debug_draw/line_helper.hpp>
 
 namespace runtime::physics
 {
@@ -29,7 +29,7 @@ namespace runtime::physics
      * @ref world::revision moved — once per physics step while anything is
      * simulated.
      */
-    struct debug_draw final : rendering_engine::editor::line_helper
+    struct debug_draw final : rendering_engine::debug_draw::line_helper
     {
         explicit debug_draw(const world& source);
 

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2015-2026 Tomislav Radanovic
 
-#include <rendering_engine/editor/debug_pass.hpp>
+#include <rendering_engine/debug_draw/debug_pass.hpp>
 
 #include <algorithm>
 #include <functional>
@@ -13,7 +13,7 @@
 #include <rendering_engine/renderables/per_draw_ubo.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
 
-namespace rendering_engine::editor
+namespace rendering_engine::debug_draw
 {
     debug_pass::debug_pass(const std::vector<renderable*>* registry) : m_registry(registry) {}
 
@@ -108,7 +108,7 @@ namespace rendering_engine::editor
         // editor::begin_frame before the passes ran; replaying it here
         // is pure GPU recording against the still-open pass, so no event
         // listener runs inside record(). No-op without ImGui.
-        record_draw_data(*pass_encoder);
+        editor::record_draw_data(*pass_encoder);
         pass_encoder->end();
     }
-} // namespace rendering_engine::editor
+} // namespace rendering_engine::debug_draw

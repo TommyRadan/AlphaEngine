@@ -148,7 +148,7 @@ namespace rendering_engine
          * Shares the scene per-frame layout (camera at slot 0) with
          * @ref get_line_material, but draws depth-less so the debug
          * helpers always read on top in the depth-less debug pass. Used by
-         * the @ref editor::helper family.
+         * the @ref debug_draw::helper family.
          */
         line_material& get_debug_line_material();
 
@@ -157,7 +157,7 @@ namespace rendering_engine
          *        ground grid) at the default fade distance.
          *
          * Shares the scene per-frame layout (camera at slot 0). The
-         * @ref editor::infinite_grid renderable builds its own material
+         * @ref debug_draw::infinite_grid renderable builds its own material
          * through @ref create_grid_material so its fade distance is
          * honoured; this shared one serves callers that want the default.
          */
@@ -199,7 +199,7 @@ namespace rendering_engine
         std::unique_ptr<line_material> m_line_material;
         std::unique_ptr<line_material> m_debug_line_material;
         // Analytic infinite-grid material at the default fade distance.
-        // editor::infinite_grid builds its own through
+        // debug_draw::infinite_grid builds its own through
         // create_grid_material, on a template made like this one's.
         std::unique_ptr<grid_material> m_grid_material;
         std::unique_ptr<ui_material> m_ui_material;

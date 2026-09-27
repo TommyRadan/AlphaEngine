@@ -7,10 +7,10 @@
 
 #include <core/math/math.hpp>
 #include <core/math/transform.hpp>
-#include <rendering_engine/editor/helper.hpp>
+#include <rendering_engine/debug_draw/helper.hpp>
 #include <rendering_engine/renderables/line.hpp>
 
-namespace rendering_engine::editor
+namespace rendering_engine::debug_draw
 {
     // A helper whose geometry is a list of independent line segments
     // (vertex pairs) drawn through the shared depth-disabled debug line
@@ -46,4 +46,4 @@ namespace rendering_engine::editor
     private:
         line m_line;
     };
-} // namespace rendering_engine::editor
+} // namespace rendering_engine::debug_draw

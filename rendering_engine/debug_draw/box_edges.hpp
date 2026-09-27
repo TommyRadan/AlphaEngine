@@ -8,7 +8,7 @@
 
 #include <core/math/vec3.hpp>
 
-namespace rendering_engine::editor
+namespace rendering_engine::debug_draw
 {
     // Append the twelve edges of a hexahedron to @p positions /
     // @p colors as independent line segments, all tinted @p color.
@@ -34,4 +34,4 @@ namespace rendering_engine::editor
             colors.push_back(color);
         }
     }
-} // namespace rendering_engine::editor
+} // namespace rendering_engine::debug_draw

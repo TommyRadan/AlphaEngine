@@ -12,7 +12,7 @@
 namespace rendering_engine
 {
     // Analytic infinite-grid material — the CAD-style ground grid. It is
-    // drawn by a single fullscreen triangle (see @ref editor::infinite_grid)
+    // drawn by a single fullscreen triangle (see @ref debug_draw::infinite_grid)
     // whose fragment shader reconstructs, per pixel, the world point where
     // the view ray crosses the Z-up ground plane (z = 0), draws minor /
     // major grid lines and the coloured world axes with screen-space

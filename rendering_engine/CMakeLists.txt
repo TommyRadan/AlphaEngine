@@ -21,6 +21,7 @@ target_sources(AlphaEngine PRIVATE
 )
 
 add_subdirectory(camera)
+add_subdirectory(debug_draw)
 add_subdirectory(editor)
 add_subdirectory(gpu)
 add_subdirectory(lighting)

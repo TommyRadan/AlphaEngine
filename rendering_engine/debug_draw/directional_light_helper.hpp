@@ -4,14 +4,14 @@
 #pragma once
 
 #include <core/math/math.hpp>
-#include <rendering_engine/editor/line_helper.hpp>
+#include <rendering_engine/debug_draw/line_helper.hpp>
 
 namespace rendering_engine
 {
     struct directional_light;
 }
 
-namespace rendering_engine::editor
+namespace rendering_engine::debug_draw
 {
     // Gizmo for a directional light. Draws a small square facing the
     // light's travel direction at the world origin plus a ray along that
@@ -35,4 +35,4 @@ namespace rendering_engine::editor
         core::math::vec3 m_last_color{0.0f, 0.0f, 0.0f};
         bool m_built{false};
     };
-} // namespace rendering_engine::editor
+} // namespace rendering_engine::debug_draw

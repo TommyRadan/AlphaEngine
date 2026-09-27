@@ -4,9 +4,9 @@
 #pragma once
 
 #include <assets/color.hpp>
-#include <rendering_engine/editor/line_helper.hpp>
+#include <rendering_engine/debug_draw/line_helper.hpp>
 
-namespace rendering_engine::editor
+namespace rendering_engine::debug_draw
 {
     // A finite square reference grid on the X/Y ground plane (the engine
     // is Z-up) centred at the origin — a bounded line-based grid.
@@ -26,4 +26,4 @@ namespace rendering_engine::editor
                              assets::color color = assets::color{120, 120, 120, 255},
                              assets::color center_color = assets::color{70, 70, 70, 255});
     };
-} // namespace rendering_engine::editor
+} // namespace rendering_engine::debug_draw

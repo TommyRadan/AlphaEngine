@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2015-2026 Tomislav Radanovic
 
-#include <rendering_engine/editor/helper.hpp>
+#include <rendering_engine/debug_draw/helper.hpp>
 
 #include <algorithm>
 
 #include <rendering_engine/renderer.hpp>
 #include <runtime/engine.hpp>
 
-namespace rendering_engine::editor
+namespace rendering_engine::debug_draw
 {
     namespace
     {
@@ -75,4 +75,4 @@ namespace rendering_engine::editor
     {
         return helper_registry();
     }
-} // namespace rendering_engine::editor
+} // namespace rendering_engine::debug_draw

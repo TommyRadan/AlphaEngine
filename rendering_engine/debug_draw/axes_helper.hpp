@@ -3,9 +3,9 @@
 
 #pragma once
 
-#include <rendering_engine/editor/line_helper.hpp>
+#include <rendering_engine/debug_draw/line_helper.hpp>
 
-namespace rendering_engine::editor
+namespace rendering_engine::debug_draw
 {
     // The three world axes drawn from the origin.
     // +X is red, +Y green, +Z blue. Reposition or
@@ -16,4 +16,4 @@ namespace rendering_engine::editor
         // at construction.
         explicit axes_helper(float size = 1.0f);
     };
-} // namespace rendering_engine::editor
+} // namespace rendering_engine::debug_draw
