@@ -66,6 +66,7 @@ set(ALPHAENGINE_TEST_SOURCES_UNDER_TEST
     ${CMAKE_SOURCE_DIR}/rendering_engine/lighting/ambient_light.cpp
     ${CMAKE_SOURCE_DIR}/rendering_engine/lighting/directional_light.cpp
     ${CMAKE_SOURCE_DIR}/rendering_engine/lighting/point_light.cpp
+    ${CMAKE_SOURCE_DIR}/rendering_engine/lighting/spot_light.cpp
     # camera + camera_registry + the two projections, and camera_component
     # over them. The cameras are math over their transform (the perspective
     # camera takes its field of view and aspect from the caller; the
