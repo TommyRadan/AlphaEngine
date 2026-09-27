@@ -76,6 +76,11 @@ namespace rendering_engine
         descriptor.frame_layout = frame_layout;
 
         descriptor.topology = gpu::primitive_topology::triangles;
+        // The fragment stage discards off-plane pixels and writes the
+        // ray-marched depth itself, neither of which a vertex-only depth
+        // pipeline can reproduce, so the depth pre-pass never draws the
+        // grid (even should a caller make it opaque).
+        descriptor.depth_prepass = false;
         return std::make_shared<material_template>(device, std::move(descriptor));
     }
 

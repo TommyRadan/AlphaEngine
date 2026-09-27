@@ -11,6 +11,13 @@ layout(location = 1) in vec3 color;
 
 layout(location = 0) out vec3 pointColor;
 
+// The depth pre-pass runs this same module in a depth-only pipeline and
+// the scene pass then compares against the depth it wrote, so the clip
+// position, and with it the sprite size that decides which pixels a
+// point covers, must come out bit-identical in both pipelines.
+invariant gl_Position;
+invariant gl_PointSize;
+
 // std140: vec4 color at 0, then float size, sizeAttenuation, useTexture
 // at 16/20/24; 32 bytes.
 layout(set = 2, binding = BINDING_MATERIAL_PARAMS, std140) uniform Material

@@ -352,6 +352,23 @@ namespace rendering_engine
         bool grading_lut_loaded() const;
 
         /**
+         * @brief Turns the depth pre-pass on or off.
+         *
+         * Stored and copied into @ref frame_context::depth_prepass every
+         * @ref render, so the change applies from the next frame: the
+         * @ref depth_prepass lays the opaque queue's depth down ahead of
+         * the scene pass, which then loads it and shades each pre-passed
+         * surface once (see @ref depth_prepass). Seeded in @ref init from
+         * @c core::settings::graphics.depth_prepass (off by default). The
+         * pass itself is always in the frame graph, so this never rebuilds
+         * the pass list.
+         */
+        void set_depth_prepass(bool enabled);
+
+        /** @brief Whether the depth pre-pass is enabled (see @ref set_depth_prepass). */
+        bool depth_prepass_enabled() const;
+
+        /**
          * @brief This frame's scene / draw statistics (renderable count,
          *        draw calls, instances, triangles, vertices).
          *
@@ -581,6 +598,11 @@ namespace rendering_engine
         // before the device.
         std::shared_ptr<texture_asset> m_grading_lut;
         std::string m_grading_lut_path;
+
+        // Whether the depth pre-pass runs, set via @ref set_depth_prepass
+        // (seeded from the graphics settings in @ref init) and copied into
+        // @ref frame_context::depth_prepass each @ref render.
+        bool m_depth_prepass_enabled{false};
 
         // Built-in materials, constructed after the passes in
         // @ref init so they can read the passes' per-frame bind-group

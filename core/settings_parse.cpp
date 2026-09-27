@@ -383,6 +383,10 @@ namespace core
                 {
                     set_from_json(out.graphics.temporal_aa, "graphics.temporal_aa", value);
                 }
+                else if (key == "depth_prepass")
+                {
+                    set_from_json(out.graphics.depth_prepass, "graphics.depth_prepass", value);
+                }
                 else if (key == "frames_in_flight")
                 {
                     set_from_json(out.graphics.frames_in_flight,
@@ -1111,6 +1115,10 @@ the ALPHAENGINE_* environment variables, which override the settings file
         if (const auto text = read("ALPHAENGINE_TAA"))
         {
             assign_if(out.graphics.temporal_aa, parse_bool_or_warn("ALPHAENGINE_TAA", *text));
+        }
+        if (const auto text = read("ALPHAENGINE_DEPTH_PREPASS"))
+        {
+            assign_if(out.graphics.depth_prepass, parse_bool_or_warn("ALPHAENGINE_DEPTH_PREPASS", *text));
         }
         if (const auto text = read("ALPHAENGINE_FRAMES_IN_FLIGHT"))
         {

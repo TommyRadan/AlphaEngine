@@ -11,6 +11,11 @@ layout(location = 1) in vec2 uv;
 
 layout(location = 0) out vec2 texCoord;
 
+// The depth pre-pass runs this same module in a depth-only pipeline and
+// the scene pass then compares against the depth it wrote, so the clip
+// position must come out bit-identical in both pipelines.
+invariant gl_Position;
+
 void main()
 {
     texCoord = uv;

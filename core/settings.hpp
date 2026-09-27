@@ -99,6 +99,17 @@ namespace core
          */
         bool temporal_aa{true};
 
+        /**
+         * @brief Whether the scene starts with the depth pre-pass enabled.
+         *
+         * When on, @ref rendering_engine::depth_prepass lays the opaque queue's depth into the scene target
+         * front-to-back through each material's vertex stage alone, and the scene pass then loads that depth and
+         * shades every pre-passed surface with depth writes off and a less-or-equal test, so each covered pixel
+         * is shaded once. Off by default. Seeds @c rendering_engine::context at init; toggled at runtime with
+         * @c context::set_depth_prepass.
+         */
+        bool depth_prepass{false};
+
         /** @brief Upper bound of @ref frames_in_flight; the Vulkan backend sizes its per-frame rings by it. */
         static constexpr unsigned int max_frames_in_flight = 2;
 

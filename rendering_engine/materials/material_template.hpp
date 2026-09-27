@@ -137,6 +137,16 @@ namespace rendering_engine
         gpu::bind_group_layout_descriptor material_layout;
 
         gpu::primitive_topology topology{gpu::primitive_topology::triangles};
+
+        // Whether the depth pre-pass may lay this template's opaque
+        // surfaces down through their vertex stage alone (see
+        // @ref material::draws_in_depth_prepass). Clear it for a template
+        // whose fragment stage decides coverage or depth itself — a
+        // @c discard, an alpha test, a @c gl_FragDepth write — since a
+        // depth-only pipeline has no fragment stage to run it: the
+        // pre-pass then skips its draws, and the scene pass draws them
+        // with their ordinary depth-tested, depth-writing variant.
+        bool depth_prepass{true};
     };
 
     struct material_template
@@ -155,7 +165,9 @@ namespace rendering_engine
         const material_template_descriptor& descriptor() const;
 
         // The pipeline for @p key: served from the cache, or compiled
-        // (shader modules per keyword set) and created on first use.
+        // (shader modules per keyword set) and created on first use. A
+        // @c depth_only key builds the vertex stage of the same shader
+        // set alone.
         gpu::pipeline pipeline(const pipeline_variant_key& key);
 
         // Whether @ref pipeline for @p key would be a cache hit.
