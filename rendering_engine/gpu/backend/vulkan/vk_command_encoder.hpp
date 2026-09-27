@@ -71,6 +71,12 @@ namespace rendering_engine::gpu::backend::vulkan
         {
             return m_in_pass ? static_cast<void*>(m_cmd) : nullptr;
         }
+        // Null unless a render pass is open; see
+        // @c render_pass_encoder::native_render_pass.
+        void* native_render_pass() const noexcept override
+        {
+            return m_in_pass ? static_cast<void*>(m_render_pass) : nullptr;
+        }
         void end() override;
 
     private:

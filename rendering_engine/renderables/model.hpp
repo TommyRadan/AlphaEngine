@@ -61,6 +61,14 @@ namespace rendering_engine
         // with @ref upload_mesh — use one.
         void set_mesh(std::shared_ptr<mesh_asset> mesh);
 
+        // The material this model draws with, or @c nullptr for a
+        // default-constructed model. Non-owning; read-only accessor for
+        // tooling (the debug overlay's inspector).
+        material* get_material() const noexcept
+        {
+            return m_material;
+        }
+
         // No-op — meshes upload through @ref upload_mesh / @ref set_mesh, which
         // are the entry points @c model uses instead of @ref renderable::upload.
         void upload() final {}

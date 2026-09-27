@@ -138,6 +138,22 @@ namespace rendering_engine::gpu
             return nullptr;
         }
 
+        // Escape hatch returning the backend-native render pass (a
+        // @c VkRenderPass on Vulkan) this encoder is currently recording
+        // into, as an opaque pointer, alongside
+        // @ref native_command_buffer. Lets a debug overlay that records
+        // into this same open pass (Dear ImGui's Vulkan backend) rebuild
+        // its own pipeline exactly when the pass it draws into changes,
+        // by comparing against the pass it last built for, rather than
+        // re-deriving the pass's load/store arguments itself and hoping
+        // they still match what the owning pass begins. Returns
+        // @c nullptr on backends with no render-pass object (OpenGL) and
+        // on any backend while the pass is not open.
+        virtual void* native_render_pass() const noexcept
+        {
+            return nullptr;
+        }
+
         // Close the pass. After this call no further methods may be
         // invoked on the encoder. The next pass on the same command
         // encoder may target a different render target.

@@ -155,6 +155,18 @@ namespace runtime
         /** @brief Number of loaded scenes, the persistent one included. */
         std::size_t scene_count() const noexcept;
 
+        /**
+         * @brief The loaded scene at @p index (0 is the persistent scene,
+         *        the rest in load order).
+         *
+         * For enumerating every loaded scene, e.g. the debug overlay's
+         * hierarchy panel; @p index must be less than @ref scene_count.
+         */
+        context& scene_at(std::size_t index) noexcept;
+
+        /** @brief The name the scene at @p index was loaded under ("persistent" for index 0). */
+        core::string_id name_at(std::size_t index) const noexcept;
+
     private:
         struct entry
         {
