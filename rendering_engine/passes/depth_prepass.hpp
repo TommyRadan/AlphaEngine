@@ -26,7 +26,6 @@
 
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/passes/pass.hpp>
-#include <rendering_engine/render_graph/frame_graph.hpp>
 
 namespace rendering_engine
 {
@@ -40,7 +39,7 @@ namespace rendering_engine
      * @ref renderer::set_depth_prepass). While it is off, or no camera is
      * active, the pass records nothing and the scene pass clears and
      * writes the scene depth itself as it always has; it stays in the
-     * frame graph either way so the setting can flip at runtime.
+     * pass list either way so the setting can flip at runtime.
      *
      * When it runs it lays the opaque queue's depth into the scene
      * target's depth attachment, through a depth-only render target that
@@ -69,7 +68,7 @@ namespace rendering_engine
      * @c invariant so the two pipelines may not compile the position
      * differently.
      *
-     * The frame graph sees it write @c scene_depth, which the scene pass
+     * The pass list sees it write @c scene_depth, which the scene pass
      * reads (loads) and writes after it. Later depth consumers get the
      * same depth either way.
      */
@@ -92,7 +91,7 @@ namespace rendering_engine
             return "depth_prepass";
         }
 
-        void declare_io(render_graph::pass_io_builder& io) const override
+        void declare_io(pass_io_builder& io) const override
         {
             io.write("scene_depth");
         }

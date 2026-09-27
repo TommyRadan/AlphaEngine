@@ -1249,7 +1249,7 @@ namespace rendering_engine::editor
                 ImGui::SameLine();
                 ImGui::Text("max %.2f ms", static_cast<double>(max_ms));
 
-                // GPU time per frame-graph pass from the device's
+                // GPU time per pass from the device's
                 // timestamp queries (last resolved frame).
                 ImGui::SeparatorText("GPU");
                 const gpu_profiler& profiler = runtime::current_engine().renderer->get_gpu_profiler();

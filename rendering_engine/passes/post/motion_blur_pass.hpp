@@ -26,7 +26,6 @@
 
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/passes/pass.hpp>
-#include <rendering_engine/render_graph/frame_graph.hpp>
 
 namespace rendering_engine
 {
@@ -59,7 +58,7 @@ namespace rendering_engine
      * bloom, auto exposure and tonemap read instead of the scene colour.
      * When it does not (disabled — the default — or no motion vectors),
      * @ref record returns at once and they read the scene colour: the
-     * previous stage, at no cost. In the frame graph both are the logical
+     * previous stage, at no cost. In the declared pass I/O both are the logical
      * "scene_color", which this pass reads and writes like bloom does.
      *
      * The output target is only allocated the first time motion blur is
@@ -90,7 +89,7 @@ namespace rendering_engine
             return "motion_blur";
         }
 
-        void declare_io(render_graph::pass_io_builder& io) const override
+        void declare_io(pass_io_builder& io) const override
         {
             io.read("scene_color");
             io.read("velocity");

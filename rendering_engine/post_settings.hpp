@@ -57,7 +57,7 @@ namespace rendering_engine
     struct bloom_settings
     {
         /// Runtime on/off switch. Disabling it does not remove the pass
-        /// from the frame graph — @ref bloom_pass::record simply skips its
+        /// from the pass list — @ref bloom_pass::record simply skips its
         /// draws, leaving the HDR scene colour it would have brightened
         /// untouched.
         bool enabled{true};
@@ -102,7 +102,7 @@ namespace rendering_engine
     /**
      * @brief Runtime-tunable FXAA parameters (@ref post_settings::fxaa).
      *
-     * @ref fxaa_pass always stays in the frame graph — it is the pass that
+     * @ref fxaa_pass always stays in the pass list — it is the pass that
      * writes the swapchain — so @ref enabled does not remove it: disabling
      * it bakes a zero edge step instead of the real one, which collapses
      * every off-centre tap onto the centre texel so the pass degrades to a
@@ -127,7 +127,7 @@ namespace rendering_engine
      * only tune how it is marched and lit. @ref volumetric_fog_pass::record
      * reads them every frame; there is no baked state to invalidate.
      *
-     * Off by default, so the pass stays in the frame graph but records no
+     * Off by default, so the pass stays in the pass list but records no
      * draws and the image is exactly what it was without it.
      */
     struct volumetric_fog_settings

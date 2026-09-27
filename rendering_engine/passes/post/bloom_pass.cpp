@@ -436,7 +436,7 @@ namespace rendering_engine
     void bloom_pass::record(gpu::command_encoder& encoder, const frame_context& ctx)
     {
         // bloom_settings::enabled early-outs entirely rather than removing
-        // this pass from the frame graph: the HDR scene colour it would
+        // this pass from the pass list: the HDR scene colour it would
         // have brightened just flows through untouched to tonemap, exactly
         // like the degenerate-backbuffer case below.
         if (!m_enabled || !ctx.post.bloom.enabled)

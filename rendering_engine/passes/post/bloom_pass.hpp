@@ -28,7 +28,6 @@
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/passes/pass.hpp>
 #include <rendering_engine/post_settings.hpp>
-#include <rendering_engine/render_graph/frame_graph.hpp>
 
 namespace rendering_engine
 {
@@ -72,7 +71,7 @@ namespace rendering_engine
      * dimensions, mirroring the way @ref fxaa_pass bakes its edge step.
      * @ref bloom_settings::enabled early-outs @ref record entirely,
      * leaving the HDR scene colour it would have brightened untouched,
-     * rather than removing the pass from the frame graph.
+     * rather than removing the pass from the pass list.
      */
     struct bloom_pass : pass
     {
@@ -97,7 +96,7 @@ namespace rendering_engine
             return "bloom";
         }
 
-        void declare_io(render_graph::pass_io_builder& io) const override
+        void declare_io(pass_io_builder& io) const override
         {
             io.read("scene_color");
             io.write("scene_color");

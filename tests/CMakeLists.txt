@@ -110,11 +110,12 @@ set(ALPHAENGINE_TEST_SOURCES_UNDER_TEST
     # the window layer uses. Pure functions over SDL's header constants; no
     # video subsystem is initialised.
     ${CMAKE_SOURCE_DIR}/rendering_engine/sdl_input.cpp
-    # render_graph::frame_graph — declared-I/O validation and ordered
-    # execution over callbacks (log only). The encoder it forwards is the
-    # abstract gpu interface whose vtable anchor lives in command_encoder.cpp;
-    # the tests drive it with a stub, no backend is linked.
-    ${CMAKE_SOURCE_DIR}/rendering_engine/render_graph/frame_graph.cpp
+    # passes/pass_list — the renderer's ordered pass list: declared-I/O
+    # validation and in-order recording (log only). The encoder it forwards
+    # is the abstract gpu interface whose vtable anchor lives in
+    # command_encoder.cpp; the tests drive it with stub passes and a stub
+    # encoder, no backend is linked.
+    ${CMAKE_SOURCE_DIR}/rendering_engine/passes/pass_list.cpp
     ${CMAKE_SOURCE_DIR}/rendering_engine/gpu/command_encoder.cpp
     # passes/projection_jitter — the temporal-AA jitter sequence and the
     # clip-space shift it applies to a projection (math only).
@@ -189,8 +190,8 @@ set(ALPHAENGINE_TEST_SOURCES
     rendering_engine/materials/pipeline_variant_test.cpp
     rendering_engine/sdl_input_test.cpp
     rendering_engine/editor/grid_lines_test.cpp
+    rendering_engine/passes/pass_list_test.cpp
     rendering_engine/passes/projection_jitter_test.cpp
-    rendering_engine/render_graph/frame_graph_test.cpp
     rendering_engine/render_stats_test.cpp
     rendering_engine/renderables/per_draw_ubo_test.cpp
     rendering_engine/gpu/vk_format_fallback_test.cpp

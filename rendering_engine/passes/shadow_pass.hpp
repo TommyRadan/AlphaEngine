@@ -32,7 +32,6 @@
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/passes/pass.hpp>
 #include <rendering_engine/passes/shadow_casters.hpp>
-#include <rendering_engine/render_graph/frame_graph.hpp>
 #include <rendering_engine/renderables/draw_item.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
 
@@ -103,7 +102,7 @@ namespace rendering_engine
             return "shadow";
         }
 
-        void declare_io(render_graph::pass_io_builder& io) const override
+        void declare_io(pass_io_builder& io) const override
         {
             io.write("shadow_map");
         }

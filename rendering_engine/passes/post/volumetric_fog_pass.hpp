@@ -26,7 +26,6 @@
 
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/passes/pass.hpp>
-#include <rendering_engine/render_graph/frame_graph.hpp>
 
 namespace rendering_engine
 {
@@ -75,7 +74,7 @@ namespace rendering_engine
      * the march's max distance (see @ref volumetric_fog_active), so the
      * two never attenuate the same stretch twice.
      *
-     * Always in the frame graph, but @ref record draws nothing unless
+     * Always in the pass list, but @ref record draws nothing unless
      * @ref frame_context::post enables it, a camera is active and the
      * height fog has a density, so with the default settings the frame
      * is unchanged. A degenerate backbuffer leaves the pass disabled.
@@ -107,7 +106,7 @@ namespace rendering_engine
             return "volumetric_fog";
         }
 
-        void declare_io(render_graph::pass_io_builder& io) const override
+        void declare_io(pass_io_builder& io) const override
         {
             // The march samples the scene depth and, through the scene
             // pass's per-frame group, the three shadow maps; the composite

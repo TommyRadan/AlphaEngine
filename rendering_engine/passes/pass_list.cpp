@@ -20,7 +20,7 @@
  * SOFTWARE.
  */
 
-#include <rendering_engine/render_graph/frame_graph.hpp>
+#include <rendering_engine/passes/pass_list.hpp>
 
 #include <unordered_set>
 #include <utility>
@@ -28,98 +28,90 @@
 #include <core/log.hpp>
 #include <rendering_engine/gpu/command_encoder.hpp>
 
-namespace rendering_engine::render_graph
+namespace rendering_engine
 {
-    void pass_io_builder::read(std::string_view resource)
-    {
-        m_reads.emplace_back(resource);
-    }
-
-    void pass_io_builder::write(std::string_view resource)
-    {
-        m_writes.emplace_back(resource);
-    }
-
-    void frame_graph::import_external(std::string_view resource)
+    void pass_list::import_external(std::string_view resource)
     {
         m_external.emplace_back(resource);
     }
 
-    void frame_graph::add_pass(std::string name, pass_io_builder io, execute_fn execute)
-    {
-        m_nodes.push_back({std::move(name), std::move(io), std::move(execute)});
-    }
-
-    bool frame_graph::compile()
+    bool pass_list::validate() const
     {
         // A resource is "produced" once an imported external declares it or an
-        // earlier pass writes it. Walking in registration order, a read of an
-        // unproduced resource means the pass list is mis-ordered (or a pass
-        // forgot to declare a write) — exactly the class of bug the legacy
-        // hand-ordered loop could hide.
+        // earlier pass writes it. Walking in list order, a read of an
+        // unproduced resource means the list is mis-ordered (or a pass forgot
+        // to declare a write) — exactly the class of bug a hand-ordered list
+        // can hide.
         std::unordered_set<std::string> produced(m_external.begin(), m_external.end());
         bool hazard_free = true;
-        for (const auto& n : m_nodes)
+        for (const auto& p : m_passes)
         {
-            for (const auto& r : n.io.reads())
+            pass_io_builder io;
+            p->declare_io(io);
+            for (const auto& r : io.reads())
             {
                 if (produced.find(r) == produced.end())
                 {
-                    LOG_ERR("frame_graph: pass '%s' reads resource '%s' before any pass produces it",
-                            n.name.c_str(),
-                            r.c_str());
+                    LOG_ERR(
+                        "pass_list: pass '%s' reads resource '%s' before any pass produces it", p->name(), r.c_str());
                     hazard_free = false;
                 }
             }
-            for (const auto& w : n.io.writes())
+            for (const auto& w : io.writes())
             {
                 produced.insert(w);
             }
         }
-        LOG_INF("frame_graph: compiled %zu passes (%s)",
-                m_nodes.size(),
+        LOG_INF("pass_list: validated %zu passes (%s)",
+                m_passes.size(),
                 hazard_free ? "no hazards" : "hazards found — see errors");
         return hazard_free;
     }
 
-    void frame_graph::execute(gpu::command_encoder& encoder, const frame_context& ctx, pass_hooks* hooks) const
+    void pass_list::record(gpu::command_encoder& encoder, const frame_context& ctx, pass_hooks* hooks) const
     {
-        for (size_t i = 0; i < m_nodes.size(); ++i)
+        for (size_t i = 0; i < m_passes.size(); ++i)
         {
-            const node& n = m_nodes[i];
+            pass& p = *m_passes[i];
+            const char* name = p.name();
             // The debug group names the pass in a graphics debugger's
             // command tree; the hooks (the GPU profiler) bracket it.
-            encoder.push_debug_group(n.name.c_str());
+            encoder.push_debug_group(name);
             if (hooks != nullptr)
             {
-                hooks->before_pass(encoder, i, n.name);
+                hooks->before_pass(encoder, i, name);
             }
-            if (n.execute)
-            {
-                n.execute(encoder, ctx);
-            }
+            p.record(encoder, ctx);
             if (hooks != nullptr)
             {
-                hooks->after_pass(encoder, i, n.name);
+                hooks->after_pass(encoder, i, name);
             }
             encoder.pop_debug_group();
         }
     }
 
-    std::vector<std::string> frame_graph::pass_names() const
+    void pass_list::resize(uint32_t width, uint32_t height) const
+    {
+        for (const auto& p : m_passes)
+        {
+            p->resize(width, height);
+        }
+    }
+
+    std::vector<std::string> pass_list::pass_names() const
     {
         std::vector<std::string> names;
-        names.reserve(m_nodes.size());
-        for (const node& n : m_nodes)
+        names.reserve(m_passes.size());
+        for (const auto& p : m_passes)
         {
-            names.push_back(n.name);
+            names.emplace_back(p->name());
         }
         return names;
     }
 
-    void frame_graph::clear()
+    void pass_list::clear()
     {
-        m_nodes.clear();
+        m_passes.clear();
         m_external.clear();
     }
-} // namespace rendering_engine::render_graph
+} // namespace rendering_engine

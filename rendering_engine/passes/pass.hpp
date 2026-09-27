@@ -28,6 +28,9 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
+#include <string_view>
+#include <vector>
 
 #include <core/math/math.hpp>
 #include <rendering_engine/fog.hpp>
@@ -39,10 +42,42 @@ namespace rendering_engine
 {
     struct camera;
 
-    namespace render_graph
+    /**
+     * @brief Collects one pass's declared resource reads and writes.
+     *
+     * Passes name resources with stable strings (e.g. "scene_color") so they
+     * never have to thread handles through their interfaces; the renderer's
+     * @ref pass_list resolves the names when it validates the order. A pass
+     * that declares nothing is an ordering-only entry — still recorded in
+     * place, just invisible to the dependency check.
+     */
+    class pass_io_builder
     {
-        class pass_io_builder;
-    }
+    public:
+        void read(std::string_view resource)
+        {
+            m_reads.emplace_back(resource);
+        }
+
+        void write(std::string_view resource)
+        {
+            m_writes.emplace_back(resource);
+        }
+
+        const std::vector<std::string>& reads() const noexcept
+        {
+            return m_reads;
+        }
+
+        const std::vector<std::string>& writes() const noexcept
+        {
+            return m_writes;
+        }
+
+    private:
+        std::vector<std::string> m_reads;
+        std::vector<std::string> m_writes;
+    };
 
     /**
      * @brief Per-frame state shared with every pass.
@@ -146,8 +181,8 @@ namespace rendering_engine
         // @ref tonemap_pass maps it, so a disabled motion blur costs its
         // consumers nothing: they simply read the previous stage. Decided
         // by @ref renderer::render before any pass records, so every pass
-        // sees the same choice; in the frame graph both are the logical
-        // "scene_color" resource. Passes before motion blur (the scene,
+        // sees the same choice; in the declared pass I/O both are the
+        // logical "scene_color" resource. Passes before motion blur (the scene,
         // skybox and volumetric fog) keep using the scene-colour pair.
         gpu::render_target hdr_color_target{};
         gpu::texture hdr_color_texture{};
@@ -228,7 +263,7 @@ namespace rendering_engine
      * @brief One step in the per-frame render sequence.
      *
      * Implementations record their draws against the encoder. The
-     * engine walks an ordered @c std::vector of passes in
+     * renderer walks its ordered @ref pass_list in
      * @ref renderer::render, so adding a new pass (post-process,
      * shadow, depth pre-pass, debug overlay) is a registration call
      * at startup, not an edit to the engine's render loop.
@@ -252,7 +287,8 @@ namespace rendering_engine
         virtual void record(gpu::command_encoder& encoder, const frame_context& ctx) = 0;
 
         /**
-         * @brief Stable identifier used in frame-graph diagnostics.
+         * @brief Stable identifier used in pass-list diagnostics, debug
+         *        groups and the GPU profiler.
          *
          * Defaults to a generic name; passes override it so dependency
          * warnings name the offending stage.
@@ -265,13 +301,13 @@ namespace rendering_engine
         /**
          * @brief Declares the logical resources this pass reads and writes.
          *
-         * Called once when the frame graph is built so it can validate that
-         * every read is produced before it is consumed. Defaults to declaring
-         * nothing — such a pass is executed in place but invisible to the
-         * dependency check. Passes name resources with the stable strings the
+         * Called once when the renderer validates its @ref pass_list, which
+         * checks that every read is produced before it is consumed. Defaults
+         * to declaring nothing — such a pass is recorded in place but
+         * invisible to the dependency check. Passes name resources with the stable strings the
          * engine imports (e.g. "scene_color", "swapchain").
          */
-        virtual void declare_io(render_graph::pass_io_builder& io) const
+        virtual void declare_io(pass_io_builder& io) const
         {
             (void)io;
         }

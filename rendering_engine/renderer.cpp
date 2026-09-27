@@ -306,7 +306,7 @@ void rendering_engine::renderer::init()
     // FXAA closes the post chain: it samples the TAA resolve when one is
     // published (else the LDR target) and writes the anti-aliased image to
     // the swapchain. It declares whichever of the two it will actually
-    // read so the frame graph checks the real wiring.
+    // read so the pass list validation checks the real wiring.
     auto fxaa = std::make_unique<fxaa_pass>(width, height, taa_enabled);
     // The UI pass owns the pixel-space projection the ui template reads at
     // slot 0; it follows the drawable through pass::resize.
@@ -382,67 +382,57 @@ void rendering_engine::renderer::init()
     // shadow passes (the scene pass's per-frame uploads, which the
     // pre-pass triggers, read their matrices) and precedes the scene pass
     // that loads its depth.
-    m_passes.push_back(std::move(shadow));
-    m_passes.push_back(std::move(point_shadow));
-    m_passes.push_back(std::move(spot_shadow));
-    m_passes.push_back(std::move(depth_pre));
-    m_passes.push_back(std::move(scene));
-    m_passes.push_back(std::move(skybox));
+    m_passes.add(std::move(shadow));
+    m_passes.add(std::move(point_shadow));
+    m_passes.add(std::move(spot_shadow));
+    m_passes.add(std::move(depth_pre));
+    m_passes.add(std::move(scene));
+    m_passes.add(std::move(skybox));
     // Motion vectors are computed from the finalised scene depth, before
     // the post chain consumes the colour, so the velocity pass sits right
     // after the geometry and skybox.
-    m_passes.push_back(std::move(velocity));
-    m_passes.push_back(std::move(volumetric_fog));
-    m_passes.push_back(std::move(motion_blur));
-    m_passes.push_back(std::move(bloom));
-    m_passes.push_back(std::move(auto_exposure));
-    m_passes.push_back(std::move(post));
+    m_passes.add(std::move(velocity));
+    m_passes.add(std::move(volumetric_fog));
+    m_passes.add(std::move(motion_blur));
+    m_passes.add(std::move(bloom));
+    m_passes.add(std::move(auto_exposure));
+    m_passes.add(std::move(post));
     if (taa)
     {
-        m_passes.push_back(std::move(taa));
+        m_passes.add(std::move(taa));
     }
-    m_passes.push_back(std::move(fxaa));
-    m_passes.push_back(std::move(ui));
+    m_passes.add(std::move(fxaa));
+    m_passes.add(std::move(ui));
 #if _DEBUG
-    m_passes.push_back(std::move(debug));
+    m_passes.add(std::move(debug));
 #endif
 
-    // Build the frame graph over the now-final pass list. The swapchain image
-    // and, with temporal AA on, the TAA history are valid at frame start
-    // without an in-frame producer, so import them as external; every other
-    // resource is produced by a pass. Each pass declares its reads/writes
-    // (those that override declare_io) and the graph validates the ordering.
-    // Execution order is the m_passes order, so this does not change what is
-    // rendered.
-    m_frame_graph.import_external("swapchain");
+    // Validate the now-final pass list. The swapchain image and, with
+    // temporal AA on, the TAA history are valid at frame start without an
+    // in-frame producer, so import them as external; every other resource
+    // is produced by a pass. Each pass declares its reads/writes (those
+    // that override declare_io) and the list checks the ordering; it
+    // records in the order the passes were added either way.
+    m_passes.import_external("swapchain");
     if (taa_enabled)
     {
-        m_frame_graph.import_external("taa_history");
-    }
-    for (auto& p : m_passes)
-    {
-        render_graph::pass_io_builder io;
-        p->declare_io(io);
-        m_frame_graph.add_pass(p->name(),
-                               std::move(io),
-                               [raw = p.get()](gpu::command_encoder& encoder, const frame_context& frame)
-                               { raw->record(encoder, frame); });
+        m_passes.import_external("taa_history");
     }
     // A hazard is a pass reading a resource nothing before it produced: a
     // mis-ordered or mis-declared pass list, i.e. a programming error. It
-    // stops a debug build here; a release build logs it (the graph already
+    // stops a debug build here; a release build logs it (the list already
     // reported each offending read) and renders in the declared order.
-    const bool hazard_free = m_frame_graph.compile();
-    assert(hazard_free && "frame graph: a pass reads a resource before any pass produces it");
+    const bool hazard_free = m_passes.validate();
+    assert(hazard_free && "pass list: a pass reads a resource before any pass produces it");
     if (!hazard_free)
     {
-        LOG_ERR("Rendering Engine: the frame graph compiled with hazards; the pass list is mis-declared or "
-                "mis-ordered (see the frame_graph errors above)");
+        LOG_ERR("Rendering Engine: the pass list has hazards; it is mis-declared or mis-ordered (see the pass_list "
+                "errors above)");
     }
 
-    // Per-pass GPU timings over the compiled graph; disabled on a device
+    // Per-pass GPU timings over the pass list; disabled on a device
     // without timestamp queries.
-    m_gpu_profiler.init(*eng.gpu, m_frame_graph.pass_names());
+    m_gpu_profiler.init(*eng.gpu, m_passes.pass_names());
 
     // Bring the ImGui debug overlay up now that the window, GL context
     // and passes are live. No-op in release builds.
@@ -491,10 +481,6 @@ void rendering_engine::renderer::quit()
 
     // The profiler's query sets go before the device does.
     m_gpu_profiler.shutdown(*eng.gpu);
-
-    // Drop the frame graph before the passes: its execute callbacks hold
-    // raw pointers into m_passes.
-    m_frame_graph.clear();
 
     // Drop the passes first; their record() bodies reach for the
     // event bus we're about to release, and the passes own per-frame
@@ -674,11 +660,11 @@ void rendering_engine::renderer::render()
                                   ? m_grading_lut->texture
                                   : gpu::texture{};
 
-    // One encoder records the frame graph's passes in order — each in a
-    // debug group and between the profiler's timestamps — then submits.
+    // One encoder records the pass list in order — each pass in a debug
+    // group and between the profiler's timestamps — then submits.
     auto encoder = gpu.create_command_encoder();
     m_gpu_profiler.begin_frame(*encoder);
-    m_frame_graph.execute(*encoder, ctx, &m_gpu_profiler);
+    m_passes.record(*encoder, ctx, &m_gpu_profiler);
     m_gpu_profiler.end_frame(*encoder);
     gpu.submit(std::move(encoder));
 
@@ -756,10 +742,7 @@ void rendering_engine::renderer::on_resize(uint32_t pixel_width, uint32_t pixel_
     // maps, debug) keep the default no-op, and the scene pass needs
     // nothing: the jitter it applies is computed by render() from the
     // size recorded above.
-    for (auto& p : m_passes)
-    {
-        p->resize(pixel_width, pixel_height);
-    }
+    m_passes.resize(pixel_width, pixel_height);
 
     // The projection follows the drawable so the image is not stretched:
     // the registry forwards the aspect to every attached camera and hands
