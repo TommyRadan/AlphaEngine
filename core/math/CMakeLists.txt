@@ -1,6 +1,9 @@
 target_sources(AlphaEngine PRIVATE
     aabb.cpp
     aabb.hpp
+    curve.hpp
+    easing.cpp
+    easing.hpp
     frustum.cpp
     frustum.hpp
     mat3.cpp
@@ -13,6 +16,8 @@ target_sources(AlphaEngine PRIVATE
     quat.hpp
     sphere.cpp
     sphere.hpp
+    trs.cpp
+    trs.hpp
     vec2.cpp
     vec2.hpp
     vec3.cpp

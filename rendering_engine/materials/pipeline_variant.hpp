@@ -134,7 +134,11 @@ namespace rendering_engine
         // shade the edges unlit. Set from @ref material_params::wireframe.
         wireframe = 1u << 8,
 
-        // Reserved for skeletal skinning (#221); no shader reads it yet.
+        // Skeletal skinning: the vertex stream carries four joint indices
+        // and weights (the skinned record) and the per-draw group a
+        // joint-matrix palette the vertex stage blends by. A template
+        // that supports it swaps its vertex and per-draw layouts for the
+        // skinned ones (see @ref material_template_descriptor).
         skinned = 1u << 9,
 
         // The surface ignores the scene fog: the lit fragment shaders

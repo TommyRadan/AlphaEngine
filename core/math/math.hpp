@@ -57,6 +57,7 @@
 #include <core/math/mat4.hpp>
 #include <core/math/quat.hpp>
 #include <core/math/sphere.hpp>
+#include <core/math/trs.hpp>
 #include <core/math/vec2.hpp>
 #include <core/math/vec3.hpp>
 #include <core/math/vec4.hpp>

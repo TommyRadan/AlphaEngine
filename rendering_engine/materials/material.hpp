@@ -108,8 +108,16 @@ namespace rendering_engine
         void set_fog(bool fog);
 
         // Layout renderables build their per-draw bind group
-        // against (model matrix, per-draw textures, options).
+        // against (model matrix, per-draw textures, options). Follows the
+        // bound variant: a skinning variant's layout also carries the
+        // joint-matrix storage buffer.
         gpu::bind_group_layout per_draw_layout() const;
+
+        // Whether the bound variant skins its vertices (the SKINNED keyword
+        // on a template that supports it): a renderable drawing with it
+        // must bind a joint palette in its per-draw group and feed the
+        // skinned vertex record.
+        bool is_skinned() const;
 
         // Slot index used for the per-draw bind group: 1 when the
         // template reserves slot 0 for a per-frame bind group, else 0.

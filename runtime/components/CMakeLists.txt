@@ -1,4 +1,6 @@
 target_sources(AlphaEngine PRIVATE
+    animator_component.cpp
+    animator_component.hpp
     camera_component.cpp
     camera_component.hpp
     light_component.cpp

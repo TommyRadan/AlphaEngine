@@ -22,8 +22,9 @@
 
 /**
  * @file gltf_importer.hpp
- * @brief glTF 2.0 importer: static meshes, PBR materials and the node
- *        hierarchy of a .gltf / .glb file, routed through the asset cache.
+ * @brief glTF 2.0 importer: meshes (static and skinned), PBR materials, the
+ *        node hierarchy, skins and animations of a .gltf / .glb file, routed
+ *        through the asset cache.
  */
 
 #pragma once
@@ -35,6 +36,8 @@
 #include <vector>
 
 #include <core/math/math.hpp>
+#include <rendering_engine/animation/animation_clip.hpp>
+#include <rendering_engine/animation/skeleton.hpp>
 #include <rendering_engine/assets/mesh_asset.hpp>
 #include <rendering_engine/assets/texture_asset.hpp>
 #include <rendering_engine/gpu/types.hpp>
@@ -65,8 +68,10 @@ namespace rendering_engine
 
     /**
      * @brief One drawable piece of a glTF mesh: a cached
-     *        @ref vertex_position_uv_normal_tangent upload plus the material
-     *        it is drawn with.
+     *        @ref vertex_position_uv_normal_tangent upload (or, for a
+     *        primitive with JOINTS_0 / WEIGHTS_0, a
+     *        @ref vertex_position_uv_normal_tangent_skin one) plus the
+     *        material it is drawn with.
      */
     struct gltf_mesh_primitive
     {
@@ -80,6 +85,12 @@ namespace rendering_engine
         // min / max when the file supplies them (the spec requires it), else
         // scanned from the positions by the cache at upload.
         std::size_t material_index{gltf_npos};
+
+        // Whether @ref mesh carries joint indices and weights (the skinned
+        // record). A node with a skin draws such a primitive with
+        // @ref gltf_model::skinned_materials; anywhere else it draws rigid,
+        // in its bind pose.
+        bool skinned{false};
     };
 
     /** @brief One glTF node: a name, a local TRS pose and its links. */
@@ -101,6 +112,10 @@ namespace rendering_engine
 
         // Indices into @ref gltf_model::primitives drawn at this node.
         std::vector<std::size_t> primitives;
+
+        // Index into @ref gltf_model::node_skeleton's skins deforming this
+        // node's skinned primitives, or @ref gltf_npos.
+        std::size_t skin{gltf_npos};
     };
 
     /**
@@ -147,6 +162,11 @@ namespace rendering_engine
 
         // occlusionTexture.strength; 1 when @ref occlusion_map is null.
         float occlusion_strength{1.0f};
+
+        // Build the instance for skinned primitives
+        // (@ref standard_material::set_skinned): the same surface, drawn
+        // through the skinning variant.
+        bool skinned{false};
     };
 
     /**
@@ -175,8 +195,9 @@ namespace rendering_engine
     };
 
     /**
-     * @brief The imported model: cached primitives, materials and the node
-     *        tree, ready for @ref runtime::instantiate_gltf.
+     * @brief The imported model: cached primitives, materials, the node
+     *        tree and its animation data, ready for
+     *        @ref runtime::instantiate_gltf.
      *
      * Holds the only references to its materials (shared handles, so they
      * are destroyed wherever the last one drops — normally here) and shares
@@ -206,6 +227,28 @@ namespace rendering_engine
         // factory, with glTF's defaults) only when some primitive needs it.
         std::shared_ptr<standard_material> default_material;
 
+        // The skinning twins of @ref materials (index-aligned; null where no
+        // skinned primitive uses the material) and of
+        // @ref default_material, created with
+        // @ref gltf_material_description::skinned set. A material instance
+        // selects one pipeline, so a surface drawn both rigid and skinned
+        // needs one of each.
+        std::vector<std::shared_ptr<standard_material>> skinned_materials;
+        std::shared_ptr<standard_material> skinned_default_material;
+
+        // The skeleton over every node of the file, index-aligned with
+        // @ref nodes (joint k is node k, its bind pose the node's TRS) and
+        // carrying one skin per glTF skin (the palette in the skin's joint
+        // order, with its inverse bind matrices). Null when the file has
+        // neither skins nor animations.
+        std::shared_ptr<const skeleton> node_skeleton;
+
+        // One clip per glTF animation, in file order, whose tracks drive
+        // @ref node_skeleton joints (so node indices): translation, rotation
+        // and scale channels with their step / linear / cubic-spline
+        // sampling. Morph-target weight channels are not imported.
+        std::vector<std::shared_ptr<const animation_clip>> animations;
+
         // One cache entry per glTF texture, index-aligned with the file's
         // texture array and uploaded in the colour space the material that
         // samples it expects. Null when the image could not be decoded.
@@ -219,10 +262,15 @@ namespace rendering_engine
      * file), GLB binary chunks and base64 data URIs. Each TRIANGLES primitive
      * becomes a @ref vertex_position_uv_normal_tangent mesh — flat normals are
      * generated when the file has none (its tangents are then ignored, as the
-     * spec requires), tangents are taken from the file or derived — cached in
+     * spec requires), tangents are taken from the file or derived; a primitive
+     * with JOINTS_0 / WEIGHTS_0 becomes a
+     * @ref vertex_position_uv_normal_tangent_skin mesh, its weights
+     * renormalised to sum to 1 — cached in
      * @p cache under @c "gltf:<canonical path>#mesh<i>/prim<j>", so loading the
-     * same file twice shares every upload. Materials go through @p materials;
-     * textures are loaded into @p cache. Throws @c std::runtime_error (after
+     * same file twice shares every upload. Materials go through @p materials
+     * (twice for a material skinned primitives use: rigid and skinned);
+     * textures are loaded into @p cache. Skins and animations become
+     * @ref gltf_model::node_skeleton and @ref gltf_model::animations. Throws @c std::runtime_error (after
      * logging) when the file cannot be parsed, its buffers cannot be loaded, or
      * it fails validation; an undecodable image is warned about and skipped.
      */

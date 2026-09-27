@@ -56,6 +56,7 @@ namespace rendering_engine
 
         using base_vertex = vertex_position_uv_normal;
         using tangent_vertex = vertex_position_uv_normal_tangent;
+        using skin_vertex = vertex_position_uv_normal_tangent_skin;
 
         // Thrown by the geometry builder, from inside the cache's builder
         // callback, so a primitive that cannot be imported is skipped without
@@ -346,9 +347,65 @@ namespace rendering_engine
             return out;
         }
 
-        // Builds the vertex_position_uv_normal_tangent records and 32-bit
-        // indices of one TRIANGLES primitive. Throws primitive_import_error
-        // (after warning) when the attributes cannot be read.
+        // Unpacks a JOINTS_0 accessor (u8 or u16 VEC4) into four indices per
+        // vertex.
+        bool unpack_joints(const cgltf_accessor& accessor, std::vector<cgltf_uint>& out, const std::string& label)
+        {
+            if (cgltf_num_components(accessor.type) != 4)
+            {
+                LOG_WRN("gltf: JOINTS_0 attribute of %s has %zu components, expected 4",
+                        label.c_str(),
+                        cgltf_num_components(accessor.type));
+                return false;
+            }
+            out.resize(accessor.count * 4);
+            for (std::size_t v = 0; v < accessor.count; ++v)
+            {
+                if (!cgltf_accessor_read_uint(&accessor, v, &out[v * 4], 4))
+                {
+                    LOG_WRN("gltf: could not read the JOINTS_0 attribute of %s", label.c_str());
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        // The skinned records: each tangent record with the joints and
+        // weights of the source vertex it was built from. Weights are
+        // renormalised to sum to 1 (quantised exports drift); a vertex with
+        // no weight at all is bound wholly to its first joint.
+        std::vector<skin_vertex> with_skin(const std::vector<tangent_vertex>& records,
+                                           const std::vector<uint32_t>& sources,
+                                           const std::vector<cgltf_uint>& joints,
+                                           const std::vector<float>& weights)
+        {
+            std::vector<skin_vertex> out;
+            out.reserve(records.size());
+            for (std::size_t v = 0; v < records.size(); ++v)
+            {
+                const std::size_t source = sources[v];
+                skin_vertex record{};
+                record.pos = records[v].pos;
+                record.uv = records[v].uv;
+                record.normal = records[v].normal;
+                record.tangent = records[v].tangent;
+                for (std::size_t k = 0; k < 4; ++k)
+                {
+                    record.joints[k] = static_cast<uint16_t>(std::min<cgltf_uint>(joints[source * 4 + k], UINT16_MAX));
+                }
+                const math::vec4 w = read_vec4(weights, source);
+                const float sum = w.x + w.y + w.z + w.w;
+                record.weights = sum > 0.0f ? w / sum : math::vec4{1.0f, 0.0f, 0.0f, 0.0f};
+                out.push_back(record);
+            }
+            return out;
+        }
+
+        // Builds the vertex_position_uv_normal_tangent records (with the skin
+        // channels, vertex_position_uv_normal_tangent_skin, when the
+        // primitive has JOINTS_0 and WEIGHTS_0) and 32-bit indices of one
+        // TRIANGLES primitive. Throws primitive_import_error (after warning)
+        // when the attributes cannot be read.
         mesh_data
         build_geometry(const cgltf_primitive& primitive, const gltf_import_options& options, const std::string& label)
         {
@@ -356,6 +413,8 @@ namespace rendering_engine
             const cgltf_accessor* normal = cgltf_find_accessor(&primitive, cgltf_attribute_type_normal, 0);
             const cgltf_accessor* texcoord = cgltf_find_accessor(&primitive, cgltf_attribute_type_texcoord, 0);
             const cgltf_accessor* tangent = cgltf_find_accessor(&primitive, cgltf_attribute_type_tangent, 0);
+            const cgltf_accessor* joint = cgltf_find_accessor(&primitive, cgltf_attribute_type_joints, 0);
+            const cgltf_accessor* weight = cgltf_find_accessor(&primitive, cgltf_attribute_type_weights, 0);
 
             std::vector<float> positions;
             if (position == nullptr || position->count == 0 ||
@@ -376,6 +435,17 @@ namespace rendering_engine
             std::vector<float> tangents;
             const bool has_tangents = tangent != nullptr && tangent->count == vertex_count &&
                                       unpack_floats(*tangent, 4, tangents, "TANGENT", label);
+            std::vector<cgltf_uint> joints;
+            std::vector<float> weights;
+            const bool has_skin = joint != nullptr && weight != nullptr && joint->count == vertex_count &&
+                                  weight->count == vertex_count && unpack_joints(*joint, joints, label) &&
+                                  unpack_floats(*weight, 4, weights, "WEIGHTS_0", label);
+            if (has_skin && cgltf_find_accessor(&primitive, cgltf_attribute_type_joints, 1) != nullptr)
+            {
+                LOG_WRN("gltf: %s has more than four joint influences per vertex; only JOINTS_0 / WEIGHTS_0 "
+                        "are imported",
+                        label.c_str());
+            }
 
             // Indices: widen u8 / u16 / u32 to u32, or number the vertices for
             // a non-indexed primitive.
@@ -416,10 +486,16 @@ namespace rendering_engine
                 throw primitive_import_error{"no triangles"};
             }
 
+            // sources[v] is the file vertex output vertex v was built from, so
+            // the skin channels follow the flat-shading split below.
             std::vector<base_vertex> vertices;
+            std::vector<uint32_t> sources;
+            std::vector<tangent_vertex> records;
             if (has_normals)
             {
                 vertices.resize(vertex_count);
+                sources.resize(vertex_count);
+                std::iota(sources.begin(), sources.end(), 0u);
                 for (std::size_t v = 0; v < vertex_count; ++v)
                 {
                     vertices[v].pos = read_vec3(positions, v);
@@ -429,14 +505,12 @@ namespace rendering_engine
 
                 if (has_tangents)
                 {
-                    std::vector<tangent_vertex> records;
                     records.reserve(vertex_count);
                     for (std::size_t v = 0; v < vertex_count; ++v)
                     {
                         records.push_back(tangent_vertex{
                             vertices[v].pos, vertices[v].uv, vertices[v].normal, read_vec4(tangents, v)});
                     }
-                    return mesh_data::from_vertices(records, std::move(indices));
                 }
             }
             else
@@ -465,18 +539,23 @@ namespace rendering_engine
                         vertices.push_back(base_vertex{read_vec3(positions, source),
                                                        has_uvs ? read_vec2(uvs, source) : math::vec2{0.0f, 0.0f},
                                                        face_normal});
+                        sources.push_back(source);
                     }
                 }
                 indices.resize(vertices.size());
                 std::iota(indices.begin(), indices.end(), 0u);
             }
 
-            if (options.generate_missing_tangents)
+            if (records.empty())
             {
-                std::vector<tangent_vertex> records = generate_tangents(vertices, indices);
-                return mesh_data::from_vertices(records, std::move(indices));
+                records = options.generate_missing_tangents ? generate_tangents(vertices, indices)
+                                                            : with_placeholder_tangents(vertices);
             }
-            return mesh_data::from_vertices(with_placeholder_tangents(vertices), std::move(indices));
+            if (has_skin)
+            {
+                return mesh_data::from_vertices(with_skin(records, sources, joints, weights), std::move(indices));
+            }
+            return mesh_data::from_vertices(records, std::move(indices));
         }
 
         // Per-load state shared by the import stages: the parsed file, where
@@ -661,6 +740,7 @@ namespace rendering_engine
                     imported.mesh = std::move(asset);
                     imported.material_index =
                         primitive.material != nullptr ? cgltf_material_index(&ctx.data, primitive.material) : gltf_npos;
+                    imported.skinned = imported.mesh->format == vertex_format::position_uv_normal_tangent_skin;
                     primitives_by_mesh[i].push_back(model.primitives.size());
                     model.primitives.push_back(std::move(imported));
                 }
@@ -822,26 +902,66 @@ namespace rendering_engine
         }
 
         // Stage 3: one material per glTF material through the factory, plus
-        // the shared default when a primitive names none.
+        // the shared default when a primitive names none, and a skinned
+        // twin of each of those a skinned primitive draws with.
         void import_materials(import_context& ctx, gltf_model& model, gltf_material_factory& factory)
         {
+            std::vector<gltf_material_description> descriptions;
+            descriptions.reserve(ctx.data.materials_count);
             model.materials.reserve(ctx.data.materials_count);
             for (std::size_t m = 0; m < ctx.data.materials_count; ++m)
             {
-                model.materials.push_back(factory.create(describe_material(ctx, ctx.data.materials[m])));
+                descriptions.push_back(describe_material(ctx, ctx.data.materials[m]));
+                model.materials.push_back(factory.create(descriptions.back()));
             }
 
             const bool needs_default =
                 std::any_of(model.primitives.begin(),
                             model.primitives.end(),
                             [](const gltf_mesh_primitive& primitive) { return primitive.material_index == gltf_npos; });
+            // glTF's default material: white, fully metallic, fully rough.
+            gltf_material_description default_description;
+            default_description.name = "gltf default";
+            default_description.base_color_space = ctx.options.base_color_space;
             if (needs_default)
             {
-                // glTF's default material: white, fully metallic, fully rough.
-                gltf_material_description description;
-                description.name = "gltf default";
-                description.base_color_space = ctx.options.base_color_space;
-                model.default_material = factory.create(description);
+                model.default_material = factory.create(default_description);
+            }
+
+            // The skinning twins, only for the materials skinned primitives
+            // name. The descriptions are reused, so every image is still
+            // decoded once and every warning still logged once.
+            model.skinned_materials.assign(ctx.data.materials_count, nullptr);
+            std::vector<bool> skinned_use(ctx.data.materials_count, false);
+            bool skinned_default = false;
+            for (const gltf_mesh_primitive& primitive : model.primitives)
+            {
+                if (!primitive.skinned)
+                {
+                    continue;
+                }
+                if (primitive.material_index == gltf_npos)
+                {
+                    skinned_default = true;
+                }
+                else if (primitive.material_index < skinned_use.size())
+                {
+                    skinned_use[primitive.material_index] = true;
+                }
+            }
+            for (std::size_t m = 0; m < descriptions.size(); ++m)
+            {
+                if (skinned_use[m])
+                {
+                    gltf_material_description description = descriptions[m];
+                    description.skinned = true;
+                    model.skinned_materials[m] = factory.create(description);
+                }
+            }
+            if (skinned_default)
+            {
+                default_description.skinned = true;
+                model.skinned_default_material = factory.create(default_description);
             }
         }
 
@@ -906,7 +1026,6 @@ namespace rendering_engine
                           const std::vector<std::vector<std::size_t>>& primitives_by_mesh)
         {
             model.nodes.resize(ctx.data.nodes_count);
-            bool skinned = false;
             for (std::size_t k = 0; k < ctx.data.nodes_count; ++k)
             {
                 const cgltf_node& source = ctx.data.nodes[k];
@@ -946,7 +1065,7 @@ namespace rendering_engine
                 {
                     node.primitives = primitives_by_mesh[cgltf_mesh_index(&ctx.data, source.mesh)];
                 }
-                skinned = skinned || source.skin != nullptr;
+                node.skin = source.skin != nullptr ? cgltf_skin_index(&ctx.data, source.skin) : gltf_npos;
             }
 
             // The default scene names the roots; without one fall back to the
@@ -975,10 +1094,214 @@ namespace rendering_engine
                 }
             }
 
-            if (skinned || ctx.data.animations_count > 0)
+            const bool morphs = std::any_of(ctx.data.meshes,
+                                            ctx.data.meshes + ctx.data.meshes_count,
+                                            [](const cgltf_mesh& mesh)
+                                            {
+                                                return std::any_of(mesh.primitives,
+                                                                   mesh.primitives + mesh.primitives_count,
+                                                                   [](const cgltf_primitive& primitive)
+                                                                   { return primitive.targets_count > 0; });
+                                            });
+            if (morphs)
             {
-                LOG_WRN("gltf: '%s' carries skins or animations, which are not imported; meshes are static",
+                LOG_WRN("gltf: '%s' carries morph targets, which are not imported; those meshes keep their base shape",
                         ctx.path_name());
+            }
+        }
+
+        // Stage 5: the skeleton over every node, with one palette per glTF
+        // skin. Only built when something will pose it (a skin or an
+        // animation).
+        void import_skeleton(import_context& ctx, gltf_model& model)
+        {
+            if (ctx.data.skins_count == 0 && ctx.data.animations_count == 0)
+            {
+                return;
+            }
+
+            std::vector<skeleton_joint> joints(model.nodes.size());
+            for (std::size_t k = 0; k < model.nodes.size(); ++k)
+            {
+                const gltf_node& node = model.nodes[k];
+                joints[k].name = node.name;
+                joints[k].parent = node.parent == gltf_npos ? no_joint : node.parent;
+                joints[k].bind_pose = math::trs{node.translation, node.rotation, node.scale};
+            }
+
+            std::vector<skeleton_skin> skins(ctx.data.skins_count);
+            for (std::size_t s = 0; s < ctx.data.skins_count; ++s)
+            {
+                const cgltf_skin& source = ctx.data.skins[s];
+                skeleton_skin& skin = skins[s];
+                skin.name = source.name != nullptr ? source.name : "skin " + std::to_string(s);
+                skin.joints.reserve(source.joints_count);
+                for (std::size_t j = 0; j < source.joints_count; ++j)
+                {
+                    skin.joints.push_back(source.joints[j] != nullptr ? cgltf_node_index(&ctx.data, source.joints[j])
+                                                                      : no_joint);
+                }
+
+                // Absent inverse bind matrices are identity (the skeleton
+                // pads them), which is what the spec defaults them to.
+                std::vector<float> matrices;
+                const std::string label = "skin '" + skin.name + "' of '" + ctx.path.string() + "'";
+                if (source.inverse_bind_matrices != nullptr &&
+                    unpack_floats(*source.inverse_bind_matrices, 16, matrices, "inverseBindMatrices", label))
+                {
+                    const std::size_t count = std::min(source.inverse_bind_matrices->count, source.joints_count);
+                    skin.inverse_bind_matrices.resize(count);
+                    for (std::size_t j = 0; j < count; ++j)
+                    {
+                        std::copy_n(&matrices[j * 16], 16, skin.inverse_bind_matrices[j].m);
+                    }
+                }
+            }
+
+            model.node_skeleton = std::make_shared<const skeleton>(std::move(joints), std::move(skins));
+        }
+
+        math::interpolation to_interpolation(cgltf_interpolation_type type)
+        {
+            switch (type)
+            {
+            case cgltf_interpolation_type_step:
+                return math::interpolation::step;
+            case cgltf_interpolation_type_cubic_spline:
+                return math::interpolation::cubic_spline;
+            default:
+                return math::interpolation::linear;
+            }
+        }
+
+        // glTF stores a rotation as (x, y, z, w); the engine's quat is (w, x, y, z).
+        math::quat read_rotation(const std::vector<float>& values, std::size_t index)
+        {
+            const math::vec4 v = read_vec4(values, index);
+            return math::quat{v.w, v.x, v.y, v.z};
+        }
+
+        // The curve of one sampler: @p values holds one element per key, or
+        // three (in-tangent, value, out-tangent) for a cubic spline.
+        template<typename T, typename Read>
+        math::curve<T> make_curve(const std::vector<float>& times,
+                                  const std::vector<float>& values,
+                                  math::interpolation mode,
+                                  Read read)
+        {
+            math::curve<T> result;
+            result.mode = mode;
+            result.keys.resize(times.size());
+            for (std::size_t k = 0; k < times.size(); ++k)
+            {
+                math::keyframe<T>& key = result.keys[k];
+                key.time = times[k];
+                if (mode == math::interpolation::cubic_spline)
+                {
+                    key.in_tangent = read(values, k * 3);
+                    key.value = read(values, k * 3 + 1);
+                    key.out_tangent = read(values, k * 3 + 2);
+                }
+                else
+                {
+                    key.value = read(values, k);
+                }
+            }
+            return result;
+        }
+
+        // Stage 6: one clip per glTF animation. Channels are grouped into one
+        // track per node they drive; the node index is the skeleton joint.
+        void import_animations(import_context& ctx, gltf_model& model)
+        {
+            model.animations.reserve(ctx.data.animations_count);
+            for (std::size_t a = 0; a < ctx.data.animations_count; ++a)
+            {
+                const cgltf_animation& animation = ctx.data.animations[a];
+                const std::string name = animation.name != nullptr ? animation.name : "animation " + std::to_string(a);
+                const std::string label = "animation '" + name + "' of '" + ctx.path.string() + "'";
+
+                std::vector<joint_track> tracks;
+                std::vector<std::size_t> track_of(model.nodes.size(), gltf_npos);
+                bool weights_reported = false;
+                for (std::size_t c = 0; c < animation.channels_count; ++c)
+                {
+                    const cgltf_animation_channel& channel = animation.channels[c];
+                    if (channel.target_node == nullptr || channel.sampler == nullptr ||
+                        channel.sampler->input == nullptr || channel.sampler->output == nullptr)
+                    {
+                        continue;
+                    }
+                    if (channel.target_path == cgltf_animation_path_type_weights)
+                    {
+                        if (!weights_reported)
+                        {
+                            LOG_WRN("gltf: %s animates morph-target weights, which are not imported", label.c_str());
+                            weights_reported = true;
+                        }
+                        continue;
+                    }
+                    const bool is_rotation = channel.target_path == cgltf_animation_path_type_rotation;
+                    if (!is_rotation && channel.target_path != cgltf_animation_path_type_translation &&
+                        channel.target_path != cgltf_animation_path_type_scale)
+                    {
+                        continue;
+                    }
+
+                    const cgltf_animation_sampler& sampler = *channel.sampler;
+                    std::vector<float> times;
+                    if (!unpack_floats(*sampler.input, 1, times, "animation input", label) || times.empty())
+                    {
+                        continue;
+                    }
+                    if (!std::is_sorted(times.begin(), times.end()))
+                    {
+                        LOG_WRN("gltf: %s has a channel whose key times are not ascending; skipped", label.c_str());
+                        continue;
+                    }
+                    const math::interpolation mode = to_interpolation(sampler.interpolation);
+                    const std::size_t per_key = mode == math::interpolation::cubic_spline ? 3 : 1;
+                    std::vector<float> values;
+                    if (sampler.output->count != times.size() * per_key ||
+                        !unpack_floats(*sampler.output, is_rotation ? 4 : 3, values, "animation output", label))
+                    {
+                        LOG_WRN("gltf: %s has a channel whose output does not match its %zu keys; skipped",
+                                label.c_str(),
+                                times.size());
+                        continue;
+                    }
+
+                    const std::size_t target = cgltf_node_index(&ctx.data, channel.target_node);
+                    if (track_of[target] == gltf_npos)
+                    {
+                        track_of[target] = tracks.size();
+                        tracks.push_back(joint_track{});
+                        tracks.back().joint = target;
+                    }
+                    joint_track& track = tracks[track_of[target]];
+                    if (channel.target_path == cgltf_animation_path_type_translation)
+                    {
+                        track.translation = make_curve<math::vec3>(times, values, mode, read_vec3);
+                    }
+                    else if (channel.target_path == cgltf_animation_path_type_scale)
+                    {
+                        track.scale = make_curve<math::vec3>(times, values, mode, read_vec3);
+                    }
+                    else
+                    {
+                        track.rotation = make_curve<math::quat>(times, values, mode, read_rotation);
+                        if (mode != math::interpolation::cubic_spline)
+                        {
+                            // Quantised or hand-written keys drift off the
+                            // unit sphere; slerp wants them on it.
+                            for (math::keyframe<math::quat>& key : track.rotation.keys)
+                            {
+                                key.value = math::normalize(key.value);
+                            }
+                        }
+                    }
+                }
+                model.animations.push_back(std::make_shared<const animation_clip>(name, std::move(tracks)));
             }
         }
     } // namespace
@@ -1030,6 +1353,8 @@ namespace rendering_engine
         import_textures(ctx, model);
         import_materials(ctx, model, materials);
         import_nodes(ctx, model, primitives_by_mesh);
+        import_skeleton(ctx, model);
+        import_animations(ctx, model);
 
         LOG_INF("gltf: loaded '%s' (%zu nodes, %zu primitives, %zu materials, %zu textures)",
                 path_string.c_str(),

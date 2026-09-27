@@ -96,4 +96,11 @@ namespace rendering_engine::gpu::shader_bindings
     // material resources above, so this resumes at 22.
     constexpr uint32_t spot_shadow = 22;
     constexpr uint32_t spot_shadow_map = 23;
+
+    // Set 1, in the per-draw group of a SKINNED variant only: the joint-
+    // matrix storage buffer the vertex stage skins with (one mat4 per
+    // palette entry, std430). A storage buffer rather than a UBO so the
+    // palette has no fixed joint cap. 22 and 23 are spent by the spot
+    // shadow resources above, so this resumes at 24.
+    constexpr uint32_t per_draw_joints = 24;
 } // namespace rendering_engine::gpu::shader_bindings

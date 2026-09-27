@@ -44,6 +44,11 @@ rendering_engine::model::~model()
         gpu.destroy(m_draw_bind_group);
         m_draw_bind_group = {};
     }
+    if (m_joint_buffer.valid())
+    {
+        gpu.destroy(m_joint_buffer);
+        m_joint_buffer = {};
+    }
     if (m_draw_ubo.valid())
     {
         gpu.destroy(m_draw_ubo);
@@ -97,8 +102,28 @@ void rendering_engine::model::set_mesh(std::shared_ptr<mesh_asset> mesh)
     m_vertex_format_reported = false;
 }
 
+void rendering_engine::model::set_joint_matrices(std::span<const core::math::mat4> matrices)
+{
+    m_joint_matrices.assign(matrices.begin(), matrices.end());
+    m_joints_dirty = true;
+}
+
+size_t rendering_engine::model::joint_count() const
+{
+    return m_joint_matrices.size();
+}
+
+bool rendering_engine::model::casts_shadow() const
+{
+    return m_material == nullptr || !m_material->is_skinned();
+}
+
 bool rendering_engine::model::world_bounds(core::math::aabb& out) const
 {
+    if (m_material != nullptr && m_material->is_skinned())
+    {
+        return false;
+    }
     if (m_mesh)
     {
         return mesh_world_bounds(m_mesh.get(), transform, out);
@@ -132,6 +157,19 @@ void rendering_engine::model::collect_draw_items(std::vector<draw_item>& out)
         return;
     }
 
+    const bool skinned = m_material->is_skinned();
+    if (skinned && m_joint_matrices.empty())
+    {
+        // The vertex stage would index an empty palette; wait for the
+        // animation system to supply one.
+        if (!m_missing_joints_reported)
+        {
+            m_missing_joints_reported = true;
+            LOG_WRN("model::collect_draw_items: skinned material but no joint matrices set; skipping draw");
+        }
+        return;
+    }
+
     auto& gpu = *runtime::current_engine().gpu;
 
     if (!m_draw_ubo.valid())
@@ -140,9 +178,45 @@ void rendering_engine::model::collect_draw_items(std::vector<draw_item>& out)
         m_draw_ubo = create_per_draw_ubo(gpu);
     }
 
+    const gpu::bind_group_layout layout = m_material->per_draw_layout();
+    if (m_draw_bind_group.valid() && m_draw_bind_group_layout != layout)
+    {
+        // The material moved between its rigid and skinned variants.
+        gpu.destroy(m_draw_bind_group);
+        m_draw_bind_group = {};
+    }
+
+    if (skinned)
+    {
+        if (!m_joint_buffer.valid() || m_joint_capacity < m_joint_matrices.size())
+        {
+            // A larger palette than the buffer holds: reallocate, and
+            // rebuild the group that references the old buffer.
+            if (m_joint_buffer.valid())
+            {
+                gpu.destroy(m_joint_buffer);
+            }
+            if (m_draw_bind_group.valid())
+            {
+                gpu.destroy(m_draw_bind_group);
+                m_draw_bind_group = {};
+            }
+            m_joint_buffer = create_joint_buffer(gpu, m_joint_matrices.size());
+            m_joint_capacity = m_joint_matrices.size();
+            m_joints_dirty = true;
+        }
+        if (m_joints_dirty)
+        {
+            write_joint_buffer(gpu, m_joint_buffer, m_joint_matrices);
+            m_joints_dirty = false;
+        }
+    }
+
     if (!m_draw_bind_group.valid())
     {
-        m_draw_bind_group = create_per_draw_bind_group(gpu, m_material->per_draw_layout(), m_draw_ubo);
+        m_draw_bind_group = skinned ? create_skinned_per_draw_bind_group(gpu, layout, m_draw_ubo, m_joint_buffer)
+                                    : create_per_draw_bind_group(gpu, layout, m_draw_ubo);
+        m_draw_bind_group_layout = layout;
     }
 
     // Upload the model + normal matrix; a mirroring transform flags the

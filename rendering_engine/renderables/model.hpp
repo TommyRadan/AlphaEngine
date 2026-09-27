@@ -23,8 +23,11 @@
 #pragma once
 
 #include <memory>
+#include <span>
+#include <vector>
 
 #include <core/math/aabb.hpp>
+#include <core/math/mat4.hpp>
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/mesh/mesh.hpp>
 #include <rendering_engine/mesh/vertex.hpp>
@@ -66,8 +69,30 @@ namespace rendering_engine
 
         // The drawn mesh's object-space box under @ref transform: the cached
         // asset's bounds, or the box computed over the vertices at
-        // @ref upload_mesh. False until either has supplied geometry.
+        // @ref upload_mesh. False until either has supplied geometry, and
+        // false while the material skins: the bind-pose box does not bound
+        // the animated pose, so a skinned model is never frustum-culled.
         bool world_bounds(core::math::aabb& out) const final;
+
+        // The joint palette a skinned material draws the mesh with: one
+        // matrix per joint the vertices' joint indices name, each mapping
+        // the mesh's bind-pose space onto that joint's current pose in the
+        // model's own space (so @ref transform still places the result).
+        // Copied here and uploaded to the per-draw storage buffer at the
+        // next draw. Written each frame by the animation system
+        // (@c runtime::animator_component); ignored while the material does
+        // not skin. A model whose material skins draws nothing until a
+        // palette has been set.
+        void set_joint_matrices(std::span<const core::math::mat4> matrices);
+
+        // Joints in the current palette (0 before the first
+        // @ref set_joint_matrices).
+        size_t joint_count() const;
+
+        // False while the material skins: the depth-only shadow pipelines
+        // have no skinned variant, so the model would cast its bind pose
+        // (and its per-draw group does not match their layout).
+        bool casts_shadow() const override;
 
     private:
         material* m_material{nullptr};
@@ -80,6 +105,19 @@ namespace rendering_engine
         gpu::buffer m_vertex_buffer{};
         gpu::buffer m_draw_ubo{};
         gpu::bind_group m_draw_bind_group{};
+
+        // The layout @ref m_draw_bind_group was built against; a material
+        // that switches between its rigid and skinned variants changes it,
+        // and the group is rebuilt.
+        gpu::bind_group_layout m_draw_bind_group_layout{};
+
+        // The skinning palette (see @ref set_joint_matrices), its storage
+        // buffer and the number of matrices the buffer has room for.
+        std::vector<core::math::mat4> m_joint_matrices;
+        gpu::buffer m_joint_buffer{};
+        size_t m_joint_capacity{0};
+        bool m_joints_dirty{false};
+        bool m_missing_joints_reported{false};
 
         size_t m_vertex_count{0};
         uint32_t m_vertex_stride{0};

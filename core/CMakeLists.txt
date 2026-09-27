@@ -18,6 +18,9 @@ target_sources(AlphaEngine PRIVATE
     subscription.hpp
     time.cpp
     time.hpp
+    timer.cpp
+    timer.hpp
+    tween.hpp
     version.cpp
     version.hpp
 )

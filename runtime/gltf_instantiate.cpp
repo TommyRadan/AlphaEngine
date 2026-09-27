@@ -22,11 +22,13 @@
 
 #include <runtime/gltf_instantiate.hpp>
 
+#include <algorithm>
 #include <string>
 #include <utility>
 
 #include <core/log.hpp>
 #include <core/math/math.hpp>
+#include <runtime/components/animator_component.hpp>
 #include <runtime/components/mesh_component.hpp>
 #include <runtime/node.hpp>
 #include <runtime/scene_graph.hpp>
@@ -56,15 +58,61 @@ namespace runtime
             return model.default_material.get();
         }
 
-        // Gives @p target the mesh component drawing primitive @p index.
-        void attach_primitive(const rendering_engine::gltf_model& model, std::size_t index, node& target)
+        // The skinning twin of material_for, or null when the model has none.
+        rendering_engine::material* skinned_material_for(const rendering_engine::gltf_model& model, std::size_t index)
         {
+            if (index == rendering_engine::gltf_npos)
+            {
+                return model.skinned_default_material.get();
+            }
+            return index < model.skinned_materials.size() ? model.skinned_materials[index].get() : nullptr;
+        }
+
+        // What the spawn walk records for the animator: the node spawned for
+        // each glTF node, which of them are roots (and so carry the up-axis
+        // turn), and the nodes drawing a skinned primitive of each glTF node.
+        struct spawn_context
+        {
+            const rendering_engine::gltf_model& model;
+            context& scene;
+            std::vector<node*>& roots;
+            std::vector<bool> visited;
+            std::vector<node*> spawned;
+            std::vector<bool> is_root;
+            std::vector<std::vector<node*>> skinned_meshes;
+
+            spawn_context(const rendering_engine::gltf_model& in_model, context& in_scene, std::vector<node*>& in_roots)
+                : model{in_model}, scene{in_scene}, roots{in_roots}, visited(in_model.nodes.size(), false),
+                  spawned(in_model.nodes.size(), nullptr), is_root(in_model.nodes.size(), false),
+                  skinned_meshes(in_model.nodes.size())
+            {
+            }
+        };
+
+        // Gives @p target the mesh component drawing primitive @p index of
+        // glTF node @p source_index. A skinned primitive of a node with a skin
+        // draws with the skinned material and is recorded for the animator.
+        void attach_primitive(spawn_context& ctx, std::size_t source_index, std::size_t index, node& target)
+        {
+            const rendering_engine::gltf_model& model = ctx.model;
             const rendering_engine::gltf_mesh_primitive& primitive = model.primitives[index];
             if (primitive.mesh == nullptr)
             {
                 return;
             }
-            rendering_engine::material* material = material_for(model, primitive.material_index);
+            const bool skinned = primitive.skinned && model.nodes[source_index].skin != rendering_engine::gltf_npos &&
+                                 model.node_skeleton != nullptr &&
+                                 model.nodes[source_index].skin < model.node_skeleton->skins().size();
+            rendering_engine::material* material =
+                skinned ? skinned_material_for(model, primitive.material_index) : nullptr;
+            if (material == nullptr)
+            {
+                material = material_for(model, primitive.material_index);
+            }
+            else
+            {
+                ctx.skinned_meshes[source_index].push_back(&target);
+            }
             if (material == nullptr)
             {
                 LOG_WRN("gltf: node '%s' has no material to draw primitive %zu with; skipped",
@@ -75,31 +123,26 @@ namespace runtime
             target.add_component<mesh_component>(mesh_component{material, primitive.mesh});
         }
 
-        void spawn(const rendering_engine::gltf_model& model,
-                   std::size_t index,
-                   context& scene,
-                   node& parent,
-                   bool is_root,
-                   std::vector<node*>& roots,
-                   std::vector<bool>& visited)
+        void spawn(spawn_context& ctx, std::size_t index, node& parent, bool is_root)
         {
+            const rendering_engine::gltf_model& model = ctx.model;
             if (index >= model.nodes.size())
             {
                 LOG_WRN("gltf: node index %zu is out of range; skipped", index);
                 return;
             }
-            if (visited[index])
+            if (ctx.visited[index])
             {
                 LOG_WRN("gltf: node '%s' is reachable twice (a cycle or a shared child); skipped",
                         model.nodes[index].name.c_str());
                 return;
             }
-            visited[index] = true;
+            ctx.visited[index] = true;
 
             const rendering_engine::gltf_node& source = model.nodes[index];
             // Created linked under the parent, so the node carries the
             // scene's component store before any mesh component is attached.
-            node& current = scene.create_node(source.name, &parent);
+            node& current = ctx.scene.create_node(source.name, &parent);
 
             math::vec3 position = source.translation;
             math::quat rotation = source.rotation;
@@ -107,15 +150,17 @@ namespace runtime
             {
                 position = k_gltf_to_engine * position;
                 rotation = k_gltf_to_engine * rotation;
-                roots.push_back(&current);
+                ctx.roots.push_back(&current);
             }
             current.transform.set_position(position);
             current.transform.set_quaternion(rotation);
             current.transform.set_scale(source.scale);
+            ctx.spawned[index] = &current;
+            ctx.is_root[index] = is_root;
 
             if (source.primitives.size() == 1)
             {
-                attach_primitive(model, source.primitives[0], current);
+                attach_primitive(ctx, index, source.primitives[0], current);
             }
             else
             {
@@ -123,15 +168,49 @@ namespace runtime
                 // fan out into one child each.
                 for (std::size_t k = 0; k < source.primitives.size(); ++k)
                 {
-                    node& child = scene.create_node(source.name + "/primitive" + std::to_string(k), &current);
-                    attach_primitive(model, source.primitives[k], child);
+                    node& child = ctx.scene.create_node(source.name + "/primitive" + std::to_string(k), &current);
+                    attach_primitive(ctx, index, source.primitives[k], child);
                 }
             }
 
             for (const std::size_t child : source.children)
             {
-                spawn(model, child, scene, current, false, roots, visited);
+                spawn(ctx, child, current, false);
             }
+        }
+
+        // Puts an animator on the first spawned root when the model has clips
+        // or skinned meshes: every spawned node follows its joint (the roots
+        // through the up-axis turn), every skinned mesh takes its skin's
+        // palette, and the first clip starts looping.
+        void attach_animator(spawn_context& ctx)
+        {
+            const rendering_engine::gltf_model& model = ctx.model;
+            const bool has_skinned_mesh = std::any_of(ctx.skinned_meshes.begin(),
+                                                      ctx.skinned_meshes.end(),
+                                                      [](const std::vector<node*>& meshes) { return !meshes.empty(); });
+            if (model.node_skeleton == nullptr || ctx.roots.empty() || (model.animations.empty() && !has_skinned_mesh))
+            {
+                return;
+            }
+
+            animator_component animator{model.node_skeleton, model.animations};
+            for (std::size_t k = 0; k < ctx.spawned.size(); ++k)
+            {
+                if (ctx.spawned[k] != nullptr)
+                {
+                    animator.bind_node(k, *ctx.spawned[k], ctx.is_root[k] ? k_gltf_to_engine : math::quat{});
+                }
+                for (node* mesh : ctx.skinned_meshes[k])
+                {
+                    animator.bind_skin(model.nodes[k].skin, k, *mesh);
+                }
+            }
+            if (!model.animations.empty())
+            {
+                animator.play(std::size_t{0});
+            }
+            ctx.roots.front()->add_component<animator_component>(std::move(animator));
         }
     } // namespace
 
@@ -150,11 +229,12 @@ namespace runtime
             return roots;
         }
 
-        std::vector<bool> visited(model.nodes.size(), false);
+        spawn_context ctx{model, *scene, roots};
         for (const std::size_t root : model.root_nodes)
         {
-            spawn(model, root, *scene, parent, true, roots, visited);
+            spawn(ctx, root, parent, true);
         }
+        attach_animator(ctx);
         return roots;
     }
 } // namespace runtime

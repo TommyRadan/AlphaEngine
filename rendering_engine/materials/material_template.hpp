@@ -109,6 +109,17 @@ namespace rendering_engine
         // data in a vertex stream.
         gpu::bind_group_layout_descriptor draw_layout;
 
+        // Skinning support. A template that can skin lists the slot-0
+        // attributes a variant with @ref material_keyword::skinned appends
+        // (the joint indices and weights), the record that variant reads,
+        // and the per-draw layout it binds in place of @ref draw_layout
+        // (the same entries plus the joint-matrix storage buffer). Leave
+        // @ref skin_attributes empty for a template that cannot skin: the
+        // keyword then changes nothing but the shader defines.
+        std::vector<gpu::vertex_attribute> skin_attributes;
+        vertex_format skinned_vertex_format{vertex_format::custom};
+        gpu::bind_group_layout_descriptor skinned_draw_layout;
+
         // The pass-owned per-frame layout bound at slot 0, or an invalid
         // handle for materials without one (the per-draw group then
         // takes slot 0).
@@ -159,9 +170,20 @@ namespace rendering_engine
         uint32_t per_draw_slot() const;
         uint32_t per_material_slot() const;
 
+        // The per-draw layout a variant with @p keywords binds: the
+        // skinned layout (created on first use) when @ref skins says so,
+        // else @ref per_draw_layout().
+        gpu::bind_group_layout per_draw_layout(uint32_t keywords) const;
+
+        // Whether a variant with @p keywords skins: the keyword is set and
+        // the template declares
+        // @ref material_template_descriptor::skin_attributes.
+        bool skins(uint32_t keywords) const;
+
         // The vertex record a variant with @p keywords reads from slot 0
         // and the narrowest stride it can be bound with (the byte extent
-        // of its furthest-reaching slot-0 attribute).
+        // of its furthest-reaching slot-0 attribute). A skinning variant
+        // reads @ref material_template_descriptor::skinned_vertex_format.
         vertex_format required_vertex_format(uint32_t keywords) const;
         uint32_t min_vertex_stride(uint32_t keywords) const;
 
@@ -187,7 +209,8 @@ namespace rendering_engine
 
         // The vertex layouts a variant with @p keywords binds: the
         // descriptor's, with the tangent attribute dropped when
-        // @c has_tangents is off.
+        // @c has_tangents is off and the skin attributes appended when
+        // the variant skins.
         std::vector<gpu::vertex_buffer_layout> vertex_layouts_for(uint32_t keywords) const;
 
         bool reads_tangents(uint32_t keywords) const;
@@ -197,6 +220,11 @@ namespace rendering_engine
 
         gpu::bind_group_layout m_per_draw_layout{};
         gpu::bind_group_layout m_per_material_layout{};
+
+        // Built the first time a skinning variant (or its per-draw layout)
+        // is asked for, so a template nobody skins with creates none.
+        // Mutable: @ref per_draw_layout is logically const.
+        mutable gpu::bind_group_layout m_skinned_per_draw_layout{};
 
         std::unordered_map<uint32_t, shader_set> m_shaders;
         std::unordered_map<uint64_t, gpu::pipeline> m_pipelines;

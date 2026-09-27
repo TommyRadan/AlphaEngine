@@ -82,6 +82,20 @@ core::math::vec3 rendering_engine::util::transform::get_scale() const
     return m_scale;
 }
 
+core::math::trs rendering_engine::util::transform::get_trs() const
+{
+    return core::math::trs{m_position, m_quaternion, m_scale};
+}
+
+void rendering_engine::util::transform::set_trs(const core::math::trs& pose)
+{
+    m_position = pose.translation;
+    m_quaternion = core::math::normalize(pose.rotation);
+    m_rotation = core::math::euler_from_quat(m_quaternion);
+    m_scale = pose.scale;
+    mark_local_dirty();
+}
+
 void rendering_engine::util::transform::look_at(const core::math::vec3& target, const core::math::vec3& up)
 {
     const core::math::vec3 direction = target - m_position;

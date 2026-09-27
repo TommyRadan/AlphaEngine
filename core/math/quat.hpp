@@ -47,6 +47,46 @@ namespace core::math
     /** @brief Rotates @p v by the rotation @p q. */
     vec3 operator*(const quat& q, const vec3& v) noexcept;
 
+    /**
+     * @name Component-wise arithmetic
+     * Treat the quaternion as a 4-vector, as blending and spline code does
+     * (a weighted sum of rotations, a Hermite tangent). The result is in
+     * general not a unit quaternion; @ref normalize it before using it as a
+     * rotation.
+     * @{
+     */
+    quat operator+(const quat& a, const quat& b) noexcept;
+    quat operator-(const quat& a, const quat& b) noexcept;
+    quat operator-(const quat& q) noexcept;
+    quat operator*(const quat& q, float s) noexcept;
+    quat operator*(float s, const quat& q) noexcept;
+    /** @} */
+
+    /** @brief Four-component dot product; the cosine of half the angle between two unit rotations. */
+    float dot(const quat& a, const quat& b) noexcept;
+
+    /**
+     * @brief Normalised linear interpolation from @p a (t = 0) to @p b (t = 1).
+     *
+     * Takes the shortest path: when the inputs lie in opposite hemispheres
+     * (negative dot) @p b is negated first, since @c q and @c -q name the
+     * same rotation. Cheaper than @ref slerp and commutative under blending,
+     * but its angular speed is not constant across @p t.
+     */
+    quat nlerp(const quat& a, const quat& b, float t) noexcept;
+
+    /**
+     * @brief Spherical linear interpolation from @p a (t = 0) to @p b (t = 1)
+     *        at constant angular speed, along the shortest arc.
+     *
+     * @p b is negated when the inputs lie in opposite hemispheres so the
+     * rotation never goes the long way round. When the two are (nearly)
+     * parallel the arc is too short for the @c sin divisor to be stable,
+     * and the result falls back to @ref nlerp, which is indistinguishable
+     * there. Both inputs should be unit quaternions; the result is one.
+     */
+    quat slerp(const quat& a, const quat& b, float t) noexcept;
+
     /** @brief Builds a quaternion from intrinsic Tait-Bryan euler angles (radians). */
     quat quat_from_euler(const vec3& euler_radians) noexcept;
     /** @brief Extracts intrinsic Tait-Bryan euler angles (radians) from @p q. */

@@ -53,10 +53,12 @@ namespace rendering_engine
     //
     // Consumes the position+uv+normal+tangent vertex stream (the tangent
     // feeds the normal-map TBN basis); @ref set_tangents(false) switches
-    // to a tangent-less position+uv+normal record. Slot layout matches
-    // the other 3D materials: the per-frame group at slot 0 (camera +
-    // lights, owned by the @ref scene_pass) and the per-draw group at
-    // slot 1 (model + normal matrix, built by each renderable). The PBR
+    // to a tangent-less position+uv+normal record and @ref set_skinned
+    // to the skinned position+uv+normal+tangent+skin record. Slot layout
+    // matches the other 3D materials: the per-frame group at slot 0
+    // (camera + lights, owned by the @ref scene_pass) and the per-draw
+    // group at slot 1 (model + normal matrix, built by each renderable,
+    // plus the joint palette when skinned). The PBR
     // scalars and the optional maps live in the per-material group at
     // slot 2 owned by each instance.
     //
@@ -186,6 +188,14 @@ namespace rendering_engine
         // not sampled.
         void set_tangents(bool enabled);
 
+        // Whether the instance draws skinned geometry: on, the vertex
+        // stage reads the position+uv+normal+tangent+skin record and blends
+        // each vertex by the joint palette its renderable binds in the
+        // per-draw group (see @ref model::set_joint_matrices). A skinned
+        // mesh and a rigid one need separate instances, since the keyword
+        // selects the pipeline. Off by default.
+        void set_skinned(bool enabled);
+
         // Whether the shaders currently sample each map (the keyword in
         // effect, not just whether an image was bound).
         bool has_tangents() const;
@@ -217,6 +227,7 @@ namespace rendering_engine
         float m_occlusion_strength{1.0f};
         float m_ibl_intensity{1.0f};
         bool m_tangents{true};
+        bool m_skinned{false};
 
         gpu::buffer m_material_ubo{};
         gpu::texture m_albedo_map{};

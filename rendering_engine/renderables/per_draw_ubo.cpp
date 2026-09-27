@@ -123,4 +123,42 @@ namespace rendering_engine
         device.write_buffer(ubo, &payload, per_draw_ubo_size, 0);
         return is_mirrored(model);
     }
+
+    gpu::buffer create_joint_buffer(gpu::device& device, size_t joint_count)
+    {
+        gpu::buffer_descriptor descriptor{};
+        descriptor.size = (joint_count > 0 ? joint_count : 1) * joint_matrix_size;
+        descriptor.usage = gpu::buffer_usage_storage | gpu::buffer_usage_copy_dst;
+        descriptor.hint = gpu::buffer_usage_hint::dynamic_data;
+        return device.create_buffer(descriptor);
+    }
+
+    gpu::bind_group create_skinned_per_draw_bind_group(gpu::device& device,
+                                                       gpu::bind_group_layout layout,
+                                                       gpu::buffer ubo,
+                                                       gpu::buffer joints)
+    {
+        gpu::bind_group_descriptor descriptor{};
+        descriptor.layout = layout;
+        gpu::binding_value model_slot{};
+        model_slot.binding = gpu::shader_bindings::per_draw_model;
+        model_slot.kind = gpu::binding_kind::uniform_buffer;
+        model_slot.buffer_value = ubo;
+        descriptor.entries.push_back(model_slot);
+        gpu::binding_value joints_slot{};
+        joints_slot.binding = gpu::shader_bindings::per_draw_joints;
+        joints_slot.kind = gpu::binding_kind::storage_buffer;
+        joints_slot.buffer_value = joints;
+        descriptor.entries.push_back(joints_slot);
+        return device.create_bind_group(descriptor);
+    }
+
+    void write_joint_buffer(gpu::device& device, gpu::buffer joints, std::span<const core::math::mat4> matrices)
+    {
+        if (matrices.empty())
+        {
+            return;
+        }
+        device.write_buffer(joints, matrices.data(), matrices.size() * joint_matrix_size, 0);
+    }
 } // namespace rendering_engine

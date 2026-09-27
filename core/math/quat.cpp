@@ -22,6 +22,8 @@
 
 #include <core/math/quat.hpp>
 
+#include <cmath>
+
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
@@ -64,6 +66,78 @@ namespace core::math
     {
         glm::vec3 result = to_glm(q) * glm::vec3{v.x, v.y, v.z};
         return vec3{result.x, result.y, result.z};
+    }
+
+    quat operator+(const quat& a, const quat& b) noexcept
+    {
+        return quat{a.w + b.w, a.x + b.x, a.y + b.y, a.z + b.z};
+    }
+
+    quat operator-(const quat& a, const quat& b) noexcept
+    {
+        return quat{a.w - b.w, a.x - b.x, a.y - b.y, a.z - b.z};
+    }
+
+    quat operator-(const quat& q) noexcept
+    {
+        return quat{-q.w, -q.x, -q.y, -q.z};
+    }
+
+    quat operator*(const quat& q, float s) noexcept
+    {
+        return quat{q.w * s, q.x * s, q.y * s, q.z * s};
+    }
+
+    quat operator*(float s, const quat& q) noexcept
+    {
+        return q * s;
+    }
+
+    float dot(const quat& a, const quat& b) noexcept
+    {
+        return glm::dot(to_glm(a), to_glm(b));
+    }
+
+    quat nlerp(const quat& a, const quat& b, float t) noexcept
+    {
+        // q and -q are the same rotation; pick the representative of b in
+        // a's hemisphere so the blend takes the short way round.
+        const quat target = dot(a, b) < 0.0f ? -b : b;
+        const quat blended = a * (1.0f - t) + target * t;
+        // Antipodal unit inputs cannot occur after the flip, so the blend
+        // only degenerates for non-unit (zero) inputs; keep a zero as the
+        // identity rather than dividing by it.
+        if (dot(blended, blended) <= 0.0f)
+        {
+            return quat{};
+        }
+        return normalize(blended);
+    }
+
+    quat slerp(const quat& a, const quat& b, float t) noexcept
+    {
+        // Above this cosine (about 1.8 degrees apart) sin(theta) is small
+        // enough that the slerp weights lose precision, while nlerp differs
+        // from the true arc by far less than a float can resolve.
+        constexpr float nearly_parallel = 0.9995f;
+
+        float cosine = dot(a, b);
+        quat target = b;
+        if (cosine < 0.0f)
+        {
+            target = -b;
+            cosine = -cosine;
+        }
+        if (cosine > nearly_parallel)
+        {
+            return nlerp(a, target, t);
+        }
+
+        const float theta = std::acos(cosine);
+        const float sine = std::sin(theta);
+        const float weight_a = std::sin((1.0f - t) * theta) / sine;
+        const float weight_b = std::sin(t * theta) / sine;
+        return normalize(a * weight_a + target * weight_b);
     }
 
     quat quat_from_euler(const vec3& euler_radians) noexcept

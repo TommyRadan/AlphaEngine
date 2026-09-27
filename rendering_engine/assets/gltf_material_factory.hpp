@@ -47,8 +47,10 @@ namespace rendering_engine
      * different image binds through @c set_occlusion_map, one that is the
      * same image is read from the packed R, and a material with a packed
      * map but no occlusion texture gets occlusion strength 0 so its R
-     * channel is ignored. Every instance shares the renderer's standard
-     * template (@ref context::create_standard_material). Needs a live
+     * channel is ignored. A description marked skinned builds the instance
+     * with @ref standard_material::set_skinned. Every instance shares the
+     * renderer's standard template
+     * (@ref context::create_standard_material). Needs a live
      * renderer (it reaches @ref runtime::current_engine), which is why it
      * lives in its own translation unit apart from the importer.
      */

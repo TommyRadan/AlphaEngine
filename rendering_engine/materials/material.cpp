@@ -152,7 +152,12 @@ namespace rendering_engine
 
     gpu::bind_group_layout material::per_draw_layout() const
     {
-        return m_template->per_draw_layout();
+        return m_template->per_draw_layout(m_key.keywords);
+    }
+
+    bool material::is_skinned() const
+    {
+        return m_template->skins(m_key.keywords);
     }
 
     uint32_t material::per_draw_slot() const

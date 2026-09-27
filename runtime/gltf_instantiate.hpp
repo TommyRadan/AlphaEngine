@@ -61,13 +61,24 @@ namespace runtime
      * that rotation belongs here beside the root pre-rotation, not in the
      * components.
      *
+     * A skinned primitive of a node with a skin draws with the model's
+     * skinned material twin. When the model has animations or skinned
+     * meshes, the first spawned root also gets an @ref animator_component
+     * over @ref rendering_engine::gltf_model::node_skeleton: every spawned
+     * node is bound to its joint (a root through the same +90 degree turn),
+     * every skinned mesh node to its skin, and the first clip, if any, is
+     * started looping — call @c stop() or @c play() on the component to
+     * change that. The animator is disabled along with that root node.
+     *
      * The nodes are owned by @p parent's scene (made with
      * @c context::create_node), and the returned vector names the spawned
-     * root nodes. The mesh components draw with @p model's materials, so the
-     * nodes must be gone before @p model is destroyed: @c destroy_node the
-     * roots (a subtree goes with its root) or unload the scene first. @p parent
-     * must belong to a scene, and that scene must not be mid-traversal (the
-     * mesh components could not be attached); otherwise nothing is spawned.
+     * root nodes. The mesh and animator components draw with @p model's
+     * materials and skeleton, so the nodes must be gone before @p model is
+     * destroyed: @c destroy_node the roots (a subtree goes with its root, and
+     * frees the animator's node bindings along with it) or unload the scene
+     * first. @p parent must belong to a scene, and that scene must not be
+     * mid-traversal (the components could not be attached); otherwise
+     * nothing is spawned.
      */
     std::vector<node*> instantiate_gltf(const rendering_engine::gltf_model& model, node& parent);
 } // namespace runtime
