@@ -11,7 +11,7 @@
 #include <utility>
 
 #include <core/log.hpp>
-#include <core/platform/platform.hpp>
+#include <core/os/os.hpp>
 #include <runtime/engine.hpp>
 #include <runtime/node.hpp>
 #include <runtime/scripting/lua_state.hpp>
@@ -32,7 +32,7 @@ namespace
         {
             return path;
         }
-        const std::u8string text = core::platform::utf8_path(path).lexically_normal().generic_u8string();
+        const std::u8string text = core::os::utf8_path(path).lexically_normal().generic_u8string();
         return std::string(text.begin(), text.end());
     }
 } // namespace

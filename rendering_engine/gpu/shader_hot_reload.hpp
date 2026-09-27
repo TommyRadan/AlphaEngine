@@ -15,7 +15,7 @@
  * The hot reload (debug builds only) watches the directory the shader
  * library's override root points at — the source tree's @c shaders/, or
  * @c ALPHAENGINE_SHADER_DIR — through a polling
- * @ref core::platform::directory_watcher, about once a second. When files
+ * @ref core::os::directory_watcher, about once a second. When files
  * change it drops their cached text from the library, works out which
  * registered modules read one of them (their own source or anything they
  * transitively @c #include, see @ref shader_dependencies), recompiles
@@ -45,7 +45,7 @@
 #include <string>
 #include <vector>
 
-#include <core/platform/directory_watcher.hpp>
+#include <core/os/directory_watcher.hpp>
 #endif
 
 namespace rendering_engine::gpu
@@ -133,7 +133,7 @@ namespace rendering_engine::gpu
         void reload_pending();
 
         device* m_device{nullptr};
-        core::platform::directory_watcher m_watcher;
+        core::os::directory_watcher m_watcher;
         // The watched root as a generic path string ending in '/', the
         // prefix stripped from a change to get its library path.
         std::string m_root_prefix;

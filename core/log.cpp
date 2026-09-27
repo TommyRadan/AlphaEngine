@@ -9,16 +9,17 @@
 #include <cstdio>
 #include <cstdlib>
 #include <ctime>
-#include <filesystem>
+#include <memory>
 #include <mutex>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <utility>
 #include <vector>
 
 #include <core/log.hpp>
-#include <core/platform/platform.hpp>
+#include <core/os/os.hpp>
 #include <core/version.hpp>
 
 namespace
@@ -26,9 +27,6 @@ namespace
     using core::logging::record;
     using core::logging::verbosity;
 
-    // The category stamped on messages the platform library (SDL) emits itself; they arrive through the platform
-    // layer's native log sink with no engine call site attached.
-    constexpr const char* k_sdl_category = "sdl";
     constexpr const char* k_default_category = "engine";
     constexpr const char* k_level_environment_variable = "ALPHAENGINE_LOG_LEVEL";
 
@@ -38,18 +36,32 @@ namespace
     constexpr verbosity k_default_level = verbosity::info;
 #endif
 
+    // The output core provides itself: every line to stderr, flushed as it is written.
+    struct console_sink : core::logging::sink
+    {
+        void write(std::string_view line) override
+        {
+            std::fwrite(line.data(), 1, line.size(), stderr);
+            std::fflush(stderr);
+        }
+
+        void flush() override
+        {
+            std::fflush(stderr);
+        }
+    };
+
     struct logging_state
     {
-        // Sinks. stderr and the optional file are written under sink_mutex so concurrent callers (worker threads
-        // log too) never interleave a line, and so shutdown() can close the file while others may still log.
-        //
-        // The file mirrors stderr: when the process is launched by double-click on Windows the console closes the
-        // moment AlphaEngine.exe exits, so any shutdown-time logs flash by unread; a copy beside the executable
-        // lets us recover the full trace post-mortem. Opened lazily on the first message so init() ordering does
-        // not matter; closed by shutdown() and never reopened (reopening would truncate it).
+        // Sinks: the console, always, then whatever add_sink added. All are written under sink_mutex so concurrent
+        // callers (worker threads log too) never interleave a line, and so shutdown() can drop the added sinks
+        // while others may still log.
         std::mutex sink_mutex;
-        std::FILE* log_file = nullptr;
-        bool log_file_attempted = false;
+        console_sink console;
+        std::vector<std::unique_ptr<core::logging::sink>> sinks;
+
+        // Told about every level change (see set_level_observer).
+        std::atomic<core::logging::level_observer> level_observer{nullptr};
 
         // Level filter. The global level is read on every message without a lock; the per-category overrides are
         // consulted (under level_mutex) only while at least one exists.
@@ -100,52 +112,13 @@ namespace
         return "???";
     }
 
-    core::platform::native_log_level to_native(verbosity level)
+    void notify_level_observer()
     {
-        switch (level)
+        if (const core::logging::level_observer observer = state().level_observer.load(std::memory_order_acquire);
+            observer != nullptr)
         {
-        case verbosity::trace:
-            return core::platform::native_log_level::trace;
-        case verbosity::debug:
-            return core::platform::native_log_level::debug;
-        case verbosity::info:
-            return core::platform::native_log_level::info;
-        case verbosity::warn:
-            return core::platform::native_log_level::warn;
-        case verbosity::error:
-            return core::platform::native_log_level::error;
-        case verbosity::fatal:
-            return core::platform::native_log_level::fatal;
+            observer();
         }
-        return core::platform::native_log_level::info;
-    }
-
-    verbosity from_native(core::platform::native_log_level level)
-    {
-        switch (level)
-        {
-        case core::platform::native_log_level::trace:
-            return verbosity::trace;
-        case core::platform::native_log_level::debug:
-            return verbosity::debug;
-        case core::platform::native_log_level::info:
-            return verbosity::info;
-        case core::platform::native_log_level::warn:
-            return verbosity::warn;
-        case core::platform::native_log_level::error:
-            return verbosity::error;
-        case core::platform::native_log_level::fatal:
-            return verbosity::fatal;
-        }
-        return verbosity::info;
-    }
-
-    // Mirrors the level configured for the "sdl" category (the global level unless overridden) into the
-    // platform library's own priority filter, so it does not format messages the engine would drop anyway.
-    // Engine messages never pass through that filter: message() applies the precise per-category level itself.
-    void apply_native_log_level()
-    {
-        core::platform::set_native_log_level(to_native(core::logging::level_for(k_sdl_category)));
     }
 
     void push_recent(record&& entry)
@@ -161,8 +134,7 @@ namespace
         s.ring_count = std::min(s.ring_count + 1, core::logging::k_recent_capacity);
     }
 
-    // Delivers one formatted message to every sink: stderr, the engine.log mirror beside the executable, and
-    // the in-memory ring.
+    // Delivers one formatted message to every sink and to the in-memory ring.
     void emit(verbosity level, const char* category, const char* file, unsigned line, const char* message)
     {
         // Timestamp with millisecond precision.
@@ -171,7 +143,7 @@ namespace
         const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count() % 1000;
 
         std::tm tm_buf{};
-        core::platform::local_time(time_t_now, tm_buf);
+        core::os::local_time(time_t_now, tm_buf);
 
         // Sized for the worst case -Wformat-truncation can construct, not the 23 characters a real date needs.
         char timestamp[64];
@@ -190,55 +162,33 @@ namespace
         tid_stream << std::this_thread::get_id();
         const std::string tid = tid_stream.str();
 
-        const auto write_to = [&](std::FILE* dst)
-        {
-            if (dst == nullptr)
-            {
-                return;
-            }
-            std::fprintf(dst,
-                         "%s [%s] [%s] [tid=%s] %s:%u | %s\n",
-                         timestamp,
-                         level_label(level),
-                         category,
-                         tid.c_str(),
-                         file,
-                         line,
-                         message);
-            std::fflush(dst);
-        };
+        std::string text;
+        text.append(timestamp)
+            .append(" [")
+            .append(level_label(level))
+            .append("] [")
+            .append(category)
+            .append("] [tid=")
+            .append(tid)
+            .append("] ")
+            .append(file)
+            .append(":")
+            .append(std::to_string(line))
+            .append(" | ")
+            .append(message)
+            .append("\n");
 
         auto& s = state();
         {
             std::lock_guard<std::mutex> lock{s.sink_mutex};
-            write_to(stderr);
-
-            if (!s.log_file_attempted)
+            s.console.write(text);
+            for (const std::unique_ptr<core::logging::sink>& destination : s.sinks)
             {
-                s.log_file_attempted = true;
-                const std::filesystem::path base_path = core::platform::base_path();
-                if (!base_path.empty())
-                {
-                    const std::string path = core::platform::path_to_utf8(base_path / "engine.log");
-                    s.log_file = std::fopen(path.c_str(), "w");
-                }
+                destination->write(text);
             }
-            write_to(s.log_file);
         }
 
         push_recent(record{now, level, category, file, line, message});
-    }
-
-    // The platform layer's native log sink: a message the platform library emitted on its own, delivered under the
-    // "sdl" category with no call site. Subject to the same level filter as everything else.
-    void native_log_sink(core::platform::native_log_level native_level, const char* message)
-    {
-        const verbosity level = from_native(native_level);
-        if (!core::logging::is_enabled(level, k_sdl_category))
-        {
-            return;
-        }
-        emit(level, k_sdl_category, "?", 0, message);
     }
 
     // Formats @p format with @p args the way vsnprintf does, growing the buffer for a message longer than the
@@ -305,9 +255,8 @@ void core::logging::init(int argc, char* argv[])
         }
     }
 
-    // Capture the platform library's own messages, then resolve the level: the build-type default first so a
-    // re-init is deterministic, then the environment override on top of it.
-    core::platform::set_native_log_sink(&native_log_sink);
+    // Resolve the level: the build-type default first so a re-init is deterministic, then the environment override
+    // on top of it.
     clear_category_levels();
     set_level(k_default_level);
 
@@ -343,24 +292,50 @@ void core::logging::shutdown()
 {
     auto& s = state();
     std::lock_guard<std::mutex> lock{s.sink_mutex};
-    if (s.log_file != nullptr)
+    for (const std::unique_ptr<sink>& destination : s.sinks)
     {
-        std::fflush(s.log_file);
-        std::fclose(s.log_file);
-        s.log_file = nullptr;
+        destination->flush();
     }
-    // Stay closed: a late message must not reopen (and truncate) the file.
-    s.log_file_attempted = true;
+    s.sinks.clear();
+}
+
+void core::logging::add_sink(std::unique_ptr<sink> destination)
+{
+    if (destination == nullptr)
+    {
+        return;
+    }
+    auto& s = state();
+    std::lock_guard<std::mutex> lock{s.sink_mutex};
+    s.sinks.push_back(std::move(destination));
+}
+
+void core::logging::forward(verbosity level, const char* category, const char* text)
+{
+    if (category == nullptr)
+    {
+        category = k_default_category;
+    }
+    if (!is_enabled(level, category))
+    {
+        return;
+    }
+    emit(level, category, "?", 0, text != nullptr ? text : "");
+}
+
+void core::logging::set_level_observer(level_observer observer)
+{
+    state().level_observer.store(observer, std::memory_order_release);
 }
 
 void core::logging::flush()
 {
     auto& s = state();
     std::lock_guard<std::mutex> lock{s.sink_mutex};
-    std::fflush(stderr);
-    if (s.log_file != nullptr)
+    s.console.flush();
+    for (const std::unique_ptr<sink>& destination : s.sinks)
     {
-        std::fflush(s.log_file);
+        destination->flush();
     }
 }
 
@@ -399,7 +374,7 @@ void core::logging::message(
 void core::logging::set_level(verbosity level)
 {
     state().global_level.store(level, std::memory_order_relaxed);
-    apply_native_log_level();
+    notify_level_observer();
 }
 
 core::logging::verbosity core::logging::level()
@@ -429,7 +404,7 @@ void core::logging::set_category_level(const char* category, verbosity level)
         }
         s.has_category_levels.store(true, std::memory_order_relaxed);
     }
-    apply_native_log_level();
+    notify_level_observer();
 }
 
 void core::logging::clear_category_levels()
@@ -440,7 +415,7 @@ void core::logging::clear_category_levels()
         s.category_levels.clear();
         s.has_category_levels.store(false, std::memory_order_relaxed);
     }
-    apply_native_log_level();
+    notify_level_observer();
 }
 
 core::logging::verbosity core::logging::level_for(const char* category)

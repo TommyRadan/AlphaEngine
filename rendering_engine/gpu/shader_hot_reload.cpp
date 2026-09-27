@@ -178,12 +178,12 @@ namespace rendering_engine::gpu
         }
         m_last_scan = now;
 
-        const std::vector<core::platform::file_change> changes = m_watcher.poll();
+        const std::vector<core::os::file_change> changes = m_watcher.poll();
         if (changes.empty())
         {
             return;
         }
-        for (const core::platform::file_change& change : changes)
+        for (const core::os::file_change& change : changes)
         {
             // The watcher spells each file <root>/<relative>, so the
             // library path is what follows the root prefix.

@@ -63,9 +63,9 @@ namespace rendering_engine
 #endif
 
     /**
-     * @brief Orchestrates the rendering subsystem: the window and GPU
-     *        device bring-up, the off-screen targets, the ordered pass
-     *        list, the post settings and stats, and the frame itself.
+     * @brief Orchestrates the rendering subsystem: the off-screen targets,
+     *        the ordered pass list, the post settings and stats, and the
+     *        frame itself.
      *
      * Owned by @ref runtime::engine. It owns two parts it hands out:
      *
@@ -77,7 +77,8 @@ namespace rendering_engine
      *
      * The registration, material and environment calls below forward to
      * those two, so renderables and game code keep reaching them through
-     * the renderer. @ref init brings up the window and GPU device,
+     * the renderer. The engine brings the window and the GPU device up
+     * before @ref init and takes them down after @ref quit. @ref init
      * constructs the built-in passes (which own their per-frame bind-group
      * layouts) and then the material library (which reads those layouts
      * when building its pipelines); @ref quit tears them down in reverse
@@ -94,12 +95,12 @@ namespace rendering_engine
         ~renderer();
 
         /**
-         * @brief Initializes the window, the gpu device and the built-in passes / materials.
+         * @brief Initializes the built-in passes / materials against the live window and gpu device.
          *        Must be called once before @ref render.
          */
         void init();
 
-        /** @brief Tears the materials, passes, gpu device and window down. */
+        /** @brief Tears the materials and passes down, ahead of the gpu device and the window. */
         void quit();
 
         /**

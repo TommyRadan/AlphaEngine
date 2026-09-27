@@ -85,6 +85,7 @@ add_executable(AlphaEngine runtime/main_loop.cpp)
 
 add_subdirectory(runtime)
 add_subdirectory(core)
+add_subdirectory(platform)
 add_subdirectory(rendering_engine)
 add_subdirectory(external)
 

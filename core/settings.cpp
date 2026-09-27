@@ -5,11 +5,12 @@
 
 #include <cstdlib>
 #include <filesystem>
+#include <functional>
 #include <string>
 #include <vector>
 
 #include <core/log.hpp>
-#include <core/platform/platform.hpp>
+#include <core/os/os.hpp>
 #include <core/settings_parse.hpp>
 #include <core/version.hpp>
 
@@ -19,17 +20,16 @@ namespace core
     {
         constexpr const char* k_settings_file_name = "settings.json";
 
-        // <pref path>/settings.json, or empty when the platform has no
-        // per-user directory for the application (it is created on demand).
-        std::string default_settings_path()
+        // <pref directory>/settings.json, or empty when the platform has no
+        // per-user directory for the application.
+        std::string default_settings_path(const std::filesystem::path& pref_directory)
         {
-            const std::filesystem::path pref_path = platform::pref_path("AlphaEngine", "AlphaEngine");
-            if (pref_path.empty())
+            if (pref_directory.empty())
             {
                 LOG_WRN("settings: no per-user preference directory; no settings file will be read");
                 return {};
             }
-            return platform::path_to_utf8(pref_path / k_settings_file_name);
+            return os::path_to_utf8(pref_directory / k_settings_file_name);
         }
 
         // Reads the file at `path` and applies it as a settings.json document.
@@ -39,7 +39,7 @@ namespace core
         void apply_settings_file(settings& out, const std::string& path)
         {
             std::string text;
-            if (!platform::read_text_file(platform::utf8_path(path), text))
+            if (!os::read_text_file(os::utf8_path(path), text))
             {
                 LOG_INF("Settings: no settings file at %s; continuing with the defaults", path.c_str());
                 return;
@@ -79,8 +79,8 @@ namespace core
         window.mode = window_mode::windowed;
 #else
         // Release goes fullscreen at the display's native size. The size is
-        // left at zero here — SDL's video subsystem is not up yet — and
-        // resolved by window::init once it is.
+        // left at zero here — the display cannot be queried before the
+        // window system is up — and resolved by window::init once it is.
         window.width = 0;
         window.height = 0;
         window.mode = window_mode::fullscreen;
@@ -126,7 +126,8 @@ namespace core
         return "unknown";
     }
 
-    settings_load_result load_settings(int argc, char* const argv[])
+    settings_load_result
+    load_settings(int argc, char* const argv[], const std::function<std::filesystem::path()>& pref_directory)
     {
         settings_load_result result;
 
@@ -152,7 +153,10 @@ namespace core
             return result;
         }
 
-        const std::string path = options.settings_path.has_value() ? *options.settings_path : default_settings_path();
+        const std::string path =
+            options.settings_path.has_value()
+                ? *options.settings_path
+                : default_settings_path(pref_directory ? pref_directory() : std::filesystem::path{});
         if (!path.empty())
         {
             apply_settings_file(result.values, path);

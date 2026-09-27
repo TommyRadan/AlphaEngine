@@ -6,7 +6,7 @@
  * @brief Pure translation of SDL input identifiers into the engine's
  *        @ref core::key_code / mouse / gamepad enums.
  *
- * Kept apart from @ref rendering_engine::window so the mapping needs no
+ * Kept apart from @ref platform::window so the mapping needs no
  * window or video subsystem and can be unit-tested headless. Every
  * function is total: an SDL value the engine has no name for maps to the
  * matching @c unknown enumerator (or @c std::nullopt for mouse buttons)
@@ -23,7 +23,7 @@
 
 #include <core/event.hpp>
 
-namespace rendering_engine::sdl_input
+namespace platform::sdl_input
 {
     /**
      * @brief Maps an SDL keycode (@c SDL_KeyboardEvent::key) to the engine
@@ -57,4 +57,4 @@ namespace rendering_engine::sdl_input
      *        trigger axes (0..32767) land in [0, 1].
      */
     float normalize_axis(std::int16_t value) noexcept;
-} // namespace rendering_engine::sdl_input
+} // namespace platform::sdl_input

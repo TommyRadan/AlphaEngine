@@ -13,6 +13,8 @@
 
 #pragma once
 
+#include <filesystem>
+#include <functional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -38,8 +40,8 @@ namespace core
     {
         /**
          * @brief Window size in logical points. Zero on either axis means "match the primary display": that
-         *        query needs SDL's video subsystem, so @ref rendering_engine::window::init resolves it after
-         *        bringing video up and writes the concrete size back here for every later reader.
+         *        query needs the window system, so @ref platform::window::init resolves it after bringing video
+         *        up and writes the concrete size back here for every later reader.
          */
         unsigned int width{0};
         unsigned int height{0};
@@ -292,7 +294,7 @@ namespace core
          * @brief Directory the engine mounts as the root of the virtual filesystem (see core/vfs/vfs.hpp), so
          *        relative asset paths resolve under it. Empty (the default) means "discover it": the first
          *        @c content directory beside the executable or in one of its parents
-         *        (@ref core::platform::content_root). Set from @c content.root in settings.json,
+         *        (@ref platform::content_root). Set from @c content.root in settings.json,
          *        @c ALPHAENGINE_CONTENT_ROOT or @c --content-root.
          */
         std::string root;
@@ -330,7 +332,7 @@ namespace core
      * release builds: fullscreen at the display's native size); @ref load_settings layers the config file, the
      * environment and the command line on top. The engine takes the resolved struct by value at construction
      * and subsystems read it afterwards. Nothing writes to it once the engine is up, except the one documented
-     * write-back of the resolved native size in @ref rendering_engine::window::init.
+     * write-back of the resolved native size in @ref platform::window::init.
      */
     struct settings
     {
@@ -368,14 +370,17 @@ namespace core
     };
 
     /**
-     * @brief Resolves the process-wide settings: compiled defaults, then `settings.json` under
-     *        @c core::platform::pref_path("AlphaEngine", "AlphaEngine") (or the file named by @c --settings), then the
-     *        `ALPHAENGINE_*` environment variables, then the command line. A missing or malformed file and any
-     *        unrecognised value are logged and skipped, never fatal. Applies @c --log-level to
-     *        @ref core::logging on the way and logs the resolved values once at INFO. Requires @c LOG_INIT to
-     *        have run.
-     * @param argc Argument count as given to @c main.
-     * @param argv Arguments as given to @c main; @c argv[0] (the program name) is skipped.
+     * @brief Resolves the process-wide settings: compiled defaults, then `settings.json` in the per-user preference
+     *        directory (or the file named by @c --settings), then the `ALPHAENGINE_*` environment variables, then
+     *        the command line. A missing or malformed file and any unrecognised value are logged and skipped, never
+     *        fatal. Applies @c --log-level to @ref core::logging on the way and logs the resolved values once at
+     *        INFO. Requires @c LOG_INIT to have run.
+     * @param argc           Argument count as given to @c main.
+     * @param argv           Arguments as given to @c main; @c argv[0] (the program name) is skipped.
+     * @param pref_directory Returns the per-user preference directory, or an empty path when there is none (the
+     *                       engine passes @c platform::pref_path("AlphaEngine", "AlphaEngine")). Called only when
+     *                       the settings file is read from there: not for @c --help, nor with @c --settings.
      */
-    settings_load_result load_settings(int argc, char* const argv[]);
+    settings_load_result
+    load_settings(int argc, char* const argv[], const std::function<std::filesystem::path()>& pref_directory);
 } // namespace core

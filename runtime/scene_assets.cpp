@@ -15,7 +15,7 @@
 #include <utility>
 
 #include <core/log.hpp>
-#include <core/platform/platform.hpp>
+#include <core/os/os.hpp>
 #include <core/vfs/vfs.hpp>
 #include <rendering_engine/assets/asset_cache.hpp>
 #include <rendering_engine/assets/cache_key.hpp>
@@ -59,7 +59,7 @@ namespace runtime
         std::shared_ptr<rendering_engine::mesh_asset> resolve_gltf(const std::string& file, const std::string& fragment)
         {
             rendering_engine::asset_cache& cache = *current_engine().assets;
-            const std::filesystem::path path = core::platform::utf8_path(file);
+            const std::filesystem::path path = core::os::utf8_path(file);
             const std::string key =
                 std::string{k_gltf_prefix} + core::default_vfs().canonical_key(path) + "#" + fragment;
             if (auto live = cache.find_mesh(key))
@@ -245,7 +245,7 @@ namespace runtime
     std::string file_reference(const std::string& canonical_key)
     {
         const std::optional<std::string> relative =
-            core::default_vfs().virtual_path(core::platform::utf8_path(canonical_key));
+            core::default_vfs().virtual_path(core::os::utf8_path(canonical_key));
         return relative.has_value() ? *relative : canonical_key;
     }
 

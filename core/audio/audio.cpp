@@ -6,18 +6,13 @@
 
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 #include <core/audio/audio_clip.hpp>
 #include <core/log.hpp>
 #include <core/math/math.hpp>
-#include <core/platform/platform.hpp>
+#include <core/os/os.hpp>
 #include <core/vfs/vfs.hpp>
-#include <SDL3/SDL_audio.h>
-#include <SDL3/SDL_init.h>
-
-// The one SDL-including translation unit for this subsystem (mirrors
-// core/platform/platform_sdl.cpp): everything else under core/audio names
-// only the forward-declared SDL_AudioStream and plain core types.
 
 namespace core
 {
@@ -38,7 +33,10 @@ namespace core
         }
     } // namespace
 
-    audio::audio() = default;
+    audio::audio(std::unique_ptr<audio_output> output, std::unique_ptr<audio_decoder> decoder)
+        : m_output{std::move(output)}, m_decoder{std::move(decoder)}
+    {
+    }
 
     audio::~audio()
     {
@@ -49,45 +47,22 @@ namespace core
     {
         LOG_INF("Init core::audio");
 
-        if (!SDL_InitSubSystem(SDL_INIT_AUDIO))
+        if (m_output == nullptr)
         {
-            LOG_WRN("core::audio: could not initialize the audio subsystem (%s); audio is disabled", SDL_GetError());
+            LOG_WRN("core::audio: no audio output; audio is disabled");
             return;
         }
 
-        SDL_AudioSpec spec{};
-        spec.format = SDL_AUDIO_F32;
-        spec.channels = static_cast<int>(k_mixer_channels);
-        spec.freq = static_cast<int>(k_mixer_sample_rate);
-
-        const SDL_AudioDeviceID device = SDL_OpenAudioDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec);
-        if (device == 0)
+        std::string error;
+        if (!m_output->open(k_mixer_sample_rate, k_mixer_channels, error))
         {
-            LOG_WRN("core::audio: no playback device available (%s); audio is disabled", SDL_GetError());
-            SDL_QuitSubSystem(SDL_INIT_AUDIO);
+            LOG_WRN("core::audio: %s; audio is disabled", error.c_str());
             return;
         }
 
-        SDL_AudioStream* stream = SDL_CreateAudioStream(&spec, &spec);
-        if (stream == nullptr || !SDL_BindAudioStream(device, stream))
-        {
-            LOG_WRN("core::audio: could not create/bind the mixer stream (%s); audio is disabled", SDL_GetError());
-            if (stream != nullptr)
-            {
-                SDL_DestroyAudioStream(stream);
-            }
-            SDL_CloseAudioDevice(device);
-            SDL_QuitSubSystem(SDL_INIT_AUDIO);
-            return;
-        }
-
-        m_device = device;
-        m_stream = stream;
         m_available = true;
-        LOG_INF("core::audio: opened '%s' (%u Hz, %u ch)",
-                SDL_GetAudioDeviceName(device),
-                k_mixer_sample_rate,
-                k_mixer_channels);
+        LOG_INF(
+            "core::audio: opened '%s' (%u Hz, %u ch)", m_output->name().c_str(), k_mixer_sample_rate, k_mixer_channels);
     }
 
     void audio::quit()
@@ -96,27 +71,10 @@ namespace core
         // again as a safety net (see ~audio); only log once there is
         // something left to close, so the ordinary shutdown path prints one
         // line rather than two.
-        if (m_stream != nullptr || m_available)
-        {
-            LOG_INF("Quit core::audio");
-        }
-
-        if (m_stream != nullptr)
-        {
-            // Unbinds from the device as part of destroying it; the device
-            // itself is only closed by SDL_OpenAudioDeviceStream's stream,
-            // which this subsystem does not use (see the class docs).
-            SDL_DestroyAudioStream(m_stream);
-            m_stream = nullptr;
-        }
-        if (m_device != 0)
-        {
-            SDL_CloseAudioDevice(static_cast<SDL_AudioDeviceID>(m_device));
-            m_device = 0;
-        }
         if (m_available)
         {
-            SDL_QuitSubSystem(SDL_INIT_AUDIO);
+            LOG_INF("Quit core::audio");
+            m_output->close();
         }
         m_available = false;
 
@@ -130,55 +88,19 @@ namespace core
 
     std::shared_ptr<audio_clip> audio::decode_wav(const std::vector<std::byte>& bytes, const std::string& label)
     {
-        SDL_IOStream* io = SDL_IOFromConstMem(bytes.data(), bytes.size());
-        if (io == nullptr)
+        if (m_decoder == nullptr)
         {
-            LOG_ERR("core::audio: could not wrap '%s' for decoding: %s", label.c_str(), SDL_GetError());
-            return nullptr;
-        }
-
-        SDL_AudioSpec file_spec{};
-        Uint8* audio_buf = nullptr;
-        Uint32 audio_len = 0;
-        // closeio = true: SDL_IOFromConstMem's stream is a thin wrapper that
-        // does not own bytes, so closing it here frees only that wrapper.
-        if (!SDL_LoadWAV_IO(io, true, &file_spec, &audio_buf, &audio_len))
-        {
-            LOG_ERR("core::audio: could not decode '%s' as WAV: %s", label.c_str(), SDL_GetError());
-            return nullptr;
-        }
-
-        SDL_AudioSpec mixer_spec{};
-        mixer_spec.format = SDL_AUDIO_F32;
-        mixer_spec.channels = static_cast<int>(k_mixer_channels);
-        mixer_spec.freq = static_cast<int>(k_mixer_sample_rate);
-
-        SDL_AudioStream* convert = SDL_CreateAudioStream(&file_spec, &mixer_spec);
-        if (convert == nullptr)
-        {
-            LOG_ERR("core::audio: could not set up format conversion for '%s': %s", label.c_str(), SDL_GetError());
-            SDL_free(audio_buf);
-            return nullptr;
-        }
-
-        const bool put_ok = SDL_PutAudioStreamData(convert, audio_buf, static_cast<int>(audio_len));
-        SDL_free(audio_buf);
-        if (!put_ok || !SDL_FlushAudioStream(convert))
-        {
-            LOG_ERR("core::audio: format conversion failed for '%s': %s", label.c_str(), SDL_GetError());
-            SDL_DestroyAudioStream(convert);
+            LOG_ERR("core::audio: no decoder for '%s'", label.c_str());
             return nullptr;
         }
 
         auto clip = std::make_shared<audio_clip>();
-        const int available = SDL_GetAudioStreamAvailable(convert);
-        if (available > 0)
+        std::string error;
+        if (!m_decoder->decode_wav(bytes, k_mixer_sample_rate, k_mixer_channels, clip->samples, error))
         {
-            clip->samples.resize(static_cast<std::size_t>(available) / sizeof(float));
-            const int got = SDL_GetAudioStreamData(convert, clip->samples.data(), available);
-            clip->samples.resize(got > 0 ? static_cast<std::size_t>(got) / sizeof(float) : 0);
+            LOG_ERR("core::audio: could not decode '%s': %s", label.c_str(), error.c_str());
+            return nullptr;
         }
-        SDL_DestroyAudioStream(convert);
 
         clip->frame_count = static_cast<std::uint32_t>(clip->samples.size() / k_mixer_channels);
         if (clip->frame_count == 0)
@@ -206,11 +128,11 @@ namespace core
         std::string error;
         if (!core::default_vfs().read_file(path, bytes, &error))
         {
-            LOG_ERR("core::audio: could not read '%s': %s", core::platform::path_to_utf8(path).c_str(), error.c_str());
+            LOG_ERR("core::audio: could not read '%s': %s", core::os::path_to_utf8(path).c_str(), error.c_str());
             return nullptr;
         }
 
-        std::shared_ptr<audio_clip> clip = decode_wav(bytes, core::platform::path_to_utf8(path));
+        std::shared_ptr<audio_clip> clip = decode_wav(bytes, core::os::path_to_utf8(path));
         if (clip == nullptr)
         {
             return nullptr;
@@ -527,9 +449,7 @@ namespace core
         std::size_t frames_needed = 0;
         if (m_available)
         {
-            const int queued_bytes = SDL_GetAudioStreamQueued(m_stream);
-            const std::size_t queued_frames =
-                queued_bytes > 0 ? static_cast<std::size_t>(queued_bytes) / (k_mixer_channels * sizeof(float)) : 0;
+            const std::size_t queued_frames = m_output->queued_frames();
             frames_needed = queued_frames < k_target_buffered_frames ? k_target_buffered_frames - queued_frames : 0;
         }
         else
@@ -550,7 +470,7 @@ namespace core
 
         if (m_available)
         {
-            SDL_PutAudioStreamData(m_stream, m_scratch.data(), static_cast<int>(m_scratch.size() * sizeof(float)));
+            m_output->queue(m_scratch.data(), frames_needed);
         }
     }
 } // namespace core

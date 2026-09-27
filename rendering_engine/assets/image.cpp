@@ -15,7 +15,7 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.hpp"
 #include <core/log.hpp>
-#include <core/platform/platform.hpp>
+#include <core/os/os.hpp>
 #include <core/vfs/vfs.hpp>
 
 namespace
@@ -33,7 +33,7 @@ rendering_engine::image::image(const std::string& filename)
     // stb_image never opens a path of its own.
     std::vector<std::byte> bytes;
     std::string error;
-    if (!core::default_vfs().read_file(core::platform::utf8_path(filename), bytes, &error))
+    if (!core::default_vfs().read_file(core::os::utf8_path(filename), bytes, &error))
     {
         LOG_ERR("Could not load image (%s): %s", filename.c_str(), error.c_str());
         throw std::runtime_error{"Could not load image (" + filename + ")"};

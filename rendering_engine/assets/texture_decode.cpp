@@ -16,7 +16,7 @@
 #include <ktx.h>
 
 #include <core/log.hpp>
-#include <core/platform/platform.hpp>
+#include <core/os/os.hpp>
 #include <core/vfs/vfs.hpp>
 #include <rendering_engine/assets/color.hpp>
 #include <rendering_engine/gpu/device.hpp>
@@ -240,7 +240,7 @@ namespace rendering_engine
                                         gpu::color_space space,
                                         const compressed_format_support& support)
     {
-        const std::string label = core::platform::path_to_utf8(path);
+        const std::string label = core::os::path_to_utf8(path);
         if (!is_ktx2_path(path))
         {
             decoded_texture decoded;

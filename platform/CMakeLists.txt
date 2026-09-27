@@ -2,11 +2,14 @@
 # Copyright (c) 2015-2026 Tomislav Radanovic
 
 target_sources(AlphaEngine PRIVATE
-    directory_watcher.cpp
-    directory_watcher.hpp
+    audio_device.cpp
+    audio_device.hpp
     dynamic_library.cpp
     dynamic_library.hpp
     platform.cpp
     platform.hpp
-    platform_sdl.cpp
+    sdl_input.cpp
+    sdl_input.hpp
+    window.cpp
+    window.hpp
 )

@@ -40,7 +40,7 @@ namespace runtime
      *
      * **Hot reload.** In Debug builds the host watches the directory of every
      * script it has loaded from a real file (through
-     * @c core::platform::directory_watcher, polled twice a second from
+     * @c core::os::directory_watcher, polled twice a second from
      * @c core::render_update). When a script's file changes it is loaded
      * again and every behaviour running it is re-bound to the new code: the
      * @c self state is kept, a property still declared keeps its value, a

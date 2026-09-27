@@ -34,7 +34,7 @@ extern "C"
 #include <string_view>
 #include <vector>
 
-#include <core/platform/directory_watcher.hpp>
+#include <core/os/directory_watcher.hpp>
 #include <runtime/reflection.hpp>
 #include <runtime/scripting/lua_behavior.hpp>
 #include <runtime/scripting/script_host.hpp>
@@ -165,7 +165,7 @@ namespace runtime
         struct watch
         {
             std::string directory;
-            core::platform::directory_watcher watcher;
+            core::os::directory_watcher watcher;
         };
         std::vector<watch> watches;
         float since_poll{0.0f};

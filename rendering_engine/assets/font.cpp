@@ -11,7 +11,7 @@
 #include <stb_truetype.hpp>
 
 #include <core/log.hpp>
-#include <core/platform/platform.hpp>
+#include <core/os/os.hpp>
 #include <core/vfs/vfs.hpp>
 #include <rendering_engine/assets/font.hpp>
 
@@ -61,7 +61,7 @@ rendering_engine::font::font(const std::string& filename, float font_size)
     // looked up in the mounted content root.
     std::vector<std::byte> bytes;
     std::string error;
-    if (!core::default_vfs().read_file(core::platform::utf8_path(filename), bytes, &error))
+    if (!core::default_vfs().read_file(core::os::utf8_path(filename), bytes, &error))
     {
         LOG_ERR("Could not open font (%s): %s", filename.c_str(), error.c_str());
         throw std::runtime_error{"Could not open font (" + filename + ")"};

@@ -18,22 +18,16 @@
 #include <optional>
 #include <set>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
-#include <cstdio>
-#include <string>
-
-#include <SDL3/SDL_filesystem.h>
-#include <SDL3/SDL_stdinc.h>
-#include <SDL3/SDL_vulkan.h>
-
 #include <core/log.hpp>
+#include <core/os/os.hpp>
 #include <core/settings.hpp>
+#include <platform/platform.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_command_encoder.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_negotiate.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_translate.hpp>
-#include <rendering_engine/window.hpp>
-#include <runtime/engine.hpp>
 
 namespace rendering_engine::gpu::backend::vulkan
 {
@@ -145,8 +139,8 @@ namespace rendering_engine::gpu::backend::vulkan
 
         // Whether the instance (or, with @p layer, that layer) exposes
         // the extension @p name. Every instance extension the backend
-        // asks for beyond SDL's mandatory set goes through here first,
-        // so vkCreateInstance never fails on an optional one.
+        // asks for beyond the window system's mandatory set goes through
+        // here first, so vkCreateInstance never fails on an optional one.
         bool instance_extension_available(const char* name, const char* layer = nullptr)
         {
             uint32_t count = 0;
@@ -316,50 +310,35 @@ namespace rendering_engine::gpu::backend::vulkan
         }
     }
 
-    void vk_device::init()
+    void vk_device::init(const surface_desc& surface, uint32_t frames_in_flight)
     {
         LOG_INF("Init gpu::backend::vulkan::vk_device");
 
-        auto& eng = runtime::current_engine();
         // Fallback extent for a surface that leaves the size to the
         // application (see choose_swapchain_extent): the drawable's
         // pixel size, which is what the swapchain follows on a scaled
-        // display; the logical settings size only when the window
-        // cannot report one.
-        if (eng.window != nullptr)
-        {
-            const window_extent drawable = eng.window->pixel_size();
-            m_window_width = drawable.width;
-            m_window_height = drawable.height;
-        }
-        if ((m_window_width == 0 || m_window_height == 0) && eng.settings != nullptr)
-        {
-            m_window_width = eng.settings->window.width;
-            m_window_height = eng.settings->window.height;
-        }
+        // display.
+        m_window_width = surface.width;
+        m_window_height = surface.height;
+        m_vsync = surface.vsync;
 
         // The slot ring is sized once, here: the command pools, sync
         // objects, swapchain depth images and every dynamic buffer's
         // regions follow it, so it cannot change while the device is
         // up. The settings layer already clamps the value to the range;
-        // the clamp here guards the compiled default only.
+        // the clamp here guards any other caller.
         static_assert(core::graphics_settings::max_frames_in_flight == k_max_frames_in_flight,
                       "the settings range and the backend ring must agree");
-        m_frames_in_flight = 1;
-        if (eng.settings != nullptr)
-        {
-            m_frames_in_flight =
-                std::clamp<uint32_t>(eng.settings->graphics.frames_in_flight, 1, k_max_frames_in_flight);
-        }
+        m_frames_in_flight = std::clamp<uint32_t>(frames_in_flight, 1, k_max_frames_in_flight);
         m_frame_slot = 0;
         m_in_frame = false;
         m_submit_serial = 0;
         m_completed_submit_serial = 0;
 
-        create_instance();
+        create_instance(surface.vulkan_instance_extensions);
         load_debug_utils_functions();
         create_debug_messenger();
-        create_surface();
+        create_surface(surface);
         pick_physical_device();
         resolve_depth_formats();
         create_logical_device();
@@ -658,9 +637,13 @@ namespace rendering_engine::gpu::backend::vulkan
         }
         if (m_surface != VK_NULL_HANDLE)
         {
-            SDL_Vulkan_DestroySurface(m_instance, m_surface, nullptr);
+            if (m_destroy_surface != nullptr)
+            {
+                m_destroy_surface(m_instance, &m_surface);
+            }
             m_surface = VK_NULL_HANDLE;
         }
+        m_destroy_surface = nullptr;
         destroy_debug_messenger();
         if (m_instance != VK_NULL_HANDLE)
         {
@@ -709,36 +692,24 @@ namespace rendering_engine::gpu::backend::vulkan
         // can override with their own SDK install.
         void publish_layer_path_if_bundled()
         {
-            if (SDL_getenv_unsafe("VK_LAYER_PATH") != nullptr)
+            if (core::os::environment_variable("VK_LAYER_PATH").has_value())
             {
                 return;
             }
-            const char* base_path = SDL_GetBasePath();
-            if (base_path == nullptr)
+            // Without a trailing separator, so the loader's path
+            // concatenation produces a well-formed lookup.
+            const std::filesystem::path base_path = platform::base_path();
+            if (base_path.empty() || !core::os::file_exists(base_path / "VkLayer_khronos_validation.json"))
             {
                 return;
             }
-            const std::string manifest = std::string{base_path} + "VkLayer_khronos_validation.json";
-            std::FILE* f = std::fopen(manifest.c_str(), "rb");
-            if (f == nullptr)
-            {
-                return;
-            }
-            std::fclose(f);
-            // Trim trailing slash so the loader's path concatenation
-            // produces a well-formed lookup; SDL_GetBasePath returns a
-            // path with a trailing separator on every platform.
-            std::string layer_path{base_path};
-            if (!layer_path.empty() && (layer_path.back() == '/' || layer_path.back() == '\\'))
-            {
-                layer_path.pop_back();
-            }
-            SDL_setenv_unsafe("VK_LAYER_PATH", layer_path.c_str(), 1);
+            const std::string layer_path = core::os::path_to_utf8(base_path);
+            platform::set_environment_variable("VK_LAYER_PATH", layer_path.c_str());
             LOG_INF("Published VK_LAYER_PATH=%s for bundled validation layer", layer_path.c_str());
         }
     } // namespace
 
-    void vk_device::create_instance()
+    void vk_device::create_instance(const std::vector<const char*>& window_extensions)
     {
         publish_layer_path_if_bundled();
 
@@ -767,16 +738,7 @@ namespace rendering_engine::gpu::backend::vulkan
         app.engineVersion = VK_MAKE_VERSION(0, 0, 1);
         app.apiVersion = api_version;
 
-        uint32_t sdl_ext_count = 0;
-        const char* const* sdl_extensions = SDL_Vulkan_GetInstanceExtensions(&sdl_ext_count);
-        std::vector<const char*> extensions;
-        if (sdl_extensions != nullptr)
-        {
-            for (uint32_t i = 0; i < sdl_ext_count; ++i)
-            {
-                extensions.push_back(sdl_extensions[i]);
-            }
-        }
+        std::vector<const char*> extensions = window_extensions;
         VkInstanceCreateFlags flags = 0;
         // A layered implementation (MoltenVK on macOS / iOS) only
         // enumerates its non-conformant physical devices when the
@@ -936,19 +898,19 @@ namespace rendering_engine::gpu::backend::vulkan
         m_debug_messenger = VK_NULL_HANDLE;
     }
 
-    void vk_device::create_surface()
+    void vk_device::create_surface(const surface_desc& surface)
     {
-        auto& eng = runtime::current_engine();
-        if (eng.window == nullptr || eng.window->sdl_window() == nullptr)
+        if (surface.native_window == nullptr || surface.create_vulkan_surface == nullptr)
         {
             LOG_FTL("vk_device::create_surface: window subsystem missing");
             throw std::runtime_error{"vk_device: window missing"};
         }
-        if (!SDL_Vulkan_CreateSurface(eng.window->sdl_window(), m_instance, nullptr, &m_surface))
+        if (!surface.create_vulkan_surface(surface.native_window, m_instance, &m_surface))
         {
-            LOG_FTL("SDL_Vulkan_CreateSurface failed: %s", SDL_GetError());
-            throw std::runtime_error{"SDL_Vulkan_CreateSurface failed"};
+            // The window system has logged its reason.
+            throw std::runtime_error{"vk_device: window surface creation failed"};
         }
+        m_destroy_surface = surface.destroy_vulkan_surface;
     }
 
     // -- Physical / logical device --------------------------------------
@@ -1584,8 +1546,7 @@ namespace rendering_engine::gpu::backend::vulkan
     bool vk_device::create_swapchain(const VkSurfaceCapabilitiesKHR& caps, VkExtent2D extent)
     {
         m_surface_format = pick_surface_format(m_physical_device, m_surface);
-        const bool vsync_enabled = runtime::current_engine().settings->window.vsync;
-        m_present_mode = pick_present_mode(m_physical_device, m_surface, vsync_enabled);
+        m_present_mode = pick_present_mode(m_physical_device, m_surface, m_vsync);
 
         uint32_t image_count = caps.minImageCount + 1;
         if (caps.maxImageCount > 0 && image_count > caps.maxImageCount)

@@ -2,20 +2,18 @@
 // Copyright (c) 2015-2026 Tomislav Radanovic
 
 /**
- * @file platform.hpp
- * @brief The operating-system services the engine core depends on: the
- *        clock, the well-known paths, file I/O, the environment, native
- *        log capture and the crash handler.
+ * @file os.hpp
+ * @brief The operating-system services core itself relies on, written
+ *        against the C++ standard library alone: local time, file I/O,
+ *        UTF-8 paths, the environment and the crash handler.
  *
- * Everything outside this directory is written against these functions
- * rather than against SDL (or any other OS library), so `core` compiles
- * without naming SDL: `core/time`, `core/log` and `core/settings` reach the
- * performance counter, the executable's directory and the per-user
- * preference directory through here. The SDL-backed implementation lives
- * in platform_sdl.cpp; the parts that need only the C++ standard library
- * (file I/O, local time, path folding, the crash hook) in platform.cpp.
- * Directory watching and dynamic libraries have headers of their own
- * (directory_watcher.hpp, dynamic_library.hpp).
+ * `core` never includes an OS library: `core/log`, `core/settings` and the
+ * VFS reach files, paths and the environment through here. The services
+ * that need one — the executable and preference directories, the content
+ * root, the window, audio devices, dynamic libraries — belong to the
+ * top-level platform module (platform/platform.hpp), which the engine
+ * hands to core where core needs them. Directory watching has a header of
+ * its own (directory_watcher.hpp).
  */
 
 #pragma once
@@ -29,18 +27,9 @@
 #include <string_view>
 #include <vector>
 
-namespace core::platform
+namespace core::os
 {
-    // -- Clock ---------------------------------------------------------------
-
-    /** @brief The high-resolution performance counter, in ticks of @ref performance_frequency. */
-    uint64_t performance_counter();
-
-    /** @brief Ticks per second of @ref performance_counter. Never zero. */
-    uint64_t performance_frequency();
-
-    /** @brief Milliseconds since the platform library was initialised. */
-    uint64_t ticks_ms();
+    // -- Time ----------------------------------------------------------------
 
     /**
      * @brief Breaks @p when down into local calendar time.
@@ -51,37 +40,6 @@ namespace core::platform
     bool local_time(std::time_t when, std::tm& out);
 
     // -- Paths ---------------------------------------------------------------
-
-    /**
-     * @brief The directory the running executable lives in, or an empty path
-     *        when the platform cannot say. Without a trailing separator.
-     */
-    std::filesystem::path base_path();
-
-    /**
-     * @brief The per-user, writable preference directory for @p application
-     *        under @p organization (created on demand), or an empty path when
-     *        the platform has none. Settings and caches live here.
-     */
-    std::filesystem::path pref_path(const char* organization, const char* application);
-
-    /**
-     * @brief Where the engine's loose content files are: the directory the
-     *        default VFS mount points at (see core/vfs/vfs.hpp).
-     * Resolved once through @ref locate_content_root from @ref base_path.
-     * This is the discovered default only; the settings layer's
-     * @c content.root (or @c ALPHAENGINE_CONTENT_ROOT) overrides it in the
-     * engine.
-     */
-    std::filesystem::path content_root();
-
-    /**
-     * @brief The pure part of @ref content_root: the first existing
-     *        @c content directory in @p base_path or any of its parents
-     *        (so a binary under @c Binaries/Debug/ finds the repository's),
-     *        else @c <base_path>/content even though it does not exist.
-     */
-    std::filesystem::path locate_content_root(const std::filesystem::path& base_path);
 
     /** @brief The process's current working directory, or an empty path on failure. */
     std::filesystem::path current_directory();
@@ -144,32 +102,6 @@ namespace core::platform
     /** @brief The last modification time of @p path, or @c std::nullopt when it cannot be read. Never throws. */
     std::optional<std::filesystem::file_time_type> last_write_time(const std::filesystem::path& path);
 
-    // -- Native log capture --------------------------------------------------
-
-    /** @brief Severity of a message the platform library emitted on its own; mirrors @c core::logging::verbosity. */
-    enum class native_log_level
-    {
-        trace,
-        debug,
-        info,
-        warn,
-        error,
-        fatal
-    };
-
-    /** @brief Receives the platform library's own log messages (see @ref set_native_log_sink). */
-    using native_log_sink = void (*)(native_log_level level, const char* message);
-
-    /**
-     * @brief Routes the messages the platform library emits itself (SDL's
-     *        diagnostics) into @p sink, so they land in the engine log
-     *        alongside everything else. A null sink restores the default.
-     */
-    void set_native_log_sink(native_log_sink sink);
-
-    /** @brief The least severe native message the platform library should bother formatting and delivering. */
-    void set_native_log_level(native_log_level minimum);
-
     // -- Crash handler -------------------------------------------------------
 
     /**
@@ -188,4 +120,4 @@ namespace core::platform
      *        A null handler uninstalls.
      */
     void install_crash_handler(crash_handler handler);
-} // namespace core::platform
+} // namespace core::os

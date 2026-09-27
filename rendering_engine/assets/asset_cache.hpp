@@ -33,7 +33,7 @@ namespace core
 {
     struct job_pool;
 
-    namespace platform
+    namespace os
     {
         struct directory_watcher;
     }
@@ -199,7 +199,7 @@ namespace rendering_engine
          * @brief Watches the directory tree under @p root and, from then on,
          *        reloads every live texture whose file under it changes.
          *
-         * @ref pump polls a @c core::platform::directory_watcher at most
+         * @ref pump polls a @c core::os::directory_watcher at most
          * every @c k_hot_reload_interval_ms. A file that was modified (or
          * re-created) is matched to the cached textures by its canonical
          * identity, in both colour spaces; each live one is decoded again on
@@ -427,7 +427,7 @@ namespace rendering_engine
 
         // Hot reload (main thread only): the watcher, when enabled, the time
         // of its last scan, and the assets with a reload in flight.
-        std::unique_ptr<core::platform::directory_watcher> m_watcher;
+        std::unique_ptr<core::os::directory_watcher> m_watcher;
         uint64_t m_last_watch_ms{0};
         std::unordered_set<const texture_asset*> m_reloading;
     };

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2015-2026 Tomislav Radanovic
 
-#include <core/platform/platform.hpp>
+#include <core/os/os.hpp>
 
 #include <atomic>
 #include <cctype>
@@ -11,11 +11,7 @@
 #include <fstream>
 #include <system_error>
 
-// The parts of the platform layer that need only the C++ standard library:
-// file I/O, local time, path folding, the content-root search and the crash
-// hook. The SDL-backed services are in platform_sdl.cpp.
-
-namespace core::platform
+namespace core::os
 {
     namespace
     {
@@ -76,30 +72,6 @@ namespace core::platform
 #else
         return localtime_r(&when, &out) != nullptr;
 #endif
-    }
-
-    std::filesystem::path content_root()
-    {
-        static const std::filesystem::path root = locate_content_root(base_path());
-        return root;
-    }
-
-    std::filesystem::path locate_content_root(const std::filesystem::path& base_path)
-    {
-        std::error_code error;
-        for (std::filesystem::path directory = base_path; !directory.empty(); directory = directory.parent_path())
-        {
-            const std::filesystem::path candidate = directory / "content";
-            if (std::filesystem::is_directory(candidate, error))
-            {
-                return candidate;
-            }
-            if (directory.parent_path() == directory)
-            {
-                break;
-            }
-        }
-        return base_path / "content";
     }
 
     std::filesystem::path current_directory()
@@ -284,4 +256,4 @@ namespace core::platform
             installed = false;
         }
     }
-} // namespace core::platform
+} // namespace core::os

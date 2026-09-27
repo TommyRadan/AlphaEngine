@@ -15,7 +15,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace core::platform
+namespace core::os
 {
     /** @brief One change @ref directory_watcher::poll observed. */
     struct file_change
@@ -89,4 +89,4 @@ namespace core::platform
         bool m_recursive;
         snapshot m_last;
     };
-} // namespace core::platform
+} // namespace core::os

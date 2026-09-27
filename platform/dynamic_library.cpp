@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2015-2026 Tomislav Radanovic
 
-#include <core/platform/dynamic_library.hpp>
+#include <platform/dynamic_library.hpp>
 
 #include <utility>
 
 #include <SDL3/SDL_error.h>
 #include <SDL3/SDL_loadso.h>
 
-#include <core/platform/platform.hpp>
+#include <core/os/os.hpp>
 
-namespace core::platform
+namespace platform
 {
     namespace
     {
@@ -50,7 +50,7 @@ namespace core::platform
     {
         close();
         m_last_error.clear();
-        m_handle = SDL_LoadObject(path_to_utf8(path).c_str());
+        m_handle = SDL_LoadObject(core::os::path_to_utf8(path).c_str());
         if (m_handle == nullptr)
         {
             const char* reason = SDL_GetError();
@@ -98,4 +98,4 @@ namespace core::platform
     {
         return m_last_error;
     }
-} // namespace core::platform
+} // namespace platform

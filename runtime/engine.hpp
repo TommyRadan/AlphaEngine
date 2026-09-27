@@ -45,9 +45,12 @@ namespace core
 {
     struct audio;
 }
-namespace rendering_engine
+namespace platform
 {
     struct window;
+}
+namespace rendering_engine
+{
     namespace gpu
     {
         struct device;
@@ -100,9 +103,10 @@ namespace runtime
         engine& operator=(engine&&) = delete;
 
         /**
-         * @brief Initializes every subsystem in dependency order, then
-         *        installs the game modules (runtime/game_module.hpp) into the
-         *        active scene.
+         * @brief Initializes every subsystem in dependency order — the
+         *        window, then the GPU device against it, then the renderer —
+         *        then installs the game modules (runtime/game_module.hpp)
+         *        into the active scene.
          */
         void init();
 
@@ -130,12 +134,12 @@ namespace runtime
         std::unique_ptr<core::time> time;
         std::unique_ptr<core::job_pool> jobs;
         std::unique_ptr<core::event_bus> events;
-        // No rendering dependency (its own SDL audio device, opened
+        // No rendering dependency (the platform's playback device, opened
         // independently of the window), so it lives here as a
         // core-level subsystem rather than under rendering_engine.
         std::unique_ptr<core::audio> audio;
         std::unique_ptr<core::input> input;
-        std::unique_ptr<rendering_engine::window> window;
+        std::unique_ptr<platform::window> window;
         std::unique_ptr<rendering_engine::gpu::device> gpu;
         std::unique_ptr<rendering_engine::asset_cache> assets;
         std::unique_ptr<rendering_engine::renderer> renderer;

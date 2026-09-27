@@ -13,17 +13,20 @@
 #include <core/input.hpp>
 #include <core/job_pool.hpp>
 #include <core/log.hpp>
-#include <core/platform/platform.hpp>
+#include <core/os/os.hpp>
 #include <core/settings.hpp>
 #include <core/time.hpp>
 #include <core/vfs/vfs.hpp>
+#include <platform/audio_device.hpp>
+#include <platform/platform.hpp>
+#include <platform/window.hpp>
 #include <rendering_engine/assets/asset_cache.hpp>
 #include <rendering_engine/assets/asset_device.hpp>
 #include <rendering_engine/assets/gltf_material_factory.hpp>
 #include <rendering_engine/editor/imgui_layer.hpp>
 #include <rendering_engine/gpu/device.hpp>
+#include <rendering_engine/gpu/surface.hpp>
 #include <rendering_engine/renderer.hpp>
-#include <rendering_engine/window.hpp>
 #include <runtime/game_module.hpp>
 #include <runtime/physics/physics_world.hpp>
 #include <runtime/scene_manager.hpp>
@@ -45,6 +48,29 @@ namespace runtime
             }
             throw std::logic_error{"to_backend_type: unknown graphics_backend"};
         }
+
+        // The window as the GPU device sees it: its native handle and the
+        // platform's Vulkan surface factory, the drawable's pixel size (the
+        // logical settings size while the window cannot report one) and the
+        // vsync preference.
+        rendering_engine::gpu::surface_desc surface_for(const platform::window& window, const core::settings& settings)
+        {
+            rendering_engine::gpu::surface_desc surface{};
+            surface.native_window = window.sdl_window();
+            surface.create_vulkan_surface = &platform::window::create_vulkan_surface;
+            surface.destroy_vulkan_surface = &platform::window::destroy_vulkan_surface;
+            surface.vulkan_instance_extensions = window.vulkan_instance_extensions();
+            const platform::window_extent drawable = window.pixel_size();
+            surface.width = drawable.width;
+            surface.height = drawable.height;
+            if (surface.width == 0 || surface.height == 0)
+            {
+                surface.width = settings.window.width;
+                surface.height = settings.window.height;
+            }
+            surface.vsync = settings.window.vsync;
+            return surface;
+        }
     } // namespace
 
     engine& current_engine()
@@ -64,7 +90,7 @@ namespace runtime
     engine::engine(core::settings values)
     {
         // Install ourselves first so subsystem constructors can observe
-        // the engine (for example, time queries SDL).
+        // the engine.
         if (g_current_engine != nullptr)
         {
             LOG_FTL("engine: another instance is already live");
@@ -83,11 +109,13 @@ namespace runtime
         // idle until the first job is dispatched.
         jobs = std::make_unique<core::job_pool>();
         events = std::make_unique<core::event_bus>();
-        audio = std::make_unique<core::audio>();
+        // The mixer plays and decodes through the platform's audio device.
+        audio = std::make_unique<core::audio>(std::make_unique<platform::sdl_audio_output>(),
+                                              std::make_unique<platform::sdl_audio_decoder>());
         // Maps physical input to actions and axes from the same raw events the window will emit once it starts
-        // pumping SDL; it only needs the bus, so it can be constructed here, ahead of the window.
+        // pumping OS events; it only needs the bus, so it can be constructed here, ahead of the window.
         input = std::make_unique<core::input>();
-        window = std::make_unique<rendering_engine::window>();
+        window = std::make_unique<platform::window>();
         gpu = rendering_engine::gpu::create_device(to_backend_type(settings->graphics.backend));
         // The asset cache hands out GPU-resource-backed handles, so it is
         // constructed after the device; its loaders are only usable once the
@@ -139,9 +167,6 @@ namespace runtime
 
     void engine::init()
     {
-        // The window and the gpu device are brought up inside
-        // rendering_engine::renderer::init(); it in turn constructs the
-        // built-in passes and materials once the device is alive.
         events->init();
         // No renderer/VFS dependency: opens (or gracefully declines) the
         // playback device up front so a module's on_engine_start can play a
@@ -154,18 +179,21 @@ namespace runtime
         // Mount the content root before anything loads a file: the configured
         // directory when one is set, else the discovered default beside the
         // executable (or in one of its parents).
-        const std::filesystem::path content_root = settings->content.root.empty()
-                                                       ? core::platform::content_root()
-                                                       : core::platform::utf8_path(settings->content.root);
-        LOG_INF("Content root: %s", core::platform::path_to_utf8(content_root).c_str());
+        const std::filesystem::path content_root =
+            settings->content.root.empty() ? platform::content_root() : core::os::utf8_path(settings->content.root);
+        LOG_INF("Content root: %s", core::os::path_to_utf8(content_root).c_str());
         core::default_vfs().mount_directory(content_root);
 
+        // The window first, then the gpu device against its surface, then
+        // the renderer, which builds its passes and materials on the live
+        // device.
+        window->init(settings->window);
+        gpu->init(surface_for(*window, *settings), settings->graphics.frames_in_flight);
         renderer->init();
-        // The renderer brings the gpu device up, so the asset cache — whose
-        // loaders need a live device — is initialised right after it. Publish
-        // the live device to the asset layer first, so the cache and the
-        // reference-counted asset handles resolve it without reaching into the
-        // engine global.
+        // The asset cache's loaders need a live device, so it is initialised
+        // right after the renderer. Publish the live device to the asset
+        // layer first, so the cache and the reference-counted asset handles
+        // resolve it without reaching into the engine global.
         rendering_engine::set_asset_device(gpu.get());
         assets->init();
         // Asynchronous glTF loads build their materials against the live
@@ -217,6 +245,10 @@ namespace runtime
         }
         assets->quit();
         renderer->quit();
+        // Reverse of init: the device goes before the window its surface
+        // was created on.
+        gpu->quit();
+        window->quit();
         core::default_vfs().unmount_all();
         input->quit();
         audio->quit();
@@ -235,7 +267,7 @@ namespace runtime
 
         // Pump OS input once per rendered frame (variable rate). Input
         // state set here is read by the fixed-step updates below.
-        window->tick();
+        window->tick(*events);
         // Latches this frame's cursor motion (see core::input::mouse_delta) now that every event window->tick()
         // pumped has updated the live action / axis state; nothing changes it again before the next window->tick().
         input->end_frame();

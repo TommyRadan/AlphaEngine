@@ -170,9 +170,9 @@ namespace core
     };
 
     /**
-     * @brief Gamepad button identifiers in the SDL gamepad layout. Face
-     *        buttons are positional: @c south is the Xbox A / PlayStation
-     *        cross button.
+     * @brief Gamepad button identifiers in the standard (Xbox-style)
+     *        gamepad layout. Face buttons are positional: @c south is the
+     *        Xbox A / PlayStation cross button.
      */
     enum class gamepad_button_code
     {
@@ -341,7 +341,7 @@ namespace core
     /**
      * @brief Text input event: committed text from the keyboard or IME,
      *        UTF-8 encoded. Only delivered while text input is enabled via
-     *        @c rendering_engine::window::set_text_input.
+     *        @c platform::window::set_text_input.
      */
     struct text_input
     {

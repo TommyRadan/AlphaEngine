@@ -87,7 +87,7 @@ namespace core
      * Every asset loader (`rendering_engine::image`, `rendering_engine::font`,
      * the asset cache and the glTF importer) reads its files through here, so
      * where the assets come from is decided once — the engine mounts the content root
-     * (`core::platform::content_root()`, or `settings.content.root`) at start-up,
+     * (`platform::content_root()`, or `settings.content.root`) at start-up,
      * a test mounts a scratch directory — and the loaders stay oblivious.
      *
      * Path rules:

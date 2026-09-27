@@ -23,9 +23,11 @@
 #include <ImGuizmo.h>
 
 #include <core/log.hpp>
-#include <core/platform/platform.hpp>
+#include <core/os/os.hpp>
 #include <core/settings.hpp>
 #include <core/time.hpp>
+#include <platform/platform.hpp>
+#include <platform/window.hpp>
 #include <rendering_engine/camera/camera_registry.hpp>
 #include <rendering_engine/camera/orthographic_camera.hpp>
 #include <rendering_engine/camera/perspective_camera.hpp>
@@ -44,7 +46,6 @@
 #include <rendering_engine/render_stats.hpp>
 #include <rendering_engine/renderables/model.hpp>
 #include <rendering_engine/renderer.hpp>
-#include <rendering_engine/window.hpp>
 #include <runtime/components/camera_component.hpp>
 #include <runtime/components/light_component.hpp>
 #include <runtime/components/mesh_component.hpp>
@@ -394,7 +395,7 @@ namespace rendering_engine::editor
         {
             const std::time_t time = std::chrono::system_clock::to_time_t(timestamp);
             std::tm local{};
-            if (!core::platform::local_time(time, local))
+            if (!core::os::local_time(time, local))
             {
                 return "--:--:--";
             }
@@ -957,7 +958,7 @@ namespace rendering_engine::editor
         // Hosts a full-viewport, passthrough dockspace so every panel can
         // dock against the window edges and against each other. Built
         // once with a stable id so ImGui's own ini persistence
-        // (core::platform::pref_path, set up in init) remembers whatever
+        // (platform::pref_path, set up in init) remembers whatever
         // arrangement the user leaves it in across runs. Returns the
         // dockspace id so the caller can locate the central node — the
         // passthrough game view the transform gizmo draws over.
@@ -1688,8 +1689,7 @@ namespace rendering_engine::editor
         ImGuiIO& io = ImGui::GetIO();
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
         io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-        g_ini_path =
-            core::platform::path_to_utf8(core::platform::pref_path("AlphaEngine", "AlphaEngine") / "imgui.ini");
+        g_ini_path = core::os::path_to_utf8(platform::pref_path("AlphaEngine", "AlphaEngine") / "imgui.ini");
         io.IniFilename = g_ini_path.c_str();
         ImGui::StyleColorsDark();
 
@@ -1700,6 +1700,17 @@ namespace rendering_engine::editor
         }
 
         g_live = true;
+
+        // Every OS event reaches the overlay before the engine; while a
+        // focused panel captures the keyboard or the mouse, the window
+        // withholds that input class from every other listener.
+        eng.window->set_event_filter(
+            [](const void* native_event)
+            {
+                process_event(native_event);
+                return platform::input_capture{wants_keyboard(), wants_mouse()};
+            });
+
         LOG_INF("editor: ImGui overlay initialised (SDL3 + Vulkan)");
     }
 
@@ -1709,13 +1720,18 @@ namespace rendering_engine::editor
         {
             return;
         }
+        // The window stops routing events here before the context they
+        // feed goes.
+        auto& eng = runtime::current_engine();
+        eng.window->set_event_filter(nullptr);
+
         // The render queue must be idle before tearing the backend's GPU
         // resources down, and every descriptor-set release the
         // render-target viewer deferred while the run was live (see
         // defer_release_vulkan_texture_binding) must have actually run by
         // now too, or its captured VkDescriptorSet dangles once
         // ImGui_ImplVulkan_Shutdown reclaims the pool it came from.
-        auto* device = static_cast<gpu::backend::vulkan::vk_device*>(runtime::current_engine().gpu.get());
+        auto* device = static_cast<gpu::backend::vulkan::vk_device*>(eng.gpu.get());
         device->flush_pending_destroys();
         // Release the render-target viewer's remaining descriptor sets
         // before the backend's descriptor pool goes with
