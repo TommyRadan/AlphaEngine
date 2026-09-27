@@ -94,7 +94,8 @@ namespace
 
 namespace rendering_engine
 {
-    point_shadow_pass::point_shadow_pass(std::vector<renderable*>* registry, const core::shadow_settings& settings)
+    point_shadow_pass::point_shadow_pass(const std::vector<renderable*>* registry,
+                                         const core::shadow_settings& settings)
         : m_registry(registry)
     {
         auto& gpu = *runtime::current_engine().gpu;

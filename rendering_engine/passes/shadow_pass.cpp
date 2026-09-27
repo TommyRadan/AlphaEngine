@@ -287,7 +287,7 @@ namespace
 
 namespace rendering_engine
 {
-    shadow_pass::shadow_pass(std::vector<renderable*>* registry, const core::shadow_settings& settings)
+    shadow_pass::shadow_pass(const std::vector<renderable*>* registry, const core::shadow_settings& settings)
         : m_registry(registry), m_resolution(std::max(settings.resolution, 1u)),
           m_cascade_count(std::clamp(static_cast<int>(settings.cascade_count), 1, max_shadow_cascades)),
           m_distance(std::max(settings.distance, min_log_split_near)), m_bias(std::max(settings.bias, 0.0f)),

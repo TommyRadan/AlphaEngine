@@ -26,11 +26,12 @@
  *        and the cache of pipeline variants its instances draw with.
  *
  * A @ref material_template is built once per material type (the
- * renderer makes one standard, one phong, ... template in
- * @c renderer::init) and shared by every @ref material instance of that
- * type. It owns no per-instance state: an instance carries its own
- * parameter block, textures and per-material bind group and points at
- * the template for everything else.
+ * renderer's material library makes one standard, one phong, ...
+ * template in @c material_library::init) and shared by every
+ * @ref material instance of that type. It owns no per-instance state:
+ * an instance carries its own parameter block, textures and
+ * per-material bind group and points at the template for everything
+ * else.
  *
  * Pipelines are built lazily, keyed by @ref pipeline_variant_key. The
  * first instance to need a given (keyword set, fixed-function state)

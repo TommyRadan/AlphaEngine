@@ -30,7 +30,7 @@
 
 namespace rendering_engine
 {
-    depth_prepass::depth_prepass(scene_pass* scene) : m_scene(scene) {}
+    depth_prepass::depth_prepass() = default;
 
     depth_prepass::~depth_prepass()
     {
@@ -59,7 +59,7 @@ namespace rendering_engine
         // Off, or nothing to draw the scene with: record nothing at all.
         // The scene pass sees that no pre-pass ran this frame and clears
         // the depth itself, exactly as it does with the pre-pass disabled.
-        if (!ctx.depth_prepass || ctx.active_camera == nullptr || m_scene == nullptr)
+        if (!ctx.depth_prepass || ctx.active_camera == nullptr || ctx.scene == nullptr)
         {
             return;
         }
@@ -94,7 +94,7 @@ namespace rendering_engine
         // view_globals block (and OpenGL executes each draw as it is
         // recorded), and the pre-pass must draw the very items, per-draw
         // blocks and order the scene pass will shade.
-        m_scene->prepare(ctx);
+        ctx.scene->prepare(ctx);
 
         // Clear to the far plane and keep the result for the scene pass,
         // which loads it instead of clearing.
@@ -106,7 +106,7 @@ namespace rendering_engine
         descriptor.depth.clear_depth = 1.0f;
 
         auto pass_encoder = encoder.begin_render_pass(descriptor);
-        m_scene->record_depth_prepass(*pass_encoder);
+        ctx.scene->record_depth_prepass(*pass_encoder);
         pass_encoder->end();
     }
 } // namespace rendering_engine

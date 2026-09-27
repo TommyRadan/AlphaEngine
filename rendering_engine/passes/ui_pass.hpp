@@ -58,7 +58,7 @@ namespace rendering_engine
     {
         // @p width x @p height is the drawable's pixel size at
         // construction; @ref resize follows it from then on.
-        ui_pass(std::vector<renderable*>* registry, uint32_t width, uint32_t height);
+        ui_pass(const std::vector<renderable*>* registry, uint32_t width, uint32_t height);
         ~ui_pass() override;
 
         ui_pass(const ui_pass&) = delete;
@@ -87,10 +87,10 @@ namespace rendering_engine
         // Rewrites the UiFrame block for m_width x m_height.
         void write_frame_block();
 
-        // Non-owning back-pointer to the renderer's
+        // Non-owning back-pointer to the render world's
         // ui-renderable registry. Same lifetime guarantee as
         // @ref scene_pass::m_registry.
-        std::vector<renderable*>* m_registry;
+        const std::vector<renderable*>* m_registry;
 
         gpu::bind_group_layout m_frame_layout{};
         gpu::buffer m_frame_ubo{};

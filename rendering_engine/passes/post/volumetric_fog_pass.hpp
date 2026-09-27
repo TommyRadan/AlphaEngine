@@ -81,19 +81,18 @@ namespace rendering_engine
      */
     struct volumetric_fog_pass : pass
     {
-        // @p frame_layout / @p frame_bind_group are the scene pass's
-        // per-frame layout and its jittered per-frame group (the view the
-        // scene depth was rasterised with). The scene pass runs first and
-        // refills the group's buffers every frame, so the captured handle
-        // always reflects the current view, lights and shadow casters.
-        // @p width / @p height are the drawable size the targets follow.
-        // The scene depth is not a constructor input: it arrives every
-        // frame as @ref frame_context::scene_depth_texture, and the bind
-        // groups sampling it are rebuilt whenever that handle changes.
-        volumetric_fog_pass(gpu::bind_group_layout frame_layout,
-                            gpu::bind_group frame_bind_group,
-                            uint32_t width,
-                            uint32_t height);
+        // @p frame_layout is the scene pass's per-frame layout, which the
+        // march pipeline reserves slot 0 for. @p width / @p height are the
+        // drawable size the targets follow. The group bound there is not a
+        // constructor input: the march binds the scene pass's jittered
+        // per-frame group (the view the scene depth was rasterised with),
+        // read through @ref frame_context::scene each frame after the scene
+        // pass refilled its buffers, so it always reflects the current
+        // view, lights and shadow casters. Nor is the scene depth: it
+        // arrives every frame as @ref frame_context::scene_depth_texture,
+        // and the bind groups sampling it are rebuilt whenever that handle
+        // changes.
+        volumetric_fog_pass(gpu::bind_group_layout frame_layout, uint32_t width, uint32_t height);
         ~volumetric_fog_pass() override;
 
         volumetric_fog_pass(const volumetric_fog_pass&) = delete;
@@ -146,10 +145,6 @@ namespace rendering_engine
         // @p scene_depth and the current targets, remembering the depth
         // handle in @ref m_bound_depth.
         void rebuild_bind_groups(gpu::texture scene_depth);
-
-        // Scene pass's per-frame group, bound at slot 0 of the march.
-        // Non-owning: the scene pass owns it and outlives this pass.
-        gpu::bind_group m_frame_bind_group{};
 
         gpu::shader_module m_vertex_shader{};
         gpu::shader_module m_march_shader{};

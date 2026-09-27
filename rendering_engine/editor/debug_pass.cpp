@@ -28,15 +28,13 @@
 #include <rendering_engine/editor/imgui_layer.hpp>
 #include <rendering_engine/gpu/render_target.hpp>
 #include <rendering_engine/materials/material.hpp>
+#include <rendering_engine/passes/scene_pass.hpp>
 #include <rendering_engine/renderables/per_draw_ubo.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
 
 namespace rendering_engine::editor
 {
-    debug_pass::debug_pass(std::vector<renderable*>* registry, gpu::bind_group frame_bind_group)
-        : m_registry(registry), m_frame_bind_group(frame_bind_group)
-    {
-    }
+    debug_pass::debug_pass(const std::vector<renderable*>* registry) : m_registry(registry) {}
 
     void debug_pass::record(gpu::command_encoder& encoder, const frame_context& ctx)
     {
@@ -49,6 +47,11 @@ namespace rendering_engine::editor
         descriptor.use_depth = false;
 
         auto pass_encoder = encoder.begin_render_pass(descriptor);
+
+        // The scene pass's unjittered camera group (see the header note),
+        // or nothing without a scene pass.
+        const gpu::bind_group frame_bind_group =
+            ctx.scene != nullptr ? ctx.scene->overlay_frame_bind_group() : gpu::bind_group{};
 
         m_items.clear();
         for (auto* r : *m_registry)
@@ -85,9 +88,9 @@ namespace rendering_engine::editor
                 // pipeline change so the line gizmos project with the
                 // scene camera; it sticks across later set_pipeline calls.
                 // Skipped when absent (no scene pass / camera).
-                if (first_iter && m_frame_bind_group.valid())
+                if (first_iter && frame_bind_group.valid())
                 {
-                    pass_encoder->set_bind_group(0, m_frame_bind_group);
+                    pass_encoder->set_bind_group(0, frame_bind_group);
                     first_iter = false;
                 }
                 last_pipeline_id = pid;

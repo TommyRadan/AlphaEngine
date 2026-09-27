@@ -51,7 +51,7 @@ namespace rendering_engine
         static_assert(sizeof(ui_frame_block) == 80, "UiFrame block must be a std140 mat4 and a vec4");
     } // namespace
 
-    ui_pass::ui_pass(std::vector<renderable*>* registry, uint32_t width, uint32_t height)
+    ui_pass::ui_pass(const std::vector<renderable*>* registry, uint32_t width, uint32_t height)
         : m_registry(registry), m_width(width), m_height(height)
     {
         auto& gpu = *runtime::current_engine().gpu;

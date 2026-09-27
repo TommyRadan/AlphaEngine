@@ -41,6 +41,10 @@
 namespace rendering_engine
 {
     struct camera;
+    struct scene_pass;
+    struct shadow_pass;
+    struct point_shadow_pass;
+    struct spot_shadow_pass;
 
     /**
      * @brief Collects one pass's declared resource reads and writes.
@@ -182,8 +186,9 @@ namespace rendering_engine
         // consumers nothing: they simply read the previous stage. Decided
         // by @ref renderer::render before any pass records, so every pass
         // sees the same choice; in the declared pass I/O both are the
-        // logical "scene_color" resource. Passes before motion blur (the scene,
-        // skybox and volumetric fog) keep using the scene-colour pair.
+        // logical "scene_color" resource. Passes before motion blur (the
+        // scene, skybox and volumetric fog) keep using the scene-colour
+        // pair.
         gpu::render_target hdr_color_target{};
         gpu::texture hdr_color_texture{};
 
@@ -257,6 +262,22 @@ namespace rendering_engine
         // its own live-tunable setters. See @ref post_settings for why
         // scene-wide fog is not part of it.
         post_settings post{};
+
+        // The passes whose per-frame output a later pass consumes,
+        // published by the renderer every frame from the pass list it owns
+        // (null for a pass that is absent), so no pass holds a pointer to
+        // another. A consumer reads its producer here while it records,
+        // after the producer has: the scene pass takes the shadow maps it
+        // binds and the fitted matrices and culling tallies it uploads from
+        // the three shadow passes; the depth pre-pass drives the scene
+        // pass's shared draw list (@ref scene_pass::prepare,
+        // @ref scene_pass::record_depth_prepass); the volumetric fog binds
+        // the scene pass's per-frame group and the debug pass its
+        // unjittered overlay twin.
+        scene_pass* scene{nullptr};
+        const shadow_pass* directional_shadow{nullptr};
+        const point_shadow_pass* point_shadow{nullptr};
+        const spot_shadow_pass* spot_shadow{nullptr};
     };
 
     /**
@@ -304,8 +325,9 @@ namespace rendering_engine
          * Called once when the renderer validates its @ref pass_list, which
          * checks that every read is produced before it is consumed. Defaults
          * to declaring nothing — such a pass is recorded in place but
-         * invisible to the dependency check. Passes name resources with the stable strings the
-         * engine imports (e.g. "scene_color", "swapchain").
+         * invisible to the dependency check. Passes name resources with the
+         * stable strings the engine imports (e.g. "scene_color",
+         * "swapchain").
          */
         virtual void declare_io(pass_io_builder& io) const
         {

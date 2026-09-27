@@ -77,7 +77,7 @@ namespace rendering_engine
         // @p settings supplies the face resolution (half the configured
         // shadow resolution) and the rasteriser slope bias; both are fixed
         // for the pass's lifetime.
-        point_shadow_pass(std::vector<renderable*>* registry, const core::shadow_settings& settings);
+        point_shadow_pass(const std::vector<renderable*>* registry, const core::shadow_settings& settings);
         ~point_shadow_pass() override;
 
         point_shadow_pass(const point_shadow_pass&) = delete;
@@ -149,9 +149,9 @@ namespace rendering_engine
             core::math::aabb bounds{};
         };
 
-        // Non-owning back-pointer to the renderer's scene-renderable
+        // Non-owning back-pointer to the render world's scene-renderable
         // registry — the same one the scene and directional shadow passes walk.
-        std::vector<renderable*>* m_registry;
+        const std::vector<renderable*>* m_registry;
 
         // The depth cube and the six depth-only targets attached to its
         // faces. The cube is owned here (the targets import it), so it is

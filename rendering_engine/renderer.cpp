@@ -42,15 +42,8 @@
 #include <rendering_engine/gpu/shader_hot_reload.hpp>
 #include <rendering_engine/gpu/shader_library.hpp>
 #include <rendering_engine/lighting/environment_probe.hpp>
-#include <rendering_engine/materials/basic_material.hpp>
 #include <rendering_engine/materials/grid_material.hpp>
-#include <rendering_engine/materials/instanced_material.hpp>
-#include <rendering_engine/materials/line_material.hpp>
-#include <rendering_engine/materials/material_template.hpp>
-#include <rendering_engine/materials/phong_material.hpp>
-#include <rendering_engine/materials/points_material.hpp>
 #include <rendering_engine/materials/standard_material.hpp>
-#include <rendering_engine/materials/ui_material.hpp>
 #include <rendering_engine/passes/depth_prepass.hpp>
 #include <rendering_engine/passes/pass.hpp>
 #include <rendering_engine/passes/point_shadow_pass.hpp>
@@ -174,11 +167,11 @@ void rendering_engine::renderer::init()
     const uint32_t height = drawable.height;
     eng.gpu->resize_swapchain(width, height);
 
-    // Report the drawable's aspect to the camera registry: every attached
+    // Report the drawable's aspect to the world's cameras: every attached
     // camera takes it now and any camera attached later takes it on
     // attach, so the projection always matches the drawable. The settings'
     // logical size stands in while the window has no drawable.
-    set_drawable_aspect(drawable_aspect_ratio(width, height, eng.settings->window.aspect_ratio()));
+    m_world.set_drawable_aspect(drawable_aspect_ratio(width, height, eng.settings->window.aspect_ratio()));
 
     // Keep the swapchain extent, the off-screen targets and the passes in
     // step with the drawable as the window is resized, maximised, restored
@@ -206,33 +199,35 @@ void rendering_engine::renderer::init()
 
     // Construct the built-in passes first — each pass owns the
     // per-frame bind-group layout its matching material reads at
-    // pipeline-create time. The shadow pass is built before the scene
-    // pass so the latter can bake the cascade array into its per-frame
-    // bind group and query the cascade matrices each frame; it walks
-    // the same scene-renderable registry. The shadow passes size their
-    // maps and biases from the shadow settings, fixed at startup.
+    // pipeline-create time. The shadow passes walk the world's
+    // scene-renderable registry, like the scene pass, and size their maps
+    // and biases from the shadow settings, fixed at startup. They run
+    // ahead of the scene pass, which reads their maps and each frame's
+    // fitted matrices through the frame context (render() publishes the
+    // passes there), so no pass is handed another at construction.
     const core::shadow_settings shadow_config =
         eng.settings != nullptr ? eng.settings->shadows : core::shadow_settings{};
-    auto shadow = std::make_unique<shadow_pass>(&m_scene_renderables, shadow_config);
+    auto shadow = std::make_unique<shadow_pass>(&m_world.scene_renderables(), shadow_config);
     m_shadow = shadow.get();
     // The omni shadow pass renders six depth faces from the first shadow-casting
     // point light; like the directional shadow it runs before the scene pass so
     // its maps are ready for the per-frame bind group.
-    auto point_shadow = std::make_unique<point_shadow_pass>(&m_scene_renderables, shadow_config);
+    auto point_shadow = std::make_unique<point_shadow_pass>(&m_world.scene_renderables(), shadow_config);
+    m_point_shadow = point_shadow.get();
     // The spot shadow pass renders a single perspective depth map from the
     // first shadow-casting spot light; also runs before the scene pass.
-    auto spot_shadow = std::make_unique<spot_shadow_pass>(&m_scene_renderables, shadow_config);
+    auto spot_shadow = std::make_unique<spot_shadow_pass>(&m_world.scene_renderables(), shadow_config);
     m_spot_shadow = spot_shadow.get();
-    auto scene = std::make_unique<scene_pass>(
-        &m_scene_renderables, shadow.get(), point_shadow.get(), spot_shadow.get(), &m_render_stats, taa_enabled);
+    auto scene = std::make_unique<scene_pass>(&m_world.scene_renderables(), &m_render_stats, taa_enabled);
+    m_scene = scene.get();
     // The optional depth pre-pass runs right before the scene pass, over
-    // the scene pass's own draw list and per-frame group, and lays the
-    // opaque depth into the scene target for it to load. It is always in
-    // the pass list and records nothing while disabled, so
-    // set_depth_prepass can flip it at runtime.
-    auto depth_pre = std::make_unique<depth_prepass>(scene.get());
+    // the scene pass's own draw list and per-frame group (reached through
+    // frame_context::scene), and lays the opaque depth into the scene
+    // target for it to load. It is always in the pass list and records
+    // nothing while disabled, so set_depth_prepass can flip it at runtime.
+    auto depth_pre = std::make_unique<depth_prepass>();
     m_depth_prepass_enabled = (eng.settings != nullptr) && eng.settings->graphics.depth_prepass;
-    // The material templates below are built against the same per-frame
+    // The material library below is built against the same per-frame
     // layout the scene pass binds at slot 0.
     const gpu::bind_group_layout scene_frame_layout = scene->frame_bind_group_layout();
     // The skybox pass runs after the scene pass and composites the cube-map
@@ -244,10 +239,10 @@ void rendering_engine::renderer::init()
     // scene depth and blends its lit haze and light shafts over the HDR
     // target, ahead of bloom and tonemap so they treat it like the rest of
     // the scene. It binds the scene pass's jittered per-frame group (the
-    // view the depth was rasterised with, the lights, the shadow maps)
-    // and draws nothing until post_settings::volumetric enables it.
-    auto volumetric_fog =
-        std::make_unique<volumetric_fog_pass>(scene_frame_layout, scene->frame_bind_group(), width, height);
+    // view the depth was rasterised with, the lights, the shadow maps),
+    // read through frame_context::scene, and draws nothing until
+    // post_settings::volumetric enables it.
+    auto volumetric_fog = std::make_unique<volumetric_fog_pass>(scene_frame_layout, width, height);
     // Per-pixel motion vectors are reconstructed from the scene depth
     // buffer: the velocity pass samples the HDR target's depth attachment
     // through frame_context::scene_depth_texture each frame. They drive
@@ -310,7 +305,7 @@ void rendering_engine::renderer::init()
     auto fxaa = std::make_unique<fxaa_pass>(width, height, taa_enabled);
     // The UI pass owns the pixel-space projection the ui template reads at
     // slot 0; it follows the drawable through pass::resize.
-    auto ui = std::make_unique<ui_pass>(&m_ui_renderables, width, height);
+    auto ui = std::make_unique<ui_pass>(&m_world.ui_renderables(), width, height);
     const gpu::bind_group_layout ui_frame_layout = ui->frame_bind_group_layout();
 #if _DEBUG
     // The debug pass binds the scene pass's per-frame camera group at
@@ -318,35 +313,14 @@ void rendering_engine::renderer::init()
     // It uses the unjittered overlay group: the debug pass paints after the
     // TAA resolve, so the projection jitter would otherwise show up as a
     // sub-pixel wobble on the gizmos rather than being averaged away.
-    auto debug = std::make_unique<editor::debug_pass>(&m_debug_renderables, scene->overlay_frame_bind_group());
+    auto debug = std::make_unique<editor::debug_pass>(&m_world.debug_renderables());
 #endif
 
-    // Construct the built-in materials: one template per type (shaders,
-    // layouts, the pipeline-variant cache) against the per-frame layouts
-    // exposed by the passes, and the built-in instance of each. The 3D
-    // templates reserve slot 0 for the scene_pass's per-frame group; the
-    // ui template reserves it for the ui_pass's. Each instance keeps its
-    // template alive; the standard template is also held here so
-    // create_standard_material hands every extra instance the same one.
-    gpu::device& device = *eng.gpu;
-    m_basic_material = std::make_unique<basic_material>(basic_material::create_template(device, scene_frame_layout));
-    m_instanced_material =
-        std::make_unique<instanced_material>(instanced_material::create_template(device, scene_frame_layout));
-    m_phong_material = std::make_unique<phong_material>(phong_material::create_template(device, scene_frame_layout));
-    m_standard_template = standard_material::create_template(device, scene_frame_layout);
-    m_standard_material = std::make_unique<standard_material>(m_standard_template);
-    m_points_material = std::make_unique<points_material>(points_material::create_template(device, scene_frame_layout));
-    // The scene lines and the depth-disabled debug-gizmo lines (which
-    // always read on top in the depth-less debug pass) are two instances
-    // of one line template, bound to two pipeline variants.
-    const std::shared_ptr<material_template> line_template = line_material::create_template(device, scene_frame_layout);
-    m_line_material = std::make_unique<line_material>(line_template);
-    m_debug_line_material = std::make_unique<line_material>(line_template, /*depth_tested=*/false);
-    // Analytic infinite-grid material; shares the scene per-frame layout.
-    m_grid_material = std::make_unique<grid_material>(grid_material::create_template(device, scene_frame_layout));
-    m_ui_material = std::make_unique<ui_material>(ui_material::create_template(device, ui_frame_layout));
-    LOG_INF("Rendering Engine: basic_material, instanced_material, phong_material, standard_material, points_material, "
-            "line_material and ui_material constructed");
+    // Build the material library: one template per built-in type against
+    // the per-frame layouts the passes above expose (the 3D templates
+    // reserve slot 0 for the scene_pass's per-frame group, the ui template
+    // for the ui_pass's), and the built-in instance of each.
+    m_materials.init(*eng.gpu, scene_frame_layout, ui_frame_layout);
 
     // Every built-in pipeline has compiled by now; report how much of it
     // the on-disk SPIR-V cache served (see gpu/shader_compiler.hpp).
@@ -457,11 +431,12 @@ void rendering_engine::renderer::quit()
 {
     auto& eng = runtime::current_engine();
 
+    // The teardown walks the members from the last declared to the first
+    // (see renderer.hpp), ahead of the device and the window.
+
     // Stop tracking window resizes before the device the listener
-    // resizes goes away, and withdraw the drawable aspect the registry
-    // hands to attaching cameras: there is no drawable to match now.
+    // resizes goes away.
     m_window_resized_subscription.reset();
-    set_drawable_aspect(0.0f);
 
 #if _DEBUG
     // Nothing reloads during teardown; the modules it tracks go with
@@ -475,8 +450,8 @@ void rendering_engine::renderer::quit()
 
     // Release the built-in debug helpers before the line material and the
     // GPU device they reference; their destructors unregister from the
-    // debug-renderable registry and free their line buffers. Empty in
-    // release. Game-owned helpers must likewise be released before quit.
+    // world's registries and free their line buffers. Empty in release.
+    // Game-owned helpers must likewise be released before quit.
     m_debug_helpers.clear();
 
     // The profiler's query sets go before the device does.
@@ -492,7 +467,9 @@ void rendering_engine::renderer::quit()
     m_motion_blur = nullptr;
     m_auto_exposure = nullptr;
     m_taa = nullptr;
+    m_scene = nullptr;
     m_shadow = nullptr;
+    m_point_shadow = nullptr;
     m_spot_shadow = nullptr;
     m_prev_camera = nullptr;
     m_has_prev_view_projection = false;
@@ -502,20 +479,10 @@ void rendering_engine::renderer::quit()
     m_grading_lut.reset();
     m_grading_lut_path.clear();
 
-    // Then materials, which own pipelines that reference the device.
-    // Release them before the device tears its pools down.
-    m_ui_material.reset();
-    m_grid_material.reset();
-    m_debug_line_material.reset();
-    m_line_material.reset();
-    m_points_material.reset();
-    m_standard_material.reset();
-    m_phong_material.reset();
-    m_instanced_material.reset();
-    m_basic_material.reset();
-    // The other templates went with their last instance above; the
-    // standard one is held here too and must go before the device.
-    m_standard_template.reset();
+    // Then the material library, whose templates own pipelines that
+    // reference the device. Release them before the device tears its
+    // pools down.
+    m_materials.quit();
 
     // The per-draw ring's buffers and shared groups go before the device.
     // Every renderable has released its per-draw state by now (they hold
@@ -526,6 +493,11 @@ void rendering_engine::renderer::quit()
     // its pools down. The colour and depth attachments are owned by the
     // targets so destroy() releases them too.
     release_color_targets();
+
+    // Last, the world: withdraw the drawable aspect it hands to attaching
+    // cameras, since there is no drawable to match now. Every renderable,
+    // pass and helper that pointed into its registries is gone.
+    m_world.quit();
 
     eng.gpu->quit();
     eng.window->quit();
@@ -582,14 +554,8 @@ void rendering_engine::renderer::render()
     // asynchronous load resolved in asset_cache::pump, or a debug hot
     // reload swapped it). Here, with the frame open and no pass recording
     // yet, the old group is released safely and every pass binds the new
-    // one. Every instance of the standard template is a standard_material.
-    if (m_standard_template != nullptr)
-    {
-        for (material* instance : m_standard_template->instances())
-        {
-            static_cast<standard_material*>(instance)->refresh_texture_assets();
-        }
-    }
+    // one.
+    m_materials.refresh_texture_assets();
 
     // The previous frame's work has retired (or its queries are polled
     // without waiting), so its per-pass timestamps can be read now.
@@ -598,11 +564,11 @@ void rendering_engine::renderer::render()
     // Capture per-frame state once so passes cannot disagree about
     // which camera or backbuffer is active mid-frame, and so they
     // do not have to re-run the camera arbitration on every entry.
-    // active_camera() is the registry's pick for this frame: the
-    // highest-priority attached, enabled camera.
+    // The world's active_camera() is the arbitration's pick for this
+    // frame: the highest-priority attached, enabled camera.
     frame_context ctx{};
     ctx.swapchain_target = gpu.swapchain_target();
-    ctx.active_camera = active_camera();
+    ctx.active_camera = m_world.active_camera();
     ctx.viewport_width = m_target_width;
     ctx.viewport_height = m_target_height;
     ctx.frame_index = m_frame_index;
@@ -639,9 +605,16 @@ void rendering_engine::renderer::render()
     // The TAA resolve is invalid while TAA is off.
     ctx.velocity_texture = (m_velocity != nullptr) ? m_velocity->velocity_texture() : gpu::texture{};
     ctx.taa_resolve_texture = (m_taa != nullptr) ? m_taa->output_texture() : gpu::texture{};
-    ctx.fog = m_fog;
+    ctx.fog = m_world.fog();
     ctx.depth_prepass = m_depth_prepass_enabled;
     ctx.post = m_post_settings;
+    // The passes whose output later passes consume, so none of them holds
+    // another: the scene pass reads the shadow passes, the depth pre-pass,
+    // the volumetric fog and the debug pass read the scene pass.
+    ctx.scene = m_scene;
+    ctx.directional_shadow = m_shadow;
+    ctx.point_shadow = m_point_shadow;
+    ctx.spot_shadow = m_spot_shadow;
     // The HDR image the chain after motion blur works on: the blurred copy
     // when the pass draws this frame, else the scene colour itself. Asked
     // of the pass with the same frame context its record() will see, so
@@ -745,10 +718,10 @@ void rendering_engine::renderer::on_resize(uint32_t pixel_width, uint32_t pixel_
     m_passes.resize(pixel_width, pixel_height);
 
     // The projection follows the drawable so the image is not stretched:
-    // the registry forwards the aspect to every attached camera and hands
-    // it to any camera attached later. Both dimensions are non-zero here,
-    // so the fallback is never used.
-    set_drawable_aspect(drawable_aspect_ratio(pixel_width, pixel_height, 1.0f));
+    // the world forwards the aspect to every attached camera and hands it
+    // to any camera attached later. Both dimensions are non-zero here, so
+    // the fallback is never used.
+    m_world.set_drawable_aspect(drawable_aspect_ratio(pixel_width, pixel_height, 1.0f));
 
     LOG_INF("Rendering Engine: render targets resized to %ux%u", pixel_width, pixel_height);
 }
@@ -808,99 +781,82 @@ void rendering_engine::renderer::release_color_targets()
 
 void rendering_engine::renderer::register_scene_renderable(renderable* r)
 {
-    if (r != nullptr)
-    {
-        m_scene_renderables.push_back(r);
-    }
+    m_world.register_scene_renderable(r);
 }
 
 void rendering_engine::renderer::unregister_scene_renderable(renderable* r)
 {
-    m_scene_renderables.erase(std::remove(m_scene_renderables.begin(), m_scene_renderables.end(), r),
-                              m_scene_renderables.end());
+    m_world.unregister_scene_renderable(r);
 }
 
 void rendering_engine::renderer::register_ui_renderable(renderable* r)
 {
-    if (r != nullptr)
-    {
-        m_ui_renderables.push_back(r);
-    }
+    m_world.register_ui_renderable(r);
 }
 
 void rendering_engine::renderer::unregister_ui_renderable(renderable* r)
 {
-    m_ui_renderables.erase(std::remove(m_ui_renderables.begin(), m_ui_renderables.end(), r), m_ui_renderables.end());
+    m_world.unregister_ui_renderable(r);
 }
 
 void rendering_engine::renderer::register_debug_renderable(renderable* r)
 {
-    if (r != nullptr)
-    {
-        m_debug_renderables.push_back(r);
-    }
+    m_world.register_debug_renderable(r);
 }
 
 void rendering_engine::renderer::unregister_debug_renderable(renderable* r)
 {
-    m_debug_renderables.erase(std::remove(m_debug_renderables.begin(), m_debug_renderables.end(), r),
-                              m_debug_renderables.end());
+    m_world.unregister_debug_renderable(r);
 }
 
 rendering_engine::basic_material& rendering_engine::renderer::get_basic_material()
 {
-    return *m_basic_material;
+    return m_materials.get_basic_material();
 }
 
 rendering_engine::instanced_material& rendering_engine::renderer::get_instanced_material()
 {
-    return *m_instanced_material;
+    return m_materials.get_instanced_material();
 }
 
 rendering_engine::phong_material& rendering_engine::renderer::get_phong_material()
 {
-    return *m_phong_material;
+    return m_materials.get_phong_material();
 }
 
 rendering_engine::standard_material& rendering_engine::renderer::get_standard_material()
 {
-    return *m_standard_material;
+    return m_materials.get_standard_material();
 }
 
 rendering_engine::points_material& rendering_engine::renderer::get_points_material()
 {
-    return *m_points_material;
+    return m_materials.get_points_material();
 }
 
 rendering_engine::line_material& rendering_engine::renderer::get_line_material()
 {
-    return *m_line_material;
+    return m_materials.get_line_material();
 }
 
 rendering_engine::line_material& rendering_engine::renderer::get_debug_line_material()
 {
-    return *m_debug_line_material;
+    return m_materials.get_debug_line_material();
 }
 
 rendering_engine::grid_material& rendering_engine::renderer::get_grid_material()
 {
-    return *m_grid_material;
+    return m_materials.get_grid_material();
 }
 
 std::unique_ptr<rendering_engine::grid_material> rendering_engine::renderer::create_grid_material(float fade_distance)
 {
-    // The fade distance is a define baked into the template's shaders, so
-    // the new instance gets a template of its own, built on the device and
-    // against the scene per-frame layout the built-in grid template uses.
-    assert(m_grid_material != nullptr && "renderer::create_grid_material is only valid between init and quit");
-    const material_template& builtin = m_grid_material->get_template();
-    return std::make_unique<grid_material>(
-        grid_material::create_template(builtin.device(), builtin.descriptor().frame_layout, fade_distance));
+    return m_materials.create_grid_material(fade_distance);
 }
 
 rendering_engine::ui_material& rendering_engine::renderer::get_ui_material()
 {
-    return *m_ui_material;
+    return m_materials.get_ui_material();
 }
 
 rendering_engine::per_draw_ring& rendering_engine::renderer::get_per_draw_ring()
@@ -1062,61 +1018,35 @@ rendering_engine::gpu::texture rendering_engine::renderer::spot_shadow_map() con
 
 rendering_engine::gpu::texture rendering_engine::renderer::environment_brdf_lut() const
 {
-    return m_environment != nullptr ? m_environment->brdf_lut() : gpu::texture{};
+    return m_world.environment_brdf_lut();
 }
 
 std::unique_ptr<rendering_engine::standard_material> rendering_engine::renderer::create_standard_material()
 {
-    auto material = std::make_unique<standard_material>(m_standard_template);
-    if (m_environment != nullptr)
-    {
-        material->set_environment(*m_environment);
-    }
-    return material;
+    return m_materials.create_standard_material(m_world.environment());
 }
 
 const std::shared_ptr<rendering_engine::material_template>&
 rendering_engine::renderer::get_standard_material_template() const
 {
-    return m_standard_template;
+    return m_materials.get_standard_material_template();
 }
 
 void rendering_engine::renderer::set_environment(const environment_probe* env)
 {
-    m_environment = env;
+    m_world.set_environment(env);
 
     // Point the skybox pass at the cube map (or clear it) and mirror the
-    // choice onto every live standard material — the built-in one and
-    // each instance create_standard_material handed out, whenever it was
-    // made — so all their surfaces pick up the matching image-based
-    // ambient. Every instance of the standard template is a
-    // standard_material: that is the only type constructed over it.
+    // choice onto every live standard material, so all their surfaces
+    // pick up the matching image-based ambient.
     if (m_skybox != nullptr)
     {
         m_skybox->set_cubemap(env != nullptr ? env->skybox() : gpu::texture{});
     }
-    if (m_standard_template == nullptr)
-    {
-        return;
-    }
-    // Copy the list: set_environment rebuilds the instance's bind group
-    // but never registers or drops an instance, so this is only caution.
-    const std::vector<material*> instances = m_standard_template->instances();
-    for (material* instance : instances)
-    {
-        auto* standard = static_cast<standard_material*>(instance);
-        if (env != nullptr)
-        {
-            standard->set_environment(*env);
-        }
-        else
-        {
-            standard->clear_environment();
-        }
-    }
+    m_materials.set_environment(env);
 }
 
 void rendering_engine::renderer::set_fog(const fog_settings& fog)
 {
-    m_fog = fog;
+    m_world.set_fog(fog);
 }

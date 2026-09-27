@@ -29,8 +29,6 @@
 
 namespace rendering_engine
 {
-    struct scene_pass;
-
     /**
      * @brief Optional depth pre-pass ahead of the @ref scene_pass.
      *
@@ -45,7 +43,10 @@ namespace rendering_engine
      * target's depth attachment, through a depth-only render target that
      * imports that attachment (the depth-only targets the shadow passes
      * use), before any colour is shaded. The draw list is the scene
-     * pass's own (@ref scene_pass::prepare): layer-filtered and
+     * pass's own (@ref scene_pass::prepare), reached through
+     * @ref frame_context::scene — the scene pass runs right after this
+     * one and owns the draw list, the per-frame bind group and the
+     * choice between loading and clearing the depth: layer-filtered and
      * frustum-culled against the camera, sorted by
      * @ref draw_item::sort_key, so the opaque items it draws go
      * front-to-back; the transparent queue and every surface
@@ -74,11 +75,7 @@ namespace rendering_engine
      */
     struct depth_prepass : pass
     {
-        // @p scene is the scene pass that runs right after this one and
-        // owns the draw list, the per-frame bind group and the choice
-        // between loading and clearing the depth. Non-owning; the
-        // renderer owns both passes.
-        explicit depth_prepass(scene_pass* scene);
+        depth_prepass();
         ~depth_prepass() override;
 
         depth_prepass(const depth_prepass&) = delete;
@@ -103,9 +100,6 @@ namespace rendering_engine
 
     private:
         void release_target();
-
-        // Non-owning; see the constructor.
-        scene_pass* m_scene{nullptr};
 
         // Depth-only target over @ref m_target_depth, the scene depth
         // attachment it was built against. Rebuilt whenever

@@ -97,14 +97,8 @@ namespace rendering_engine
         constexpr size_t spot_shadow_ubo_size = sizeof(core::math::mat4) + 4 * sizeof(float);
     } // namespace
 
-    scene_pass::scene_pass(std::vector<renderable*>* registry,
-                           shadow_pass* shadow,
-                           point_shadow_pass* point_shadow,
-                           spot_shadow_pass* spot_shadow,
-                           render_stats* stats,
-                           bool taa_jitter)
-        : m_registry(registry), m_shadow(shadow), m_point_shadow(point_shadow), m_spot_shadow(spot_shadow),
-          m_stats(stats), m_taa_jitter(taa_jitter)
+    scene_pass::scene_pass(const std::vector<renderable*>* registry, render_stats* stats, bool taa_jitter)
+        : m_registry(registry), m_stats(stats), m_taa_jitter(taa_jitter)
     {
         auto& gpu = *runtime::current_engine().gpu;
 
@@ -169,85 +163,6 @@ namespace rendering_engine
         spot_shadow_descriptor.usage = gpu::buffer_usage_uniform | gpu::buffer_usage_copy_dst;
         spot_shadow_descriptor.hint = gpu::buffer_usage_hint::dynamic_data;
         m_spot_shadow_ubo = gpu.create_buffer(spot_shadow_descriptor);
-
-        gpu::bind_group_descriptor frame_bind_group_descriptor{};
-        frame_bind_group_descriptor.layout = m_frame_layout;
-
-        gpu::binding_value view_globals_slot{};
-        view_globals_slot.binding = view_globals_binding;
-        view_globals_slot.kind = gpu::binding_kind::uniform_buffer;
-        view_globals_slot.buffer_value = m_frame_ubo;
-        frame_bind_group_descriptor.entries.push_back(view_globals_slot);
-
-        gpu::binding_value lights_slot{};
-        lights_slot.binding = lights_binding;
-        lights_slot.kind = gpu::binding_kind::uniform_buffer;
-        lights_slot.buffer_value = m_lights_ubo;
-        frame_bind_group_descriptor.entries.push_back(lights_slot);
-
-        gpu::binding_value shadow_slot{};
-        shadow_slot.binding = shadow_binding;
-        shadow_slot.kind = gpu::binding_kind::uniform_buffer;
-        shadow_slot.buffer_value = m_shadow_ubo;
-        frame_bind_group_descriptor.entries.push_back(shadow_slot);
-
-        // The cascade array and its comparison sampler are owned by the
-        // shadow pass. Their handles are stable across frames, so capture
-        // them once here; invalid handles (no shadow pass) simply bind
-        // nothing and the enabled flag keeps the map unsampled.
-        gpu::binding_value shadow_map_slot{};
-        shadow_map_slot.binding = shadow_map_binding;
-        shadow_map_slot.kind = gpu::binding_kind::texture;
-        shadow_map_slot.texture_value = m_shadow != nullptr ? m_shadow->shadow_map() : gpu::texture{};
-        frame_bind_group_descriptor.entries.push_back(shadow_map_slot);
-
-        gpu::binding_value shadow_sampler_slot{};
-        shadow_sampler_slot.binding = shadow_map_binding;
-        shadow_sampler_slot.kind = gpu::binding_kind::sampler;
-        shadow_sampler_slot.sampler_value = m_shadow != nullptr ? m_shadow->shadow_sampler() : gpu::sampler{};
-        frame_bind_group_descriptor.entries.push_back(shadow_sampler_slot);
-
-        gpu::binding_value point_shadow_slot{};
-        point_shadow_slot.binding = point_shadow_binding;
-        point_shadow_slot.kind = gpu::binding_kind::uniform_buffer;
-        point_shadow_slot.buffer_value = m_point_shadow_ubo;
-        frame_bind_group_descriptor.entries.push_back(point_shadow_slot);
-
-        // The omni depth cube is owned by the point shadow pass; its handle
-        // is stable across frames. An invalid handle (no pass) binds nothing
-        // and the lit shader's enabled flag keeps it unsampled.
-        gpu::binding_value point_map_slot{};
-        point_map_slot.binding = point_shadow_map_binding;
-        point_map_slot.kind = gpu::binding_kind::texture;
-        point_map_slot.texture_value = m_point_shadow != nullptr ? m_point_shadow->shadow_map() : gpu::texture{};
-        frame_bind_group_descriptor.entries.push_back(point_map_slot);
-
-        gpu::binding_value spot_shadow_slot{};
-        spot_shadow_slot.binding = spot_shadow_binding;
-        spot_shadow_slot.kind = gpu::binding_kind::uniform_buffer;
-        spot_shadow_slot.buffer_value = m_spot_shadow_ubo;
-        frame_bind_group_descriptor.entries.push_back(spot_shadow_slot);
-
-        // The spot shadow map is owned by the spot shadow pass. An invalid
-        // handle (no pass) binds nothing and the lit shader's enabled flag
-        // keeps it unsampled, just like the directional and omni maps.
-        gpu::binding_value spot_map_slot{};
-        spot_map_slot.binding = spot_shadow_map_binding;
-        spot_map_slot.kind = gpu::binding_kind::texture;
-        spot_map_slot.texture_value = m_spot_shadow != nullptr ? m_spot_shadow->shadow_map() : gpu::texture{};
-        frame_bind_group_descriptor.entries.push_back(spot_map_slot);
-
-        m_frame_bind_group = gpu.create_bind_group(frame_bind_group_descriptor);
-
-        // The overlay twin shares every binding with the main group except
-        // the view_globals block (entries[0], pushed first above), which it
-        // points at the unjittered buffer so the debug pass projects without
-        // the sub-pixel jitter.
-        if (m_taa_jitter)
-        {
-            frame_bind_group_descriptor.entries[0].buffer_value = m_overlay_frame_ubo;
-            m_overlay_frame_bind_group = gpu.create_bind_group(frame_bind_group_descriptor);
-        }
     }
 
     scene_pass::~scene_pass()
@@ -317,6 +232,125 @@ namespace rendering_engine
         return m_overlay_frame_bind_group.valid() ? m_overlay_frame_bind_group : m_frame_bind_group;
     }
 
+    void scene_pass::update_frame_bind_groups(const frame_context& ctx)
+    {
+        // The shadow maps (and the directional comparison sampler) this
+        // pass binds are owned by the shadow passes and reach it through
+        // the frame context, like every other texture a pass samples but
+        // does not own. The groups are built on the first frame and
+        // rebuilt only if one of those handles changes; the uniform
+        // buffers behind them are this pass's own and never change.
+        const gpu::texture shadow_map =
+            ctx.directional_shadow != nullptr ? ctx.directional_shadow->shadow_map() : gpu::texture{};
+        const gpu::sampler shadow_sampler =
+            ctx.directional_shadow != nullptr ? ctx.directional_shadow->shadow_sampler() : gpu::sampler{};
+        const gpu::texture point_shadow_map =
+            ctx.point_shadow != nullptr ? ctx.point_shadow->shadow_map() : gpu::texture{};
+        const gpu::texture spot_shadow_map =
+            ctx.spot_shadow != nullptr ? ctx.spot_shadow->shadow_map() : gpu::texture{};
+        if (m_frame_bind_group.valid() && shadow_map == m_bound_shadow_map &&
+            shadow_sampler == m_bound_shadow_sampler && point_shadow_map == m_bound_point_shadow_map &&
+            spot_shadow_map == m_bound_spot_shadow_map)
+        {
+            return;
+        }
+
+        auto& gpu = *runtime::current_engine().gpu;
+        if (m_overlay_frame_bind_group.valid())
+        {
+            gpu.destroy(m_overlay_frame_bind_group);
+            m_overlay_frame_bind_group = {};
+        }
+        if (m_frame_bind_group.valid())
+        {
+            gpu.destroy(m_frame_bind_group);
+            m_frame_bind_group = {};
+        }
+
+        gpu::bind_group_descriptor frame_bind_group_descriptor{};
+        frame_bind_group_descriptor.layout = m_frame_layout;
+
+        gpu::binding_value view_globals_slot{};
+        view_globals_slot.binding = view_globals_binding;
+        view_globals_slot.kind = gpu::binding_kind::uniform_buffer;
+        view_globals_slot.buffer_value = m_frame_ubo;
+        frame_bind_group_descriptor.entries.push_back(view_globals_slot);
+
+        gpu::binding_value lights_slot{};
+        lights_slot.binding = lights_binding;
+        lights_slot.kind = gpu::binding_kind::uniform_buffer;
+        lights_slot.buffer_value = m_lights_ubo;
+        frame_bind_group_descriptor.entries.push_back(lights_slot);
+
+        gpu::binding_value shadow_slot{};
+        shadow_slot.binding = shadow_binding;
+        shadow_slot.kind = gpu::binding_kind::uniform_buffer;
+        shadow_slot.buffer_value = m_shadow_ubo;
+        frame_bind_group_descriptor.entries.push_back(shadow_slot);
+
+        // The cascade array and its comparison sampler are owned by the
+        // shadow pass; invalid handles (no shadow pass) simply bind nothing
+        // and the enabled flag keeps the map unsampled.
+        gpu::binding_value shadow_map_slot{};
+        shadow_map_slot.binding = shadow_map_binding;
+        shadow_map_slot.kind = gpu::binding_kind::texture;
+        shadow_map_slot.texture_value = shadow_map;
+        frame_bind_group_descriptor.entries.push_back(shadow_map_slot);
+
+        gpu::binding_value shadow_sampler_slot{};
+        shadow_sampler_slot.binding = shadow_map_binding;
+        shadow_sampler_slot.kind = gpu::binding_kind::sampler;
+        shadow_sampler_slot.sampler_value = shadow_sampler;
+        frame_bind_group_descriptor.entries.push_back(shadow_sampler_slot);
+
+        gpu::binding_value point_shadow_slot{};
+        point_shadow_slot.binding = point_shadow_binding;
+        point_shadow_slot.kind = gpu::binding_kind::uniform_buffer;
+        point_shadow_slot.buffer_value = m_point_shadow_ubo;
+        frame_bind_group_descriptor.entries.push_back(point_shadow_slot);
+
+        // The omni depth cube is owned by the point shadow pass. An invalid
+        // handle (no pass) binds nothing and the lit shader's enabled flag
+        // keeps it unsampled.
+        gpu::binding_value point_map_slot{};
+        point_map_slot.binding = point_shadow_map_binding;
+        point_map_slot.kind = gpu::binding_kind::texture;
+        point_map_slot.texture_value = point_shadow_map;
+        frame_bind_group_descriptor.entries.push_back(point_map_slot);
+
+        gpu::binding_value spot_shadow_slot{};
+        spot_shadow_slot.binding = spot_shadow_binding;
+        spot_shadow_slot.kind = gpu::binding_kind::uniform_buffer;
+        spot_shadow_slot.buffer_value = m_spot_shadow_ubo;
+        frame_bind_group_descriptor.entries.push_back(spot_shadow_slot);
+
+        // The spot shadow map is owned by the spot shadow pass. An invalid
+        // handle (no pass) binds nothing and the lit shader's enabled flag
+        // keeps it unsampled, just like the directional and omni maps.
+        gpu::binding_value spot_map_slot{};
+        spot_map_slot.binding = spot_shadow_map_binding;
+        spot_map_slot.kind = gpu::binding_kind::texture;
+        spot_map_slot.texture_value = spot_shadow_map;
+        frame_bind_group_descriptor.entries.push_back(spot_map_slot);
+
+        m_frame_bind_group = gpu.create_bind_group(frame_bind_group_descriptor);
+
+        // The overlay twin shares every binding with the main group except
+        // the view_globals block (entries[0], pushed first above), which it
+        // points at the unjittered buffer so the debug pass projects without
+        // the sub-pixel jitter.
+        if (m_taa_jitter)
+        {
+            frame_bind_group_descriptor.entries[0].buffer_value = m_overlay_frame_ubo;
+            m_overlay_frame_bind_group = gpu.create_bind_group(frame_bind_group_descriptor);
+        }
+
+        m_bound_shadow_map = shadow_map;
+        m_bound_shadow_sampler = shadow_sampler;
+        m_bound_point_shadow_map = point_shadow_map;
+        m_bound_spot_shadow_map = spot_shadow_map;
+    }
+
     void scene_pass::prepare(const frame_context& ctx)
     {
         // Once per frame: the depth pre-pass may already have prepared
@@ -328,6 +362,17 @@ namespace rendering_engine
         m_prepared_frame = ctx.frame_index;
         m_depth_prepassed = false;
         m_items.clear();
+
+        // The per-frame groups exist from the first prepare on, camera or
+        // not: the depth pre-pass, this pass and the passes that bind them
+        // later in the frame (see frame_bind_group) all read them.
+        update_frame_bind_groups(ctx);
+
+        // The shadow passes recorded ahead of this one this frame; their
+        // fits and culling tallies feed the uploads and stats below.
+        const shadow_pass* shadow = ctx.directional_shadow;
+        const point_shadow_pass* point_shadow = ctx.point_shadow;
+        const spot_shadow_pass* spot_shadow = ctx.spot_shadow;
 
         auto& eng = runtime::current_engine();
         auto& gpu = *eng.gpu;
@@ -341,9 +386,9 @@ namespace rendering_engine
             m_stats->scene_renderables = static_cast<uint32_t>(m_registry->size());
             // The shadow passes ran ahead of this one this frame; carry their
             // culling tallies over so the overlay reads one struct.
-            m_stats->shadow_culled = m_shadow != nullptr ? m_shadow->culled_count() : 0u;
-            m_stats->point_shadow_culled = m_point_shadow != nullptr ? m_point_shadow->culled_count() : 0u;
-            m_stats->spot_shadow_culled = m_spot_shadow != nullptr ? m_spot_shadow->culled_count() : 0u;
+            m_stats->shadow_culled = shadow != nullptr ? shadow->culled_count() : 0u;
+            m_stats->point_shadow_culled = point_shadow != nullptr ? point_shadow->culled_count() : 0u;
+            m_stats->spot_shadow_culled = spot_shadow != nullptr ? spot_shadow->culled_count() : 0u;
         }
 
         // No camera, no scene: nothing to upload or collect.
@@ -390,27 +435,27 @@ namespace rendering_engine
         // skips sampling, so the matrices and the (cleared) layers go
         // unused.
         std::array<float, shadow_ubo_floats> shadow_payload{};
-        if (m_shadow != nullptr && m_shadow->has_shadow())
+        if (shadow != nullptr && shadow->has_shadow())
         {
             constexpr size_t splits_offset = static_cast<size_t>(max_shadow_cascades) * 16;
             constexpr size_t bias_offset = splits_offset + 4;
             constexpr size_t params_offset = bias_offset + 4;
             constexpr size_t blend_offset = params_offset + 4;
-            const int cascades = m_shadow->cascade_count();
+            const int cascades = shadow->cascade_count();
             for (int cascade = 0; cascade < cascades; ++cascade)
             {
                 const auto lane = static_cast<size_t>(cascade);
                 std::memcpy(shadow_payload.data() + lane * 16,
-                            m_shadow->light_view_projection(cascade).data(),
+                            shadow->light_view_projection(cascade).data(),
                             sizeof(core::math::mat4));
-                shadow_payload[splits_offset + lane] = m_shadow->split_depth(cascade);
-                shadow_payload[bias_offset + lane] = m_shadow->depth_bias(cascade);
+                shadow_payload[splits_offset + lane] = shadow->split_depth(cascade);
+                shadow_payload[bias_offset + lane] = shadow->depth_bias(cascade);
             }
             shadow_payload[params_offset] = 1.0f;
             shadow_payload[params_offset + 1] = static_cast<float>(cascades);
-            shadow_payload[params_offset + 2] = static_cast<float>(m_shadow->shadow_light_index());
-            shadow_payload[params_offset + 3] = static_cast<float>(m_shadow->pcf_kernel());
-            shadow_payload[blend_offset] = m_shadow->cascade_blend();
+            shadow_payload[params_offset + 2] = static_cast<float>(shadow->shadow_light_index());
+            shadow_payload[params_offset + 3] = static_cast<float>(shadow->pcf_kernel());
+            shadow_payload[blend_offset] = shadow->cascade_blend();
         }
         gpu.write_buffer(m_shadow_ubo, shadow_payload.data(), shadow_ubo_size, 0);
 
@@ -419,23 +464,23 @@ namespace rendering_engine
         // far plane}. enabled stays 0 with no caster so the lit shader skips
         // the (cleared) cube.
         std::array<float, 104> point_shadow_payload{};
-        if (m_point_shadow != nullptr && m_point_shadow->has_shadow())
+        if (point_shadow != nullptr && point_shadow->has_shadow())
         {
             for (int face = 0; face < point_shadow_face_count; ++face)
             {
                 std::memcpy(point_shadow_payload.data() + face * 16,
-                            m_point_shadow->light_view_projection(face).data(),
+                            point_shadow->light_view_projection(face).data(),
                             sizeof(core::math::mat4));
             }
-            const auto& pos = m_point_shadow->light_position();
+            const auto& pos = point_shadow->light_position();
             point_shadow_payload[96] = pos.x;
             point_shadow_payload[97] = pos.y;
             point_shadow_payload[98] = pos.z;
-            point_shadow_payload[99] = m_point_shadow->shadow_near();
+            point_shadow_payload[99] = point_shadow->shadow_near();
             point_shadow_payload[100] = 1.0f; // enabled
-            point_shadow_payload[101] = m_point_shadow->depth_bias();
-            point_shadow_payload[102] = static_cast<float>(m_point_shadow->shadow_point_index());
-            point_shadow_payload[103] = m_point_shadow->shadow_far();
+            point_shadow_payload[101] = point_shadow->depth_bias();
+            point_shadow_payload[102] = static_cast<float>(point_shadow->shadow_point_index());
+            point_shadow_payload[103] = point_shadow->shadow_far();
         }
         gpu.write_buffer(m_point_shadow_ubo, point_shadow_payload.data(), point_shadow_ubo_size, 0);
 
@@ -443,13 +488,13 @@ namespace rendering_engine
         // {enabled, bias, caster spot index}. enabled stays 0 with no
         // caster so the lit shader skips the (cleared) map.
         std::array<float, 20> spot_shadow_payload{};
-        if (m_spot_shadow != nullptr && m_spot_shadow->has_shadow())
+        if (spot_shadow != nullptr && spot_shadow->has_shadow())
         {
             std::memcpy(
-                spot_shadow_payload.data(), m_spot_shadow->light_view_projection().data(), sizeof(core::math::mat4));
+                spot_shadow_payload.data(), spot_shadow->light_view_projection().data(), sizeof(core::math::mat4));
             spot_shadow_payload[16] = 1.0f;
-            spot_shadow_payload[17] = m_spot_shadow->depth_bias();
-            spot_shadow_payload[18] = static_cast<float>(m_spot_shadow->shadow_spot_index());
+            spot_shadow_payload[17] = spot_shadow->depth_bias();
+            spot_shadow_payload[18] = static_cast<float>(spot_shadow->shadow_spot_index());
         }
         gpu.write_buffer(m_spot_shadow_ubo, spot_shadow_payload.data(), spot_shadow_ubo_size, 0);
 

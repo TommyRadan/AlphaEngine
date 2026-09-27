@@ -56,25 +56,26 @@ namespace rendering_engine::editor
      * read on top of the game UI.
      *
      * The pass owns no per-frame state of its own: the line-based
-     * gizmos read the scene pass's camera group, handed in at
-     * construction (see the constructor).
+     * gizmos read the scene pass's camera group through the frame
+     * context (see @ref record).
      */
     struct debug_pass : pass
     {
-        // @p frame_bind_group is the scene pass's per-frame group (camera
-        // at slot 0). The debug helpers draw through the line material,
-        // whose pipeline reserves slot 0 for the camera, so binding it
-        // here projects the world-space gizmos with the same camera the
-        // scene used. The scene pass runs first and refills the backing
-        // UBO every frame, so the captured handle always reflects the
-        // current camera. An invalid handle simply binds nothing (e.g.
-        // ImGui-only debug content).
-        debug_pass(std::vector<renderable*>* registry, gpu::bind_group frame_bind_group);
+        explicit debug_pass(const std::vector<renderable*>* registry);
         ~debug_pass() override = default;
 
         debug_pass(const debug_pass&) = delete;
         debug_pass& operator=(const debug_pass&) = delete;
 
+        // The debug helpers draw through the line material, whose
+        // pipeline reserves slot 0 for the camera, so the pass binds the
+        // scene pass's unjittered per-frame group there
+        // (@ref scene_pass::overlay_frame_bind_group, read through
+        // @ref frame_context::scene): the world-space gizmos project with
+        // the camera the scene used, without the projection jitter the
+        // TAA resolve would otherwise leave on them. The scene pass runs
+        // first and refills the backing UBO every frame. With no scene
+        // pass nothing is bound (ImGui-only debug content).
         void record(gpu::command_encoder& encoder, const frame_context& ctx) override;
 
         const char* name() const override
@@ -89,14 +90,10 @@ namespace rendering_engine::editor
         }
 
     private:
-        // Non-owning back-pointer to the renderer's
+        // Non-owning back-pointer to the render world's
         // debug-renderable registry. Same lifetime guarantee as
         // @ref ui_pass::m_registry.
-        std::vector<renderable*>* m_registry;
-
-        // Scene pass's per-frame camera bind group, bound at slot 0 for
-        // the line-based gizmos. See the constructor note.
-        gpu::bind_group m_frame_bind_group;
+        const std::vector<renderable*>* m_registry;
 
         // Reused across frames so the underlying allocation persists.
         std::vector<draw_item> m_items;

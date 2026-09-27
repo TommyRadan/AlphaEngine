@@ -69,7 +69,7 @@ namespace rendering_engine
     {
         // @p settings supplies the map resolution and the rasteriser slope
         // bias; both are fixed for the pass's lifetime.
-        spot_shadow_pass(std::vector<renderable*>* registry, const core::shadow_settings& settings);
+        spot_shadow_pass(const std::vector<renderable*>* registry, const core::shadow_settings& settings);
         ~spot_shadow_pass() override;
 
         spot_shadow_pass(const spot_shadow_pass&) = delete;
@@ -124,10 +124,10 @@ namespace rendering_engine
         uint32_t caster_mask() const noexcept;
 
     private:
-        // Non-owning back-pointer to the renderer's
+        // Non-owning back-pointer to the render world's
         // scene-renderable registry — the same one the scene and other
-        // shadow passes walk. The renderer outlives every pass.
-        std::vector<renderable*>* m_registry;
+        // shadow passes walk. The world outlives every pass.
+        const std::vector<renderable*>* m_registry;
 
         // Off-screen depth-only shadow-map target (the sampled
         // @c depth32_float attachment is its only attachment) and the
