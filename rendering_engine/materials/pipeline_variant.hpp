@@ -9,9 +9,9 @@
  *        translation of the shared @ref material_params surface onto
  *        fixed-function GPU state.
  *
- * Everything here is plain data and constexpr-friendly so the unit tests
- * can exercise the key encoding, the keyword-to-define mapping and the
- * blend / depth / rasterizer mapping without a device.
+ * Everything here is plain data and constexpr-friendly: pure functions
+ * over the key encoding, the keyword-to-define mapping and the
+ * blend / depth / rasterizer mapping, with no device needed.
  */
 
 #pragma once

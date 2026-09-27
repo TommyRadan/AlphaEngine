@@ -63,8 +63,8 @@ namespace rendering_engine
         static std::shared_ptr<material_template> create_template(gpu::device& device,
                                                                   gpu::bind_group_layout frame_layout);
 
-        // The descriptor @ref create_template builds from (exposed so a
-        // test can construct the template over a fake device).
+        // The descriptor @ref create_template builds from, exposed as a
+        // separate, device-free step: it touches no gpu::device.
         static material_template_descriptor template_descriptor(gpu::bind_group_layout frame_layout);
 
         // Base (albedo) colour. When an albedo map is set the sampled
