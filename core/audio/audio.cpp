@@ -508,8 +508,7 @@ namespace core
             }
         }
 
-        // A hard clip guards against many overlapping voices summing past
-        // full scale; a limiter/compressor is out of scope (see class docs).
+        // A hard clip guards against many overlapping voices summing past full scale.
         for (std::size_t i = 0; i < frame_count * k_mixer_channels; ++i)
         {
             out[i] = std::clamp(out[i], -1.0f, 1.0f);

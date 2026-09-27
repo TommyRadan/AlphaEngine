@@ -378,7 +378,7 @@ void core::logging::message(
 
     va_list args;
     va_start(args, format);
-    // Formatted through a va_copy inside format_message; the original list is never advanced here (issue #30).
+    // Formatted through a va_copy inside format_message; the original list is never advanced here.
     const std::string text = format_message(format != nullptr ? format : "", args);
     va_end(args);
 
