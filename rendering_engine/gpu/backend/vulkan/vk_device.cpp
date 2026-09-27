@@ -2730,6 +2730,22 @@ namespace rendering_engine::gpu::backend::vulkan
         }
     }
 
+    void vk_device::flush_pending_destroys()
+    {
+        if (m_device == VK_NULL_HANDLE || m_device_lost)
+        {
+            return;
+        }
+        check_queue_result(vkDeviceWaitIdle(m_device), "vkDeviceWaitIdle (flush_pending_destroys)");
+        // Idle: nothing executes any more, so every deferred destroy —
+        // including one stamped for a submission that never happened —
+        // may run now, same reasoning as quit()'s own final drain.
+        note_device_idle();
+        m_completed_submit_serial = UINT64_MAX;
+        retire_transfer_batches();
+        drain_pending_destroys();
+    }
+
     // -- Frame boundary ------------------------------------------------
 
     void vk_device::begin_frame()

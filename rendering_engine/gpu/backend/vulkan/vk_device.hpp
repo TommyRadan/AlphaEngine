@@ -473,18 +473,33 @@ namespace rendering_engine::gpu::backend::vulkan
         // with its serial, and waiting a fence marks its serial — and
         // every earlier one, which the queue completed first — retired.
         // @c drain_pending_destroys runs the entries whose serial has
-        // retired, and only at two points where no open command buffer
-        // can reference them: in @c begin_frame, after the slot's fence
+        // retired, and only at points where no open command buffer can
+        // reference them: in @c begin_frame, after the slot's fence
         // wait and before the renderer records anything (so a bind
         // group a material rebuilds mid-frame is never freed while the
-        // open command buffer already references it), and under
-        // vkDeviceWaitIdle in @c quit. A transfer batch may reference
-        // the resource as well — a copy into a buffer or image destroyed
-        // before the batch ran — so each entry also records the newest
-        // batch id at enqueue time and runs only once every batch up to
-        // that id has retired.
+        // open command buffer already references it); under
+        // vkDeviceWaitIdle in @c quit; and under @c flush_pending_destroys
+        // for a caller with the same problem outside this queue (the
+        // ImGui Vulkan backend's own descriptor sets — see its use in
+        // debug_ui). A transfer batch may reference the resource as well
+        // — a copy into a buffer or image destroyed before the batch ran
+        // — so each entry also records the newest batch id at enqueue
+        // time and runs only once every batch up to that id has retired.
         void enqueue_destroy(std::function<void()> fn);
         void drain_pending_destroys();
+
+        // Wait the queue idle and flush every deferred destroy right
+        // away, including one stamped for a submission that has not
+        // happened yet: once idle, nothing can still reference it,
+        // exactly as @c quit reasons about its own final drain. For a
+        // caller that manages Vulkan objects of its own outside this
+        // device (through @c enqueue_destroy, as the ImGui Vulkan
+        // backend's descriptor-set cache does) and must reclaim every
+        // one of them before tearing its own state down — ahead of
+        // @c quit draining the same queue, by which point that state is
+        // already gone. A no-op once the device is lost or was never
+        // brought up.
+        void flush_pending_destroys();
 
         // 1x1 placeholder textures (one 2D, one cube) bound in place of
         // an unset sampler slot. Vulkan requires every statically-used
