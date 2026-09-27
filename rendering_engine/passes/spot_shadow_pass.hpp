@@ -6,10 +6,10 @@
 #include <vector>
 
 #include <core/math/math.hpp>
-#include <core/settings.hpp>
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/passes/pass.hpp>
 #include <rendering_engine/passes/shadow_casters.hpp>
+#include <rendering_engine/passes/shadow_settings.hpp>
 #include <rendering_engine/renderables/draw_item.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
 
@@ -24,7 +24,7 @@ namespace rendering_engine
      * the first shadow-casting @ref spot_light's point of view into a
      * single off-screen depth-only @c depth32_float target (a perspective
      * map, unlike the directional pass's auto-fitted orthographic
-     * cascades), sized by @c core::shadow_settings::resolution.
+     * cascades), sized by @c rendering_engine::shadow_settings::resolution.
      * The vertical field of view is twice the caster's outer cone
      * half-angle, so the map exactly covers the cone, and the far plane
      * follows the caster's @ref spot_light::range (a fixed default when
@@ -50,7 +50,7 @@ namespace rendering_engine
     {
         // @p settings supplies the map resolution and the rasteriser slope
         // bias; both are fixed for the pass's lifetime.
-        spot_shadow_pass(const std::vector<renderable*>* registry, const core::shadow_settings& settings);
+        spot_shadow_pass(const std::vector<renderable*>* registry, const rendering_engine::shadow_settings& settings);
         ~spot_shadow_pass() override;
 
         spot_shadow_pass(const spot_shadow_pass&) = delete;

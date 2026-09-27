@@ -14,7 +14,7 @@ namespace rendering_engine
      * @brief Optional depth pre-pass ahead of the @ref scene_pass.
      *
      * Opt-in (@ref frame_context::depth_prepass, from
-     * @c core::settings::graphics.depth_prepass and
+     * @c rendering_engine::graphics_settings::depth_prepass and
      * @ref renderer::set_depth_prepass). While it is off, or no camera is
      * active, the pass records nothing and the scene pass clears and
      * writes the scene depth itself as it always has; it stays in the

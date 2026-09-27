@@ -43,7 +43,7 @@ namespace rendering_engine
      * items keep their ordinary variant.
      *
      * A frame whose draw list is longer than the parallel draw threshold
-     * (@c core::graphics_settings::parallel_draw_threshold) is recorded
+     * (@c rendering_engine::graphics_settings::parallel_draw_threshold) is recorded
      * in parallel: the sorted list is cut into contiguous chunks of at
      * least that many draws, at most one per recording thread (the job
      * pool's workers plus the main thread), the pass is begun with

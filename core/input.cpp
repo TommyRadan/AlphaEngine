@@ -9,9 +9,11 @@
 #include <optional>
 #include <utility>
 
+#include <nlohmann/json.hpp>
+
 #include <core/event_engine.hpp>
 #include <core/log.hpp>
-#include <core/settings.hpp>
+#include <core/settings_registry.hpp>
 
 namespace core
 {
@@ -859,5 +861,59 @@ namespace core
                 slot.axis_was_active = now_active;
             }
         }
+    }
+
+    void register_settings(settings_registry& registry, input_settings& out)
+    {
+        typed_section<input_settings> section = add_typed_section(registry, "input", out);
+
+        section.add_number("mouse_sensitivity", &input_settings::mouse_sensitivity, 0.0001f, 10.0f);
+        section.add_flag("mouse_reversed", &input_settings::mouse_reversed);
+
+        // input.bindings: { "<action or axis name>": ["<binding string>", ...], ... }. The binding-string
+        // grammar itself is core::input's concern (core/input.cpp's bind_action / bind_axis rebind path);
+        // this only captures the raw strings, tolerant the same way as every scalar field, so a bad entry is
+        // warned about and skipped rather than dropping the whole section.
+        section.set_custom_json(
+            [](input_settings& out_settings, std::string_view key, const nlohmann::json& value)
+            {
+                if (key != "bindings")
+                {
+                    LOG_WRN("settings: ignoring unknown key 'input.%s'", std::string{key}.c_str());
+                    return;
+                }
+                if (!value.is_object())
+                {
+                    LOG_WRN("settings: input.bindings must be a JSON object; ignoring it");
+                    return;
+                }
+                for (const auto& [name, list] : value.items())
+                {
+                    if (!list.is_array())
+                    {
+                        LOG_WRN("settings: input.bindings.%s must be an array of strings; ignoring it", name.c_str());
+                        continue;
+                    }
+                    std::vector<std::string> parsed;
+                    for (const auto& entry : list)
+                    {
+                        if (!entry.is_string())
+                        {
+                            LOG_WRN("settings: input.bindings.%s has a non-string entry; skipping it", name.c_str());
+                            continue;
+                        }
+                        parsed.push_back(entry.get<std::string>());
+                    }
+                    out_settings.bindings[name] = std::move(parsed);
+                }
+            });
+
+        section.set_log_resolved(
+            [](const input_settings& s)
+            {
+                LOG_INF("Input settings resolved: mouse_sensitivity=%.4f mouse_reversed=%s",
+                        static_cast<double>(s.mouse_sensitivity),
+                        on_off(s.mouse_reversed));
+            });
     }
 } // namespace core

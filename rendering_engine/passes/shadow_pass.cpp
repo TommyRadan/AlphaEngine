@@ -62,7 +62,7 @@ namespace
 
     // Constant term of the depth-only pipeline's rasteriser depth bias:
     // one resolvable depth step. On the float depth format that step is
-    // tiny, so the slope term (core::shadow_settings::slope_bias times
+    // tiny, so the slope term (rendering_engine::shadow_settings::slope_bias times
     // the caster's depth slope) does the work of lifting grazing casters
     // clear of their own samples, and the lit shader's receiver-side
     // bias covers the rest of the PCF footprint.
@@ -266,11 +266,12 @@ namespace
 
 namespace rendering_engine
 {
-    shadow_pass::shadow_pass(const std::vector<renderable*>* registry, const core::shadow_settings& settings)
+    shadow_pass::shadow_pass(const std::vector<renderable*>* registry,
+                             const rendering_engine::shadow_settings& settings)
         : m_registry(registry), m_resolution(std::max(settings.resolution, 1u)),
           m_cascade_count(std::clamp(static_cast<int>(settings.cascade_count), 1, max_shadow_cascades)),
           m_distance(std::max(settings.distance, min_log_split_near)), m_bias(std::max(settings.bias, 0.0f)),
-          m_pcf_kernel(std::clamp(settings.pcf_kernel, 1u, core::shadow_settings::max_pcf_kernel))
+          m_pcf_kernel(std::clamp(settings.pcf_kernel, 1u, rendering_engine::shadow_settings::max_pcf_kernel))
     {
         auto& gpu = *runtime::current_engine().gpu;
 

@@ -23,11 +23,11 @@
 
 #include <core/log.hpp>
 #include <core/os/os.hpp>
-#include <core/settings.hpp>
 #include <platform/platform.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_command_encoder.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_negotiate.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_translate.hpp>
+#include <rendering_engine/graphics_settings.hpp>
 
 namespace rendering_engine::gpu::backend::vulkan
 {
@@ -327,7 +327,7 @@ namespace rendering_engine::gpu::backend::vulkan
         // regions follow it, so it cannot change while the device is
         // up. The settings layer already clamps the value to the range;
         // the clamp here guards any other caller.
-        static_assert(core::graphics_settings::max_frames_in_flight == k_max_frames_in_flight,
+        static_assert(rendering_engine::graphics_settings::max_frames_in_flight == k_max_frames_in_flight,
                       "the settings range and the backend ring must agree");
         m_frames_in_flight = std::clamp<uint32_t>(frames_in_flight, 1, k_max_frames_in_flight);
         m_frame_slot = 0;

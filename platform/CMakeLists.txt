@@ -12,4 +12,6 @@ target_sources(AlphaEngine PRIVATE
     sdl_input.hpp
     window.cpp
     window.hpp
+    window_settings.cpp
+    window_settings.hpp
 )

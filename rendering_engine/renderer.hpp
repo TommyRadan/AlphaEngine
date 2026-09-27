@@ -273,7 +273,7 @@ namespace rendering_engine
          * @ref tonemap right after this call sees the new values without
          * waiting for a frame. @c taa.enabled is read-only in practice:
          * whether @ref taa_pass exists is decided once in @ref init from
-         * @c core::settings::graphics.temporal_aa and the drawable size, so
+         * @c rendering_engine::graphics_settings::temporal_aa and the drawable size, so
          * whatever this is called with is overwritten with the pass's real
          * presence before it is stored — @ref get_post_settings always
          * reports the truth. A new @c grading.lut path is loaded through
@@ -281,7 +281,7 @@ namespace rendering_engine
          * only up once the engine has finished initialising). See
          * @ref post_settings for why scene-wide fog (@ref set_fog) is not
          * part of this struct. @ref init calls this with the values
-         * @c core::settings::post resolved at startup.
+         * @c rendering_engine::post_process_settings resolved at startup.
          */
         void set_post_settings(const post_settings& settings);
 
@@ -305,7 +305,7 @@ namespace rendering_engine
          * @ref depth_prepass lays the opaque queue's depth down ahead of
          * the scene pass, which then loads it and shades each pre-passed
          * surface once (see @ref depth_prepass). Seeded in @ref init from
-         * @c core::settings::graphics.depth_prepass (off by default). The
+         * @c rendering_engine::graphics_settings::depth_prepass (off by default). The
          * pass itself is always in the pass list, so this never rebuilds
          * it.
          */
@@ -552,7 +552,7 @@ namespace rendering_engine
         // @ref set_post_settings and copied into
         // @ref frame_context::post each @ref render so the post passes
         // can read the fields they own. Seeded by @ref init from
-        // @c core::settings::post, whose defaults match each pass's
+        // @c rendering_engine::post_process_settings, whose defaults match each pass's
         // compiled-in values.
         post_settings m_post_settings{};
 

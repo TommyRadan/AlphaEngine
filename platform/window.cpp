@@ -13,8 +13,8 @@
 
 #include <core/event_engine.hpp>
 #include <core/log.hpp>
-#include <core/settings.hpp>
 #include <platform/sdl_input.hpp>
+#include <platform/window_settings.hpp>
 
 namespace platform
 {
@@ -65,7 +65,7 @@ namespace platform
 
     window::window() = default;
 
-    void window::init(core::window_settings& settings)
+    void window::init(window_settings& settings)
     {
         LOG_INF("Init platform::window");
 
@@ -119,7 +119,7 @@ namespace platform
                 {
                     settings.height = 720;
                 }
-                settings.mode = core::window_mode::windowed;
+                settings.mode = window_mode::windowed;
                 LOG_WRN("SDL_GetCurrentDisplayMode failed (%s); falling back to %ux%u windowed",
                         SDL_GetError(),
                         settings.width,
@@ -134,15 +134,15 @@ namespace platform
         // matches the display's native pixel grid instead of a scaled logical
         // size — pixel_size() is what the swapchain follows.
         window_flags |= SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY;
-        const core::window_mode mode{settings.mode};
+        const window_mode mode{settings.mode};
 
         bool fullscreen = false;
-        if (mode == core::window_mode::borderless)
+        if (mode == window_mode::borderless)
         {
             window_flags |= SDL_WINDOW_BORDERLESS;
         }
 
-        if (mode == core::window_mode::fullscreen)
+        if (mode == window_mode::fullscreen)
         {
             window_flags |= SDL_WINDOW_FULLSCREEN;
             fullscreen = true;
@@ -152,7 +152,7 @@ namespace platform
                 settings.title.c_str(),
                 settings.width,
                 settings.height,
-                core::window_mode_name(mode));
+                window_mode_name(mode));
 
         m_window.reset(SDL_CreateWindow(settings.title.c_str(), settings.width, settings.height, window_flags));
 

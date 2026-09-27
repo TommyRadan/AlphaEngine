@@ -9,10 +9,10 @@
 #include <vector>
 
 #include <core/math/math.hpp>
-#include <core/settings.hpp>
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/passes/pass.hpp>
 #include <rendering_engine/passes/shadow_casters.hpp>
+#include <rendering_engine/passes/shadow_settings.hpp>
 #include <rendering_engine/renderables/draw_item.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
 
@@ -23,7 +23,7 @@ namespace rendering_engine
     // Upper bound of the directional cascades: the lit shaders' Shadow
     // block holds this many light-space matrices and split depths
     // (SHADOW_MAX_CASCADES in shaders/include/shadows.glsl).
-    constexpr int max_shadow_cascades = static_cast<int>(core::shadow_settings::max_cascade_count);
+    constexpr int max_shadow_cascades = static_cast<int>(rendering_engine::shadow_settings::max_cascade_count);
 
     /**
      * @brief Directional-light cascaded shadow-map pass.
@@ -70,7 +70,7 @@ namespace rendering_engine
         // @p settings supplies the map resolution, the shadow distance,
         // the cascade count, the receiver and slope biases and the PCF
         // kernel; they are fixed for the pass's lifetime.
-        shadow_pass(const std::vector<renderable*>* registry, const core::shadow_settings& settings);
+        shadow_pass(const std::vector<renderable*>* registry, const rendering_engine::shadow_settings& settings);
         ~shadow_pass() override;
 
         shadow_pass(const shadow_pass&) = delete;
@@ -178,7 +178,7 @@ namespace rendering_engine
         // walks. The world outlives every pass.
         const std::vector<renderable*>* m_registry;
 
-        // Configuration, fixed at construction (see core::shadow_settings).
+        // Configuration, fixed at construction (see rendering_engine::shadow_settings).
         uint32_t m_resolution{0};
         int m_cascade_count{1};
         float m_distance{0.0f};

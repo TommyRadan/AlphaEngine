@@ -10,10 +10,11 @@
 #include <core/log.hpp>
 #include <core/os/os.hpp>
 #include <core/settings.hpp>
-#include <core/settings_parse.hpp>
+#include <core/settings_registry.hpp>
 #include <platform/platform.hpp>
 #include <platform/window.hpp>
 #include <runtime/engine.hpp>
+#include <runtime/engine_settings.hpp>
 
 namespace
 {
@@ -77,15 +78,19 @@ int main(int argc, char* argv[])
     LOG_INIT(argc, argv);
     core::os::install_crash_handler(&on_crash);
 
-    // Resolve the configuration before anything else exists: compiled
-    // defaults, the settings file, the environment, then the command line
-    // (see core::load_settings). --help is answered here, before the engine
-    // and its window are ever constructed.
-    core::settings_load_result startup =
-        core::load_settings(argc, argv, [] { return platform::pref_path("AlphaEngine", "AlphaEngine"); });
+    // Every module declares its own settings section against one shared registry (a fixed order that
+    // decides --help's layout and the log lines below; see runtime::register_engine_settings), then
+    // core::load_settings resolves it: compiled defaults, the settings file, the environment, then the
+    // command line. --help is answered here, before the engine and its window are ever constructed.
+    runtime::engine_settings engine_settings;
+    core::settings_registry registry;
+    runtime::register_engine_settings(registry, engine_settings);
+
+    const core::settings_load_result startup =
+        core::load_settings(registry, argc, argv, [] { return platform::pref_path("AlphaEngine", "AlphaEngine"); });
     if (startup.help_requested)
     {
-        std::fputs(core::command_line_usage(), stdout);
+        std::fputs(runtime::settings_help_text(registry).c_str(), stdout);
         return EXIT_SUCCESS;
     }
 
@@ -95,7 +100,7 @@ int main(int argc, char* argv[])
     // settings. Its constructor installs itself as
     // runtime::current_engine() for the duration of this scope, so every
     // subsystem can resolve its dependencies through the engine.
-    runtime::engine engine{std::move(startup.values)};
+    runtime::engine engine{std::move(engine_settings)};
 
     try
     {

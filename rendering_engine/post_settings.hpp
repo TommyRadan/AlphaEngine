@@ -62,7 +62,7 @@ namespace rendering_engine
      * @ref enabled mirrors whether @ref taa_pass is actually in the pass
      * chain rather than requesting it: temporal AA also gates the scene
      * pass's projection jitter and is decided once, at @ref renderer::init,
-     * from @c core::settings::graphics.temporal_aa and the drawable size.
+     * from @c rendering_engine::graphics_settings::temporal_aa and the drawable size.
      * @ref renderer::set_post_settings overwrites whatever value it is
      * given here with the pass's real presence, so this always reports the
      * truth rather than silently failing to apply a request to flip it.
@@ -278,7 +278,7 @@ namespace rendering_engine
      * tunes how @ref volumetric_fog_pass raymarches that same height-fog
      * medium in the post chain.
      *
-     * @ref renderer::init seeds it from @c core::settings::post (the
+     * @ref renderer::init seeds it from @c rendering_engine::post_process_settings (the
      * settings.json @c post section, the matching @c ALPHAENGINE_*
      * variables and command-line options), so the engine starts with the
      * persisted values; later changes live only in the renderer.

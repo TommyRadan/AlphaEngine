@@ -11,7 +11,7 @@
  * encoders / lookup_*, vk_device_buffer.cpp for buffers, etc.).
  *
  * The backend keeps up to k_max_frames_in_flight frames in flight
- * (core::graphics_settings::frames_in_flight, 2 by default): each
+ * (rendering_engine::graphics_settings::frames_in_flight, 2 by default): each
  * frame records into its own slot — an image-available semaphore, an
  * in-flight fence, a command pool and a swapchain depth image — and
  * begin_frame waits only for the frame that last used the slot, so the

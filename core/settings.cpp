@@ -4,15 +4,12 @@
 #include <core/settings.hpp>
 
 #include <cstdlib>
-#include <filesystem>
-#include <functional>
 #include <string>
 #include <vector>
 
 #include <core/log.hpp>
 #include <core/os/os.hpp>
-#include <core/settings_parse.hpp>
-#include <core/version.hpp>
+#include <core/settings_registry.hpp>
 
 namespace core
 {
@@ -34,9 +31,9 @@ namespace core
 
         // Reads the file at `path` and applies it as a settings.json document.
         // A missing file is the normal first run and is only noted; the
-        // warnings for a malformed one come from apply_json, right after the
-        // INFO line that names the file.
-        void apply_settings_file(settings& out, const std::string& path)
+        // warnings for a malformed one come from settings_registry::apply_json,
+        // right after the INFO line that names the file.
+        void apply_settings_file(const settings_registry& registry, const std::string& path)
         {
             std::string text;
             if (!os::read_text_file(os::utf8_path(path), text))
@@ -45,89 +42,40 @@ namespace core
                 return;
             }
             LOG_INF("Settings: reading %s", path.c_str());
-            apply_json(out, text);
+            registry.apply_json(text);
         }
 
-        const char* on_off(bool value) noexcept
-        {
-            return value ? "on" : "off";
-        }
+        constexpr const char k_help_preamble[] = "Usage: AlphaEngine [options]\n\nOptions:\n";
+
+        constexpr const char k_meta_options_help[] =
+            "  --log-level <spec>       log level, e.g. warn or info,gpu=trace\n"
+            "  --settings <path>        settings file to read instead of the default\n"
+            "  -h, --help               print this text and exit\n";
+
+        constexpr const char k_help_epilogue[] =
+            "\nEvery option also accepts the --key=value form. Command-line values override\n"
+            "the ALPHAENGINE_* environment variables, which override the settings file.\n";
     } // namespace
 
-    bool window_settings::uses_native_resolution() const noexcept
+    const char* settings_help_preamble() noexcept
     {
-        return width == 0 || height == 0;
+        return k_help_preamble;
     }
 
-    float window_settings::aspect_ratio() const noexcept
+    const char* settings_meta_options_help() noexcept
     {
-        if (height == 0)
-        {
-            return 1.0f;
-        }
-        return static_cast<float>(width) / static_cast<float>(height);
+        return k_meta_options_help;
     }
 
-    settings::settings()
+    const char* settings_help_epilogue() noexcept
     {
-#ifdef _DEBUG
-        // Debug runs windowed and roomy: a larger canvas leaves space for the
-        // ImGui debug panels (FPS overlay, settings inspector) without
-        // crowding the scene.
-        window.width = 1600;
-        window.height = 900;
-        window.mode = window_mode::windowed;
-#else
-        // Release goes fullscreen at the display's native size. The size is
-        // left at zero here — the display cannot be queried before the
-        // window system is up — and resolved by window::init once it is.
-        window.width = 0;
-        window.height = 0;
-        window.mode = window_mode::fullscreen;
-#endif
-        window.title = std::string{"AlphaEngine v"} + core::version::get_version();
+        return k_help_epilogue;
     }
 
-    const char* window_mode_name(window_mode mode) noexcept
-    {
-        switch (mode)
-        {
-        case window_mode::windowed:
-            return "windowed";
-        case window_mode::fullscreen:
-            return "fullscreen";
-        case window_mode::borderless:
-            return "borderless";
-        }
-        return "unknown";
-    }
-
-    const char* graphics_backend_name(graphics_backend backend) noexcept
-    {
-        switch (backend)
-        {
-        case graphics_backend::vulkan:
-            return "vulkan";
-        }
-        return "unknown";
-    }
-
-    const char* tonemap_curve_name(tonemap_curve curve) noexcept
-    {
-        switch (curve)
-        {
-        case tonemap_curve::none:
-            return "none";
-        case tonemap_curve::reinhard:
-            return "reinhard";
-        case tonemap_curve::aces:
-            return "aces";
-        }
-        return "unknown";
-    }
-
-    settings_load_result
-    load_settings(int argc, char* const argv[], const std::function<std::filesystem::path()>& pref_directory)
+    settings_load_result load_settings(const settings_registry& registry,
+                                       int argc,
+                                       char* const argv[],
+                                       const std::function<std::filesystem::path()>& pref_directory)
     {
         settings_load_result result;
 
@@ -146,7 +94,7 @@ namespace core
         // The command line is parsed first — --settings names the file the
         // next layer reads and --help short-circuits everything — but applied
         // last, so it stays the top layer.
-        const command_line_options options = parse_command_line(args);
+        const settings_command_line_result options = registry.parse_command_line(args);
         if (options.help_requested)
         {
             result.help_requested = true;
@@ -159,10 +107,10 @@ namespace core
                 : default_settings_path(pref_directory ? pref_directory() : std::filesystem::path{});
         if (!path.empty())
         {
-            apply_settings_file(result.values, path);
+            apply_settings_file(registry, path);
         }
-        apply_environment(result.values, [](const char* name) { return std::getenv(name); });
-        apply_command_line(result.values, options);
+        registry.apply_environment([](const char* name) { return std::getenv(name); });
+        registry.apply_command_line(options);
 
         if (options.log_level.has_value())
         {
@@ -181,69 +129,7 @@ namespace core
             }
         }
 
-        const settings& s = result.values;
-        LOG_INF("Settings resolved: window=%ux%u%s mode=%s vsync=%s backend=%s temporal_aa=%s "
-                "depth_prepass=%s frames_in_flight=%u parallel_draw_threshold=%u fov=%.1f mouse_sensitivity=%.4f "
-                "mouse_reversed=%s title='%s' content_root='%s'",
-                s.window.width,
-                s.window.height,
-                s.window.uses_native_resolution() ? " (match the display)" : "",
-                window_mode_name(s.window.mode),
-                on_off(s.window.vsync),
-                graphics_backend_name(s.graphics.backend),
-                on_off(s.graphics.temporal_aa),
-                on_off(s.graphics.depth_prepass),
-                s.graphics.frames_in_flight,
-                s.graphics.parallel_draw_threshold,
-                static_cast<double>(s.camera.field_of_view),
-                static_cast<double>(s.input.mouse_sensitivity),
-                on_off(s.input.mouse_reversed),
-                s.window.title.c_str(),
-                s.content.root.empty() ? "(discover)" : s.content.root.c_str());
-        LOG_INF("Shadow settings: resolution=%u distance=%.1f cascades=%u bias=%.5f slope_bias=%.2f pcf_kernel=%u",
-                s.shadows.resolution,
-                static_cast<double>(s.shadows.distance),
-                s.shadows.cascade_count,
-                static_cast<double>(s.shadows.bias),
-                static_cast<double>(s.shadows.slope_bias),
-                s.shadows.pcf_kernel);
-        const post_process_settings& p = s.post;
-        LOG_INF("Post settings: exposure=%.2f tonemap=%s bloom=%s (threshold=%.2f knee=%.2f strength=%.2f) "
-                "taa_feedback=%.2f fxaa=%s volumetric_fog=%s (density_scale=%.2f anisotropy=%.2f max_distance=%.1f "
-                "steps=%u intensity=%.2f)",
-                static_cast<double>(p.exposure),
-                tonemap_curve_name(p.tonemap),
-                on_off(p.bloom),
-                static_cast<double>(p.bloom_threshold),
-                static_cast<double>(p.bloom_knee),
-                static_cast<double>(p.bloom_strength),
-                static_cast<double>(p.taa_feedback),
-                on_off(p.fxaa),
-                on_off(p.volumetric_fog),
-                static_cast<double>(p.volumetric_fog_density_scale),
-                static_cast<double>(p.volumetric_fog_anisotropy),
-                static_cast<double>(p.volumetric_fog_max_distance),
-                p.volumetric_fog_steps,
-                static_cast<double>(p.volumetric_fog_intensity));
-        LOG_INF("Post settings: grading_lut='%s' grading_intensity=%.2f motion_blur=%s (intensity=%.2f samples=%u "
-                "max_radius=%.1f) auto_exposure=%s (ev=[%.1f, %.1f] speed_up=%.2f speed_down=%.2f "
-                "compensation=%.2f)",
-                p.grading_lut.empty() ? "(off)" : p.grading_lut.c_str(),
-                static_cast<double>(p.grading_intensity),
-                on_off(p.motion_blur),
-                static_cast<double>(p.motion_blur_intensity),
-                p.motion_blur_samples,
-                static_cast<double>(p.motion_blur_max_radius),
-                on_off(p.auto_exposure),
-                static_cast<double>(p.auto_exposure_min_ev),
-                static_cast<double>(p.auto_exposure_max_ev),
-                static_cast<double>(p.auto_exposure_speed_up),
-                static_cast<double>(p.auto_exposure_speed_down),
-                static_cast<double>(p.auto_exposure_compensation));
-        LOG_INF("Diagnostics settings: frames=%u%s fail_on_error=%s",
-                s.diagnostics.frame_limit,
-                s.diagnostics.frame_limit == 0 ? " (run forever)" : "",
-                on_off(s.diagnostics.fail_on_error));
+        registry.log_all_resolved();
         return result;
     }
 } // namespace core

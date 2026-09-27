@@ -24,10 +24,10 @@
 
 #include <core/log.hpp>
 #include <core/os/os.hpp>
-#include <core/settings.hpp>
 #include <core/time.hpp>
 #include <platform/platform.hpp>
 #include <platform/window.hpp>
+#include <platform/window_settings.hpp>
 #include <rendering_engine/camera/camera_registry.hpp>
 #include <rendering_engine/camera/orthographic_camera.hpp>
 #include <rendering_engine/camera/perspective_camera.hpp>
@@ -37,6 +37,7 @@
 #include <rendering_engine/gpu/command_encoder.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/gpu_profiler.hpp>
+#include <rendering_engine/graphics_settings.hpp>
 #include <rendering_engine/lighting/directional_light.hpp>
 #include <rendering_engine/lighting/light.hpp>
 #include <rendering_engine/lighting/point_light.hpp>
@@ -50,6 +51,7 @@
 #include <runtime/components/light_component.hpp>
 #include <runtime/components/mesh_component.hpp>
 #include <runtime/engine.hpp>
+#include <runtime/engine_settings.hpp>
 #include <runtime/node.hpp>
 #include <runtime/scene.hpp>
 #include <runtime/scene_manager.hpp>
@@ -1324,7 +1326,7 @@ namespace rendering_engine::editor
                 ImGui::SeparatorText("Window");
                 ImGui::Text("Size: %u x %u", settings.window.width, settings.window.height);
                 ImGui::Text("Aspect: %.3f", static_cast<double>(settings.window.aspect_ratio()));
-                ImGui::Text("Mode: %s", core::window_mode_name(settings.window.mode));
+                ImGui::Text("Mode: %s", platform::window_mode_name(settings.window.mode));
                 ImGui::Text("Vsync: %s", settings.window.vsync ? "on" : "off");
 
                 ImGui::SeparatorText("Camera / input");
@@ -1333,7 +1335,7 @@ namespace rendering_engine::editor
                 ImGui::Text("Mouse reversed: %s", settings.input.mouse_reversed ? "yes" : "no");
 
                 ImGui::SeparatorText("GPU");
-                ImGui::Text("Backend: %s", core::graphics_backend_name(settings.graphics.backend));
+                ImGui::Text("Backend: %s", rendering_engine::graphics_backend_name(settings.graphics.backend));
             }
             ImGui::End();
         }
@@ -1347,7 +1349,7 @@ namespace rendering_engine::editor
         // their UBO on the spot). TAA's own enabled checkbox is shown
         // disabled: the pass is only ever brought up once, at init, from
         // graphics.temporal_aa (see post_settings::taa's doc comment).
-        // The panel edits the live settings only: core::settings has no
+        // The panel edits the live settings only: core::load_settings has no
         // save path, so the startup values stay whatever settings.json,
         // the environment and the command line resolved.
         void draw_post_window()

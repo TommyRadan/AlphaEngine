@@ -21,11 +21,12 @@ struct SDL_Gamepad;
 namespace core
 {
     struct event_bus;
-    struct window_settings;
 } // namespace core
 
 namespace platform
 {
+    struct window_settings;
+
     /** @brief Custom deleter that destroys an @c SDL_Window via @c SDL_DestroyWindow. */
     struct sdl_window_deleter
     {
@@ -111,7 +112,7 @@ namespace platform
          * displays. A failed gamepad init only logs a warning.
          * @throws std::runtime_error if SDL video init or window creation fails.
          */
-        void init(core::window_settings& settings);
+        void init(window_settings& settings);
 
         /** @brief Closes open gamepads, destroys the window and shuts down SDL video. */
         void quit();

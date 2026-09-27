@@ -6,6 +6,8 @@ target_sources(AlphaEngine PRIVATE
     component.hpp
     engine.cpp
     engine.hpp
+    engine_settings.cpp
+    engine_settings.hpp
     game_module.cpp
     game_module.hpp
     gltf_instantiate.cpp
