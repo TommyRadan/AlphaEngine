@@ -273,7 +273,7 @@ void rendering_engine::context::init()
     // Execution order is the m_passes order, so this does not change what is
     // rendered.
     m_frame_graph.import_external("swapchain");
-    if (taa)
+    if (taa_enabled)
     {
         m_frame_graph.import_external("taa_history");
     }
