@@ -27,6 +27,7 @@
 #include <stdexcept>
 #include <utility>
 
+#include <core/audio/audio.hpp>
 #include <core/event_engine.hpp>
 #include <core/jobs.hpp>
 #include <core/log.hpp>
@@ -102,6 +103,7 @@ namespace runtime
         // idle until the first job is dispatched.
         jobs = std::make_unique<core::jobs>();
         events = std::make_unique<core::event_bus>();
+        audio = std::make_unique<core::audio>();
         window = std::make_unique<rendering_engine::window>();
         gpu = rendering_engine::gpu::create_device(to_backend_type(settings->graphics.backend));
         // The asset cache hands out GPU-resource-backed handles, so it is
@@ -135,6 +137,7 @@ namespace runtime
         rendering_engine::set_asset_device(nullptr);
         gpu.reset();
         window.reset();
+        audio.reset();
         m_quit_subscription.reset();
         events.reset();
         // Joins the worker threads. Every per-frame job is forked and joined
@@ -153,6 +156,10 @@ namespace runtime
         // constructs the built-in passes and materials once GL is
         // alive.
         events->init();
+        // No renderer/VFS dependency: opens (or gracefully declines) the
+        // playback device up front so a module's on_engine_start can play a
+        // sound immediately.
+        audio->init();
 
         // Mount the asset root before anything loads a file: the configured
         // directory when one is set, else the discovered default beside the
@@ -202,6 +209,7 @@ namespace runtime
         renderer->quit();
         core::default_vfs().unmount_all();
         m_quit_subscription.reset();
+        audio->quit();
         events->quit();
     }
 
@@ -258,6 +266,12 @@ namespace runtime
         // renderer->render(). The interpolation alpha for smoothing between
         // fixed states is available via time->interpolation_alpha().
         scenes->update();
+
+        // Mixed after the scene graph so every source/listener transform
+        // pushed by this frame's component updates is already applied.
+        // Independent of the drawable, so it keeps playing while minimized.
+        audio->update(static_cast<float>(time->delta_time()));
+
         // A minimized window has no drawable (the Vulkan surface reports a
         // zero extent), so the frame is neither built nor presented until
         // the window is restored; the updates above keep running.

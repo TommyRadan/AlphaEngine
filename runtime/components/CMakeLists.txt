@@ -1,6 +1,10 @@
 target_sources(AlphaEngine PRIVATE
     animator_component.cpp
     animator_component.hpp
+    audio_listener_component.cpp
+    audio_listener_component.hpp
+    audio_source_component.cpp
+    audio_source_component.hpp
     behavior_component.cpp
     behavior_component.hpp
     camera_component.cpp

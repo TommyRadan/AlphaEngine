@@ -1,0 +1,55 @@
+/**
+ * Copyright (c) 2015-2026 Tomislav Radanovic
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+/**
+ * @file audio_clip.hpp
+ * @brief Decoded, mixer-ready PCM audio produced by @ref core::audio::load_clip.
+ */
+
+#pragma once
+
+#include <cstdint>
+#include <vector>
+
+namespace core
+{
+    /**
+     * @brief One decoded sound, cached and shared like @c texture_asset /
+     *        @c mesh_asset.
+     *
+     * Holds interleaved 32-bit float samples already converted to the
+     * mixer's fixed format (@ref audio::k_mixer_sample_rate stereo,
+     * @ref audio::k_mixer_channels channels): the format conversion runs
+     * once in @ref audio::load_clip, so mixing a voice each tick is a plain
+     * gain-scaled, pitch-resampled read with no per-frame conversion.
+     *
+     * Unlike @c texture_asset this owns no device resource — it is host
+     * memory decoded up front — so there is nothing to release beyond the
+     * vector itself, and a clip stays valid even if the audio device that
+     * decoded it later closes.
+     */
+    struct audio_clip
+    {
+        std::vector<float> samples;   // interleaved, k_mixer_channels floats per frame
+        std::uint32_t frame_count{0}; // samples.size() / k_mixer_channels
+    };
+} // namespace core
