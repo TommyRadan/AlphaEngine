@@ -191,6 +191,9 @@ namespace rendering_engine::debug_ui
         // resize does not leak a descriptor set per resize event.
         std::unordered_map<uint64_t, vulkan_texture_binding> g_vulkan_texture_bindings;
 
+        // Immediate release: only safe once nothing can still be reading
+        // the descriptor set, i.e. with the queue already idle (see
+        // clear_vulkan_texture_bindings).
         void release_vulkan_texture_binding(vulkan_texture_binding& binding)
         {
             if (binding.descriptor_set != VK_NULL_HANDLE)
@@ -200,6 +203,32 @@ namespace rendering_engine::debug_ui
             binding = vulkan_texture_binding{};
         }
 
+        // Same, but for a binding dropped mid-run (a stale render-target
+        // texture the panel no longer shows, or one rebuilt because the
+        // texture it names was recreated by a resize): the draw data of a
+        // frame or two still in flight may reference the descriptor set
+        // through ImGui_ImplVulkan_RenderDrawData, so freeing it right
+        // here — as release_vulkan_texture_binding does — races the GPU
+        // once several frames are in flight (VUID-vkFreeDescriptorSets-
+        // pDescriptorSets-00309). ImGui_ImplVulkan_RemoveTexture runs
+        // instead through the device's own deferred-destroy queue, gated
+        // on the same submission serial every other Vulkan resource is.
+        void defer_release_vulkan_texture_binding(vulkan_texture_binding& binding)
+        {
+            if (binding.descriptor_set != VK_NULL_HANDLE)
+            {
+                auto* device = static_cast<gpu::backend::vulkan::vk_device*>(runtime::current_engine().gpu.get());
+                const VkDescriptorSet descriptor_set = binding.descriptor_set;
+                device->enqueue_destroy([descriptor_set] { ImGui_ImplVulkan_RemoveTexture(descriptor_set); });
+            }
+            binding = vulkan_texture_binding{};
+        }
+
+        // Called once, at shutdown, after the queue has already been
+        // waited idle (see debug_ui::shutdown): nothing can still be
+        // reading the descriptor sets, so releasing them immediately —
+        // ahead of ImGui_ImplVulkan_Shutdown reclaiming the pool they
+        // came from — is safe.
         void clear_vulkan_texture_bindings()
         {
             for (auto& [id, binding] : g_vulkan_texture_bindings)
@@ -210,13 +239,15 @@ namespace rendering_engine::debug_ui
         }
 
         // Drops every cached binding whose handle id is not in @p touched.
+        // Runs every frame the viewer is active, so a dropped binding may
+        // still be drawn by a frame or two in flight; the release defers.
         void prune_vulkan_texture_bindings(const std::vector<uint64_t>& touched)
         {
             for (auto it = g_vulkan_texture_bindings.begin(); it != g_vulkan_texture_bindings.end();)
             {
                 if (std::find(touched.begin(), touched.end(), it->first) == touched.end())
                 {
-                    release_vulkan_texture_binding(it->second);
+                    defer_release_vulkan_texture_binding(it->second);
                     it = g_vulkan_texture_bindings.erase(it);
                 }
                 else
@@ -270,7 +301,7 @@ namespace rendering_engine::debug_ui
             vulkan_texture_binding& binding = g_vulkan_texture_bindings[handle.id];
             if (binding.descriptor_set != VK_NULL_HANDLE && binding.view != tex->view)
             {
-                release_vulkan_texture_binding(binding);
+                defer_release_vulkan_texture_binding(binding);
             }
             if (binding.descriptor_set == VK_NULL_HANDLE)
             {
@@ -1756,11 +1787,17 @@ namespace rendering_engine::debug_ui
         if (g_backend == backend_mode::vulkan)
         {
             // The render queue must be idle before tearing the backend's
-            // GPU resources down.
+            // GPU resources down, and every descriptor-set release the
+            // render-target viewer deferred while the run was live (see
+            // defer_release_vulkan_texture_binding) must have actually
+            // run by now too, or its captured VkDescriptorSet dangles
+            // once ImGui_ImplVulkan_Shutdown reclaims the pool it came
+            // from.
             auto* device = static_cast<gpu::backend::vulkan::vk_device*>(runtime::current_engine().gpu.get());
-            vkDeviceWaitIdle(device->vk_handle());
-            // Release the render-target viewer's descriptor sets before the
-            // backend's descriptor pool goes with ImGui_ImplVulkan_Shutdown.
+            device->flush_pending_destroys();
+            // Release the render-target viewer's remaining descriptor sets
+            // before the backend's descriptor pool goes with
+            // ImGui_ImplVulkan_Shutdown.
             clear_vulkan_texture_bindings();
             ImGui_ImplVulkan_Shutdown();
         }
