@@ -7,10 +7,12 @@
 
 namespace rendering_engine
 {
-    // Atmospheric distance fog applied by the lit materials. The analog
-    // of @c THREE.Fog (linear) and @c THREE.FogExp2 (exponential): the
+    // Atmospheric distance fog applied by the lit materials. The
     // fragment blends toward @ref fog_settings::color by camera distance,
-    // approximating aerial perspective cheaply with no extra pass.
+    // approximating aerial perspective cheaply with no extra pass. Two
+    // modes: linear interpolation between @ref fog_settings::near_distance
+    // and @ref fog_settings::far_distance, or exponential-squared falloff
+    // driven by @ref fog_settings::density.
     //
     // The active fog is scene-wide state set through
     // @ref renderer::set_fog; the scene pass packs it into the per-view
@@ -28,8 +30,8 @@ namespace rendering_engine
         // and @ref fog_settings::far_distance (full fog).
         linear,
 
-        // Exponential-squared falloff driven by
-        // @ref fog_settings::density (matches @c THREE.FogExp2).
+        // Exponential-squared fog: @c factor = @c exp(-(density *
+        // distance)^2), driven by @ref fog_settings::density.
         exponential,
     };
 

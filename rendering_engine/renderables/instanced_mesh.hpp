@@ -19,10 +19,10 @@ namespace rendering_engine
     struct mesh_asset;
 
     // Draws one shared mesh many times in a single instanced draw, each
-    // copy with its own world transform and tint — the engine analog of
-    // THREE.InstancedMesh. The geometry (vertex + index buffers) and the
-    // material are shared across every instance; a per-instance vertex
-    // stream of @c {mat4 model; vec4 color;} records supplies what varies.
+    // copy with its own world transform and tint. The geometry (vertex +
+    // index buffers) and the material are shared across every instance; a
+    // per-instance vertex stream of @c {mat4 model; vec4 color;} records
+    // supplies what varies.
     //
     // The renderable emits a single indexed-indirect @ref draw_item: the
     // command record carries the instance count, and the per-instance

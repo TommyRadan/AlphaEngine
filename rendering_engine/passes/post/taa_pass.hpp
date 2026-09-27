@@ -24,9 +24,10 @@ namespace rendering_engine
      * @c temporal_aa setting), so every frame samples the scene at a
      * slightly different sub-pixel position; blending those frames over
      * time resolves detail that no single-frame filter can — fine geometry
-     * edges, specular shimmer, the near-mirror IBL reflections — which is
-     * exactly the THREE.TAARenderPass / SSAARenderPass behaviour this
-     * mirrors.
+     * edges, specular shimmer, the near-mirror IBL reflections. History
+     * reprojection via per-pixel motion vectors keeps accumulated detail
+     * aligned to surfaces, with colour clamping to suppress ghosting at
+     * disocclusions.
      *
      * The resolve runs after @ref tonemap_pass on the LDR target (TAA on
      * the perceptual image keeps HDR fireflies from dominating the history)

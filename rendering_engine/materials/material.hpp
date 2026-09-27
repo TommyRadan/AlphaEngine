@@ -107,9 +107,9 @@ namespace rendering_engine
         void set_depth_test(bool depth_test);
         void set_depth_write(bool depth_write);
 
-        // Whether the scene fog blends over this surface (on by default;
-        // three.js Material.fog). Off, a lit material rebinds to the
-        // @c NO_FOG variant of its template, which carries no fog code.
+        // Whether the scene fog blends over this surface (on by default).
+        // Off, a lit material rebinds to the @c NO_FOG variant of its
+        // template, which carries no fog code.
         void set_fog(bool fog);
 
         // Layout renderables build their per-draw bind group
