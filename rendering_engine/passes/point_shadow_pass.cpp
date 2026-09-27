@@ -22,6 +22,7 @@
 
 #include <rendering_engine/passes/point_shadow_pass.hpp>
 
+#include <algorithm>
 #include <string>
 
 #include <rendering_engine/gpu/bind_group.hpp>
@@ -41,10 +42,6 @@ namespace
 {
     namespace math = core::math;
 
-    // Per-face resolution. Smaller than the 4096 directional map because six
-    // faces are kept resident; 1024 is plenty for the demo's small bodies.
-    constexpr uint32_t shadow_map_size = 1024;
-
     // Perspective frustum per face: 90 degrees covers exactly one cube face.
     // The near plane hugs the light; the far plane is the caster's
     // point_light::range — nothing beyond it receives the light, so nothing
@@ -63,10 +60,10 @@ namespace
         return far_plane > light_near ? far_plane : default_light_far;
     }
 
-    // Rasteriser depth bias of the depth-only pipeline (see shadow_pass
-    // for the rationale): one depth step plus 1.5 times the slope.
+    // Constant term of the depth-only pipeline's rasteriser depth bias
+    // (see shadow_pass for the rationale): one depth step. The slope term
+    // is core::shadow_settings::slope_bias times the caster's slope.
     constexpr float shadow_depth_bias_constant = 1.0f;
-    constexpr float shadow_depth_bias_slope = 1.5f;
 
     constexpr uint32_t light_frame_binding = 0;
     constexpr uint32_t draw_model_binding = 1;
@@ -97,9 +94,20 @@ namespace
 
 namespace rendering_engine
 {
-    point_shadow_pass::point_shadow_pass(std::vector<renderable*>* registry) : m_registry(registry)
+    point_shadow_pass::point_shadow_pass(std::vector<renderable*>* registry, const core::shadow_settings& settings)
+        : m_registry(registry)
     {
         auto& gpu = *runtime::current_engine().gpu;
+
+        // Per-face resolution: half the configured shadow resolution,
+        // because six faces are kept resident (the default 2048 gives
+        // 1024-texel faces, plenty for the demo's small bodies). Clamped
+        // to the device's cube limit.
+        uint32_t shadow_map_size = std::max(settings.resolution / 2u, 1u);
+        if (const uint32_t max_size = gpu.limits().max_texture_size_cube; max_size != 0)
+        {
+            shadow_map_size = std::min(shadow_map_size, max_size);
+        }
 
         // One depth cube map, sampled by the lit materials as a
         // samplerCube, and six depth-only targets each attached to one of
@@ -189,7 +197,7 @@ namespace rendering_engine
         gpu::depth_bias_state depth_bias{};
         depth_bias.enabled = true;
         depth_bias.constant = shadow_depth_bias_constant;
-        depth_bias.slope = shadow_depth_bias_slope;
+        depth_bias.slope = std::max(settings.slope_bias, 0.0f);
 
         gpu::pipeline_descriptor pipeline_descriptor{};
         pipeline_descriptor.vertex_shader = m_vertex_shader;

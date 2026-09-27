@@ -67,10 +67,17 @@ namespace rendering_engine
         constexpr uint32_t shadow_map_binding = gpu::shader_bindings::shadow_map;
         constexpr uint32_t shadow_binding = gpu::shader_bindings::shadow;
 
-        // std140 layout of the per-frame Shadow block: mat4
-        // lightViewProj at offset 0, vec4 params at offset 64
-        // (x enabled, y bias, z caster index). 80 bytes total.
-        constexpr size_t shadow_ubo_size = sizeof(core::math::mat4) + 4 * sizeof(float);
+        // std140 layout of the per-frame Shadow block (the directional
+        // cascades): mat4 lightViewProj[max_shadow_cascades] at offset 0
+        // (256 bytes), vec4 splitDepths at 256 (each cascade's far view
+        // depth), vec4 cascadeBias at 272 (each cascade's receiver bias),
+        // vec4 params at 288 (x enabled, y cascade count, z caster index,
+        // w PCF taps per side) and vec4 blend at 304 (x the cross-fade
+        // band as a fraction of a cascade's depth range). mat4 and vec4
+        // are 16-byte aligned, so there is no padding. 320 bytes total.
+        constexpr size_t shadow_ubo_floats = static_cast<size_t>(max_shadow_cascades) * 16 + 4 * 4;
+        constexpr size_t shadow_ubo_size = shadow_ubo_floats * sizeof(float);
+        static_assert(max_shadow_cascades <= 4, "splitDepths / cascadeBias hold one vec4 lane per cascade");
 
         // Omni (point-light) shadow data also shares the per-frame group:
         // the UBO plus the depth cube map.
@@ -85,8 +92,8 @@ namespace rendering_engine
             point_shadow_face_count * sizeof(core::math::mat4) + 2 * 4 * sizeof(float);
 
         // Spot shadow data shares the per-frame group too, in a block
-        // shaped just like the directional Shadow one (a single
-        // perspective matrix rather than an auto-fitted orthographic box).
+        // holding a single perspective matrix (rather than the
+        // directional block's auto-fitted orthographic cascades).
         constexpr uint32_t spot_shadow_binding = gpu::shader_bindings::spot_shadow;
         constexpr uint32_t spot_shadow_map_binding = gpu::shader_bindings::spot_shadow_map;
 
@@ -111,7 +118,16 @@ namespace rendering_engine
         frame_layout_descriptor.entries.push_back({camera_binding, gpu::binding_kind::uniform_buffer});
         frame_layout_descriptor.entries.push_back({lights_binding, gpu::binding_kind::uniform_buffer});
         frame_layout_descriptor.entries.push_back({shadow_binding, gpu::binding_kind::uniform_buffer});
-        frame_layout_descriptor.entries.push_back({shadow_map_binding, gpu::binding_kind::texture});
+        // The directional cascades are one depth array read through a
+        // comparison sampler (sampler2DArrayShadow in the shaders): the
+        // texture entry says so, so a device that substitutes a
+        // placeholder for an unset slot picks an array, and the sampler
+        // shares its binding number (Vulkan folds it into that texture's
+        // combined image sampler, OpenGL binds it to the same unit).
+        gpu::bind_group_layout_entry shadow_map_entry{shadow_map_binding, gpu::binding_kind::texture};
+        shadow_map_entry.dimension = gpu::texture_dimension::d2_array;
+        frame_layout_descriptor.entries.push_back(shadow_map_entry);
+        frame_layout_descriptor.entries.push_back({shadow_map_binding, gpu::binding_kind::sampler});
         frame_layout_descriptor.entries.push_back({point_shadow_binding, gpu::binding_kind::uniform_buffer});
         // The omni shadow is a depth cube (samplerCube in the shaders), so
         // the layout says so and a device that substitutes a placeholder
@@ -181,14 +197,21 @@ namespace rendering_engine
         shadow_slot.buffer_value = m_shadow_ubo;
         frame_bind_group_descriptor.entries.push_back(shadow_slot);
 
-        // The shadow map is owned by the shadow pass. Its handle is
-        // stable across frames, so capture it once here; an invalid
-        // handle (no shadow pass) simply binds nothing.
+        // The cascade array and its comparison sampler are owned by the
+        // shadow pass. Their handles are stable across frames, so capture
+        // them once here; invalid handles (no shadow pass) simply bind
+        // nothing and the enabled flag keeps the map unsampled.
         gpu::binding_value shadow_map_slot{};
         shadow_map_slot.binding = shadow_map_binding;
         shadow_map_slot.kind = gpu::binding_kind::texture;
         shadow_map_slot.texture_value = m_shadow != nullptr ? m_shadow->shadow_map() : gpu::texture{};
         frame_bind_group_descriptor.entries.push_back(shadow_map_slot);
+
+        gpu::binding_value shadow_sampler_slot{};
+        shadow_sampler_slot.binding = shadow_map_binding;
+        shadow_sampler_slot.kind = gpu::binding_kind::sampler;
+        shadow_sampler_slot.sampler_value = m_shadow != nullptr ? m_shadow->shadow_sampler() : gpu::sampler{};
+        frame_bind_group_descriptor.entries.push_back(shadow_sampler_slot);
 
         gpu::binding_value point_shadow_slot{};
         point_shadow_slot.binding = point_shadow_binding;
@@ -401,17 +424,34 @@ namespace rendering_engine
         pack_lights(registered_lights(), lights_payload);
         gpu.write_buffer(m_lights_ubo, &lights_payload, sizeof(gpu_lights), 0);
 
-        // Upload the directional shadow block: the light-space matrix
-        // plus {enabled, bias, caster index}. When no caster is active
-        // the enabled flag stays 0 and the lit shader skips sampling,
-        // so the matrix and the (cleared) map go unused.
-        std::array<float, 20> shadow_payload{};
+        // Upload the directional shadow block: each cascade's light-space
+        // matrix, split depth and receiver bias, then {enabled, cascade
+        // count, caster index, PCF taps} and the blend band. When no
+        // caster is active the enabled flag stays 0 and the lit shader
+        // skips sampling, so the matrices and the (cleared) layers go
+        // unused.
+        std::array<float, shadow_ubo_floats> shadow_payload{};
         if (m_shadow != nullptr && m_shadow->has_shadow())
         {
-            std::memcpy(shadow_payload.data(), m_shadow->light_view_projection().data(), sizeof(core::math::mat4));
-            shadow_payload[16] = 1.0f;
-            shadow_payload[17] = m_shadow->depth_bias();
-            shadow_payload[18] = static_cast<float>(m_shadow->shadow_light_index());
+            constexpr size_t splits_offset = static_cast<size_t>(max_shadow_cascades) * 16;
+            constexpr size_t bias_offset = splits_offset + 4;
+            constexpr size_t params_offset = bias_offset + 4;
+            constexpr size_t blend_offset = params_offset + 4;
+            const int cascades = m_shadow->cascade_count();
+            for (int cascade = 0; cascade < cascades; ++cascade)
+            {
+                const auto lane = static_cast<size_t>(cascade);
+                std::memcpy(shadow_payload.data() + lane * 16,
+                            m_shadow->light_view_projection(cascade).data(),
+                            sizeof(core::math::mat4));
+                shadow_payload[splits_offset + lane] = m_shadow->split_depth(cascade);
+                shadow_payload[bias_offset + lane] = m_shadow->depth_bias(cascade);
+            }
+            shadow_payload[params_offset] = 1.0f;
+            shadow_payload[params_offset + 1] = static_cast<float>(cascades);
+            shadow_payload[params_offset + 2] = static_cast<float>(m_shadow->shadow_light_index());
+            shadow_payload[params_offset + 3] = static_cast<float>(m_shadow->pcf_kernel());
+            shadow_payload[blend_offset] = m_shadow->cascade_blend();
         }
         gpu.write_buffer(m_shadow_ubo, shadow_payload.data(), shadow_ubo_size, 0);
 
@@ -441,9 +481,8 @@ namespace rendering_engine
         gpu.write_buffer(m_point_shadow_ubo, point_shadow_payload.data(), point_shadow_ubo_size, 0);
 
         // Upload the spot shadow block: the light-space matrix plus
-        // {enabled, bias, caster spot index}, shaped just like the
-        // directional Shadow block. enabled stays 0 with no caster so the
-        // lit shader skips the (cleared) map.
+        // {enabled, bias, caster spot index}. enabled stays 0 with no
+        // caster so the lit shader skips the (cleared) map.
         std::array<float, 20> spot_shadow_payload{};
         if (m_spot_shadow != nullptr && m_spot_shadow->has_shadow())
         {

@@ -28,6 +28,7 @@
 #include <vector>
 
 #include <core/math/math.hpp>
+#include <core/settings.hpp>
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/passes/pass.hpp>
 #include <rendering_engine/passes/shadow_casters.hpp>
@@ -70,7 +71,10 @@ namespace rendering_engine
      */
     struct point_shadow_pass : pass
     {
-        explicit point_shadow_pass(std::vector<renderable*>* registry);
+        // @p settings supplies the face resolution (half the configured
+        // shadow resolution) and the rasteriser slope bias; both are fixed
+        // for the pass's lifetime.
+        point_shadow_pass(std::vector<renderable*>* registry, const core::shadow_settings& settings);
         ~point_shadow_pass() override;
 
         point_shadow_pass(const point_shadow_pass&) = delete;

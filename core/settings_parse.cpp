@@ -113,6 +113,20 @@ namespace core
             return parsed;
         }
 
+        std::optional<float> parse_float_or_warn(const char* source, std::string_view text, float min, float max)
+        {
+            const auto parsed = parse_float(text, min, max);
+            if (!parsed.has_value())
+            {
+                LOG_WRN("settings: %s='%s' is not a number in [%g, %g]; ignoring it",
+                        source,
+                        std::string{text}.c_str(),
+                        static_cast<double>(min),
+                        static_cast<double>(max));
+            }
+            return parsed;
+        }
+
         std::optional<bool> parse_bool_or_warn(const char* source, std::string_view text)
         {
             const auto parsed = parse_bool(text);
@@ -368,6 +382,51 @@ namespace core
             }
         }
 
+        void apply_shadows_section(settings& out, const json& section)
+        {
+            for (const auto& [key, value] : section.items())
+            {
+                if (key == "resolution")
+                {
+                    set_from_json(out.shadows.resolution,
+                                  "shadows.resolution",
+                                  value,
+                                  k_min_shadow_resolution,
+                                  k_max_shadow_resolution);
+                }
+                else if (key == "distance")
+                {
+                    set_from_json(
+                        out.shadows.distance, "shadows.distance", value, k_min_shadow_distance, k_max_shadow_distance);
+                }
+                else if (key == "cascade_count")
+                {
+                    set_from_json(out.shadows.cascade_count,
+                                  "shadows.cascade_count",
+                                  value,
+                                  1,
+                                  shadow_settings::max_cascade_count);
+                }
+                else if (key == "bias")
+                {
+                    set_from_json(out.shadows.bias, "shadows.bias", value, 0.0f, k_max_shadow_bias);
+                }
+                else if (key == "slope_bias")
+                {
+                    set_from_json(out.shadows.slope_bias, "shadows.slope_bias", value, 0.0f, k_max_shadow_slope_bias);
+                }
+                else if (key == "pcf_kernel")
+                {
+                    set_from_json(
+                        out.shadows.pcf_kernel, "shadows.pcf_kernel", value, 1, shadow_settings::max_pcf_kernel);
+                }
+                else
+                {
+                    warn_unknown_key("shadows", key);
+                }
+            }
+        }
+
         // -- Command line -----------------------------------------------------
 
         enum class value_option
@@ -376,6 +435,12 @@ namespace core
             height,
             backend,
             vsync,
+            shadow_resolution,
+            shadow_distance,
+            shadow_cascades,
+            shadow_bias,
+            shadow_slope_bias,
+            shadow_pcf_kernel,
             log_level,
             settings_path,
             asset_root
@@ -392,6 +457,12 @@ namespace core
             {"--height", value_option::height},
             {"--backend", value_option::backend},
             {"--vsync", value_option::vsync},
+            {"--shadow-resolution", value_option::shadow_resolution},
+            {"--shadow-distance", value_option::shadow_distance},
+            {"--shadow-cascades", value_option::shadow_cascades},
+            {"--shadow-bias", value_option::shadow_bias},
+            {"--shadow-slope-bias", value_option::shadow_slope_bias},
+            {"--shadow-pcf-kernel", value_option::shadow_pcf_kernel},
             {"--log-level", value_option::log_level},
             {"--settings", value_option::settings_path},
             {"--asset-root", value_option::asset_root},
@@ -441,17 +512,23 @@ namespace core
         constexpr const char k_usage[] = R"(Usage: AlphaEngine [options]
 
 Options:
-  --width <n>          window width in points (0 = match the display)
-  --height <n>         window height in points (0 = match the display)
-  --windowed           decorated window
-  --fullscreen         fullscreen at the display's resolution
-  --borderless         borderless window
-  --backend <name>     gpu backend: opengl or vulkan
-  --vsync <on|off>     wait for vertical sync
-  --log-level <spec>   log level, e.g. warn or info,gpu=trace
-  --settings <path>    settings file to read instead of the default
-  --asset-root <path>  directory relative asset paths resolve under
-  -h, --help           print this text and exit
+  --width <n>              window width in points (0 = match the display)
+  --height <n>             window height in points (0 = match the display)
+  --windowed               decorated window
+  --fullscreen             fullscreen at the display's resolution
+  --borderless             borderless window
+  --backend <name>         gpu backend: opengl or vulkan
+  --vsync <on|off>         wait for vertical sync
+  --shadow-resolution <n>  texels per side of the shadow maps
+  --shadow-distance <d>    view depth the directional cascades cover
+  --shadow-cascades <n>    directional shadow cascades, 1 to 4
+  --shadow-bias <b>        directional receiver depth bias
+  --shadow-slope-bias <s>  rasterizer slope bias of the shadow passes
+  --shadow-pcf-kernel <n>  hardware pcf taps per side, 1 to 8
+  --log-level <spec>       log level, e.g. warn or info,gpu=trace
+  --settings <path>        settings file to read instead of the default
+  --asset-root <path>      directory relative asset paths resolve under
+  -h, --help               print this text and exit
 
 Every option also accepts the --key=value form. Command-line values override
 the ALPHAENGINE_* environment variables, which override the settings file
@@ -596,6 +673,10 @@ the ALPHAENGINE_* environment variables, which override the settings file
             {
                 apply_input_section(out, section);
             }
+            else if (name == "shadows")
+            {
+                apply_shadows_section(out, section);
+            }
             else if (name == "assets")
             {
                 apply_assets_section(out, section);
@@ -645,6 +726,39 @@ the ALPHAENGINE_* environment variables, which override the settings file
         if (const auto text = read("ALPHAENGINE_TAA"))
         {
             assign_if(out.graphics.temporal_aa, parse_bool_or_warn("ALPHAENGINE_TAA", *text));
+        }
+        if (const auto text = read("ALPHAENGINE_SHADOW_RESOLUTION"))
+        {
+            assign_if(out.shadows.resolution,
+                      parse_unsigned_or_warn(
+                          "ALPHAENGINE_SHADOW_RESOLUTION", *text, k_min_shadow_resolution, k_max_shadow_resolution));
+        }
+        if (const auto text = read("ALPHAENGINE_SHADOW_DISTANCE"))
+        {
+            assign_if(out.shadows.distance,
+                      parse_float_or_warn(
+                          "ALPHAENGINE_SHADOW_DISTANCE", *text, k_min_shadow_distance, k_max_shadow_distance));
+        }
+        if (const auto text = read("ALPHAENGINE_SHADOW_CASCADES"))
+        {
+            assign_if(
+                out.shadows.cascade_count,
+                parse_unsigned_or_warn("ALPHAENGINE_SHADOW_CASCADES", *text, 1, shadow_settings::max_cascade_count));
+        }
+        if (const auto text = read("ALPHAENGINE_SHADOW_BIAS"))
+        {
+            assign_if(out.shadows.bias, parse_float_or_warn("ALPHAENGINE_SHADOW_BIAS", *text, 0.0f, k_max_shadow_bias));
+        }
+        if (const auto text = read("ALPHAENGINE_SHADOW_SLOPE_BIAS"))
+        {
+            assign_if(out.shadows.slope_bias,
+                      parse_float_or_warn("ALPHAENGINE_SHADOW_SLOPE_BIAS", *text, 0.0f, k_max_shadow_slope_bias));
+        }
+        if (const auto text = read("ALPHAENGINE_SHADOW_PCF_KERNEL"))
+        {
+            assign_if(
+                out.shadows.pcf_kernel,
+                parse_unsigned_or_warn("ALPHAENGINE_SHADOW_PCF_KERNEL", *text, 1, shadow_settings::max_pcf_kernel));
         }
         if (const auto text = read("ALPHAENGINE_ASSET_ROOT"))
         {
@@ -724,6 +838,30 @@ the ALPHAENGINE_* environment variables, which override the settings file
             case value_option::vsync:
                 store_if(out.vsync, parse_bool_or_warn(name.c_str(), *value));
                 break;
+            case value_option::shadow_resolution:
+                store_if(
+                    out.shadow_resolution,
+                    parse_unsigned_or_warn(name.c_str(), *value, k_min_shadow_resolution, k_max_shadow_resolution));
+                break;
+            case value_option::shadow_distance:
+                store_if(out.shadow_distance,
+                         parse_float_or_warn(name.c_str(), *value, k_min_shadow_distance, k_max_shadow_distance));
+                break;
+            case value_option::shadow_cascades:
+                store_if(out.shadow_cascades,
+                         parse_unsigned_or_warn(name.c_str(), *value, 1, shadow_settings::max_cascade_count));
+                break;
+            case value_option::shadow_bias:
+                store_if(out.shadow_bias, parse_float_or_warn(name.c_str(), *value, 0.0f, k_max_shadow_bias));
+                break;
+            case value_option::shadow_slope_bias:
+                store_if(out.shadow_slope_bias,
+                         parse_float_or_warn(name.c_str(), *value, 0.0f, k_max_shadow_slope_bias));
+                break;
+            case value_option::shadow_pcf_kernel:
+                store_if(out.shadow_pcf_kernel,
+                         parse_unsigned_or_warn(name.c_str(), *value, 1, shadow_settings::max_pcf_kernel));
+                break;
             case value_option::log_level:
                 out.log_level = std::string{trim(*value)};
                 break;
@@ -745,6 +883,12 @@ the ALPHAENGINE_* environment variables, which override the settings file
         assign_if(out.window.mode, options.mode);
         assign_if(out.window.vsync, options.vsync);
         assign_if(out.graphics.backend, options.backend);
+        assign_if(out.shadows.resolution, options.shadow_resolution);
+        assign_if(out.shadows.distance, options.shadow_distance);
+        assign_if(out.shadows.cascade_count, options.shadow_cascades);
+        assign_if(out.shadows.bias, options.shadow_bias);
+        assign_if(out.shadows.slope_bias, options.shadow_slope_bias);
+        assign_if(out.shadows.pcf_kernel, options.shadow_pcf_kernel);
         assign_if(out.assets.root, options.asset_root);
     }
 

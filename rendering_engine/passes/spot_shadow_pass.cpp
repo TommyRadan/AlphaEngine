@@ -41,12 +41,6 @@ namespace
 {
     namespace math = core::math;
 
-    // Square shadow-map resolution. A single map (unlike the six kept
-    // resident by the omni pass), so it can afford more texels than
-    // point_shadow_pass's per-face 1024 while staying well under the
-    // directional pass's 4096.
-    constexpr uint32_t shadow_map_size = 2048;
-
     // Perspective frustum: the vertical FOV is twice the caster's outer
     // cone half-angle, so the map exactly covers the cone and no texels
     // are spent outside it. Clamped away from the edges (a cone must be
@@ -60,13 +54,12 @@ namespace
     constexpr float default_light_far = 20.0f;
     constexpr float shadow_bias = 0.0025f;
 
-    // Rasteriser depth bias of the depth-only pipeline, matching
-    // shadow_pass's conservative pair: a constant of one resolvable
-    // depth step plus 1.5 times the caster's depth slope, lifting
-    // grazing casters clear of their own samples without detaching
-    // contact shadows.
+    // Constant term of the depth-only pipeline's rasteriser depth bias,
+    // matching shadow_pass: one resolvable depth step. The slope term is
+    // core::shadow_settings::slope_bias times the caster's depth slope,
+    // lifting grazing casters clear of their own samples without
+    // detaching contact shadows.
     constexpr float shadow_depth_bias_constant = 1.0f;
-    constexpr float shadow_depth_bias_slope = 1.5f;
 
     // The far plane for a caster: its range, or the default when it has
     // no cutoff. Never closer than the near plane. Mirrors
@@ -83,9 +76,20 @@ namespace
 
 namespace rendering_engine
 {
-    spot_shadow_pass::spot_shadow_pass(std::vector<renderable*>* registry) : m_registry(registry)
+    spot_shadow_pass::spot_shadow_pass(std::vector<renderable*>* registry, const core::shadow_settings& settings)
+        : m_registry(registry)
     {
         auto& gpu = *runtime::current_engine().gpu;
+
+        // Square map of the configured shadow resolution (the same edge
+        // as each directional cascade): a single map, unlike the six the
+        // omni pass keeps resident, so it affords the full size. Clamped
+        // to the device's 2D limit.
+        uint32_t shadow_map_size = std::max(settings.resolution, 1u);
+        if (const uint32_t max_size = gpu.limits().max_texture_size_2d; max_size != 0)
+        {
+            shadow_map_size = std::min(shadow_map_size, max_size);
+        }
 
         // Off-screen depth-only target: the sampled depth32_float
         // attachment the lit materials read is its only attachment.
@@ -158,7 +162,7 @@ namespace rendering_engine
         gpu::depth_bias_state depth_bias{};
         depth_bias.enabled = true;
         depth_bias.constant = shadow_depth_bias_constant;
-        depth_bias.slope = shadow_depth_bias_slope;
+        depth_bias.slope = std::max(settings.slope_bias, 0.0f);
 
         gpu::pipeline_descriptor pipeline_descriptor{};
         pipeline_descriptor.vertex_shader = m_vertex_shader;

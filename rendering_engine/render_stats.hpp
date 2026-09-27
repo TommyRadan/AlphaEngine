@@ -55,8 +55,10 @@ namespace rendering_engine
         // entirely outside the camera frustum.
         uint32_t culled{0};
 
-        // Shadow casters skipped by the directional shadow pass because
-        // their bounds fell outside the fitted light frustum.
+        // Caster / cascade pairs skipped by the directional shadow pass
+        // because the caster's bounds could not reach that cascade's
+        // fitted light box (a caster outside every cascade counts once
+        // per cascade).
         uint32_t shadow_culled{0};
 
         // Caster / face pairs skipped by the point shadow pass across its
