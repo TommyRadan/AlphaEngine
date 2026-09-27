@@ -209,5 +209,19 @@ namespace core
 
         /** @brief The command line handed to @ref init (argv[0] included), for a later command-line parser. */
         const std::vector<std::string>& arguments();
+
+        /**
+         * @brief Number of messages logged at @ref verbosity::error since the process started, so a headless run
+         * (@c runtime::main_loop) can turn a validation message or any other error into a non-zero exit code
+         * without a second log sink. Counts only messages that actually reached the sinks — one a category
+         * override filtered out was never "logged". Thread-safe.
+         */
+        std::size_t error_count();
+
+        /**
+         * @brief Number of messages logged at @ref verbosity::fatal since the process started, for the same
+         * headless-run use as @ref error_count. Thread-safe.
+         */
+        std::size_t fatal_count();
     } // namespace logging
 } // namespace core

@@ -258,6 +258,10 @@ namespace core
                 static_cast<double>(p.auto_exposure_speed_up),
                 static_cast<double>(p.auto_exposure_speed_down),
                 static_cast<double>(p.auto_exposure_compensation));
+        LOG_INF("Diagnostics settings: frames=%u%s fail_on_error=%s",
+                s.diagnostics.frame_limit,
+                s.diagnostics.frame_limit == 0 ? " (run forever)" : "",
+                on_off(s.diagnostics.fail_on_error));
         return result;
     }
 } // namespace core

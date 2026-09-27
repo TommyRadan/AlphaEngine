@@ -76,6 +76,8 @@ namespace core
     inline constexpr float k_max_exposure_ev = 32.0f;
     inline constexpr float k_max_exposure_speed = 100.0f;
     inline constexpr float k_max_exposure_compensation = 16.0f;
+    /** @brief Largest accepted @ref diagnostics_settings::frame_limit; 0 means run forever. */
+    inline constexpr unsigned int k_max_frame_limit = 1'000'000'000u;
 
     /** @brief Parses `true` / `false`, `1` / `0`, `yes` / `no`, `on` / `off`; trimmed, case-insensitive. */
     std::optional<bool> parse_bool(std::string_view text);
@@ -110,11 +112,12 @@ namespace core
      * @brief Applies the `ALPHAENGINE_WIDTH`, `_HEIGHT`, `_WINDOW_MODE`, `_VSYNC`, `_GRAPHICS_BACKEND`, `_TAA`,
      *        `_DEPTH_PREPASS`, `_FRAMES_IN_FLIGHT`, `_PARALLEL_DRAW_THRESHOLD`, `_SHADOW_RESOLUTION`,
      *        `_SHADOW_DISTANCE`, `_SHADOW_CASCADES`,
-     *        `_SHADOW_BIAS`, `_SHADOW_SLOPE_BIAS`, `_SHADOW_PCF_KERNEL` and `_ASSET_ROOT` variables on top of
-     *        @p out, plus one variable per @ref post_process_settings field: `ALPHAENGINE_` followed by its `post`
-     *        key in upper case (`ALPHAENGINE_EXPOSURE`, `_TONEMAP`, `_BLOOM`, `_BLOOM_THRESHOLD`, ...,
-     *        `_GRADING_LUT`, `_MOTION_BLUR`, `_AUTO_EXPOSURE`, `_AUTO_EXPOSURE_MIN_EV`, ...). An unset or empty
-     *        variable leaves its setting as it is. (`ALPHAENGINE_LOG_LEVEL` belongs to @ref core::logging::init.)
+     *        `_SHADOW_BIAS`, `_SHADOW_SLOPE_BIAS`, `_SHADOW_PCF_KERNEL`, `_ASSET_ROOT`, `_FRAMES` and
+     *        `_FAIL_ON_ERROR` variables on top of @p out, plus one variable per @ref post_process_settings field:
+     *        `ALPHAENGINE_` followed by its `post` key in upper case (`ALPHAENGINE_EXPOSURE`, `_TONEMAP`, `_BLOOM`,
+     *        `_BLOOM_THRESHOLD`, ..., `_GRADING_LUT`, `_MOTION_BLUR`, `_AUTO_EXPOSURE`, `_AUTO_EXPOSURE_MIN_EV`,
+     *        ...). An unset or empty variable leaves its setting as it is. (`ALPHAENGINE_LOG_LEVEL` belongs to
+     *        @ref core::logging::init.)
      */
     void apply_environment(settings& out, const environment_getter& get);
 
@@ -162,6 +165,11 @@ namespace core
         std::optional<std::string> settings_path;
         /** @brief The `--asset-root` override of @ref asset_settings::root. */
         std::optional<std::string> asset_root;
+
+        /** @brief The `--frames` override of @ref diagnostics_settings::frame_limit. */
+        std::optional<unsigned int> frame_limit;
+        /** @brief Whether `--fail-on-error` was given; a presence-only flag, so never turned back off from here. */
+        bool fail_on_error{false};
 
         bool help_requested{false};
     };

@@ -317,6 +317,109 @@ jobs:
             --gtest_repeat=20
 
   # ---------------------------------------------------------------------------
+  # smoke: launches the real Debug binary headlessly under Xvfb, on Mesa's
+  # software Vulkan implementation (lavapipe) with the Khronos validation
+  # layer, for a bounded number of frames (--frames), and fails the step on
+  # any [ERR] or [FTL] line (--fail-on-error) — so a validation message, not
+  # only a crash, fails CI. Run twice: once with the layer's default checks,
+  # once with synchronization validation added, which catches a different
+  # class of hazard (a missing barrier) the default checks miss.
+  #
+  # A second matrix entry repeats both runs under AddressSanitizer +
+  # UndefinedBehaviorSanitizer. ThreadSanitizer is left out: lavapipe's own
+  # worker threads produce driver-internal races that would need a
+  # suppressions file, and none of it is engine code.
+  # ---------------------------------------------------------------------------
+  smoke:
+    name: smoke (linux vulkan ${{ matrix.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: plain
+            cmake_args: ""
+          - name: asan+ubsan
+            cmake_args: -DALPHAENGINE_SANITIZE=address,undefined
+    env:
+      VK_ICD_FILENAMES: /usr/share/vulkan/icd.d/lvp_icd.json
+      VK_INSTANCE_LAYERS: VK_LAYER_KHRONOS_validation
+      ALPHAENGINE_GRAPHICS_BACKEND: vulkan
+      SDL_AUDIO_DRIVER: dummy
+      ASAN_OPTIONS: detect_leaks=1
+      UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install toolchain and dev headers
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ${LINUX_DEV_PACKAGES} g++ \
+            mesa-vulkan-drivers vulkan-validationlayers xvfb
+          g++ --version
+
+      # GCC 13's libasan aborts at startup ("unexpected memory mapping") when
+      # the kernel randomises mmap with more than 28 bits of entropy; only
+      # the sanitizer entry links it (see the sanitizers job above).
+      - name: Limit mmap randomisation for the sanitizer runtime
+        if: matrix.name == 'asan+ubsan'
+        run: sudo sysctl -w vm.mmap_rnd_bits=28
+
+      - name: Cache FetchContent sources
+        uses: actions/cache@v4
+        with:
+          path: |
+            build/_deps/*-src
+            build/_deps/*-subbuild
+          key: fetchcontent-${{ runner.os }}-${{ hashFiles('CMakeLists.txt') }}
+          restore-keys: fetchcontent-${{ runner.os }}-
+
+      - name: Configure
+        run: |
+          cmake -S . -B build \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_COMPILER=gcc \
+            -DCMAKE_CXX_COMPILER=g++ \
+            -DALPHAENGINE_BUILD_TESTS=OFF \
+            ${{ matrix.cmake_args }}
+
+      - name: Build engine
+        run: cmake --build build --target AlphaEngine
+
+      # A smaller window than the engine's own default keeps lavapipe's
+      # software rasterizer inside the timeout below; it renders only a few
+      # frames per second at the default resolution.
+      - name: Smoke run (validation)
+        timeout-minutes: 8
+        run: |
+          set -euo pipefail
+          xvfb-run -a ./Binaries/AlphaEngine \
+            --width 640 --height 360 --frames 300 --fail-on-error \
+            2>&1 | tee smoke-validation.log
+
+      - name: Smoke run (synchronization validation)
+        timeout-minutes: 8
+        env:
+          VK_LAYER_ENABLES: VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT
+        run: |
+          set -euo pipefail
+          xvfb-run -a ./Binaries/AlphaEngine \
+            --width 640 --height 360 --frames 300 --fail-on-error \
+            2>&1 | tee smoke-sync-validation.log
+
+      - name: Upload smoke logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-logs-${{ matrix.name }}
+          path: smoke-*.log
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # ---------------------------------------------------------------------------
   # build: Windows MSVC build matrix (Debug + Release). Both the OpenGL and
   # Vulkan backends are compiled into the same binary and the runtime choice
   # is driven by settings::get_graphics_backend(); the Vulkan SDK is therefore

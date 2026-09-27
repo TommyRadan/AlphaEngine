@@ -176,6 +176,8 @@ namespace runtime
         // Owns the bus listener that sets m_quit_requested; dropped before the
         // bus is torn down so the [this] capture never outlives the engine.
         core::subscription m_quit_subscription;
+        // Frames rendered so far, for diagnostics.frame_limit.
+        unsigned int m_frames_rendered{0};
     };
 
     /**
