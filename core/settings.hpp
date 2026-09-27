@@ -33,6 +33,8 @@
 #pragma once
 
 #include <string>
+#include <unordered_map>
+#include <vector>
 
 namespace core
 {
@@ -111,6 +113,15 @@ namespace core
         /** @brief Mouse-look scale, radians per point of cursor travel. */
         float mouse_sensitivity{0.005f};
         bool mouse_reversed{false};
+
+        /**
+         * @brief Rebinds for @c core::input actions and axes, from the `input.bindings` section of settings.json
+         *        (e.g. `"move_forward": ["key:w", "gamepad_axis:left_y-"]`). Keyed by the action or axis name; a
+         *        name registered through @c core::input::bind_action / @c bind_axis with an entry here uses
+         *        these binding strings instead of its compiled defaults. Empty by default. See @c core/input.hpp
+         *        for the binding-string grammar; an entry that does not parse is warned about and skipped.
+         */
+        std::unordered_map<std::string, std::vector<std::string>> bindings;
     };
 
     /**

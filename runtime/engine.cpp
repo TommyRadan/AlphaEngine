@@ -29,6 +29,7 @@
 
 #include <core/audio/audio.hpp>
 #include <core/event_engine.hpp>
+#include <core/input.hpp>
 #include <core/jobs.hpp>
 #include <core/log.hpp>
 #include <core/platform/platform.hpp>
@@ -104,6 +105,9 @@ namespace runtime
         jobs = std::make_unique<core::jobs>();
         events = std::make_unique<core::event_bus>();
         audio = std::make_unique<core::audio>();
+        // Maps physical input to actions and axes from the same raw events the window will emit once it starts
+        // pumping SDL; it only needs the bus, so it can be constructed here, ahead of the window.
+        input = std::make_unique<core::input>();
         window = std::make_unique<rendering_engine::window>();
         gpu = rendering_engine::gpu::create_device(to_backend_type(settings->graphics.backend));
         // The asset cache hands out GPU-resource-backed handles, so it is
@@ -137,6 +141,8 @@ namespace runtime
         rendering_engine::set_asset_device(nullptr);
         gpu.reset();
         window.reset();
+        // Reverse of construction order: input was made after audio, so it goes first here.
+        input.reset();
         audio.reset();
         m_quit_subscription.reset();
         events.reset();
@@ -160,6 +166,9 @@ namespace runtime
         // playback device up front so a module's on_engine_start can play a
         // sound immediately.
         audio->init();
+        // Subscribes to the raw input events the window will start emitting once it is up, and picks up any
+        // `input.bindings` rebind from settings ahead of the game modules' bind_action / bind_axis calls below.
+        input->init(*events, settings->input);
 
         // Mount the asset root before anything loads a file: the configured
         // directory when one is set, else the discovered default beside the
@@ -208,8 +217,9 @@ namespace runtime
         assets->quit();
         renderer->quit();
         core::default_vfs().unmount_all();
-        m_quit_subscription.reset();
+        input->quit();
         audio->quit();
+        m_quit_subscription.reset();
         events->quit();
     }
 
@@ -225,6 +235,9 @@ namespace runtime
         // Pump OS input once per rendered frame (variable rate). Input
         // state set here is read by the fixed-step updates below.
         window->tick();
+        // Latches this frame's cursor motion (see core::input::mouse_delta) now that every event window->tick()
+        // pumped has updated the live action / axis state; nothing changes it again before the next window->tick().
+        input->end_frame();
 
         // Deliver the events buffered through event_bus::enqueue since the
         // last tick, now that this frame's input has been pumped and before
@@ -248,6 +261,9 @@ namespace runtime
         frame.m_delta_time = static_cast<float>(time->fixed_delta_time());
         while (time->next_fixed_step())
         {
+            // Latches was_action_pressed / was_action_released for this step before behaviours see it, so they
+            // stay stable for every on_fixed_update the step runs (core::input::begin_step).
+            input->begin_step();
             events->emit<core::frame>(frame);
         }
 

@@ -270,6 +270,39 @@ namespace core
             target = *parsed;
         }
 
+        // input.bindings: { "<action or axis name>": ["<binding string>", ...], ... }. The binding-string
+        // grammar itself is core::input's concern (core/input.cpp); this only captures the raw strings, tolerant
+        // the same way as everything else here, so a bad entry is warned about and skipped rather than dropping
+        // the whole section.
+        void set_bindings_from_json(std::unordered_map<std::string, std::vector<std::string>>& target,
+                                    const json& value)
+        {
+            if (!value.is_object())
+            {
+                LOG_WRN("settings: input.bindings must be a JSON object; ignoring it");
+                return;
+            }
+            for (const auto& [name, list] : value.items())
+            {
+                if (!list.is_array())
+                {
+                    LOG_WRN("settings: input.bindings.%s must be an array of strings; ignoring it", name.c_str());
+                    continue;
+                }
+                std::vector<std::string> bindings;
+                for (const auto& entry : list)
+                {
+                    if (!entry.is_string())
+                    {
+                        LOG_WRN("settings: input.bindings.%s has a non-string entry; skipping it", name.c_str());
+                        continue;
+                    }
+                    bindings.push_back(entry.get<std::string>());
+                }
+                target[name] = std::move(bindings);
+            }
+        }
+
         void warn_unknown_key(const char* section, const std::string& key)
         {
             LOG_WRN("settings: ignoring unknown key '%s.%s'", section, key.c_str());
@@ -374,6 +407,10 @@ namespace core
                 else if (key == "mouse_reversed")
                 {
                     set_from_json(out.input.mouse_reversed, "input.mouse_reversed", value);
+                }
+                else if (key == "bindings")
+                {
+                    set_bindings_from_json(out.input.bindings, value);
                 }
                 else
                 {
