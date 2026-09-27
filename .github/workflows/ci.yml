@@ -35,15 +35,12 @@ env:
     libxfixes-dev
     libxss-dev
 
-# The Linux jobs share one actions/cache of the FetchContent checkouts
-# (SDL3, GLM, glslang, ImGui) so only the first job after a CMakeLists.txt
-# change hits GitHub for the sources. Both the *-src trees and the
-# *-subbuild directories are cached: FetchContent skips the clone only when
-# the "<name>-populate-gitclone-lastrun.txt" stamp inside the subbuild is
-# present and up to date, and with the pinned tag already checked out the
-# update step is a no-op — a restored cache never touches the network. The
-# *-build trees are left out: they hold compiled objects that differ per
-# compiler and per sanitizer flag.
+# Every job that configures the tree caches the FetchContent checkouts
+# (every FetchContent_Declare dependency in the root CMakeLists.txt)
+# via actions/cache, one entry per OS, so only the first job after a
+# CMakeLists.txt change hits GitHub for the sources. The *-build trees
+# are left out: each job's own ccache/sccache cache (below) covers
+# compiled objects at per-translation-unit granularity instead.
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -198,6 +195,9 @@ jobs:
             # (std::__1::vector vs std::vector in the mangled names). Build
             # the whole tree against libc++ so the engine links.
             cmake_args: -DCMAKE_CXX_FLAGS=-stdlib=libc++
+    env:
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_MAXSIZE: 1G
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -208,13 +208,13 @@ jobs:
           sudo apt-get update
           case "${{ matrix.compiler }}" in
             gcc)
-              sudo apt-get install -y --no-install-recommends ${LINUX_DEV_PACKAGES} g++
+              sudo apt-get install -y --no-install-recommends ${LINUX_DEV_PACKAGES} ccache g++
               ;;
             clang)
               # CMakeLists.txt passes -stdlib=libc++ to the AlphaEngine target
               # when the compiler is Clang, so the libc++ headers and runtime
               # are needed to compile and link the engine.
-              sudo apt-get install -y --no-install-recommends ${LINUX_DEV_PACKAGES} \
+              sudo apt-get install -y --no-install-recommends ${LINUX_DEV_PACKAGES} ccache \
                 clang-${CLANG_VERSION} \
                 libc++-${CLANG_VERSION}-dev \
                 libc++abi-${CLANG_VERSION}-dev
@@ -233,6 +233,17 @@ jobs:
           key: fetchcontent-${{ runner.os }}-${{ hashFiles('CMakeLists.txt') }}
           restore-keys: fetchcontent-${{ runner.os }}-
 
+      # Keyed on compiler and configuration (this job is always a Debug
+      # build) so the two matrix legs, which compile different object
+      # files from the same sources (GCC vs. Clang + libc++), never share
+      # or overwrite each other's cache entry.
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ccache-linux-${{ matrix.compiler }}-debug-${{ github.sha }}
+          restore-keys: ccache-linux-${{ matrix.compiler }}-debug-
+
       - name: Configure
         run: |
           cmake -S . -B build \
@@ -240,6 +251,8 @@ jobs:
             -DCMAKE_BUILD_TYPE=Debug \
             -DCMAKE_C_COMPILER=${{ matrix.cc }} \
             -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             ${{ matrix.cmake_args }}
 
       - name: Build engine
@@ -287,6 +300,8 @@ jobs:
       SDL_AUDIO_DRIVER: dummy
       ASAN_OPTIONS: detect_leaks=1
       UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_MAXSIZE: 1G
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -295,7 +310,7 @@ jobs:
         run: |
           set -euxo pipefail
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends ${LINUX_DEV_PACKAGES} g++ \
+          sudo apt-get install -y --no-install-recommends ${LINUX_DEV_PACKAGES} ccache g++ \
             mesa-vulkan-drivers vulkan-validationlayers xvfb
           g++ --version
 
@@ -317,6 +332,18 @@ jobs:
           key: fetchcontent-${{ runner.os }}-${{ hashFiles('CMakeLists.txt') }}
           restore-keys: fetchcontent-${{ runner.os }}-
 
+      # Keyed on matrix.name (plain vs. asan+ubsan), not just compiler and
+      # configuration: -fsanitize=address,undefined changes every object
+      # file, and without a distinct key both matrix legs would race to
+      # save the same cache entry, silently dropping whichever leg's save
+      # loses the race.
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ccache-linux-smoke-${{ matrix.name }}-debug-${{ github.sha }}
+          restore-keys: ccache-linux-smoke-${{ matrix.name }}-debug-
+
       - name: Configure
         run: |
           cmake -S . -B build \
@@ -324,6 +351,8 @@ jobs:
             -DCMAKE_BUILD_TYPE=Debug \
             -DCMAKE_C_COMPILER=gcc \
             -DCMAKE_CXX_COMPILER=g++ \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             ${{ matrix.cmake_args }}
 
       - name: Build engine
@@ -370,6 +399,12 @@ jobs:
   # Vulkan backend's shader compile). The Khronos validation layer is staged
   # alongside the executable so reviewers can run with VK validation enabled
   # without a system-wide SDK install.
+  #
+  # Configures with Ninja instead of a Visual Studio generator:
+  # CMAKE_<LANG>_COMPILER_LAUNCHER, the hook sccache needs, is
+  # documented as supported only by the Makefile and Ninja generators.
+  # ilammy/msvc-dev-cmd loads cl.exe / link.exe onto PATH so Ninja can
+  # drive them; the executable then lands directly under Binaries/.
   # ---------------------------------------------------------------------------
   build:
     name: build (windows-msvc ${{ matrix.configuration }})
@@ -380,6 +415,9 @@ jobs:
         configuration: [Debug, Release]
     env:
       VULKAN_SDK_VERSION: "1.3.296.0"
+      SCCACHE_VERSION: "0.18.0"
+      SCCACHE_DIR: ${{ github.workspace }}\.sccache
+      SCCACHE_CACHE_SIZE: 1G
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -422,36 +460,97 @@ jobs:
           "$sdk\Bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           Write-Host "Installed Vulkan SDK at $sdk"
 
-      - name: Cache CMake build
+      # Downloaded directly from the project's GitHub releases, the same
+      # pinned-version-plus-retry pattern as the Vulkan SDK step above,
+      # rather than a marketplace action: sccache is a small, single-file
+      # download and this keeps the compiler cache's own provenance under
+      # the same control as the rest of this job.
+      - name: Install sccache
+        shell: pwsh
+        run: |
+          $version = "${env:SCCACHE_VERSION}"
+          $archive = "sccache-v$version-x86_64-pc-windows-msvc"
+          $url = "https://github.com/mozilla/sccache/releases/download/v$version/$archive.zip"
+          Write-Host "Downloading sccache $version from $url"
+          $maxAttempts = 4
+          for ($attempt = 1; $attempt -le $maxAttempts; $attempt++)
+          {
+            try
+            {
+              Invoke-WebRequest -Uri $url -OutFile sccache.zip -UseBasicParsing
+              break
+            }
+            catch
+            {
+              if ($attempt -eq $maxAttempts) { throw }
+              $delay = [math]::Pow(2, $attempt)
+              Write-Host "Download attempt $attempt failed: $($_.Exception.Message). Retrying in $delay s..."
+              Start-Sleep -Seconds $delay
+            }
+          }
+          Expand-Archive -Path sccache.zip -DestinationPath sccache-extracted
+          $sccacheDir = (Resolve-Path "sccache-extracted\$archive").Path
+          if (-not (Test-Path "$sccacheDir\sccache.exe")) { throw "sccache.exe missing after extraction" }
+          $sccacheDir | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          Write-Host "Installed sccache at $sccacheDir"
+
+      # Loads cl.exe / link.exe onto PATH (via vswhere + vcvarsall) for the
+      # Ninja configure below.
+      - name: Set up MSVC developer environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Cache FetchContent sources
         uses: actions/cache@v4
         with:
-          path: build
-          key: build-msvc-${{ matrix.configuration }}-${{ env.VULKAN_SDK_VERSION }}-${{ hashFiles('CMakeLists.txt', 'cmake/**') }}-${{ github.sha }}
-          restore-keys: |
-            build-msvc-${{ matrix.configuration }}-${{ env.VULKAN_SDK_VERSION }}-${{ hashFiles('CMakeLists.txt', 'cmake/**') }}-
-            build-msvc-${{ matrix.configuration }}-${{ env.VULKAN_SDK_VERSION }}-
+          path: |
+            build/_deps/*-src
+            build/_deps/*-subbuild
+          key: fetchcontent-${{ runner.os }}-${{ hashFiles('CMakeLists.txt') }}
+          restore-keys: fetchcontent-${{ runner.os }}-
+
+      # Keyed on configuration (this job is always MSVC) so the Debug and
+      # Release legs, which compile different object files, never share or
+      # overwrite each other's cache entry.
+      - name: Cache sccache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.SCCACHE_DIR }}
+          key: sccache-windows-msvc-${{ matrix.configuration }}-${{ github.sha }}
+          restore-keys: sccache-windows-msvc-${{ matrix.configuration }}-
 
       - name: Configure (MSVC)
         shell: pwsh
         run: |
-          # windows-latest ships Visual Studio 2026 (generator v18); the
-          # older "Visual Studio 17 2022" is no longer installed on the
-          # image, so configure against the 2026 toolchain.
+          $ciArgs = @()
+          if ('${{ matrix.configuration }}' -eq 'Debug')
+          {
+            # /Zi (CMake's default here) shares one PDB via mspdbsrv,
+            # which sccache can't key per object; /Z7 embeds it in each
+            # .obj instead. Release already has no debug-info flag.
+            $ciArgs = @('-DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded')
+          }
           cmake -S . -B build `
-            -G "Visual Studio 18 2026" `
-            -A x64
+            -G Ninja `
+            -DCMAKE_BUILD_TYPE=${{ matrix.configuration }} `
+            -DCMAKE_C_COMPILER=cl `
+            -DCMAKE_CXX_COMPILER=cl `
+            -DCMAKE_C_COMPILER_LAUNCHER=sccache `
+            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache `
+            @ciArgs
           if ($LASTEXITCODE -ne 0) { throw "cmake configure failed" }
 
       - name: Build
         shell: pwsh
         run: |
-          cmake --build build --config ${{ matrix.configuration }}
+          cmake --build build
           if ($LASTEXITCODE -ne 0) { throw "cmake build failed" }
 
       - name: Verify output
         shell: pwsh
         run: |
-          $exe = "Binaries\${{ matrix.configuration }}\AlphaEngine.exe"
+          $exe = "Binaries\AlphaEngine.exe"
           if (-not (Test-Path $exe)) { throw "Missing $exe" }
           Write-Host "Built $exe ($((Get-Item $exe).Length) bytes)"
 
@@ -468,7 +567,7 @@ jobs:
         shell: pwsh
         run: |
           $sdkBin = "$env:VULKAN_SDK\Bin"
-          $outDir = "Binaries\${{ matrix.configuration }}"
+          $outDir = "Binaries"
           $files = @(
             "VkLayer_khronos_validation.dll",
             "VkLayer_khronos_validation.json"
@@ -486,9 +585,9 @@ jobs:
         with:
           name: AlphaEngine-windows-Debug
           path: |
-            Binaries/Debug/AlphaEngine.exe
-            Binaries/Debug/VkLayer_khronos_validation.dll
-            Binaries/Debug/VkLayer_khronos_validation.json
+            Binaries/AlphaEngine.exe
+            Binaries/VkLayer_khronos_validation.dll
+            Binaries/VkLayer_khronos_validation.json
           if-no-files-found: error
           retention-days: 14
 
@@ -497,7 +596,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: AlphaEngine-windows-Release
-          path: Binaries/Release/AlphaEngine.exe
+          path: Binaries/AlphaEngine.exe
           if-no-files-found: error
           retention-days: 14
 
