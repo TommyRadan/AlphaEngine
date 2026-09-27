@@ -126,8 +126,7 @@ add_custom_command(
 
 # A tiny static library rather than a source of the AlphaEngine target:
 # a generated source can only be consumed by targets in the directory
-# that declares its custom command, and both the engine and the unit
-# tests need the registry. Its only API is the plain-C-shaped
+# that declares its custom command. Its only API is the plain-C-shaped
 # embedded_shaders(), so it carries no standard-library types across
 # the link.
 add_library(shader_registry STATIC ${ALPHAENGINE_SHADER_REGISTRY_SOURCE})

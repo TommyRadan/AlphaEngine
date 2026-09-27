@@ -4,13 +4,13 @@
 // HAS_TANGENTS) tangent frame for the fragment stage, plus the camera
 // position the per-frame block carries.
 //
-// Keywords (injected as defines by standard_material's template, see
-// docs/shaders.md): HAS_TANGENTS declares the tangent attribute at
-// location 3 and forwards it; without it the pipeline reads a
-// position+uv+normal record and normal mapping is off. SKINNED declares
-// the joint indices (location 4) and weights (location 5) of the
-// position+uv+normal+tangent+skin record and moves the vertex by the
-// per-draw joint palette (include/per_draw.glsl) before the model matrix.
+// Keywords (injected as defines by standard_material's template):
+// HAS_TANGENTS declares the tangent attribute at location 3 and forwards
+// it; without it the pipeline reads a position+uv+normal record and
+// normal mapping is off. SKINNED declares the joint indices (location 4)
+// and weights (location 5) of the position+uv+normal+tangent+skin record
+// and moves the vertex by the per-draw joint palette
+// (include/per_draw.glsl) before the model matrix.
 
 #include "include/per_frame.glsl"
 #include "include/per_draw.glsl"

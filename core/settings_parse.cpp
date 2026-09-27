@@ -962,8 +962,7 @@ ALPHAENGINE_BLOOM_THRESHOLD):
   --auto-exposure-compensation <stops>  stops added to the adapted exposure
 
 Every option also accepts the --key=value form. Command-line values override
-the ALPHAENGINE_* environment variables, which override the settings file
-(see docs/settings.md).
+the ALPHAENGINE_* environment variables, which override the settings file.
 )";
     } // namespace
 

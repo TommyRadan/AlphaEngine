@@ -8,7 +8,7 @@
 // phong_material through the includes.
 //
 // Which maps are sampled is decided at compile time by the keywords
-// standard_material's template injects as defines (docs/shaders.md):
+// standard_material's template injects as defines:
 //   USE_ALBEDO_MAP     base colour (and alpha) from albedoMap
 //   USE_NORMAL_MAP     tangent-space normal from normalMap (needs
 //                      HAS_TANGENTS, else ignored)

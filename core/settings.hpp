@@ -26,8 +26,8 @@
  *
  * The values are resolved once at startup by @ref core::load_settings: compiled defaults, then
  * `<pref path>/settings.json`, then the `ALPHAENGINE_*` environment variables, then the command line, each
- * layer overriding the one before it (see docs/settings.md). The per-layer steps are pure functions in
- * core/settings_parse.hpp so they can be exercised without touching the process environment or the platform.
+ * layer overriding the one before it. The per-layer steps are pure functions in core/settings_parse.hpp so
+ * they can be exercised without touching the process environment or the platform.
  */
 
 #pragma once
