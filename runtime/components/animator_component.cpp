@@ -21,8 +21,8 @@ namespace runtime
     namespace
     {
         namespace math = core::math;
-        using rendering_engine::animation_clip;
-        using rendering_engine::no_joint;
+        using animation::animation_clip;
+        using animation::no_joint;
 
         // Layers blended at once. A burst of cross-fades beyond this drops
         // the faintest outgoing layer rather than growing without bound.
@@ -97,7 +97,7 @@ namespace runtime
 
     struct animator_component::impl
     {
-        std::shared_ptr<const rendering_engine::skeleton> skeleton;
+        std::shared_ptr<const animation::skeleton> skeleton;
         std::vector<std::shared_ptr<const animation_clip>> clips;
 
         // The joints some clip drives: the only ones that are blended and
@@ -129,7 +129,7 @@ namespace runtime
 
         impl() = default;
 
-        impl(std::shared_ptr<const rendering_engine::skeleton> in_skeleton,
+        impl(std::shared_ptr<const animation::skeleton> in_skeleton,
              std::vector<std::shared_ptr<const animation_clip>> in_clips)
             : skeleton{std::move(in_skeleton)}, clips{std::move(in_clips)}
         {
@@ -141,7 +141,7 @@ namespace runtime
                 {
                     continue;
                 }
-                for (const rendering_engine::joint_track& track : clip->tracks())
+                for (const animation::joint_track& track : clip->tracks())
                 {
                     if (track.joint < count && !animated[track.joint])
                     {
@@ -294,7 +294,7 @@ namespace runtime
         // previous and the latest fixed step.
         void evaluate(double alpha)
         {
-            const std::vector<rendering_engine::skeleton_joint>& joints = skeleton->joints();
+            const std::vector<animation::skeleton_joint>& joints = skeleton->joints();
             pose.resize(joints.size());
             for (std::size_t j = 0; j < joints.size(); ++j)
             {
@@ -430,8 +430,8 @@ namespace runtime
 
     animator_component::animator_component() : m_impl{std::make_unique<impl>()} {}
 
-    animator_component::animator_component(std::shared_ptr<const rendering_engine::skeleton> skeleton,
-                                           std::vector<std::shared_ptr<const rendering_engine::animation_clip>> clips)
+    animator_component::animator_component(std::shared_ptr<const animation::skeleton> skeleton,
+                                           std::vector<std::shared_ptr<const animation::animation_clip>> clips)
         : m_impl{std::make_unique<impl>(std::move(skeleton), std::move(clips))}
     {
     }
@@ -478,13 +478,12 @@ namespace runtime
         m_impl->needs_apply = true;
     }
 
-    const std::shared_ptr<const rendering_engine::skeleton>& animator_component::skeleton() const noexcept
+    const std::shared_ptr<const animation::skeleton>& animator_component::skeleton() const noexcept
     {
         return m_impl->skeleton;
     }
 
-    const std::vector<std::shared_ptr<const rendering_engine::animation_clip>>&
-    animator_component::clips() const noexcept
+    const std::vector<std::shared_ptr<const animation::animation_clip>>& animator_component::clips() const noexcept
     {
         return m_impl->clips;
     }

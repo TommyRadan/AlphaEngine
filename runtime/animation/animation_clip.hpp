@@ -16,9 +16,9 @@
 
 #include <core/math/curve.hpp>
 #include <core/math/math.hpp>
-#include <rendering_engine/animation/skeleton.hpp>
+#include <runtime/animation/skeleton.hpp>
 
-namespace rendering_engine
+namespace runtime::animation
 {
     /**
      * @brief The keyframed channels of one joint. A channel with no keys is
@@ -73,4 +73,4 @@ namespace rendering_engine
         std::vector<joint_track> m_tracks;
         float m_duration{0.0f};
     };
-} // namespace rendering_engine
+} // namespace runtime::animation
