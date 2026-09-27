@@ -8,12 +8,23 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Debug)
 endif()
 
+# CI-only switch, off by default so a local MSVC build is unaffected:
+# skips the explicit /Zi below so the Windows CI job's own
+# -DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded (passed from the
+# workflow, not here) selects /Z7 instead. /Zi routes debug info
+# through mspdbsrv into a shared PDB, which a compiler cache cannot key
+# per object file; /Z7 embeds it in each .obj like GCC/Clang's -g does.
+set(ALPHAENGINE_CI_BUILD OFF CACHE BOOL "Enable CI-only build tweaks (sccache-compatible MSVC debug info)")
+
 # Add debug definitions and flags. Use generator expressions so this works
 # correctly with multi-config generators (e.g. Visual Studio) where
 # CMAKE_BUILD_TYPE is empty at configure time.
 add_compile_definitions($<$<CONFIG:Debug>:_DEBUG>)
 if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
-    add_compile_options($<$<CONFIG:Debug>:/Zi> $<$<CONFIG:Debug>:/Od>)
+    if(NOT ALPHAENGINE_CI_BUILD)
+        add_compile_options($<$<CONFIG:Debug>:/Zi>)
+    endif()
+    add_compile_options($<$<CONFIG:Debug>:/Od>)
 else()
     add_compile_options($<$<CONFIG:Debug>:-g> $<$<CONFIG:Debug>:-O0>)
 endif()
