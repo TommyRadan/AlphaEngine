@@ -60,7 +60,7 @@ namespace rendering_engine
      *
      * File assets are read through the virtual filesystem
      * (@c core::default_vfs): a relative path is looked up in the mounted
-     * asset root, an absolute one names a native file. Their keys are the
+     * content root, an absolute one names a native file. Their keys are the
      * VFS's canonical identity (@c vfs::canonical_key — resolved, made
      * canonical, case-folded where the filesystem ignores case), so two
      * spellings of one file share one entry. Numeric parameters in a
@@ -88,7 +88,7 @@ namespace rendering_engine
      * device samples (see @ref decode_ktx2).
      *
      * With @ref enable_hot_reload (the engine turns it on in debug builds for
-     * the asset root) @ref pump also polls a directory watcher: a texture
+     * the content root) @ref pump also polls a directory watcher: a texture
      * file that changes on disk is decoded again on a worker and its new
      * upload swapped into the live @ref texture_asset, whose
      * @c generation then moves so bound materials rebuild.
@@ -209,7 +209,7 @@ namespace rendering_engine
          * fails to decode — often one caught half-written — is logged and
          * leaves the previous texture in place; the next change retries. A
          * load still in flight is not reloaded, and removed files are
-         * ignored. The engine enables this for the asset root in debug
+         * ignored. The engine enables this for the content root in debug
          * builds; a second call replaces the watched root.
          */
         void enable_hot_reload(const std::filesystem::path& root);

@@ -92,7 +92,7 @@ namespace core
      * @brief Applies the `ALPHAENGINE_WIDTH`, `_HEIGHT`, `_WINDOW_MODE`, `_VSYNC`, `_GRAPHICS_BACKEND`, `_TAA`,
      *        `_DEPTH_PREPASS`, `_FRAMES_IN_FLIGHT`, `_PARALLEL_DRAW_THRESHOLD`, `_SHADOW_RESOLUTION`,
      *        `_SHADOW_DISTANCE`, `_SHADOW_CASCADES`,
-     *        `_SHADOW_BIAS`, `_SHADOW_SLOPE_BIAS`, `_SHADOW_PCF_KERNEL`, `_ASSET_ROOT`, `_FRAMES` and
+     *        `_SHADOW_BIAS`, `_SHADOW_SLOPE_BIAS`, `_SHADOW_PCF_KERNEL`, `_CONTENT_ROOT`, `_FRAMES` and
      *        `_FAIL_ON_ERROR` variables on top of @p out, plus one variable per @ref post_process_settings field:
      *        `ALPHAENGINE_` followed by its `post` key in upper case (`ALPHAENGINE_EXPOSURE`, `_TONEMAP`, `_BLOOM`,
      *        `_BLOOM_THRESHOLD`, ..., `_GRADING_LUT`, `_MOTION_BLUR`, `_AUTO_EXPOSURE`, `_AUTO_EXPOSURE_MIN_EV`,
@@ -143,8 +143,8 @@ namespace core
 
         /** @brief The `--settings` override of the settings-file path. */
         std::optional<std::string> settings_path;
-        /** @brief The `--asset-root` override of @ref asset_settings::root. */
-        std::optional<std::string> asset_root;
+        /** @brief The `--content-root` override of @ref content_settings::root. */
+        std::optional<std::string> content_root;
 
         /** @brief The `--frames` override of @ref diagnostics_settings::frame_limit. */
         std::optional<unsigned int> frame_limit;
@@ -162,7 +162,8 @@ namespace core
      */
     command_line_options parse_command_line(std::span<const char* const> args);
 
-    /** @brief Applies the window / graphics / shadow / post / asset options present in @p options on top of @p out. */
+    /** @brief Applies the window / graphics / shadow / post / content options present in @p options on top of @p out.
+     */
     void apply_command_line(settings& out, const command_line_options& options);
 
     /** @brief The `--help` text. */

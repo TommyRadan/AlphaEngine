@@ -86,8 +86,8 @@ namespace core
      *
      * Every asset loader (`rendering_engine::image`, `rendering_engine::font`,
      * the asset cache and the glTF importer) reads its files through here, so
-     * where the assets come from is decided once — the engine mounts the asset root
-     * (`core::platform::asset_root()`, or `settings.assets.root`) at start-up,
+     * where the assets come from is decided once — the engine mounts the content root
+     * (`core::platform::content_root()`, or `settings.content.root`) at start-up,
      * a test mounts a scratch directory — and the loaders stay oblivious.
      *
      * Path rules:
@@ -209,7 +209,7 @@ namespace core
 
     /**
      * @brief The process-wide @ref vfs the asset loaders read through.
-     * The engine mounts the asset root on it at start-up and unmounts at
+     * The engine mounts the content root on it at start-up and unmounts at
      * shutdown; a test mounts whatever directory it needs. With nothing
      * mounted every path is read natively, so code that hands the loaders
      * real paths keeps working unchanged.

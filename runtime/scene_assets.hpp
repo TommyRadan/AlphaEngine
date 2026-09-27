@@ -29,7 +29,7 @@ namespace runtime
      * @brief How a scene file names the file a VFS canonical key
      *        (@c core::vfs::canonical_key) identifies: the mount-relative
      *        path that reaches it (see @c core::vfs::virtual_path), so the
-     *        file does not depend on where the asset root sits on the
+     *        file does not depend on where the content root sits on the
      *        machine that saved it, or the key itself when no mount holds it.
      */
     std::string file_reference(const std::string& canonical_key);

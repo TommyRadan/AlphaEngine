@@ -151,14 +151,14 @@ namespace runtime
         // `input.bindings` rebind from settings ahead of the game modules' bind_action / bind_axis calls below.
         input->init(*events, settings->input);
 
-        // Mount the asset root before anything loads a file: the configured
+        // Mount the content root before anything loads a file: the configured
         // directory when one is set, else the discovered default beside the
         // executable (or in one of its parents).
-        const std::filesystem::path asset_root = settings->assets.root.empty()
-                                                     ? core::platform::asset_root()
-                                                     : core::platform::utf8_path(settings->assets.root);
-        LOG_INF("Asset root: %s", core::platform::path_to_utf8(asset_root).c_str());
-        core::default_vfs().mount_directory(asset_root);
+        const std::filesystem::path content_root = settings->content.root.empty()
+                                                       ? core::platform::content_root()
+                                                       : core::platform::utf8_path(settings->content.root);
+        LOG_INF("Content root: %s", core::platform::path_to_utf8(content_root).c_str());
+        core::default_vfs().mount_directory(content_root);
 
         renderer->init();
         // The renderer brings the gpu device up, so the asset cache — whose
@@ -172,9 +172,9 @@ namespace runtime
         // renderer through the standard factory.
         assets->set_gltf_material_factory(std::make_shared<rendering_engine::gltf_standard_material_factory>());
 #if _DEBUG
-        // Debug builds reload a texture whose file under the asset root
+        // Debug builds reload a texture whose file under the content root
         // changes on disk (polled from assets->pump()).
-        assets->enable_hot_reload(asset_root);
+        assets->enable_hot_reload(content_root);
 #endif
         // After the renderer: debug builds give the physics world a line
         // helper that draws its colliders.

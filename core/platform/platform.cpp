@@ -12,7 +12,7 @@
 #include <system_error>
 
 // The parts of the platform layer that need only the C++ standard library:
-// file I/O, local time, path folding, the asset-root search and the crash
+// file I/O, local time, path folding, the content-root search and the crash
 // hook. The SDL-backed services are in platform_sdl.cpp.
 
 namespace core::platform
@@ -78,18 +78,18 @@ namespace core::platform
 #endif
     }
 
-    std::filesystem::path asset_root()
+    std::filesystem::path content_root()
     {
-        static const std::filesystem::path root = locate_asset_root(base_path());
+        static const std::filesystem::path root = locate_content_root(base_path());
         return root;
     }
 
-    std::filesystem::path locate_asset_root(const std::filesystem::path& base_path)
+    std::filesystem::path locate_content_root(const std::filesystem::path& base_path)
     {
         std::error_code error;
         for (std::filesystem::path directory = base_path; !directory.empty(); directory = directory.parent_path())
         {
-            const std::filesystem::path candidate = directory / "assets";
+            const std::filesystem::path candidate = directory / "content";
             if (std::filesystem::is_directory(candidate, error))
             {
                 return candidate;
@@ -99,7 +99,7 @@ namespace core::platform
                 break;
             }
         }
-        return base_path / "assets";
+        return base_path / "content";
     }
 
     std::filesystem::path current_directory()
