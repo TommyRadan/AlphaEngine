@@ -126,6 +126,7 @@ void rendering_engine::context::init()
     const core::shadow_settings shadow_config =
         eng.settings != nullptr ? eng.settings->shadows : core::shadow_settings{};
     auto shadow = std::make_unique<shadow_pass>(&m_scene_renderables, shadow_config);
+    m_shadow = shadow.get();
     // The omni shadow pass renders six depth faces from the first shadow-casting
     // point light; like the directional shadow it runs before the scene pass so
     // its maps are ready for the per-frame bind group.
@@ -133,6 +134,7 @@ void rendering_engine::context::init()
     // The spot shadow pass renders a single perspective depth map from the
     // first shadow-casting spot light; also runs before the scene pass.
     auto spot_shadow = std::make_unique<spot_shadow_pass>(&m_scene_renderables, shadow_config);
+    m_spot_shadow = spot_shadow.get();
     auto scene = std::make_unique<scene_pass>(
         &m_scene_renderables, shadow.get(), point_shadow.get(), spot_shadow.get(), &m_render_stats, taa_enabled);
     // The material templates below are built against the same per-frame
@@ -372,6 +374,8 @@ void rendering_engine::context::quit()
     m_tonemap = nullptr;
     m_velocity = nullptr;
     m_taa = nullptr;
+    m_shadow = nullptr;
+    m_spot_shadow = nullptr;
     m_prev_camera = nullptr;
     m_has_prev_view_projection = false;
 
@@ -745,6 +749,46 @@ const rendering_engine::render_stats& rendering_engine::context::get_render_stat
 const rendering_engine::gpu_profiler& rendering_engine::context::get_gpu_profiler() const
 {
     return m_gpu_profiler;
+}
+
+rendering_engine::gpu::texture rendering_engine::context::scene_color_texture() const
+{
+    return m_scene_color_texture;
+}
+
+rendering_engine::gpu::texture rendering_engine::context::scene_depth_texture() const
+{
+    return runtime::current_engine().gpu->render_target_depth_texture(m_scene_color_target);
+}
+
+rendering_engine::gpu::texture rendering_engine::context::ldr_color_texture() const
+{
+    return m_ldr_color_texture;
+}
+
+rendering_engine::gpu::texture rendering_engine::context::velocity_texture() const
+{
+    return m_velocity != nullptr ? m_velocity->velocity_texture() : gpu::texture{};
+}
+
+rendering_engine::gpu::texture rendering_engine::context::taa_resolve_texture() const
+{
+    return m_taa != nullptr ? m_taa->output_texture() : gpu::texture{};
+}
+
+rendering_engine::gpu::texture rendering_engine::context::directional_shadow_map() const
+{
+    return m_shadow != nullptr ? m_shadow->shadow_map() : gpu::texture{};
+}
+
+rendering_engine::gpu::texture rendering_engine::context::spot_shadow_map() const
+{
+    return m_spot_shadow != nullptr ? m_spot_shadow->shadow_map() : gpu::texture{};
+}
+
+rendering_engine::gpu::texture rendering_engine::context::environment_brdf_lut() const
+{
+    return m_environment != nullptr ? m_environment->brdf_lut() : gpu::texture{};
 }
 
 std::unique_ptr<rendering_engine::standard_material> rendering_engine::context::create_standard_material()

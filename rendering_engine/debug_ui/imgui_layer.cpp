@@ -24,9 +24,16 @@
 
 #ifdef ALPHAENGINE_HAS_IMGUI
 
+#include <algorithm>
 #include <array>
+#include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <cstdio>
+#include <ctime>
+#include <string>
+#include <unordered_map>
+#include <vector>
 
 #include <glad/gl.h>
 
@@ -34,22 +41,39 @@
 #include <imgui_impl_opengl3.h>
 #include <imgui_impl_sdl3.h>
 #include <imgui_impl_vulkan.h>
+#include <imgui_internal.h>
 
 #include <core/log.hpp>
+#include <core/platform/platform.hpp>
 #include <core/settings.hpp>
 #include <core/time.hpp>
+#include <rendering_engine/camera/orthographic_camera.hpp>
+#include <rendering_engine/camera/perspective_camera.hpp>
 #include <rendering_engine/debug/helper.hpp>
+#include <rendering_engine/gpu/backend/opengl/gl_device.hpp>
+#include <rendering_engine/gpu/backend/opengl/gl_resources.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_device.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_resources.hpp>
 #include <rendering_engine/gpu/command_encoder.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/gpu_profiler.hpp>
+#include <rendering_engine/lighting/directional_light.hpp>
 #include <rendering_engine/lighting/light.hpp>
+#include <rendering_engine/lighting/point_light.hpp>
+#include <rendering_engine/lighting/spot_light.hpp>
+#include <rendering_engine/materials/material.hpp>
 #include <rendering_engine/post_settings.hpp>
 #include <rendering_engine/render_stats.hpp>
+#include <rendering_engine/renderables/model.hpp>
 #include <rendering_engine/rendering_engine.hpp>
 #include <rendering_engine/window.hpp>
+#include <runtime/components/camera_component.hpp>
+#include <runtime/components/light_component.hpp>
+#include <runtime/components/mesh_component.hpp>
 #include <runtime/engine.hpp>
+#include <runtime/node.hpp>
+#include <runtime/scene_graph.hpp>
+#include <runtime/scene_manager.hpp>
 #include <SDL3/SDL.h>
 
 namespace rendering_engine::debug_ui
@@ -73,13 +97,17 @@ namespace rendering_engine::debug_ui
         // pass. Guards against recording a half-built frame.
         bool g_frame_ready = false;
 
-        // The vk_device::swapchain_generation() the ImGui Vulkan
-        // pipeline was last built for. The device rebuilds the
-        // swapchain on resize, minimise / restore and any out-of-date
-        // surface, retiring the render pass ImGui baked into its
-        // pipeline; record_draw_data compares this before recording and
-        // rebuilds the pipeline when the generation moved.
-        uint64_t g_vulkan_swapchain_generation = 0;
+        // The VkRenderPass the ImGui Vulkan pipeline was last built
+        // for. The debug pass's own render pass can be retired and
+        // rebuilt independently of a swapchain change (any acquire
+        // through vk_device::acquire_render_pass may hand back a
+        // different object); record_draw_data reads the pass it is
+        // actually recording into off the encoder
+        // (gpu::render_pass_encoder::native_render_pass) and rebuilds
+        // the pipeline whenever that differs from this, rather than
+        // re-deriving the pass's load/store arguments and guessing they
+        // still match what the debug pass begins.
+        VkRenderPass g_vulkan_render_pass = VK_NULL_HANDLE;
 
         // Visibility toggles for the optional panels, driven from the
         // FPS overlay's right-click context menu.
@@ -89,6 +117,10 @@ namespace rendering_engine::debug_ui
         bool g_show_helpers = true;
         bool g_show_scene = true;
         bool g_show_post = true;
+        bool g_show_render_targets = true;
+        bool g_show_console = true;
+        bool g_show_hierarchy = true;
+        bool g_show_inspector = true;
 
         // Rolling frame-time history (milliseconds) for the profiler
         // graph, used as a ring buffer.
@@ -96,12 +128,795 @@ namespace rendering_engine::debug_ui
         std::array<float, k_frame_history> g_frame_times{};
         int g_frame_cursor = 0;
 
+        // Degree <-> radian conversion for the transform / camera / spot
+        // light angle fields, which the engine stores in radians but are
+        // far more legible to edit in degrees.
+        constexpr float k_rad_to_deg = 57.295779513082320876798154814105f;
+        constexpr float k_deg_to_rad = 0.017453292519943295769236907684886f;
+
+        // The scene-graph node currently selected in the Hierarchy panel
+        // and shown by the Inspector panel, or null. Validated once per
+        // frame (see validate_selection) against the live scene forest
+        // before the Inspector dereferences it, so a node destroyed since
+        // it was selected is never read.
+        runtime::node* g_selected_node = nullptr;
+
         void check_vk_result(VkResult result)
         {
             if (result != VK_SUCCESS)
             {
                 LOG_ERR("debug_ui: Vulkan error in ImGui backend (VkResult=%d)", static_cast<int>(result));
             }
+        }
+
+        // -- Render-target viewer: backend texture-id bridge -----------------
+        //
+        // ImGui::Image wants an ImTextureID: on OpenGL that is just the
+        // texture name, but Vulkan needs a VkDescriptorSet registered
+        // through ImGui_ImplVulkan_AddTexture. Every off-screen texture in
+        // this engine is transitioned to VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+        // immediately on creation and rests there between render passes
+        // (see vk_device::create_texture), so that layout is always the
+        // right one to bake into the descriptor — including on the very
+        // first frame, before any pass has touched the texture.
+        struct vulkan_texture_binding
+        {
+            VkImageView view{VK_NULL_HANDLE};
+            VkDescriptorSet descriptor_set{VK_NULL_HANDLE};
+        };
+
+        // Cached per gpu::texture (keyed by its handle id) so a texture
+        // sampled by several panel frames in a row reuses one descriptor
+        // set; rebuilt when the texture is recreated (its image view
+        // changes, e.g. on a resize) and pruned once nothing asks for it
+        // any more (see prune_vulkan_texture_bindings), so a window
+        // resize does not leak a descriptor set per resize event.
+        std::unordered_map<uint64_t, vulkan_texture_binding> g_vulkan_texture_bindings;
+
+        void release_vulkan_texture_binding(vulkan_texture_binding& binding)
+        {
+            if (binding.descriptor_set != VK_NULL_HANDLE)
+            {
+                ImGui_ImplVulkan_RemoveTexture(binding.descriptor_set);
+            }
+            binding = vulkan_texture_binding{};
+        }
+
+        void clear_vulkan_texture_bindings()
+        {
+            for (auto& [id, binding] : g_vulkan_texture_bindings)
+            {
+                release_vulkan_texture_binding(binding);
+            }
+            g_vulkan_texture_bindings.clear();
+        }
+
+        // Drops every cached binding whose handle id is not in @p touched.
+        void prune_vulkan_texture_bindings(const std::vector<uint64_t>& touched)
+        {
+            for (auto it = g_vulkan_texture_bindings.begin(); it != g_vulkan_texture_bindings.end();)
+            {
+                if (std::find(touched.begin(), touched.end(), it->first) == touched.end())
+                {
+                    release_vulkan_texture_binding(it->second);
+                    it = g_vulkan_texture_bindings.erase(it);
+                }
+                else
+                {
+                    ++it;
+                }
+            }
+        }
+
+        // A texture resolved for ImGui::Image: the backend id (0 /
+        // ImTextureID_Invalid when @p handle could not be resolved) plus
+        // its pixel size, so the caller can preserve the aspect ratio.
+        struct resolved_texture
+        {
+            ImTextureID id{0};
+            uint32_t width{0};
+            uint32_t height{0};
+        };
+
+        resolved_texture resolve_texture(gpu::texture handle)
+        {
+            resolved_texture result{};
+            if (!handle.valid())
+            {
+                return result;
+            }
+
+            if (g_backend == backend_mode::opengl)
+            {
+                auto* device = static_cast<gpu::backend::opengl::gl_device*>(runtime::current_engine().gpu.get());
+                gpu::backend::opengl::gl_texture* tex = device->lookup_texture(handle);
+                if (tex == nullptr)
+                {
+                    return result;
+                }
+                result.id = static_cast<ImTextureID>(tex->object_id);
+                result.width = tex->width;
+                result.height = tex->height;
+                return result;
+            }
+
+            auto* device = static_cast<gpu::backend::vulkan::vk_device*>(runtime::current_engine().gpu.get());
+            gpu::backend::vulkan::vk_texture* tex = device->lookup_texture(handle);
+            if (tex == nullptr || tex->view == VK_NULL_HANDLE)
+            {
+                return result;
+            }
+            result.width = tex->width;
+            result.height = tex->height;
+
+            vulkan_texture_binding& binding = g_vulkan_texture_bindings[handle.id];
+            if (binding.descriptor_set != VK_NULL_HANDLE && binding.view != tex->view)
+            {
+                release_vulkan_texture_binding(binding);
+            }
+            if (binding.descriptor_set == VK_NULL_HANDLE)
+            {
+                binding.view = tex->view;
+                binding.descriptor_set =
+                    ImGui_ImplVulkan_AddTexture(tex->view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+            }
+            result.id = static_cast<ImTextureID>(reinterpret_cast<uintptr_t>(binding.descriptor_set));
+            return result;
+        }
+
+        // One texture the viewer can show, paired with the label it lists
+        // it under. Built fresh every frame from the context's read-only
+        // accessors, so a target that comes and goes (temporal AA off, no
+        // environment set) appears and disappears with it.
+        struct render_target_slot
+        {
+            const char* label;
+            gpu::texture texture;
+        };
+
+        // ImGui::Image over the engine's intermediate textures: the HDR
+        // scene colour, scene depth, the tonemapped LDR image, the spot
+        // shadow map, the velocity buffer, the temporal-AA resolve and
+        // the active environment's BRDF LUT. Every off-screen render
+        // target the engine currently exposes as a plain 2D, colour-or-
+        // depth texture ends up here; the ones that do not fit that shape
+        // (the directional light's cascade array, the point-light cube
+        // shadow map, the prefiltered / irradiance IBL cubes) are listed
+        // but not shown — ImGui's image shader has no array- or
+        // cube-sampling path.
+        void draw_render_targets_window()
+        {
+            if (!g_show_render_targets)
+            {
+                return;
+            }
+
+            auto& renderer = *runtime::current_engine().renderer;
+            const std::array<render_target_slot, 7> slots = {{
+                {"HDR scene colour", renderer.scene_color_texture()},
+                {"Scene depth", renderer.scene_depth_texture()},
+                {"LDR colour (tonemapped)", renderer.ldr_color_texture()},
+                {"Spot shadow map", renderer.spot_shadow_map()},
+                {"Velocity", renderer.velocity_texture()},
+                {"TAA resolve", renderer.taa_resolve_texture()},
+                {"IBL BRDF LUT", renderer.environment_brdf_lut()},
+            }};
+
+            // Resolved (and, on Vulkan, cached / pruned) every frame
+            // regardless of whether the window is open or collapsed, so
+            // the descriptor cache always tracks exactly the handles
+            // currently in play rather than whatever was last drawn.
+            std::vector<uint64_t> touched;
+            std::array<resolved_texture, slots.size()> resolved{};
+            for (std::size_t i = 0; i < slots.size(); ++i)
+            {
+                if (slots[i].texture.valid())
+                {
+                    resolved[i] = resolve_texture(slots[i].texture);
+                    touched.push_back(slots[i].texture.id);
+                }
+            }
+            if (g_backend == backend_mode::vulkan)
+            {
+                prune_vulkan_texture_bindings(touched);
+            }
+
+            ImGui::SetNextWindowSize(ImVec2{420.0f, 380.0f}, ImGuiCond_FirstUseEver);
+            if (ImGui::Begin("Render Targets", &g_show_render_targets))
+            {
+                static int selected = 0;
+                const render_target_slot& current = slots[static_cast<std::size_t>(selected)];
+                if (ImGui::BeginCombo("##render_target_select", current.label))
+                {
+                    for (int i = 0; i < static_cast<int>(slots.size()); ++i)
+                    {
+                        const bool is_selected = (selected == i);
+                        if (ImGui::Selectable(slots[static_cast<std::size_t>(i)].label, is_selected))
+                        {
+                            selected = i;
+                        }
+                        if (is_selected)
+                        {
+                            ImGui::SetItemDefaultFocus();
+                        }
+                    }
+                    ImGui::EndCombo();
+                }
+
+                const resolved_texture& shown = resolved[static_cast<std::size_t>(selected)];
+                if (shown.id == 0)
+                {
+                    ImGui::TextDisabled("not active");
+                }
+                else
+                {
+                    const float aspect =
+                        shown.height > 0 ? static_cast<float>(shown.width) / static_cast<float>(shown.height) : 1.0f;
+                    const float width = ImGui::GetContentRegionAvail().x;
+                    ImGui::Image(shown.id, ImVec2{width, aspect > 0.0f ? width / aspect : width});
+                    ImGui::Text("%u x %u", shown.width, shown.height);
+                }
+
+                ImGui::Separator();
+                ImGui::TextDisabled("Not shown: directional shadow (cascade array), point-light shadow (cube),\n"
+                                    "prefiltered / irradiance IBL (cube)");
+            }
+            ImGui::End();
+        }
+
+        // -- Console -----------------------------------------------------
+
+        int g_console_level_filter = static_cast<int>(core::logging::verbosity::trace);
+        char g_console_category_filter[64] = {};
+        bool g_console_auto_scroll = true;
+
+        ImVec4 console_level_color(core::logging::verbosity level)
+        {
+            switch (level)
+            {
+            case core::logging::verbosity::trace:
+                return ImVec4{0.55f, 0.55f, 0.55f, 1.0f};
+            case core::logging::verbosity::debug:
+                return ImVec4{0.70f, 0.75f, 0.95f, 1.0f};
+            case core::logging::verbosity::info:
+                return ImVec4{0.85f, 0.85f, 0.85f, 1.0f};
+            case core::logging::verbosity::warn:
+                return ImVec4{0.95f, 0.75f, 0.20f, 1.0f};
+            case core::logging::verbosity::error:
+                return ImVec4{0.95f, 0.35f, 0.35f, 1.0f};
+            case core::logging::verbosity::fatal:
+                return ImVec4{1.00f, 0.20f, 0.20f, 1.0f};
+            }
+            return ImVec4{1.0f, 1.0f, 1.0f, 1.0f};
+        }
+
+        std::string format_timestamp(std::chrono::system_clock::time_point timestamp)
+        {
+            const std::time_t time = std::chrono::system_clock::to_time_t(timestamp);
+            std::tm local{};
+            if (!core::platform::local_time(time, local))
+            {
+                return "--:--:--";
+            }
+            char buffer[16];
+            std::snprintf(buffer, sizeof(buffer), "%02d:%02d:%02d", local.tm_hour, local.tm_min, local.tm_sec);
+            return buffer;
+        }
+
+        // The log ring buffer (#195) with a minimum-level and a
+        // category-substring filter, auto-scroll and a clear button.
+        void draw_console_window()
+        {
+            if (!g_show_console)
+            {
+                return;
+            }
+
+            ImGui::SetNextWindowSize(ImVec2{560.0f, 280.0f}, ImGuiCond_FirstUseEver);
+            if (ImGui::Begin("Console", &g_show_console))
+            {
+                static constexpr std::array<const char*, 6> level_names = {
+                    "Trace", "Debug", "Info", "Warn", "Error", "Fatal"};
+                ImGui::SetNextItemWidth(90.0f);
+                ImGui::Combo(
+                    "##min_level", &g_console_level_filter, level_names.data(), static_cast<int>(level_names.size()));
+                ImGui::SameLine();
+                ImGui::SetNextItemWidth(150.0f);
+                ImGui::InputTextWithHint("##category_filter",
+                                         "category filter",
+                                         g_console_category_filter,
+                                         sizeof(g_console_category_filter));
+                ImGui::SameLine();
+                ImGui::Checkbox("Auto-scroll", &g_console_auto_scroll);
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Clear"))
+                {
+                    core::logging::clear_recent_messages();
+                }
+                ImGui::Separator();
+
+                if (ImGui::BeginChild(
+                        "##console_scroll", ImVec2{0.0f, 0.0f}, false, ImGuiWindowFlags_HorizontalScrollbar))
+                {
+                    for (const core::logging::record& record : core::logging::recent_messages())
+                    {
+                        if (static_cast<int>(record.level) < g_console_level_filter)
+                        {
+                            continue;
+                        }
+                        if (g_console_category_filter[0] != '\0' &&
+                            record.category.find(g_console_category_filter) == std::string::npos)
+                        {
+                            continue;
+                        }
+                        const std::string line =
+                            format_timestamp(record.timestamp) + " [" + record.category + "] " + record.text;
+                        ImGui::PushStyleColor(ImGuiCol_Text, console_level_color(record.level));
+                        ImGui::TextUnformatted(line.c_str());
+                        ImGui::PopStyleColor();
+                    }
+                    if (g_console_auto_scroll && ImGui::GetScrollY() >= ImGui::GetScrollMaxY() - 1.0f)
+                    {
+                        ImGui::SetScrollHereY(1.0f);
+                    }
+                }
+                ImGui::EndChild();
+            }
+            ImGui::End();
+        }
+
+        // -- Hierarchy + Inspector --------------------------------------------
+
+        // True once @p target is found under @p node's subtree; used by
+        // validate_selection to drop a selection whose node has since
+        // been destroyed, without the Hierarchy panel needing to be open.
+        bool node_exists(runtime::node& node, const runtime::node* target)
+        {
+            if (&node == target)
+            {
+                return true;
+            }
+            for (runtime::node* child : node.children())
+            {
+                if (node_exists(*child, target))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // Clears g_selected_node once its node is no longer reachable
+        // from any loaded scene's root, so the Inspector never reads a
+        // freed node. Run once per frame regardless of which (if any)
+        // debug panel is visible.
+        void validate_selection()
+        {
+            if (g_selected_node == nullptr)
+            {
+                return;
+            }
+            auto& scenes = *runtime::current_engine().scenes;
+            for (std::size_t i = 0; i < scenes.scene_count(); ++i)
+            {
+                if (node_exists(scenes.scene_at(i).root, g_selected_node))
+                {
+                    return;
+                }
+            }
+            g_selected_node = nullptr;
+        }
+
+        // One row of the tree, recursing into children when expanded.
+        void draw_node_row(runtime::node& node)
+        {
+            ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth;
+            const bool is_leaf = node.children().empty();
+            if (is_leaf)
+            {
+                flags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
+            }
+            if (&node == g_selected_node)
+            {
+                flags |= ImGuiTreeNodeFlags_Selected;
+            }
+
+            const char* name = node.name().c_str();
+            const bool inactive = !node.is_active();
+            if (inactive)
+            {
+                ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+            }
+            // Disambiguates same-named siblings: TreeNodeEx otherwise hashes
+            // its id from the label text alone, which two nodes sharing a
+            // name would collide on. Popped after TreePop (not right after
+            // TreeNodeEx) so the two stay properly nested: TreeNodeEx pushes
+            // its own id on top of this one while open, and the children
+            // recurse under both.
+            ImGui::PushID(&node);
+            const bool open = ImGui::TreeNodeEx(name[0] != '\0' ? name : "(unnamed)", flags);
+            if (inactive)
+            {
+                ImGui::PopStyleColor();
+            }
+            if (ImGui::IsItemClicked())
+            {
+                g_selected_node = &node;
+            }
+
+            if (open && !is_leaf)
+            {
+                for (runtime::node* child : node.children())
+                {
+                    draw_node_row(*child);
+                }
+                ImGui::TreePop();
+            }
+            ImGui::PopID();
+        }
+
+        // Tree over each loaded scene's root (the persistent scene
+        // included), with click-to-select feeding the Inspector panel.
+        void draw_hierarchy_window()
+        {
+            if (!g_show_hierarchy)
+            {
+                return;
+            }
+
+            auto& scenes = *runtime::current_engine().scenes;
+
+            ImGui::SetNextWindowSize(ImVec2{280.0f, 380.0f}, ImGuiCond_FirstUseEver);
+            if (ImGui::Begin("Hierarchy", &g_show_hierarchy))
+            {
+                for (std::size_t i = 0; i < scenes.scene_count(); ++i)
+                {
+                    runtime::context& scene = scenes.scene_at(i);
+                    const char* name = scenes.name_at(i).c_str();
+                    ImGui::PushID(static_cast<int>(i));
+                    const bool open =
+                        ImGui::TreeNodeEx(name[0] != '\0' ? name : "scene",
+                                          ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth);
+                    if (open)
+                    {
+                        for (runtime::node* child : scene.root.children())
+                        {
+                            draw_node_row(*child);
+                        }
+                        ImGui::TreePop();
+                    }
+                    ImGui::PopID();
+                }
+            }
+            ImGui::End();
+        }
+
+        void draw_transform_section(rendering_engine::util::transform& transform)
+        {
+            core::math::vec3 position = transform.get_position();
+            if (ImGui::DragFloat3("Position", position.data(), 0.05f))
+            {
+                transform.set_position(position);
+            }
+            core::math::vec3 rotation = transform.get_rotation() * k_rad_to_deg;
+            if (ImGui::DragFloat3("Rotation", rotation.data(), 0.5f))
+            {
+                transform.set_rotation(rotation * k_deg_to_rad);
+            }
+            core::math::vec3 scale = transform.get_scale();
+            if (ImGui::DragFloat3("Scale", scale.data(), 0.02f))
+            {
+                transform.set_scale(scale);
+            }
+        }
+
+        void draw_inspector(runtime::camera_component& component)
+        {
+            rendering_engine::camera* camera = component.get();
+            if (camera == nullptr)
+            {
+                ImGui::TextDisabled("empty");
+                return;
+            }
+
+            bool enabled = camera->is_enabled();
+            if (ImGui::Checkbox("Enabled##camera", &enabled))
+            {
+                camera->set_enabled(enabled);
+            }
+            bool main = camera->is_main();
+            if (ImGui::Checkbox("Main##camera", &main))
+            {
+                camera->set_main(main);
+            }
+            int priority = camera->get_priority();
+            if (ImGui::DragInt("Priority##camera", &priority))
+            {
+                camera->set_priority(priority);
+            }
+
+            if (auto* persp = dynamic_cast<rendering_engine::perspective_camera*>(camera))
+            {
+                float fov_deg = persp->get_field_of_view() * k_rad_to_deg;
+                if (ImGui::DragFloat("Field of view", &fov_deg, 0.5f, 1.0f, 179.0f))
+                {
+                    persp->set_field_of_view(fov_deg * k_deg_to_rad);
+                }
+                float near_clip = persp->get_near_clip();
+                if (ImGui::DragFloat("Near##persp", &near_clip, 0.01f, 0.001f, persp->get_far_clip()))
+                {
+                    persp->set_near_clip(near_clip);
+                }
+                float far_clip = persp->get_far_clip();
+                if (ImGui::DragFloat("Far##persp", &far_clip, 1.0f, persp->get_near_clip(), 1000000.0f))
+                {
+                    persp->set_far_clip(far_clip);
+                }
+            }
+            else if (auto* ortho = dynamic_cast<rendering_engine::orthographic_camera*>(camera))
+            {
+                float x_mag = ortho->get_x_magnification();
+                if (ImGui::DragFloat("X magnification", &x_mag, 0.05f))
+                {
+                    ortho->set_x_magnification(x_mag);
+                }
+                float y_mag = ortho->get_y_magnification();
+                if (ImGui::DragFloat("Y magnification", &y_mag, 0.05f))
+                {
+                    ortho->set_y_magnification(y_mag);
+                }
+                float near_clip = ortho->get_near_clip();
+                if (ImGui::DragFloat("Near##ortho", &near_clip, 0.01f))
+                {
+                    ortho->set_near_clip(near_clip);
+                }
+                float far_clip = ortho->get_far_clip();
+                if (ImGui::DragFloat("Far##ortho", &far_clip, 1.0f))
+                {
+                    ortho->set_far_clip(far_clip);
+                }
+            }
+        }
+
+        void draw_inspector(runtime::light_component& component)
+        {
+            rendering_engine::light* light = component.get();
+            if (light == nullptr)
+            {
+                ImGui::TextDisabled("empty");
+                return;
+            }
+
+            bool enabled = light->is_enabled();
+            if (ImGui::Checkbox("Enabled##light", &enabled))
+            {
+                light->set_enabled(enabled);
+            }
+            ImGui::ColorEdit3("Color##light", light->color.data());
+            ImGui::DragFloat("Intensity##light", &light->intensity, 0.05f, 0.0f, 1000.0f);
+
+            switch (light->type())
+            {
+            case rendering_engine::light_type::ambient:
+                ImGui::TextDisabled("ambient — no spatial parameters");
+                break;
+            case rendering_engine::light_type::directional:
+            {
+                auto* directional = static_cast<rendering_engine::directional_light*>(light);
+                ImGui::DragFloat3("Direction##light", directional->direction.data(), 0.01f);
+                ImGui::Checkbox("Cast shadow##light", &directional->cast_shadow);
+                break;
+            }
+            case rendering_engine::light_type::point:
+            {
+                auto* point = static_cast<rendering_engine::point_light*>(light);
+                ImGui::DragFloat3("Position##light", point->position.data(), 0.05f);
+                ImGui::DragFloat("Range##light", &point->range, 0.1f, 0.0f, 100000.0f);
+                ImGui::DragFloat("Constant atten.##light", &point->constant_attenuation, 0.01f);
+                ImGui::DragFloat("Linear atten.##light", &point->linear_attenuation, 0.001f);
+                ImGui::DragFloat("Quadratic atten.##light", &point->quadratic_attenuation, 0.001f);
+                ImGui::Checkbox("Cast shadow##light", &point->cast_shadow);
+                break;
+            }
+            case rendering_engine::light_type::spot:
+            {
+                auto* spot = static_cast<rendering_engine::spot_light*>(light);
+                ImGui::DragFloat3("Position##light", spot->position.data(), 0.05f);
+                ImGui::DragFloat3("Direction##light", spot->direction.data(), 0.01f);
+                ImGui::DragFloat("Range##light", &spot->range, 0.1f, 0.0f, 100000.0f);
+                ImGui::DragFloat("Constant atten.##light", &spot->constant_attenuation, 0.01f);
+                ImGui::DragFloat("Linear atten.##light", &spot->linear_attenuation, 0.001f);
+                ImGui::DragFloat("Quadratic atten.##light", &spot->quadratic_attenuation, 0.001f);
+                float outer_deg = spot->outer_angle * k_rad_to_deg;
+                if (ImGui::DragFloat("Outer angle##light", &outer_deg, 0.5f, 0.0f, 89.0f))
+                {
+                    spot->outer_angle = outer_deg * k_deg_to_rad;
+                }
+                float inner_deg = spot->inner_angle * k_rad_to_deg;
+                if (ImGui::DragFloat("Inner angle##light", &inner_deg, 0.5f, 0.0f, 89.0f))
+                {
+                    spot->inner_angle = inner_deg * k_deg_to_rad;
+                }
+                ImGui::Checkbox("Cast shadow##light", &spot->cast_shadow);
+                break;
+            }
+            }
+        }
+
+        void draw_inspector(runtime::mesh_component& component)
+        {
+            rendering_engine::model* model = component.model();
+            if (model == nullptr)
+            {
+                ImGui::TextDisabled("empty");
+                return;
+            }
+
+            rendering_engine::material* material = model->get_material();
+            if (material == nullptr)
+            {
+                ImGui::TextDisabled("no material");
+                return;
+            }
+
+            rendering_engine::material_params params = material->params();
+            bool changed = false;
+            changed |= ImGui::Checkbox("Transparent##mat", &params.transparent);
+            changed |= ImGui::SliderFloat("Opacity##mat", &params.opacity, 0.0f, 1.0f);
+            changed |= ImGui::Checkbox("Double-sided##mat", &params.double_sided);
+            static constexpr std::array<const char*, 5> blend_names = {
+                "None", "Normal", "Additive", "Subtractive", "Multiply"};
+            int blend = static_cast<int>(params.blending);
+            if (ImGui::Combo("Blending##mat", &blend, blend_names.data(), static_cast<int>(blend_names.size())))
+            {
+                params.blending = static_cast<rendering_engine::blend_mode>(blend);
+                changed = true;
+            }
+            changed |= ImGui::Checkbox("Wireframe##mat", &params.wireframe);
+            changed |= ImGui::Checkbox("Depth test##mat", &params.depth_test);
+            changed |= ImGui::Checkbox("Depth write##mat", &params.depth_write);
+            changed |= ImGui::Checkbox("Fog##mat", &params.fog);
+            if (changed)
+            {
+                material->set_params(params);
+            }
+
+            if (ImGui::TreeNode("Keywords##mat"))
+            {
+                const uint32_t keywords = material->keywords();
+                for (const rendering_engine::material_keyword keyword : rendering_engine::all_material_keywords)
+                {
+                    bool set = (keywords & rendering_engine::keyword_bit(keyword)) != 0;
+                    ImGui::BeginDisabled(true);
+                    ImGui::Checkbox(rendering_engine::keyword_define(keyword), &set);
+                    ImGui::EndDisabled();
+                }
+                ImGui::TreePop();
+            }
+        }
+
+        // The selected node's name, active flag and transform, plus a
+        // hand-written section per built-in component it carries. Kept
+        // here in debug_ui rather than on the components so release
+        // builds carry none of this.
+        void draw_inspector_window()
+        {
+            if (!g_show_inspector)
+            {
+                return;
+            }
+
+            ImGui::SetNextWindowSize(ImVec2{320.0f, 420.0f}, ImGuiCond_FirstUseEver);
+            if (ImGui::Begin("Inspector", &g_show_inspector))
+            {
+                if (g_selected_node == nullptr)
+                {
+                    ImGui::TextDisabled("no node selected");
+                }
+                else
+                {
+                    runtime::node& node = *g_selected_node;
+
+                    static runtime::node* last_node = nullptr;
+                    static char name_buffer[128];
+                    if (last_node != &node)
+                    {
+                        last_node = &node;
+                        std::snprintf(name_buffer, sizeof(name_buffer), "%s", node.name().c_str());
+                    }
+                    ImGui::InputText("Name", name_buffer, sizeof(name_buffer));
+                    if (ImGui::IsItemDeactivatedAfterEdit())
+                    {
+                        node.set_name(name_buffer);
+                    }
+
+                    bool active = node.is_active();
+                    if (ImGui::Checkbox("Active", &active))
+                    {
+                        node.set_active(active);
+                    }
+
+                    ImGui::SeparatorText("Transform");
+                    draw_transform_section(node.transform);
+
+                    if (runtime::camera_component* camera = node.get_component<runtime::camera_component>())
+                    {
+                        if (ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen))
+                        {
+                            draw_inspector(*camera);
+                        }
+                    }
+                    if (runtime::light_component* light = node.get_component<runtime::light_component>())
+                    {
+                        if (ImGui::CollapsingHeader("Light", ImGuiTreeNodeFlags_DefaultOpen))
+                        {
+                            draw_inspector(*light);
+                        }
+                    }
+                    if (runtime::mesh_component* mesh = node.get_component<runtime::mesh_component>())
+                    {
+                        if (ImGui::CollapsingHeader("Mesh", ImGuiTreeNodeFlags_DefaultOpen))
+                        {
+                            draw_inspector(*mesh);
+                        }
+                    }
+                }
+            }
+            ImGui::End();
+        }
+
+        // -- Default docking layout -------------------------------------------
+
+        // Arranges the built-in panels into a hierarchy / inspector /
+        // render-targets / console layout around a central, transparent
+        // dock node (so the game view shows through it). Only called once,
+        // the first time this dockspace id has no node — a fresh
+        // imgui.ini, or one predating this dockspace — so a user's own
+        // rearrangement, once saved, is never overwritten.
+        void build_default_dock_layout(ImGuiID dockspace_id)
+        {
+            ImGui::DockBuilderRemoveNode(dockspace_id);
+            // ImGuiDockNodeFlags_DockSpace is the internal-only flag
+            // DockBuilderAddNode expects for a dockspace root; the cast
+            // avoids an enum-mismatch warning ORing it with the public
+            // ImGuiDockNodeFlags_PassthruCentralNode.
+            ImGui::DockBuilderAddNode(dockspace_id,
+                                      static_cast<ImGuiDockNodeFlags>(ImGuiDockNodeFlags_DockSpace) |
+                                          ImGuiDockNodeFlags_PassthruCentralNode);
+            ImGui::DockBuilderSetNodeSize(dockspace_id, ImGui::GetMainViewport()->Size);
+
+            ImGuiID main_id = dockspace_id;
+            ImGuiID right_id = ImGui::DockBuilderSplitNode(main_id, ImGuiDir_Right, 0.26f, nullptr, &main_id);
+            ImGuiID bottom_id = ImGui::DockBuilderSplitNode(main_id, ImGuiDir_Down, 0.28f, nullptr, &main_id);
+            ImGuiID left_id = ImGui::DockBuilderSplitNode(main_id, ImGuiDir_Left, 0.2f, nullptr, &main_id);
+            ImGuiID right_bottom_id = ImGui::DockBuilderSplitNode(right_id, ImGuiDir_Down, 0.5f, nullptr, &right_id);
+
+            ImGui::DockBuilderDockWindow("Hierarchy", left_id);
+            ImGui::DockBuilderDockWindow("Inspector", right_id);
+            ImGui::DockBuilderDockWindow("Render Targets", right_bottom_id);
+            ImGui::DockBuilderDockWindow("Console", bottom_id);
+            ImGui::DockBuilderDockWindow("Profiler", main_id);
+            ImGui::DockBuilderDockWindow("Scene", main_id);
+            ImGui::DockBuilderDockWindow("Settings", main_id);
+            ImGui::DockBuilderDockWindow("Post", main_id);
+            ImGui::DockBuilderDockWindow("Helpers", main_id);
+            ImGui::DockBuilderFinish(dockspace_id);
+        }
+
+        // Hosts a full-viewport, passthrough dockspace so every panel can
+        // dock against the window edges and against each other. Built
+        // once with a stable id so ImGui's own ini persistence
+        // (core::platform::pref_path, set up in init) remembers whatever
+        // arrangement the user leaves it in across runs.
+        void setup_dockspace()
+        {
+            const ImGuiID dockspace_id = ImGui::GetID("AlphaEngineDockSpace");
+            if (ImGui::DockBuilderGetNode(dockspace_id) == nullptr)
+            {
+                build_default_dock_layout(dockspace_id);
+            }
+            ImGui::DockSpaceOverViewport(
+                dockspace_id, ImGui::GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode);
         }
 
         // Small always-on overlay pinned to the top-right corner showing
@@ -131,6 +946,10 @@ namespace rendering_engine::debug_ui
                 ImGui::TextDisabled("right-click for tools");
                 if (ImGui::BeginPopupContextWindow())
                 {
+                    ImGui::MenuItem("Render Targets", nullptr, &g_show_render_targets);
+                    ImGui::MenuItem("Console", nullptr, &g_show_console);
+                    ImGui::MenuItem("Hierarchy", nullptr, &g_show_hierarchy);
+                    ImGui::MenuItem("Inspector", nullptr, &g_show_inspector);
                     ImGui::MenuItem("Profiler", nullptr, &g_show_profiler);
                     ImGui::MenuItem("Scene", nullptr, &g_show_scene);
                     ImGui::MenuItem("Settings", nullptr, &g_show_settings);
@@ -447,7 +1266,14 @@ namespace rendering_engine::debug_ui
             g_frame_times[g_frame_cursor] = static_cast<float>(time.delta_time());
             g_frame_cursor = (g_frame_cursor + 1) % k_frame_history;
 
+            setup_dockspace();
+            validate_selection();
+
             draw_fps_overlay();
+            draw_render_targets_window();
+            draw_console_window();
+            draw_hierarchy_window();
+            draw_inspector_window();
             draw_profiler_window();
             draw_scene_window();
             draw_settings_window();
@@ -480,39 +1306,34 @@ namespace rendering_engine::debug_ui
                 *target, VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_LOAD_OP_CLEAR, /*use_depth=*/false);
         }
 
-        // Rebuild ImGui's main pipeline against the current swapchain
-        // render pass if the swapchain was rebuilt since the pipeline
-        // was last built. Called right before recording, inside the
-        // debug pass: the frame-top fence wait has already retired the
-        // command buffer that last bound the old pipeline, and this
-        // frame has not bound it yet, so ImGui may destroy it here.
-        // Only the pipeline is rebuilt — the font texture, vertex /
-        // index buffers and descriptor pool survive — and it happens
-        // in the same frame as an acquire-time rebuild, so the overlay
-        // never records against a pass it was not built for. Returns
-        // false when no pipeline could be built; the caller then skips
-        // this frame's overlay.
-        bool refresh_vulkan_pipeline()
+        // Rebuild ImGui's main pipeline against the render pass @p encoder
+        // is actually recording into, if that differs from the one the
+        // pipeline was last built for. Called right before recording,
+        // inside the debug pass: the frame-top fence wait has already
+        // retired the command buffer that last bound the old pipeline,
+        // and this frame has not bound it yet, so ImGui may destroy it
+        // here. Only the pipeline is rebuilt — the font texture, vertex /
+        // index buffers and descriptor pool survive. Returns false when
+        // no pipeline could be built (the pass is not open this frame);
+        // the caller then skips this frame's overlay.
+        bool refresh_vulkan_pipeline(gpu::render_pass_encoder& encoder)
         {
-            auto* device = static_cast<gpu::backend::vulkan::vk_device*>(runtime::current_engine().gpu.get());
-            const uint64_t generation = device->swapchain_generation();
-            if (generation == g_vulkan_swapchain_generation)
-            {
-                return true;
-            }
-            VkRenderPass ui_render_pass = acquire_ui_render_pass(*device);
-            if (ui_render_pass == VK_NULL_HANDLE)
+            auto native_pass = static_cast<VkRenderPass>(encoder.native_render_pass());
+            if (native_pass == VK_NULL_HANDLE)
             {
                 return false;
             }
+            if (native_pass == g_vulkan_render_pass)
+            {
+                return true;
+            }
             ImGui_ImplVulkan_PipelineInfo pipeline_info{};
-            pipeline_info.RenderPass = ui_render_pass;
+            pipeline_info.RenderPass = native_pass;
             pipeline_info.Subpass = 0;
             pipeline_info.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
             ImGui_ImplVulkan_CreateMainPipeline(&pipeline_info);
-            g_vulkan_swapchain_generation = generation;
-            LOG_INF("debug_ui: ImGui Vulkan pipeline rebuilt for swapchain generation %llu",
-                    static_cast<unsigned long long>(generation));
+            g_vulkan_render_pass = native_pass;
+            LOG_INF("debug_ui: ImGui Vulkan pipeline rebuilt for a new debug-pass render pass");
             return true;
         }
 
@@ -530,7 +1351,7 @@ namespace rendering_engine::debug_ui
                 LOG_ERR("debug_ui: acquire_render_pass returned null for ImGui Vulkan init");
                 return false;
             }
-            g_vulkan_swapchain_generation = device->swapchain_generation();
+            g_vulkan_render_pass = ui_render_pass;
 
             if (!ImGui_ImplSDL3_InitForVulkan(eng.window->sdl_window()))
             {
@@ -547,10 +1368,12 @@ namespace rendering_engine::debug_ui
             init_info.QueueFamily = device->graphics_queue_family();
             init_info.Queue = device->graphics_queue();
             // Leave DescriptorPool null and let the backend own a pool
-            // sized for the font atlas (and any user textures); avoids
+            // sized for the font atlas and every render-target texture the
+            // Render Targets panel registers through
+            // ImGui_ImplVulkan_AddTexture (see resolve_texture); avoids
             // depending on the engine pool's descriptor budget / flags.
             init_info.DescriptorPool = VK_NULL_HANDLE;
-            init_info.DescriptorPoolSize = 16;
+            init_info.DescriptorPoolSize = 64;
             init_info.MinImageCount = image_count < 2 ? 2 : image_count;
             init_info.ImageCount = image_count < 2 ? 2 : image_count;
             init_info.PipelineCache = VK_NULL_HANDLE;
@@ -587,6 +1410,13 @@ namespace rendering_engine::debug_ui
             g_backend = backend_mode::opengl;
             return true;
         }
+        // Where ImGui persists window / dock layout (imgui.ini): the
+        // per-user preference directory rather than beside the
+        // executable, matching the shader cache's use of the same pref
+        // path. ImGui stores io.IniFilename as a raw pointer rather than
+        // copying it, so the backing string must outlive the context;
+        // file-scope storage does.
+        std::string g_ini_path;
     } // namespace
 
     void init()
@@ -604,6 +1434,9 @@ namespace rendering_engine::debug_ui
         ImGuiIO& io = ImGui::GetIO();
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
         io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+        g_ini_path =
+            core::platform::path_to_utf8(core::platform::pref_path("AlphaEngine", "AlphaEngine") / "imgui.ini");
+        io.IniFilename = g_ini_path.c_str();
         ImGui::StyleColorsDark();
 
         bool ok = false;
@@ -638,6 +1471,9 @@ namespace rendering_engine::debug_ui
             // GPU resources down.
             auto* device = static_cast<gpu::backend::vulkan::vk_device*>(runtime::current_engine().gpu.get());
             vkDeviceWaitIdle(device->vk_handle());
+            // Release the render-target viewer's descriptor sets before the
+            // backend's descriptor pool goes with ImGui_ImplVulkan_Shutdown.
+            clear_vulkan_texture_bindings();
             ImGui_ImplVulkan_Shutdown();
         }
         else
@@ -648,6 +1484,8 @@ namespace rendering_engine::debug_ui
         ImGui::DestroyContext();
         g_backend = backend_mode::none;
         g_frame_ready = false;
+        g_vulkan_render_pass = VK_NULL_HANDLE;
+        g_selected_node = nullptr;
         LOG_INF("debug_ui: ImGui overlay shut down");
     }
 
@@ -708,7 +1546,7 @@ namespace rendering_engine::debug_ui
             // image this frame (minimised) — so nothing is recorded
             // outside a render pass.
             auto* cmd = static_cast<VkCommandBuffer>(encoder.native_command_buffer());
-            if (cmd != VK_NULL_HANDLE && refresh_vulkan_pipeline())
+            if (cmd != VK_NULL_HANDLE && refresh_vulkan_pipeline(encoder))
             {
                 ImGui_ImplVulkan_RenderDrawData(draw_data, cmd);
             }

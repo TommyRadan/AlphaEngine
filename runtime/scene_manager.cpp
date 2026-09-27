@@ -211,6 +211,16 @@ std::size_t runtime::scene_manager::scene_count() const noexcept
     return m_scenes.size();
 }
 
+runtime::context& runtime::scene_manager::scene_at(std::size_t index) noexcept
+{
+    return *m_scenes[index].scene;
+}
+
+core::string_id runtime::scene_manager::name_at(std::size_t index) const noexcept
+{
+    return m_scenes[index].name;
+}
+
 runtime::scene_manager::entry* runtime::scene_manager::find_entry(const context& scene) noexcept
 {
     for (entry& candidate : m_scenes)

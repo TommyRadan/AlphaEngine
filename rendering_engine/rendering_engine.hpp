@@ -49,6 +49,8 @@ namespace rendering_engine
     struct tonemap_pass;
     struct velocity_pass;
     struct taa_pass;
+    struct shadow_pass;
+    struct spot_shadow_pass;
     struct environment;
     struct material_template;
     struct basic_material;
@@ -334,6 +336,63 @@ namespace rendering_engine
         const gpu_profiler& get_gpu_profiler() const;
 
         /**
+         * @brief Off-screen HDR scene-colour texture the scene pass renders
+         *        into: post lighting, skybox and bloom, pre-tonemap.
+         *
+         * Read-only accessor for tooling (the debug overlay's render-target
+         * viewer); valid between @ref init and @ref quit.
+         */
+        gpu::texture scene_color_texture() const;
+
+        /**
+         * @brief Depth attachment of the HDR scene-colour target; see
+         *        @ref frame_context::scene_depth_texture for the encoding.
+         *        Valid between @ref init and @ref quit.
+         */
+        gpu::texture scene_depth_texture() const;
+
+        /**
+         * @brief Tonemapped LDR colour texture the post chain resolves
+         *        into. Valid between @ref init and @ref quit.
+         */
+        gpu::texture ldr_color_texture() const;
+
+        /**
+         * @brief Per-pixel motion vectors from the velocity pass, or an
+         *        invalid handle while temporal AA is off.
+         */
+        gpu::texture velocity_texture() const;
+
+        /**
+         * @brief This frame's temporal-AA resolve output, or an invalid
+         *        handle while temporal AA is off.
+         */
+        gpu::texture taa_resolve_texture() const;
+
+        /**
+         * @brief Directional-light cascaded shadow map: a depth 2D-array
+         *        texture, one layer per cascade (see
+         *        @ref shadow_pass::cascade_count). Valid between
+         *        @ref init and @ref quit; holds cleared, unused depth
+         *        while no shadow-casting directional light is present
+         *        (see @ref shadow_pass::has_shadow).
+         */
+        gpu::texture directional_shadow_map() const;
+
+        /**
+         * @brief Spot-light shadow map. Valid between @ref init and
+         *        @ref quit; see @ref directional_shadow_map.
+         */
+        gpu::texture spot_shadow_map() const;
+
+        /**
+         * @brief The active environment's BRDF look-up table (a 2D
+         *        scale/bias table), or an invalid handle when no
+         *        environment is set (see @ref set_environment).
+         */
+        gpu::texture environment_brdf_lut() const;
+
+        /**
          * @brief Sets (or clears) the scene's image-based-lighting
          *        environment plus background.
          *
@@ -402,6 +461,14 @@ namespace rendering_engine
         // how a resize that recreates the targets reaches them.
         velocity_pass* m_velocity{nullptr};
         taa_pass* m_taa{nullptr};
+
+        // Non-owning back-pointers to the directional and spot shadow
+        // passes owned by @ref m_passes, surfaced through
+        // @ref directional_shadow_map / @ref spot_shadow_map for tooling
+        // (the debug overlay's render-target viewer). Null until
+        // @ref init runs.
+        shadow_pass* m_shadow{nullptr};
+        spot_shadow_pass* m_spot_shadow{nullptr};
 
         // The standard material's shared template: shaders, layouts and
         // the pipeline-variant cache every @ref standard_material
