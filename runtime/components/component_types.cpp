@@ -91,8 +91,6 @@ namespace
         }
     }
 
-    // --- camera ---------------------------------------------------------------
-
     enum class projection : uint8_t
     {
         none,
@@ -215,8 +213,6 @@ namespace
             orthographic->set_far_clip(value);
         }
     }
-
-    // --- light ----------------------------------------------------------------
 
     enum class light_kind : uint8_t
     {
@@ -378,8 +374,6 @@ namespace
                 })
             .when(is_point_or_spot);
     }
-
-    // --- mesh and materials ---------------------------------------------------
 
     // The built-in, renderer-owned material the "phong" and "basic" object
     // types stand for: nothing to describe.
@@ -749,8 +743,6 @@ namespace
             .lossy_reason(mesh_lossy_reason);
     }
 
-    // --- physics --------------------------------------------------------------
-
     using runtime::collider_component;
     using runtime::rigidbody_component;
     namespace physics = runtime::physics;
@@ -850,8 +842,6 @@ namespace
                            : "";
             });
     }
-
-    // --- audio ----------------------------------------------------------------
 
     using runtime::audio_source_component;
     using source_config = audio_source_component::config;

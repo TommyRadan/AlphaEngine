@@ -57,8 +57,6 @@ namespace runtime
         rigidbody_component(rigidbody_component&& other) noexcept = default;
         rigidbody_component& operator=(rigidbody_component&& other) noexcept;
 
-        // --- Component hooks ------------------------------------------------
-
         /** @brief Registers the body with the physics world. */
         void on_attach(node& owner);
         /** @brief Unregisters it; the body is destroyed with the node's last physics component. */
@@ -70,8 +68,6 @@ namespace runtime
          *        for @c scene::clone. Listeners are not copied.
          */
         rigidbody_component clone() const;
-
-        // --- Settings -------------------------------------------------------
 
         physics::rigidbody_settings settings() const;
         void set_settings(const physics::rigidbody_settings& settings);
@@ -91,8 +87,6 @@ namespace runtime
         void set_angular_damping(float damping);
         float gravity_scale() const;
         void set_gravity_scale(float scale);
-
-        // --- Motion ---------------------------------------------------------
 
         /** @brief Linear velocity in m/s, as of the last step (or as last set). */
         core::math::vec3 linear_velocity() const;
@@ -118,8 +112,6 @@ namespace runtime
         bool is_sleeping() const;
         /** @brief Wakes the body at the next step. */
         void wake_up();
-
-        // --- Contact listeners ----------------------------------------------
 
         /**
          * @brief Calls @p listener for every collision this node's body is in,

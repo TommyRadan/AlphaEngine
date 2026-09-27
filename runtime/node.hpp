@@ -111,8 +111,6 @@ namespace runtime
          */
         node* find(core::string_id target);
 
-        // --- World-space helpers -------------------------------------------
-
         /** @brief This node's world-space position (translation of @ref world_matrix). */
         core::math::vec3 world_position() const;
 
@@ -129,8 +127,6 @@ namespace runtime
          *        under a rotated parent the @p up handling is approximate.
          */
         void look_at(const core::math::vec3& target, const core::math::vec3& up = core::math::world_up);
-
-        // --- Active / visible state ----------------------------------------
 
         /** @brief This node's own active flag (ignores ancestors). */
         bool is_active() const noexcept;

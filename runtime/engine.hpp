@@ -5,14 +5,11 @@
  * @file engine.hpp
  * @brief Central, owning container for every engine subsystem.
  *
- * Replaces the process-wide @c singleton<T> pattern that used to live
- * under @c core/singleton.hpp. @ref engine owns each subsystem
- * as a @c std::unique_ptr so construction/destruction order is explicit
- * and deterministic, and multiple instances are possible (e.g. from
- * tests). One live instance is published through @ref current_engine so
- * existing call sites that reached for a global can resolve the
- * subsystem they need without threading an @c engine& through every
- * function.
+ * @ref engine owns each subsystem as a @c std::unique_ptr so
+ * construction/destruction order is explicit and deterministic. One live
+ * instance is published through @ref current_engine so a call site can
+ * resolve the subsystem it needs without threading an @c engine& through
+ * every function.
  */
 
 #pragma once
@@ -91,8 +88,8 @@ namespace runtime
         /**
          * @brief Wires every subsystem up around the resolved @p values
          *        (see @ref core::load_settings) and installs itself as
-         *        @ref current_engine. A test that needs an engine passes
-         *        @c core::settings{} for the compiled defaults.
+         *        @ref current_engine. @c core::settings{} gives the
+         *        compiled defaults.
          */
         explicit engine(core::settings values);
         ~engine();
@@ -168,9 +165,7 @@ namespace runtime
      * engine is constructed — in every build configuration, so a module
      * static that outlives the engine fails visibly rather than
      * dereferencing null. The pointer is installed by the @ref engine
-     * constructor and cleared by its destructor; tests that construct
-     * their own @c engine on the stack therefore get a well-defined value
-     * here for the duration of the test.
+     * constructor and cleared by its destructor.
      */
     engine& current_engine();
 } // namespace runtime

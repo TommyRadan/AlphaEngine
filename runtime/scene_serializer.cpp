@@ -66,8 +66,6 @@ namespace runtime
         // normalised on load rather than restored bit for bit.
         constexpr float k_unit_tolerance = 1e-4f;
 
-        // -- Load sessions ------------------------------------------------------
-
         // What keep_alive_while_loading holds for the instantiate in
         // progress; nested instantiations each get their own.
         struct load_session
@@ -96,8 +94,6 @@ namespace runtime
         private:
             load_session* m_previous;
         };
-
-        // -- Encoding -----------------------------------------------------------
 
         // The JSON number a float field is written as: the shortest decimal
         // that reads back as the same float, so a file shows 0.25 rather than
@@ -210,8 +206,6 @@ namespace runtime
                 },
                 value);
         }
-
-        // -- Decoding -----------------------------------------------------------
 
         // Exactly @p count numbers, or std::nullopt.
         std::optional<std::array<float, 4>> read_numbers(const json& value, std::size_t count)
@@ -385,8 +379,6 @@ namespace runtime
             return std::nullopt;
         }
 
-        // -- Printing -----------------------------------------------------------
-
         std::string print_scalar(const json& value)
         {
             return value.dump(-1, ' ', false, json::error_handler_t::replace);
@@ -455,8 +447,6 @@ namespace runtime
         {
             return target.name().empty() ? std::string{"<unnamed>"} : std::string{target.name().view()};
         }
-
-        // -- Saving -------------------------------------------------------------
 
         // One problem a save met, however many nodes it met it on.
         struct save_note
@@ -671,8 +661,6 @@ namespace runtime
             document["nodes"] = std::move(state.nodes);
             return scene_io::make(std::move(document));
         }
-
-        // -- Loading ------------------------------------------------------------
 
         struct load_state
         {

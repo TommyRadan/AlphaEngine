@@ -136,8 +136,6 @@ namespace runtime
          */
         void update();
 
-        // --- Scene-owned nodes ---------------------------------------------
-
         /**
          * @brief Creates a node owned by this scene, named @p name, under
          *        @p parent (the @ref root when null), and returns it.
@@ -199,8 +197,6 @@ namespace runtime
          */
         node* find(core::string_id name);
 
-        // --- Component queries ---------------------------------------------
-
         /**
          * @brief Invokes @p fn on every @c C in this scene, as one pass over
          *        @c C's pool.
@@ -228,8 +224,6 @@ namespace runtime
          */
         template<typename C, typename... Rest>
         component_view<C, Rest...> view();
-
-        // --- Deferred commands ---------------------------------------------
 
         /**
          * @brief Queues an arbitrary command for the end of the current (or
