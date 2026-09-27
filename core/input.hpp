@@ -115,13 +115,12 @@ namespace core
      * subsystem never touches SDL itself, and never sees input the debug overlay is capturing, because
      * @c rendering_engine::window withholds those events from every listener the same way while it does.
      *
-     * Gameplay code registers its actions and axes once — typically from a game module's bootstrap, in place of
-     * the private key table @c external/camera_module.cpp's @c fly_camera used to keep — with @ref bind_action /
-     * @ref bind_axis, then polls @ref is_action_down / @ref get_axis / @ref mouse_position / @ref mouse_delta
-     * instead of subscribing to raw input events. A name with an entry under @c input.bindings in settings.json
-     * (@ref input_settings::bindings) has that entry parsed as its bindings in place of the ones @ref bind_action
-     * / @ref bind_axis were called with; a malformed entry is warned about and the code-provided bindings are
-     * kept instead.
+     * Gameplay code registers its actions and axes once — typically from a game module's bootstrap — with @ref
+     * bind_action / @ref bind_axis, then polls @ref is_action_down / @ref get_axis / @ref mouse_position / @ref
+     * mouse_delta instead of subscribing to raw input events. A name with an entry under @c input.bindings in
+     * settings.json (@ref input_settings::bindings) has that entry parsed as its bindings in place of the ones
+     * @ref bind_action / @ref bind_axis were called with; a malformed entry is warned about and the code-provided
+     * bindings are kept instead.
      *
      * @ref was_action_pressed and @ref was_action_released answer for the fixed step that just ran: they latch
      * once per @ref runtime::engine::tick, right before its `core::frame` broadcast (see @ref begin_step), so

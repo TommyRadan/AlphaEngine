@@ -48,9 +48,7 @@ namespace core
      * listener's transform, tops the bound stream's queue up to a small
      * target buffer by mixing the @ref k_max_voices active voices into one
      * interleaved buffer and handing it to SDL — no audio callback, no
-     * cross-thread mixer state. Only WAV is decoded (@c SDL_LoadWAV_IO);
-     * compressed formats and streamed music are a follow-on (see the class
-     * docs on scope in the audio subsystem's issue).
+     * cross-thread mixer state. Only WAV is decoded (@c SDL_LoadWAV_IO).
      *
      * **Graceful degradation.** A container or CI runner with no usable
      * playback device is expected, not exceptional: @ref init logs one
