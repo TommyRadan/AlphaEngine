@@ -28,7 +28,6 @@
 
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/passes/pass.hpp>
-#include <rendering_engine/render_graph/frame_graph.hpp>
 
 namespace rendering_engine
 {
@@ -100,7 +99,7 @@ namespace rendering_engine
 
         // Declares the input the engine actually wires: the TAA resolve
         // when temporal AA is on, else the tonemapped LDR target.
-        void declare_io(render_graph::pass_io_builder& io) const override
+        void declare_io(pass_io_builder& io) const override
         {
             io.read(m_taa_enabled ? "taa_resolve" : "ldr_color");
             io.write("swapchain");

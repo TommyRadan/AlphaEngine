@@ -37,14 +37,13 @@
 #include <rendering_engine/fog.hpp>
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/gpu_profiler.hpp>
+#include <rendering_engine/passes/pass_list.hpp>
 #include <rendering_engine/post_settings.hpp>
-#include <rendering_engine/render_graph/frame_graph.hpp>
 #include <rendering_engine/render_stats.hpp>
 
 namespace rendering_engine
 {
     struct camera;
-    struct pass;
     struct renderable;
     struct skybox_pass;
     struct tonemap_pass;
@@ -92,10 +91,9 @@ namespace rendering_engine
     struct renderer
     {
         renderer();
-        // Defined out-of-line in renderer.cpp so the
-        // std::vector<std::unique_ptr<pass>> destructor is only
-        // instantiated where @ref pass is a complete type. The
-        // header keeps @c pass forward-declared.
+        // Defined out-of-line in renderer.cpp so the std::unique_ptr
+        // members' destructors are only instantiated where their types
+        // are complete. The header keeps them forward-declared.
         ~renderer();
 
         /**
@@ -361,8 +359,8 @@ namespace rendering_engine
          * the scene pass, which then loads it and shades each pre-passed
          * surface once (see @ref depth_prepass). Seeded in @ref init from
          * @c core::settings::graphics.depth_prepass (off by default). The
-         * pass itself is always in the frame graph, so this never rebuilds
-         * the pass list.
+         * pass itself is always in the pass list, so this never rebuilds
+         * it.
          */
         void set_depth_prepass(bool enabled);
 
@@ -380,7 +378,7 @@ namespace rendering_engine
 
         /**
          * @brief The per-pass GPU timer: last frame's GPU time of every
-         *        frame-graph pass, from the device's timestamp queries.
+         *        pass, from the device's timestamp queries.
          *
          * Disabled (empty timings, @c enabled() false) on a device
          * without timestamp support. The debug overlay's profiler panel
@@ -487,17 +485,12 @@ namespace rendering_engine
         // release builds, where the debug pass is dropped entirely.
         std::vector<std::unique_ptr<editor::helper>> m_debug_helpers;
 
-        // Ordered pass list walked once per frame in @ref render.
-        // Populated by @ref init with the built-in scene + UI passes
-        // and torn down first in @ref quit, before the materials and
-        // GPU device the passes reference.
-        std::vector<std::unique_ptr<pass>> m_passes;
-
-        // Declarative view over @ref m_passes built once in @ref init: each
-        // pass declares the resources it reads/writes, the graph validates the
-        // ordering, and @ref render executes through it. Execution order equals
-        // the @ref m_passes order, so the graph does not change rendering.
-        render_graph::frame_graph m_frame_graph;
+        // Ordered pass list recorded once per frame in @ref render.
+        // Populated by @ref init with the built-in passes in render order,
+        // which validates the resources each declares, and torn down first
+        // in @ref quit, before the materials and GPU device the passes
+        // reference.
+        pass_list m_passes;
 
         // Non-owning back-pointer to the skybox pass owned by
         // @ref m_passes. Kept so @ref set_environment can swap its cube
@@ -563,9 +556,9 @@ namespace rendering_engine
         // holds a pointer to it) and surfaced via @ref get_render_stats.
         render_stats m_render_stats{};
 
-        // Per-pass GPU timer over the frame graph, brought up after the
-        // graph is compiled in @ref init and released before the device
-        // in @ref quit. Surfaced via @ref get_gpu_profiler.
+        // Per-pass GPU timer over the pass list, brought up after the list
+        // is validated in @ref init and released before the device in
+        // @ref quit. Surfaced via @ref get_gpu_profiler.
         gpu_profiler m_gpu_profiler;
 
         // The window_resized listener that keeps the swapchain extent and,

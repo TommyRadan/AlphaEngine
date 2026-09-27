@@ -25,7 +25,6 @@
 #include <vector>
 
 #include <rendering_engine/passes/pass.hpp>
-#include <rendering_engine/render_graph/frame_graph.hpp>
 #include <rendering_engine/renderables/draw_item.hpp>
 
 namespace rendering_engine
@@ -83,7 +82,7 @@ namespace rendering_engine::editor
             return "debug";
         }
 
-        void declare_io(render_graph::pass_io_builder& io) const override
+        void declare_io(pass_io_builder& io) const override
         {
             io.read("swapchain");
             io.write("swapchain");

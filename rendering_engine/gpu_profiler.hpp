@@ -24,9 +24,9 @@
  * @file gpu_profiler.hpp
  * @brief Per-pass GPU timings from the device's timestamp queries.
  *
- * The profiler brackets every frame-graph pass (and the whole frame)
- * with @c command_encoder::write_timestamp through the graph's
- * @ref render_graph::pass_hooks. One query set more than the device
+ * The profiler brackets every pass (and the whole frame)
+ * with @c command_encoder::write_timestamp through the pass list's
+ * @ref pass_hooks. One query set more than the device
  * keeps frames in flight rotate: a frame writes one set and reads back,
  * with @c device::resolve_queries at its top, the set written
  * @c frames_in_flight frames earlier — on Vulkan the frame fence wait in
@@ -48,7 +48,7 @@
 #include <vector>
 
 #include <rendering_engine/gpu/handle.hpp>
-#include <rendering_engine/render_graph/frame_graph.hpp>
+#include <rendering_engine/passes/pass_list.hpp>
 
 namespace rendering_engine
 {
@@ -58,7 +58,7 @@ namespace rendering_engine
         struct device;
     } // namespace gpu
 
-    // GPU time of one frame-graph pass, in milliseconds, from the last
+    // GPU time of one pass, in milliseconds, from the last
     // frame whose queries resolved.
     struct gpu_pass_timing
     {
@@ -66,7 +66,7 @@ namespace rendering_engine
         float gpu_ms{0.0f};
     };
 
-    class gpu_profiler final : public render_graph::pass_hooks
+    class gpu_profiler final : public pass_hooks
     {
     public:
         // Create the query sets for @p pass_names passes. No-op, leaving
@@ -82,14 +82,14 @@ namespace rendering_engine
         void resolve(gpu::device& device);
 
         // Reset this frame's set and stamp the frame start; record it
-        // before the graph executes on @p encoder.
+        // before the pass list records on @p encoder.
         void begin_frame(gpu::command_encoder& encoder);
 
         // Stamp the frame end and rotate to the next set; record it after
-        // the graph executed on @p encoder.
+        // the pass list recorded on @p encoder.
         void end_frame(gpu::command_encoder& encoder);
 
-        // render_graph::pass_hooks — stamps around each pass.
+        // pass_hooks — stamps around each pass.
         void before_pass(gpu::command_encoder& encoder, size_t index, std::string_view name) override;
         void after_pass(gpu::command_encoder& encoder, size_t index, std::string_view name) override;
 

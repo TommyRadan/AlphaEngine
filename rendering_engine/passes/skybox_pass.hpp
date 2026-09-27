@@ -24,7 +24,6 @@
 
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/passes/pass.hpp>
-#include <rendering_engine/render_graph/frame_graph.hpp>
 
 namespace rendering_engine
 {
@@ -62,7 +61,7 @@ namespace rendering_engine
             return "skybox";
         }
 
-        void declare_io(render_graph::pass_io_builder& io) const override
+        void declare_io(pass_io_builder& io) const override
         {
             io.read("scene_color");
             io.write("scene_color");

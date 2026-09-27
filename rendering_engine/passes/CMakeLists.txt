@@ -2,6 +2,8 @@ target_sources(AlphaEngine PRIVATE
     depth_prepass.cpp
     depth_prepass.hpp
     pass.hpp
+    pass_list.cpp
+    pass_list.hpp
     point_shadow_pass.cpp
     point_shadow_pass.hpp
     projection_jitter.cpp
