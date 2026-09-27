@@ -43,8 +43,14 @@ namespace rendering_engine
             m_timings.push_back({name, 0.0f});
         }
         m_frame_ms = 0.0f;
-        m_written = {false, false};
         m_write_set = 0;
+
+        // One set per frame in flight plus the one being written: the
+        // oldest set of the ring is then always a frame the device has
+        // waited for (see the file comment).
+        const size_t set_count = static_cast<size_t>(device.frames_in_flight()) + 1u;
+        m_sets.assign(set_count, gpu::query_set{});
+        m_written.assign(set_count, false);
 
         if (!device.features().timestamp_queries)
         {
@@ -79,18 +85,20 @@ namespace rendering_engine
             }
         }
         m_enabled = false;
-        m_written = {false, false};
+        m_written.assign(m_written.size(), false);
     }
 
     void gpu_profiler::resolve(gpu::device& device)
     {
-        if (!m_enabled)
+        if (!m_enabled || m_sets.empty())
         {
             return;
         }
-        // The set the previous frame wrote is the other one; a set that
-        // has not completed yet keeps the previous values on screen.
-        const uint32_t read_set = 1u - m_write_set;
+        // The oldest set of the ring, written frames_in_flight frames
+        // ago; a set that has not completed yet keeps the previous
+        // values on screen.
+        const auto set_count = static_cast<uint32_t>(m_sets.size());
+        const uint32_t read_set = (m_write_set + 1u) % set_count;
         if (!m_written[read_set])
         {
             return;
@@ -137,7 +145,7 @@ namespace rendering_engine
         }
         encoder.write_timestamp(m_sets[m_write_set], frame_end_slot);
         m_written[m_write_set] = true;
-        m_write_set = 1u - m_write_set;
+        m_write_set = (m_write_set + 1u) % static_cast<uint32_t>(m_sets.size());
     }
 
     void gpu_profiler::before_pass(gpu::command_encoder& encoder, size_t index, std::string_view /*name*/)

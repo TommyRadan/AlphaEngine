@@ -58,7 +58,11 @@ namespace rendering_engine
         const uint32_t alignment = std::max(device.limits().uniform_buffer_offset_alignment, min_slot_alignment);
         m_stride = round_up(static_cast<uint32_t>(per_draw_ubo_size), alignment);
         m_slots_per_frame = initial_slots_per_frame;
-        m_main.buffer = create_buffer(m_slots_per_frame * frames_in_flight, "per_draw_ring");
+        // One region per frame the device keeps in flight; fixed for the
+        // device's lifetime, like the slot the device hands out.
+        m_frames_in_flight = std::max(device.frames_in_flight(), 1u);
+        m_region = device.frame_slot() % m_frames_in_flight;
+        m_main.buffer = create_buffer(m_slots_per_frame * m_frames_in_flight, "per_draw_ring");
     }
 
     per_draw_ring::~per_draw_ring()
@@ -73,12 +77,15 @@ namespace rendering_engine
 
     gpu::buffer per_draw_ring::create_buffer(uint32_t slots, const char* name)
     {
-        // Host-visible: the Vulkan backend maps a dynamic-data buffer for
-        // its whole lifetime, so each block is a memcpy into it.
+        // Host-visible: the Vulkan backend maps a stream buffer for its
+        // whole lifetime, so each block is a memcpy into it. Stream, not
+        // dynamic: the ring partitions the buffer per frame in flight
+        // itself, so the backend keeps a single copy (see
+        // buffer_usage_hint).
         gpu::buffer_descriptor descriptor{};
         descriptor.size = static_cast<size_t>(slots) * m_stride;
         descriptor.usage = gpu::buffer_usage_uniform | gpu::buffer_usage_copy_dst;
-        descriptor.hint = gpu::buffer_usage_hint::dynamic_data;
+        descriptor.hint = gpu::buffer_usage_hint::stream_data;
         const gpu::buffer buffer = m_device.create_buffer(descriptor);
         if (!buffer.valid())
         {
@@ -167,7 +174,7 @@ namespace rendering_engine
             {
                 release(m_main);
                 m_slots_per_frame = slots;
-                m_main.buffer = create_buffer(m_slots_per_frame * frames_in_flight, "per_draw_ring");
+                m_main.buffer = create_buffer(m_slots_per_frame * m_frames_in_flight, "per_draw_ring");
                 LOG_INF("per_draw_ring: grew to %u draws per frame (%u bytes per slot) after a frame used %u",
                         m_slots_per_frame,
                         m_stride,
@@ -189,7 +196,9 @@ namespace rendering_engine
                           return true;
                       });
 
-        m_region = (m_region + 1) % frames_in_flight;
+        // The region of the slot the device is recording into: its fence
+        // was waited in device::begin_frame, so the GPU is done with it.
+        m_region = m_device.frame_slot() % m_frames_in_flight;
         m_cursor = 0;
         m_spill_cursor = 0;
         m_used = 0;

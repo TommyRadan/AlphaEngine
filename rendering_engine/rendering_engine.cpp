@@ -433,18 +433,19 @@ void rendering_engine::context::render()
 
     // Open the device frame before anything below touches GPU-visible
     // memory. A deferred-execution backend (Vulkan) blocks here until
-    // the previous frame's command buffer has finished and then frees
-    // the resources whose destruction it deferred while that buffer
-    // could still reference them, so the per-frame UBO writes and
-    // bind-group rebuilds the passes make during the walk never race
-    // the GPU.
+    // the frame that last recorded into this frame's slot has finished
+    // and then frees the resources whose destruction it deferred while
+    // a command buffer could still reference them; the per-frame UBO
+    // writes the passes make during the walk land in this slot's copy of
+    // each buffer (see buffer_usage_hint::dynamic_data), so they never
+    // race a frame still in flight.
     gpu.begin_frame();
     m_in_frame = true;
 
     // Rewind the per-draw ring to this frame's region. It must follow
-    // begin_frame: the region is rewritten from its first slot, which is
-    // only safe once the frame that last read it has retired (see
-    // per_draw_ring).
+    // begin_frame: the region is the device's frame slot's, rewritten
+    // from its first slot, which is only safe once the frame that last
+    // read it has retired (see per_draw_ring).
     m_per_draw_ring->begin_frame();
 
     // The previous frame's work has retired (or its queries are polled

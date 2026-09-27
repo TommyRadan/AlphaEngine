@@ -71,20 +71,23 @@ namespace rendering_engine
      * One uniform buffer is split into @ref frames_in_flight regions of
      * @ref slots_per_frame slots each; a slot is one block rounded up to
      * the device's @c uniform_buffer_offset_alignment. @ref begin_frame
-     * moves to the next region and rewinds its cursor, @ref allocate hands
-     * out the region's slots in order. Nothing is freed per draw.
+     * moves to the device's current frame slot's region and rewinds its
+     * cursor, @ref allocate hands out the region's slots in order. Nothing
+     * is freed per draw.
      *
      * Synchronisation. The host writes a region while the GPU may still
-     * be reading the one it wrote the frame before, so a region must not
-     * be reused until the frame that read it has retired. Today there is
-     * one region, and that is safe only because the Vulkan backend keeps a
-     * single frame in flight and @c device::begin_frame waits for the
-     * previous frame's fence before the renderer records anything (the
-     * frame-top wait of #189); OpenGL's @c glBufferSubData is ordered
-     * against earlier draws by the driver. Raising the number of frames in
-     * flight (#169) must raise @ref frames_in_flight to match, so each
-     * frame writes a region the GPU is done with; the offsets already
-     * account for the region index.
+     * be reading the ones it wrote the frames before, so a region must not
+     * be reused until the frame that read it has retired. The buffer holds
+     * one region per frame the device keeps in flight
+     * (@c device::frames_in_flight) and a frame writes the region of its
+     * @c device::frame_slot: the Vulkan backend waits that slot's fence in
+     * @c device::begin_frame before the renderer records anything (the
+     * frame-top wait of #189), so the region a frame rewrites is one the
+     * GPU is done with; OpenGL keeps one frame in flight and orders
+     * @c glBufferSubData against earlier draws itself. Because the ring
+     * partitions the buffer per slot itself, it is created with the
+     * @c stream_data hint and the backend keeps a single copy of it
+     * rather than one per slot as it does for @c dynamic_data buffers.
      *
      * Overflow. A frame that draws more than a region holds spills into
      * extra buffers of the same slot count for the rest of that frame
@@ -108,10 +111,6 @@ namespace rendering_engine
     class per_draw_ring
     {
     public:
-        // Regions the buffer is split into; see the class comment. Must
-        // match the backend's frames in flight.
-        static constexpr uint32_t frames_in_flight = 1;
-
         // Slots per region before the first growth.
         static constexpr uint32_t initial_slots_per_frame = 1024;
 
@@ -150,6 +149,13 @@ namespace rendering_engine
             return m_slots_per_frame;
         }
 
+        // Regions the buffer is split into: the device's frames in
+        // flight, read once at construction. See the class comment.
+        uint32_t frames_in_flight() const noexcept
+        {
+            return m_frames_in_flight;
+        }
+
     private:
         // A buffer blocks are written into, with the groups built over it
         // (one per per-draw layout that has drawn from it).
@@ -177,8 +183,10 @@ namespace rendering_engine
         // One block rounded up to the offset alignment.
         uint32_t m_stride{0};
         uint32_t m_slots_per_frame{0};
+        uint32_t m_frames_in_flight{1};
 
-        // The main buffer: frames_in_flight regions of m_slots_per_frame.
+        // The main buffer: m_frames_in_flight regions of m_slots_per_frame.
+        // m_region is the device's frame slot, taken at begin_frame.
         chunk m_main;
         uint32_t m_region{0};
         uint32_t m_cursor{0};
