@@ -8,10 +8,11 @@
 #include <utility>
 
 #include <core/log.hpp>
-#include <core/platform/platform.hpp>
+#include <core/os/os.hpp>
 #include <core/settings.hpp>
 #include <core/settings_parse.hpp>
-#include <rendering_engine/window.hpp>
+#include <platform/platform.hpp>
+#include <platform/window.hpp>
 #include <runtime/engine.hpp>
 
 namespace
@@ -70,14 +71,18 @@ namespace
 
 int main(int argc, char* argv[])
 {
+    // The engine.log mirror and SDL's own diagnostics join the log before
+    // its first line.
+    platform::install_log_sinks();
     LOG_INIT(argc, argv);
-    core::platform::install_crash_handler(&on_crash);
+    core::os::install_crash_handler(&on_crash);
 
     // Resolve the configuration before anything else exists: compiled
     // defaults, the settings file, the environment, then the command line
     // (see core::load_settings). --help is answered here, before the engine
     // and its window are ever constructed.
-    core::settings_load_result startup = core::load_settings(argc, argv);
+    core::settings_load_result startup =
+        core::load_settings(argc, argv, [] { return platform::pref_path("AlphaEngine", "AlphaEngine"); });
     if (startup.help_requested)
     {
         std::fputs(core::command_line_usage(), stdout);

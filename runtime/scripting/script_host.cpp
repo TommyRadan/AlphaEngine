@@ -16,7 +16,7 @@
 #include <core/event_engine.hpp>
 #include <core/log.hpp>
 #include <core/math/math.hpp>
-#include <core/platform/platform.hpp>
+#include <core/os/os.hpp>
 #include <core/vfs/vfs.hpp>
 
 namespace
@@ -397,7 +397,7 @@ bool runtime::script_host::state::load(scripting::script_class& script)
 {
     std::string text;
     std::string error;
-    if (!core::default_vfs().read_text_file(core::platform::utf8_path(script.path), text, &error))
+    if (!core::default_vfs().read_text_file(core::os::utf8_path(script.path), text, &error))
     {
         LOG_ERR("script '%s' did not load: %s", script.path.c_str(), error.c_str());
         return false;
@@ -514,7 +514,7 @@ void runtime::script_host::state::watch_file(scripting::script_class& script)
         return;
     }
     const core::vfs& files = core::default_vfs();
-    const std::filesystem::path native = files.resolve(core::platform::utf8_path(script.path));
+    const std::filesystem::path native = files.resolve(core::os::utf8_path(script.path));
     const std::filesystem::path directory = native.parent_path();
     std::error_code error;
     if (directory.empty() || !std::filesystem::is_directory(directory, error))
@@ -527,7 +527,7 @@ void runtime::script_host::state::watch_file(scripting::script_class& script)
         watches.begin(), watches.end(), [&](const watch& entry) { return entry.directory == directory_key; });
     if (!watched)
     {
-        watches.push_back(watch{directory_key, core::platform::directory_watcher{directory, false}});
+        watches.push_back(watch{directory_key, core::os::directory_watcher{directory, false}});
     }
 }
 
@@ -544,9 +544,9 @@ void runtime::script_host::state::poll_changes(float delta_time)
     std::vector<scripting::script_class*> changed;
     for (watch& entry : watches)
     {
-        for (const core::platform::file_change& change : entry.watcher.poll())
+        for (const core::os::file_change& change : entry.watcher.poll())
         {
-            if (change.change == core::platform::file_change::kind::removed)
+            if (change.change == core::os::file_change::kind::removed)
             {
                 continue;
             }

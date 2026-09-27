@@ -37,7 +37,7 @@
 #include <core/audio/audio.hpp>
 #include <core/audio/audio_clip.hpp>
 #include <core/math/math.hpp>
-#include <core/platform/platform.hpp>
+#include <core/os/os.hpp>
 #include <core/settings.hpp>
 #include <rendering_engine/assets/mesh_asset.hpp>
 #include <rendering_engine/camera/camera_registry.hpp>
@@ -870,7 +870,7 @@ namespace
             return true;
         }
         std::shared_ptr<core::audio_clip> clip =
-            runtime::current_engine().audio->load_clip(core::platform::utf8_path(reference));
+            runtime::current_engine().audio->load_clip(core::os::utf8_path(reference));
         if (clip == nullptr)
         {
             return false;

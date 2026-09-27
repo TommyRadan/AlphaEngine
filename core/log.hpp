@@ -3,7 +3,7 @@
 
 /**
  * @file log.hpp
- * @brief Printf-style logging facade: stderr, an engine.log mirror beside the executable, and an in-memory ring.
+ * @brief Printf-style logging facade: stderr, pluggable sinks and an in-memory ring.
  *
  * Prefer the @c LOG_TRC / @c LOG_DBG / @c LOG_INF / @c LOG_WRN / @c LOG_ERR / @c LOG_FTL macros over calling
  * @ref core::logging::message directly — they capture the originating @c __FILE__ / @c __LINE__ and the
@@ -25,7 +25,11 @@
  * Fatal: @c LOG_FTL logs and flushes the sinks but does @b not terminate the process. The call site throws (or
  * exits) right after it; that is what lets @c main unwind, show the error dialog and tear the engine down.
  *
- * Every message that reaches a sink is also kept in a bounded in-memory ring (@ref core::logging::recent_messages)
+ * Sinks: every message is written to stderr and to each sink added through @ref core::logging::add_sink — the
+ * platform module adds an engine.log mirror beside the executable and routes its OS library's own diagnostics in
+ * through @ref core::logging::forward.
+ *
+ * Every message that reaches the sinks is also kept in a bounded in-memory ring (@ref core::logging::recent_messages)
  * so a debug console can display the recent log without re-parsing the file.
  */
 
@@ -33,6 +37,7 @@
 
 #include <chrono>
 #include <cstddef>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -120,20 +125,54 @@ namespace core
         inline constexpr std::size_t k_recent_capacity = 512;
 
         /**
-         * @brief Initializes the logging system: captures the platform library's own messages (through
-         * @c core::platform::set_native_log_sink, under the @c "sdl" category), stashes the command line
-         * (see @ref arguments), resolves the level from the build type and @c ALPHAENGINE_LOG_LEVEL, and
-         * registers @ref shutdown with @c atexit so the file sink is closed when the process exits.
+         * @brief A destination every message is written to besides stderr (see @ref add_sink).
+         *
+         * Calls are serialised under the logger's sink lock, so a sink needs no locking of its own; it must not log.
+         */
+        struct sink
+        {
+            virtual ~sink() = default;
+
+            /** @brief Writes one message as the complete formatted line stderr receives, trailing newline included. */
+            virtual void write(std::string_view line) = 0;
+
+            /** @brief Pushes anything buffered to its destination. */
+            virtual void flush() = 0;
+        };
+
+        /**
+         * @brief Initializes the logging system: stashes the command line (see @ref arguments), resolves the level
+         * from the build type and @c ALPHAENGINE_LOG_LEVEL, and registers @ref shutdown with @c atexit so the sinks
+         * are closed when the process exits.
          * @param argc The number of arguments
          * @param argv The arguments
          */
         void init(int argc, char* argv[]);
 
         /**
-         * @brief Flushes and closes the file sink. Registered with @c atexit by @ref init; safe to call earlier
-         * and more than once. Messages logged afterwards still reach stderr and the ring, but not the file.
+         * @brief Flushes and destroys every sink @ref add_sink added. Registered with @c atexit by @ref init; safe
+         * to call earlier and more than once. Messages logged afterwards still reach stderr and the ring.
          */
         void shutdown();
+
+        /** @brief Adds @p destination to the sinks every later message is written to. Thread-safe. */
+        void add_sink(std::unique_ptr<sink> destination);
+
+        /**
+         * @brief Logs @p text that a library emitted on its own, under @p category, with no engine call site.
+         * Subject to the same level filter as every other message; as a library's diagnostic rather than the
+         * engine's, it is not counted by @ref error_count or @ref fatal_count. Thread-safe.
+         */
+        void forward(verbosity level, const char* category, const char* text);
+
+        /** @brief Called after every change to the global or a per-category level (see @ref set_level_observer). */
+        using level_observer = void (*)();
+
+        /**
+         * @brief Installs @p observer, replacing any earlier one; null removes it. A library that filters its own
+         * diagnostics installs one to follow @ref level_for its category.
+         */
+        void set_level_observer(level_observer observer);
 
         /** @brief Flushes every sink. Called after each fatal message. */
         void flush();

@@ -111,9 +111,9 @@ namespace core
      *        step) and axes (analog, dead-zoned). Engine subsystem, owned by @ref runtime::engine.
      *
      * Physical state (which keys / buttons are down, the cursor position and motion, gamepad axis values) is
-     * kept live from the raw @c core::event_bus input events @ref rendering_engine::window already emits — this
-     * subsystem never touches SDL itself, and never sees input the debug overlay is capturing, because
-     * @c rendering_engine::window withholds those events from every listener the same way while it does.
+     * kept live from the raw @c core::event_bus input events @ref platform::window already emits — this
+     * subsystem never touches the OS itself, and never sees input the debug overlay is capturing, because
+     * @c platform::window withholds those events from every listener the same way while it does.
      *
      * Gameplay code registers its actions and axes once — typically from a game module's bootstrap — with @ref
      * bind_action / @ref bind_axis, then polls @ref is_action_down / @ref get_axis / @ref mouse_position / @ref
@@ -127,7 +127,7 @@ namespace core
      * they stay stable through every behaviour's `on_fixed_update` in that step even when several run in one
      * rendered frame. @ref is_action_down, @ref get_axis, @ref mouse_position and @ref mouse_delta are live —
      * safe to poll from either `on_fixed_update` or the render-rate `on_update` — because the physical state
-     * behind them only changes where @c rendering_engine::window pumps events, once per rendered frame and
+     * behind them only changes where @c platform::window pumps events, once per rendered frame and
      * before any fixed step drawn from it runs.
      *
      * Main-thread-only, like the rest of the engine.
@@ -187,7 +187,7 @@ namespace core
         /** @brief @p name's axis value in [-1, 1] (or [0, 1] for a trigger); 0 for an unknown or blocked name. */
         float get_axis(std::string_view name) const;
 
-        /** @brief Cursor position in window coordinates, as last reported by @c rendering_engine::window. */
+        /** @brief Cursor position in window coordinates, as last reported by @c platform::window. */
         core::math::vec2 mouse_position() const noexcept;
 
         /** @brief Cursor motion since the previous rendered frame, in window coordinates. */
@@ -209,7 +209,7 @@ namespace core
          * @brief Latches the cursor motion and scroll accumulated since the previous call into @ref mouse_delta /
          *        @ref mouse_wheel_delta and resets both accumulators.
          *
-         * Called once per rendered frame by @ref runtime::engine::tick, right after @c rendering_engine::window
+         * Called once per rendered frame by @ref runtime::engine::tick, right after @c platform::window
          * has pumped this frame's input. Not for game code to call.
          */
         void end_frame();

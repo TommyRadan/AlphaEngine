@@ -5,8 +5,6 @@
 
 #include <stdexcept>
 
-#include <core/platform/platform.hpp>
-
 namespace
 {
     // Weight of the newest frame time in the average_fps moving average. 0.1
@@ -16,7 +14,7 @@ namespace
 } // namespace
 
 core::time::time(double fixed_delta_time, int max_steps_per_frame)
-    : m_previous_ticks{platform::performance_counter()}, m_frame_count{0}, m_delta_time{0}, m_average_delta_time{0},
+    : m_start{clock::now()}, m_previous_tick{m_start}, m_frame_count{0}, m_delta_time{0}, m_average_delta_time{0},
       m_fixed_delta_time{fixed_delta_time}, m_accumulator{0}, m_max_steps_per_frame{max_steps_per_frame}
 {
     // Written as !(x > 0) so a NaN step is rejected along with zero and negatives.
@@ -32,7 +30,7 @@ core::time::time(double fixed_delta_time, int max_steps_per_frame)
 
 void core::time::perform_tick()
 {
-    const uint64_t ticks = platform::performance_counter();
+    const clock::time_point now = clock::now();
 
     if (m_frame_count == 0)
     {
@@ -42,8 +40,7 @@ void core::time::perform_tick()
     }
     else
     {
-        m_delta_time = static_cast<double>(ticks - m_previous_ticks) * 1000.0 /
-                       static_cast<double>(platform::performance_frequency());
+        m_delta_time = std::chrono::duration<double, std::milli>(now - m_previous_tick).count();
         // Seed the average with the first real frame time rather than ramping
         // up from zero, then blend each new sample in.
         m_average_delta_time = m_average_delta_time > 0.0
@@ -51,7 +48,7 @@ void core::time::perform_tick()
                                    : m_delta_time;
     }
 
-    m_previous_ticks = ticks;
+    m_previous_tick = now;
     ++m_frame_count;
 }
 
@@ -62,7 +59,7 @@ double core::time::delta_time() const
 
 float core::time::total_time() const
 {
-    return static_cast<float>(platform::ticks_ms());
+    return std::chrono::duration<float, std::milli>(clock::now() - m_start).count();
 }
 
 uint32_t core::time::frame_count() const

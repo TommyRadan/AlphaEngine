@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  SOURCE_DIRS: "runtime core rendering_engine external"
+  SOURCE_DIRS: "runtime core platform rendering_engine external"
   CLANG_VERSION: "18"
   # Dev packages every Linux job that configures the tree installs. SDL3 is
   # built from source via FetchContent and on Linux its CMake refuses to
@@ -81,7 +81,7 @@ jobs:
           # Every first-party source, shader, build file, script and workflow
           # must start with the SPDX identifier line (line 2 after a shebang).
           # Directory pathspecs recurse; vendor/ is deliberately not listed.
-          files=$(git ls-files -- core runtime rendering_engine external shaders cmake scripts CMakeLists.txt .github/workflows \
+          files=$(git ls-files -- core platform runtime rendering_engine external shaders cmake scripts CMakeLists.txt .github/workflows \
             | grep -E '(\.(cpp|hpp|h|c|glsl|cmake|ps1|yml)|CMakeLists\.txt)$')
           echo "Checking $(echo "${files}" | wc -l) files"
           failed=0
@@ -160,7 +160,7 @@ jobs:
           # repo's top-level modules and not vendored sources that happen
           # to live under a like-named subdirectory (e.g. SDL3's
           # build/_deps/sdl3-src/src/core/).
-          pattern="${GITHUB_WORKSPACE}/(runtime|core|rendering_engine|external)/"
+          pattern="${GITHUB_WORKSPACE}/(runtime|core|platform|rendering_engine|external)/"
           run-clang-tidy -p build -quiet "${pattern}"
 
   # ---------------------------------------------------------------------------

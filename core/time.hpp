@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include <chrono>
 #include <cstdint>
 
 namespace core
@@ -15,8 +16,7 @@ namespace core
     /**
      * @brief Frame clock owned by @ref runtime::engine.
      *
-     * Backed by the platform layer's high-resolution performance counter
-     * (@c core::platform::performance_counter). Call
+     * Backed by @c std::chrono::steady_clock. Call
      * @ref perform_tick once per frame, at the top of the frame, so the
      * variable-rate accessors (@ref delta_time, @ref current_fps,
      * @ref frame_count) describe the frame being processed. Each instance
@@ -76,7 +76,7 @@ namespace core
          */
         double delta_time() const;
 
-        /** @brief Milliseconds since the platform library was initialized. */
+        /** @brief Milliseconds since this clock was constructed. */
         float total_time() const;
 
         /**
@@ -140,7 +140,10 @@ namespace core
         double interpolation_alpha() const;
 
     private:
-        uint64_t m_previous_ticks; // performance-counter reading at the last tick
+        using clock = std::chrono::steady_clock;
+
+        clock::time_point m_start;         // construction, the origin of total_time
+        clock::time_point m_previous_tick; // the clock reading at the last tick
         uint32_t m_frame_count;
         double m_delta_time;
         double m_average_delta_time; // exponential moving average of m_delta_time

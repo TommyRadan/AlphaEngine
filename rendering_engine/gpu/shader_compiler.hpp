@@ -20,7 +20,7 @@
  * every file it (transitively) includes, the defines, the stage and the
  * glslang version, so a launch that compiles what a previous launch
  * compiled reads the SPIR-V back instead of running glslang. The cache
- * lives under @c SDL_GetPrefPath("AlphaEngine", "AlphaEngine")/shader_cache
+ * lives under @c platform::pref_path("AlphaEngine", "AlphaEngine")/shader_cache
  * unless @c ALPHAENGINE_SHADER_CACHE names another directory or is
  * @c 0 / @c off / @c false, which disables it; @ref set_shader_cache_directory
  * overrides both. The Vulkan backend keeps its @c VkPipelineCache blob

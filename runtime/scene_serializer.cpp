@@ -21,7 +21,7 @@
 #include <nlohmann/json.hpp>
 
 #include <core/log.hpp>
-#include <core/platform/platform.hpp>
+#include <core/os/os.hpp>
 #include <core/vfs/vfs.hpp>
 #include <runtime/behavior.hpp>
 #include <runtime/components/behavior_component.hpp>
@@ -898,7 +898,7 @@ namespace runtime
         // The scene a file loads as: its file name up to the first dot.
         std::string scene_name_for(const std::filesystem::path& path)
         {
-            const std::string file = core::platform::path_to_utf8(path.filename());
+            const std::string file = core::os::path_to_utf8(path.filename());
             const std::size_t dot = file.find('.');
             return dot == std::string::npos || dot == 0 ? file : file.substr(0, dot);
         }
@@ -1020,10 +1020,10 @@ namespace runtime
         std::string error;
         if (!document.write(path, &error))
         {
-            LOG_ERR("scene save: could not write %s: %s", core::platform::path_to_utf8(path).c_str(), error.c_str());
+            LOG_ERR("scene save: could not write %s: %s", core::os::path_to_utf8(path).c_str(), error.c_str());
             return false;
         }
-        LOG_INF("Saved scene %s (%zu nodes)", core::platform::path_to_utf8(path).c_str(), document.node_count());
+        LOG_INF("Saved scene %s (%zu nodes)", core::os::path_to_utf8(path).c_str(), document.node_count());
         return true;
     }
 
@@ -1131,7 +1131,7 @@ namespace runtime
 
     runtime::scene* load_scene(scene_manager& scenes, const std::filesystem::path& path, bool additive)
     {
-        const std::string label = core::platform::path_to_utf8(path);
+        const std::string label = core::os::path_to_utf8(path);
         std::string error;
         const std::optional<scene_document> document = scene_document::read(path, &error);
         if (!document.has_value())

@@ -18,7 +18,7 @@
 #include <vector>
 
 #include <core/log.hpp>
-#include <core/platform/platform.hpp>
+#include <core/os/os.hpp>
 #include <core/vfs/vfs.hpp>
 #include <rendering_engine/assets/asset_cache.hpp>
 #include <rendering_engine/assets/tangent.hpp>
@@ -130,7 +130,7 @@ namespace rendering_engine
                                    void** data)
         {
             std::vector<std::byte> bytes;
-            if (!core::default_vfs().read_file(core::platform::utf8_path(path), bytes))
+            if (!core::default_vfs().read_file(core::os::utf8_path(path), bytes))
             {
                 return cgltf_result_file_not_found;
             }

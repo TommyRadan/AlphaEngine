@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2015-2026 Tomislav Radanovic
 
-#include <rendering_engine/sdl_input.hpp>
+#include <platform/sdl_input.hpp>
 
 #include <algorithm>
 
 #include <SDL3/SDL_mouse.h>
 
-namespace rendering_engine::sdl_input
+namespace platform::sdl_input
 {
     core::key_code to_key_code(SDL_Keycode key) noexcept
     {
@@ -351,4 +351,4 @@ namespace rendering_engine::sdl_input
         constexpr float k_axis_max = 32767.0f;
         return std::clamp(static_cast<float>(value) / k_axis_max, -1.0f, 1.0f);
     }
-} // namespace rendering_engine::sdl_input
+} // namespace platform::sdl_input

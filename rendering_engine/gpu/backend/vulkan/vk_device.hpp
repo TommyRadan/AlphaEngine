@@ -95,7 +95,7 @@ namespace rendering_engine::gpu::backend::vulkan
         vk_device();
         ~vk_device() override;
 
-        void init() override;
+        void init(const surface_desc& surface, uint32_t frames_in_flight) override;
         void quit() override;
 
         texture_usage format_support(texture_format format) const override;
@@ -180,8 +180,8 @@ namespace rendering_engine::gpu::backend::vulkan
         void begin_frame() override;
         void end_frame() override;
 
-        // The slot ring: see gpu::device. The count is read from the
-        // settings at init and clamped to k_max_frames_in_flight.
+        // The slot ring: see gpu::device. The count init was given,
+        // clamped to k_max_frames_in_flight.
         uint32_t frames_in_flight() const noexcept override;
         uint32_t frame_slot() const noexcept override;
 
@@ -537,7 +537,7 @@ namespace rendering_engine::gpu::backend::vulkan
         texture default_texture(texture_dimension dim) const noexcept;
 
     private:
-        void create_instance();
+        void create_instance(const std::vector<const char*>& window_extensions);
         void create_default_textures();
         void create_debug_messenger();
         void destroy_debug_messenger();
@@ -545,7 +545,7 @@ namespace rendering_engine::gpu::backend::vulkan
         // points once the instance exists; leaves them null (and the
         // debug_labels feature off) when the extension is not enabled.
         void load_debug_utils_functions();
-        void create_surface();
+        void create_surface(const surface_desc& surface);
         void pick_physical_device();
         void create_logical_device();
         // Fill the base class's device_features / device_limits from
@@ -737,6 +737,12 @@ namespace rendering_engine::gpu::backend::vulkan
         VkInstance m_instance{VK_NULL_HANDLE};
         VkDebugUtilsMessengerEXT m_debug_messenger{VK_NULL_HANDLE};
         VkSurfaceKHR m_surface{VK_NULL_HANDLE};
+        // Releases m_surface through the window system that created it
+        // (surface_desc::destroy_vulkan_surface).
+        destroy_vulkan_surface_fn m_destroy_surface{nullptr};
+        // Whether presentation waits for vertical sync
+        // (surface_desc::vsync), read at every swapchain build.
+        bool m_vsync{false};
         VkPhysicalDevice m_physical_device{VK_NULL_HANDLE};
         // The API version the instance was created with (what VMA is
         // told, capped by the physical device's own version).
@@ -976,8 +982,8 @@ namespace rendering_engine::gpu::backend::vulkan
         PFN_vkCmdBindVertexBuffers2EXT m_cmd_bind_vertex_buffers2{nullptr};
 
         // Last drawable size the engine reported through
-        // resize_swapchain, in pixels (seeded from window::pixel_size
-        // at init, falling back to the logical settings size). Only
+        // resize_swapchain, in pixels (seeded from the surface_desc
+        // size at init). Only
         // consulted when the surface leaves the extent to the
         // application (currentExtent == UINT32_MAX); everywhere else
         // the surface capabilities decide, so a rebuild never trusts

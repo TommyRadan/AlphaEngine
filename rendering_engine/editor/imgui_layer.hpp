@@ -11,7 +11,7 @@
  * macro is set for Debug builds only (see the root CMakeLists.txt), so in
  * release every function below collapses to an empty no-op and ImGui is
  * not linked at all. None of these declarations expose an ImGui or SDL
- * type, so callers in the always-compiled engine core (window, renderer,
+ * type, so callers in the always-compiled engine core (engine, renderer,
  * debug pass) can include this header unconditionally.
  *
  * The frame is split in two: building the panels (@ref begin_frame) runs
@@ -33,12 +33,16 @@ namespace rendering_engine::editor
 {
     /**
      * @brief Brings ImGui and its SDL3 + Vulkan backends up against the
-     *        live window and GPU device. Call once after the window, GPU
-     *        device and passes are initialised. No-op in release.
+     *        live window and GPU device, and installs the window's event
+     *        filter (@c platform::window::set_event_filter), which hands
+     *        every event to @ref process_event and reports
+     *        @ref wants_keyboard / @ref wants_mouse as the input it
+     *        captures. Call once after the window, GPU device and passes
+     *        are initialised. No-op in release.
      */
     void init();
 
-    /** @brief Tears ImGui and its backends down. No-op in release. */
+    /** @brief Removes the window's event filter and tears ImGui and its backends down. No-op in release. */
     void shutdown();
 
     /**

@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2015-2026 Tomislav Radanovic
 
-#include <core/platform/directory_watcher.hpp>
+#include <core/os/directory_watcher.hpp>
 
 #include <system_error>
 #include <utility>
 
-namespace core::platform
+namespace core::os
 {
     directory_watcher::directory_watcher(std::filesystem::path root, bool recursive)
         : m_root{std::move(root)}, m_recursive{recursive}, m_last{scan()}
@@ -105,4 +105,4 @@ namespace core::platform
         m_last = std::move(current);
         return changes;
     }
-} // namespace core::platform
+} // namespace core::os

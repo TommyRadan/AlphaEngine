@@ -11,7 +11,7 @@
 #include <filesystem>
 #include <string>
 
-namespace core::platform
+namespace platform
 {
     /**
      * @brief A shared library (`.dll` / `.so` / `.dylib`) opened for symbol
@@ -64,4 +64,4 @@ namespace core::platform
         void* m_handle{nullptr};
         std::string m_last_error;
     };
-} // namespace core::platform
+} // namespace platform

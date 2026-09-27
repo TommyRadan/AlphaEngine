@@ -20,6 +20,7 @@ target_sources(AlphaEngine PRIVATE
     shader_hot_reload.hpp
     shader_library.cpp
     shader_library.hpp
+    surface.hpp
     texture.hpp
     types.hpp
 )

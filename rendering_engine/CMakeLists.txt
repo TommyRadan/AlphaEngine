@@ -12,10 +12,6 @@ target_sources(AlphaEngine PRIVATE
     render_world.hpp
     renderer.cpp
     renderer.hpp
-    sdl_input.cpp
-    sdl_input.hpp
-    window.cpp
-    window.hpp
 )
 
 add_subdirectory(assets)

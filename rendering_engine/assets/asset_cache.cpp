@@ -4,6 +4,7 @@
 #include <rendering_engine/assets/asset_cache.hpp>
 
 #include <algorithm>
+#include <chrono>
 #include <exception>
 #include <initializer_list>
 #include <iterator>
@@ -13,8 +14,8 @@
 
 #include <core/job_pool.hpp>
 #include <core/log.hpp>
-#include <core/platform/directory_watcher.hpp>
-#include <core/platform/platform.hpp>
+#include <core/os/directory_watcher.hpp>
+#include <core/os/os.hpp>
 #include <core/vfs/vfs.hpp>
 #include <rendering_engine/assets/asset_device.hpp>
 #include <rendering_engine/assets/cache_key.hpp>
@@ -34,6 +35,14 @@ namespace rendering_engine
         std::string path_key(const std::filesystem::path& path)
         {
             return core::default_vfs().canonical_key(path);
+        }
+
+        // Milliseconds on the monotonic clock, for the hot-reload poll cadence.
+        uint64_t steady_ms()
+        {
+            return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                                             std::chrono::steady_clock::now().time_since_epoch())
+                                             .count());
         }
 
         // The colour-space suffix of a texture key. An sRGB and a linear
@@ -317,7 +326,7 @@ namespace rendering_engine
         // a KTX2 file needs to know what the device samples.
         const decoded_texture decoded =
             decode_texture_file(path, space, is_ktx2_path(path) ? compressed_support() : compressed_format_support{});
-        const std::string label = core::platform::path_to_utf8(path);
+        const std::string label = core::os::path_to_utf8(path);
         const uploaded_texture uploaded = upload_decoded(decoded, space, label);
         if (!uploaded.texture.valid())
         {
@@ -389,7 +398,7 @@ namespace rendering_engine
         };
         auto state = std::make_shared<decode_state>();
         state->path = path;
-        state->label = core::platform::path_to_utf8(path);
+        state->label = core::os::path_to_utf8(path);
         state->space = space;
         if (is_ktx2_path(path))
         {
@@ -553,10 +562,10 @@ namespace rendering_engine
         {
             watched = root;
         }
-        m_watcher = std::make_unique<core::platform::directory_watcher>(watched);
-        m_last_watch_ms = core::platform::ticks_ms();
+        m_watcher = std::make_unique<core::os::directory_watcher>(watched);
+        m_last_watch_ms = steady_ms();
         LOG_INF("asset_cache: hot reload watching %s (%zu files)",
-                core::platform::path_to_utf8(watched).c_str(),
+                core::os::path_to_utf8(watched).c_str(),
                 m_watcher->tracked_count());
     }
 
@@ -572,18 +581,18 @@ namespace rendering_engine
 
     void asset_cache::poll_hot_reload()
     {
-        const uint64_t now = core::platform::ticks_ms();
+        const uint64_t now = steady_ms();
         if (now - m_last_watch_ms < k_hot_reload_interval_ms)
         {
             return;
         }
         m_last_watch_ms = now;
 
-        for (const core::platform::file_change& change : m_watcher->poll())
+        for (const core::os::file_change& change : m_watcher->poll())
         {
             // A deleted file leaves its texture as it was; an editor that
             // saves by replacing the file reports it modified (or added).
-            if (change.change == core::platform::file_change::kind::removed)
+            if (change.change == core::os::file_change::kind::removed)
             {
                 continue;
             }
@@ -620,7 +629,7 @@ namespace rendering_engine
                                                              std::shared_ptr<gltf_material_factory> factory)
     {
         auto asset = std::make_shared<gltf_asset>();
-        const std::string label = core::platform::path_to_utf8(path);
+        const std::string label = core::os::path_to_utf8(path);
         if (factory == nullptr)
         {
             factory = m_gltf_factory;
@@ -762,7 +771,7 @@ namespace rendering_engine
             }
         }
 
-        auto asset = std::make_shared<font_asset>(core::platform::path_to_utf8(path), size);
+        auto asset = std::make_shared<font_asset>(core::os::path_to_utf8(path), size);
         std::unique_lock lock{m_mutex};
         m_fonts[key] = asset;
         return asset;

@@ -3,8 +3,8 @@
 
 /**
  * @file audio.hpp
- * @brief SDL3-backed audio subsystem: playback device, software mixer and
- *        clip cache.
+ * @brief Audio subsystem: software mixer, voices, listeners and clip cache,
+ *        over a platform playback device and decoder.
  */
 
 #pragma once
@@ -17,38 +17,35 @@
 #include <unordered_map>
 #include <vector>
 
+#include <core/audio/audio_backend.hpp>
 #include <core/audio/audio_types.hpp>
 #include <core/math/vec3.hpp>
-
-// The concrete stream type is only named in audio.cpp — the one
-// SDL-including translation unit for this subsystem, like
-// core/platform/platform_sdl.cpp is for the platform layer.
-struct SDL_AudioStream;
 
 namespace core
 {
     struct audio_clip;
 
     /**
-     * @brief Owns the default playback device, a fixed-voice-cap software
-     *        mixer, and a weak-ref cache of decoded @ref audio_clip assets.
+     * @brief Owns a fixed-voice-cap software mixer and a weak-ref cache of
+     *        decoded @ref audio_clip assets, and feeds the playback device.
      *
      * Owned by @ref runtime::engine with the usual @c init / @c quit shape.
-     * @ref init opens the default playback device through SDL3 (a plain
-     * @c SDL_AudioStream bound to an @c SDL_OpenAudioDevice handle, rather
-     * than the callback-driven @c SDL_OpenAudioDeviceStream form, so mixing
-     * stays a main-thread call): every clip is decoded and converted once,
-     * up front, to one fixed mixer format (@ref k_mixer_sample_rate stereo
-     * float, @ref k_mixer_channels channels), so a device that requests a
-     * different native format is handled by the stream's own conversion,
+     * The device and the decoder are platform services handed in at
+     * construction (@ref audio_output, @ref audio_decoder; the engine
+     * passes the platform module's, from platform/audio_device.hpp), so
+     * this subsystem is plain C++. @ref init opens the default playback device:
+     * every clip is decoded and converted once, up front, to one fixed
+     * mixer format (@ref k_mixer_sample_rate stereo float,
+     * @ref k_mixer_channels channels), so a device that requests a
+     * different native format is handled by the output's own conversion,
      * invisibly to every voice.
      *
      * Playback is a pull model: @ref update, called once per tick from
      * @c engine::tick after the scene graph has updated every source and
-     * listener's transform, tops the bound stream's queue up to a small
-     * target buffer by mixing the @ref k_max_voices active voices into one
-     * interleaved buffer and handing it to SDL — no audio callback, no
-     * cross-thread mixer state. Only WAV is decoded (@c SDL_LoadWAV_IO).
+     * listener's transform, tops the device's queue up to a small target
+     * buffer by mixing the @ref k_max_voices active voices into one
+     * interleaved buffer and queueing it — no audio callback, no
+     * cross-thread mixer state. Only WAV is decoded.
      *
      * **Graceful degradation.** A container or CI runner with no usable
      * playback device is expected, not exceptional: @ref init logs one
@@ -60,12 +57,18 @@ namespace core
      * and nothing hangs or throws.
      *
      * Main-thread-only, like every other subsystem: nothing here runs on a
-     * background thread or an SDL audio callback, so there is no mixer
-     * state to synchronise.
+     * background thread or an audio callback, so there is no mixer state
+     * to synchronise.
      */
     struct audio
     {
-        audio();
+        /**
+         * @param output  The playback device @ref init opens; null leaves the
+         *                subsystem without one (see "Graceful degradation").
+         * @param decoder Decodes the files @ref load_clip reads; null makes
+         *                every load fail.
+         */
+        audio(std::unique_ptr<audio_output> output, std::unique_ptr<audio_decoder> decoder);
         ~audio();
 
         audio(const audio&) = delete;
@@ -93,7 +96,7 @@ namespace core
          * @brief Returns the clip decoded from @p path, decoding it on a miss.
          *
          * Reads @p path through @c core::default_vfs, decodes it as WAV
-         * (@c SDL_LoadWAV_IO) and converts it to the mixer format once; the
+         * (@ref audio_decoder::decode_wav) and converts it to the mixer format once; the
          * result is cached (weak-ref, like @c texture_asset) by the VFS's
          * canonical identity, so a clip requested twice is decoded once and
          * freed as soon as its last handle drops. Unlike
@@ -221,8 +224,8 @@ namespace core
 
         std::unordered_map<std::string, std::weak_ptr<audio_clip>> m_clips;
 
-        std::uint32_t m_device{0}; // an SDL_AudioDeviceID; 0 is SDL's "invalid" value
-        SDL_AudioStream* m_stream{nullptr};
+        std::unique_ptr<audio_output> m_output;
+        std::unique_ptr<audio_decoder> m_decoder;
         bool m_available{false};
 
         std::array<voice, k_max_voices> m_voices;

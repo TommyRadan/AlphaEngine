@@ -13,12 +13,11 @@
 
 #include <glslang/Public/ResourceLimits.h>
 #include <glslang/Public/ShaderLang.h>
-#include <SDL3/SDL_filesystem.h>
-#include <SDL3/SDL_stdinc.h>
 #include <SPIRV/GlslangToSpv.h>
 
 #include <core/hash.hpp>
 #include <core/log.hpp>
+#include <platform/platform.hpp>
 #include <rendering_engine/gpu/shader_library.hpp>
 
 namespace rendering_engine::gpu
@@ -308,14 +307,14 @@ namespace rendering_engine::gpu
                 }
                 state.directory = std::filesystem::path{value};
             }
-            else if (char* pref_path = SDL_GetPrefPath("AlphaEngine", "AlphaEngine"); pref_path != nullptr)
+            else if (const std::filesystem::path pref_path = platform::pref_path("AlphaEngine", "AlphaEngine");
+                     !pref_path.empty())
             {
-                state.directory = std::filesystem::path{pref_path} / "shader_cache";
-                SDL_free(pref_path);
+                state.directory = pref_path / "shader_cache";
             }
             else
             {
-                LOG_WRN("Shader cache: SDL_GetPrefPath failed (%s); caching disabled", SDL_GetError());
+                LOG_WRN("Shader cache: no per-user preference directory; caching disabled");
                 return;
             }
 

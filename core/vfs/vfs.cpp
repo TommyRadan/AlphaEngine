@@ -8,7 +8,7 @@
 #include <utility>
 
 #include <core/log.hpp>
-#include <core/platform/platform.hpp>
+#include <core/os/os.hpp>
 #include <core/vfs/directory_mount.hpp>
 
 namespace core
@@ -49,7 +49,7 @@ namespace core
         {
             LOG_INF("VFS: asset directory %s does not exist yet; relative asset paths fall back to the working "
                     "directory until it does",
-                    platform::path_to_utf8(root).c_str());
+                    os::path_to_utf8(root).c_str());
         }
         mount(std::make_unique<directory_mount>(root));
     }
@@ -70,7 +70,7 @@ namespace core
     {
         if (is_native(path))
         {
-            return platform::file_exists(path);
+            return os::file_exists(path);
         }
         const std::optional<std::string> relative = mount_relative(path);
         if (!relative.has_value())
@@ -87,7 +87,7 @@ namespace core
                 }
             }
         }
-        return platform::file_exists(path);
+        return os::file_exists(path);
     }
 
     bool vfs::read_file(const std::filesystem::path& path, std::vector<std::byte>& out, std::string* error) const
@@ -95,7 +95,7 @@ namespace core
         std::string reason;
         if (is_native(path))
         {
-            const bool ok = platform::read_file(path, out, &reason);
+            const bool ok = os::read_file(path, out, &reason);
             if (!ok && error != nullptr)
             {
                 *error = reason;
@@ -130,7 +130,7 @@ namespace core
         }
 
         // No mount holds it: the working-directory fallback.
-        const bool ok = platform::read_file(path, out, &reason);
+        const bool ok = os::read_file(path, out, &reason);
         if (!ok && error != nullptr)
         {
             *error = reason;
@@ -191,9 +191,9 @@ namespace core
             canonical = native;
         }
         std::string key = canonical.lexically_normal().generic_string();
-        if (platform::case_insensitive_paths())
+        if (os::case_insensitive_paths())
         {
-            key = platform::fold_path_case(std::move(key));
+            key = os::fold_path_case(std::move(key));
         }
         return key;
     }
@@ -219,7 +219,7 @@ namespace core
             {
                 std::filesystem::create_directories(target.parent_path(), ignored);
             }
-            return platform::write_file(target, data, size, &reason);
+            return os::write_file(target, data, size, &reason);
         };
 
         if (is_native(path))
@@ -309,7 +309,7 @@ namespace core
     {
         if (is_native(path))
         {
-            return platform::last_write_time(path);
+            return os::last_write_time(path);
         }
         const std::optional<std::string> relative = mount_relative(path);
         if (!relative.has_value())
@@ -326,7 +326,7 @@ namespace core
                 }
             }
         }
-        return platform::last_write_time(path);
+        return os::last_write_time(path);
     }
 
     vfs& default_vfs()

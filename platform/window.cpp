@@ -1,24 +1,22 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2015-2026 Tomislav Radanovic
 
+#include <platform/window.hpp>
+
 #include <algorithm>
 #include <optional>
 #include <stdexcept>
 #include <utility>
 
-#include <core/event_engine.hpp>
-#include <core/log.hpp>
-#include <core/settings.hpp>
-#include <core/time.hpp>
-#include <rendering_engine/assets/color.hpp>
-#include <rendering_engine/editor/imgui_layer.hpp>
-#include <rendering_engine/sdl_input.hpp>
-#include <rendering_engine/window.hpp>
-#include <runtime/engine.hpp>
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
 
-namespace rendering_engine
+#include <core/event_engine.hpp>
+#include <core/log.hpp>
+#include <core/settings.hpp>
+#include <platform/sdl_input.hpp>
+
+namespace platform
 {
     namespace
     {
@@ -67,9 +65,9 @@ namespace rendering_engine
 
     window::window() = default;
 
-    void window::init()
+    void window::init(core::window_settings& settings)
     {
-        LOG_INF("Init rendering_engine::window");
+        LOG_INF("Init platform::window");
 
         if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
         {
@@ -87,47 +85,45 @@ namespace rendering_engine
             LOG_WRN("Could not initialize gamepad subsystem: %s", SDL_GetError());
         }
 
-        core::settings& s{*runtime::current_engine().settings};
-
         // A zero width or height means "match the primary display" (the
         // release default). The display can only be queried now that the
         // video subsystem is up; the concrete size is written back to the
         // settings so the swapchain, the projection and the debug inspector
         // all read it.
-        if (s.window.uses_native_resolution())
+        if (settings.uses_native_resolution())
         {
             const SDL_DisplayMode* display_mode = SDL_GetCurrentDisplayMode(SDL_GetPrimaryDisplay());
             if (display_mode != nullptr && display_mode->w > 0 && display_mode->h > 0)
             {
-                if (s.window.width == 0)
+                if (settings.width == 0)
                 {
-                    s.window.width = to_extent(display_mode->w);
+                    settings.width = to_extent(display_mode->w);
                 }
-                if (s.window.height == 0)
+                if (settings.height == 0)
                 {
-                    s.window.height = to_extent(display_mode->h);
+                    settings.height = to_extent(display_mode->h);
                 }
                 LOG_INF("Display mode %dx%d; window size resolved to %ux%u",
                         display_mode->w,
                         display_mode->h,
-                        s.window.width,
-                        s.window.height);
+                        settings.width,
+                        settings.height);
             }
             else
             {
-                if (s.window.width == 0)
+                if (settings.width == 0)
                 {
-                    s.window.width = 1280;
+                    settings.width = 1280;
                 }
-                if (s.window.height == 0)
+                if (settings.height == 0)
                 {
-                    s.window.height = 720;
+                    settings.height = 720;
                 }
-                s.window.mode = core::window_mode::windowed;
+                settings.mode = core::window_mode::windowed;
                 LOG_WRN("SDL_GetCurrentDisplayMode failed (%s); falling back to %ux%u windowed",
                         SDL_GetError(),
-                        s.window.width,
-                        s.window.height);
+                        settings.width,
+                        settings.height);
             }
         }
         // Vulkan owns presentation through vkQueuePresentKHR; the window
@@ -138,7 +134,7 @@ namespace rendering_engine
         // matches the display's native pixel grid instead of a scaled logical
         // size — pixel_size() is what the swapchain follows.
         window_flags |= SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY;
-        const core::window_mode mode{s.window.mode};
+        const core::window_mode mode{settings.mode};
 
         bool fullscreen = false;
         if (mode == core::window_mode::borderless)
@@ -153,12 +149,12 @@ namespace rendering_engine
         }
 
         LOG_INF("Creating window: title='%s' size=%ux%u mode=%s",
-                s.window.title.c_str(),
-                s.window.width,
-                s.window.height,
+                settings.title.c_str(),
+                settings.width,
+                settings.height,
                 core::window_mode_name(mode));
 
-        m_window.reset(SDL_CreateWindow(s.window.title.c_str(), s.window.width, s.window.height, window_flags));
+        m_window.reset(SDL_CreateWindow(settings.title.c_str(), settings.width, settings.height, window_flags));
 
         if (m_window == nullptr)
         {
@@ -192,12 +188,51 @@ namespace rendering_engine
         }
         SDL_QuitSubSystem(SDL_INIT_VIDEO);
 
-        LOG_INF("Quit rendering_engine::window");
+        LOG_INF("Quit platform::window");
     }
 
     SDL_Window* window::sdl_window() const noexcept
     {
         return m_window.get();
+    }
+
+    std::vector<const char*> window::vulkan_instance_extensions() const
+    {
+        std::vector<const char*> extensions;
+        if (m_window == nullptr)
+        {
+            return extensions;
+        }
+        Uint32 count = 0;
+        const char* const* names = SDL_Vulkan_GetInstanceExtensions(&count);
+        if (names != nullptr)
+        {
+            extensions.assign(names, names + count);
+        }
+        return extensions;
+    }
+
+    bool window::create_vulkan_surface(void* native_window, void* instance, void* surface)
+    {
+        if (!SDL_Vulkan_CreateSurface(static_cast<SDL_Window*>(native_window),
+                                      static_cast<VkInstance>(instance),
+                                      nullptr,
+                                      static_cast<VkSurfaceKHR*>(surface)))
+        {
+            LOG_FTL("SDL_Vulkan_CreateSurface failed: %s", SDL_GetError());
+            return false;
+        }
+        return true;
+    }
+
+    void window::destroy_vulkan_surface(void* instance, void* surface)
+    {
+        SDL_Vulkan_DestroySurface(static_cast<VkInstance>(instance), *static_cast<VkSurfaceKHR*>(surface), nullptr);
+    }
+
+    void window::set_event_filter(event_filter filter)
+    {
+        m_event_filter = std::move(filter);
     }
 
     void window::show_message(const std::string& title, const std::string& message, message_severity severity)
@@ -281,30 +316,24 @@ namespace rendering_engine
         return m_minimized;
     }
 
-    void window::tick()
+    void window::tick(core::event_bus& bus)
     {
         SDL_Event event{};
-
-        auto& eng = runtime::current_engine();
-        auto& bus = *eng.events;
 
         SDL_PumpEvents();
         while (SDL_PollEvent(&event))
         {
-            // Let the debug UI see every event first. When a debug panel
-            // has focus it captures the matching input class so the same
-            // click / keystroke does not also drive the camera or game
-            // modules. Both calls are no-ops in release builds.
-            editor::process_event(&event);
-            const bool ui_wants_keyboard = editor::wants_keyboard();
-            const bool ui_wants_mouse = editor::wants_mouse();
+            // The filter sees every event first. While it captures an input
+            // class (a focused debug panel, say), the same click / keystroke
+            // does not also drive the camera or game modules.
+            const input_capture capture = m_event_filter ? m_event_filter(&event) : input_capture{};
 
             switch (event.type)
             {
             case SDL_EVENT_KEY_DOWN:
             case SDL_EVENT_KEY_UP:
             {
-                if (ui_wants_keyboard)
+                if (capture.keyboard)
                 {
                     break;
                 }
@@ -329,7 +358,7 @@ namespace rendering_engine
             case SDL_EVENT_MOUSE_BUTTON_DOWN:
             case SDL_EVENT_MOUSE_BUTTON_UP:
             {
-                if (ui_wants_mouse)
+                if (capture.mouse)
                 {
                     break;
                 }
@@ -363,7 +392,7 @@ namespace rendering_engine
 
             case SDL_EVENT_MOUSE_MOTION:
             {
-                if (ui_wants_mouse)
+                if (capture.mouse)
                 {
                     break;
                 }
@@ -381,7 +410,7 @@ namespace rendering_engine
 
             case SDL_EVENT_MOUSE_WHEEL:
             {
-                if (ui_wants_mouse)
+                if (capture.mouse)
                 {
                     break;
                 }
@@ -396,7 +425,7 @@ namespace rendering_engine
 
             case SDL_EVENT_TEXT_INPUT:
             {
-                if (ui_wants_keyboard || event.text.text == nullptr)
+                if (capture.keyboard || event.text.text == nullptr)
                 {
                     break;
                 }
@@ -558,4 +587,4 @@ namespace rendering_engine
             }
         }
     } // namespace
-} // namespace rendering_engine
+} // namespace platform

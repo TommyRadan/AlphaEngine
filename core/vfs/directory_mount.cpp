@@ -6,7 +6,7 @@
 #include <system_error>
 #include <utility>
 
-#include <core/platform/platform.hpp>
+#include <core/os/os.hpp>
 
 namespace core
 {
@@ -19,27 +19,27 @@ namespace core
 
     std::string directory_mount::describe() const
     {
-        return "directory " + platform::path_to_utf8(m_root);
+        return "directory " + os::path_to_utf8(m_root);
     }
 
     bool directory_mount::exists(const std::string& relative) const
     {
-        return platform::file_exists(native_path(relative));
+        return os::file_exists(native_path(relative));
     }
 
     bool directory_mount::read(const std::string& relative, std::vector<std::byte>& out, std::string& error) const
     {
-        return platform::read_file(native_path(relative), out, &error);
+        return os::read_file(native_path(relative), out, &error);
     }
 
     std::filesystem::path directory_mount::native_path(const std::string& relative) const
     {
-        return m_root / platform::utf8_path(relative);
+        return m_root / os::utf8_path(relative);
     }
 
     std::optional<std::filesystem::file_time_type> directory_mount::last_write_time(const std::string& relative) const
     {
-        return platform::last_write_time(native_path(relative));
+        return os::last_write_time(native_path(relative));
     }
 
     bool directory_mount::writable() const
@@ -56,11 +56,10 @@ namespace core
             std::filesystem::create_directories(target.parent_path(), created);
             if (created)
             {
-                error = "cannot create directory " + platform::path_to_utf8(target.parent_path()) + ": " +
-                        created.message();
+                error = "cannot create directory " + os::path_to_utf8(target.parent_path()) + ": " + created.message();
                 return false;
             }
         }
-        return platform::write_file(target, data, size, &error);
+        return os::write_file(target, data, size, &error);
     }
 } // namespace core

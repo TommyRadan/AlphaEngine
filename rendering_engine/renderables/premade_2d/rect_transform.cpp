@@ -5,7 +5,7 @@
 
 #include <cmath>
 
-#include <rendering_engine/window.hpp>
+#include <platform/window.hpp>
 #include <runtime/engine.hpp>
 
 namespace rendering_engine
@@ -110,9 +110,9 @@ namespace rendering_engine
 
     core::math::vec2 window_to_pixels(const core::math::vec2& point)
     {
-        const window& win = *runtime::current_engine().window;
-        const window_extent logical = win.size();
-        const window_extent pixels = win.pixel_size();
+        const platform::window& win = *runtime::current_engine().window;
+        const platform::window_extent logical = win.size();
+        const platform::window_extent pixels = win.pixel_size();
         return window_to_pixels(point,
                                 core::math::vec2{static_cast<float>(logical.width), static_cast<float>(logical.height)},
                                 core::math::vec2{static_cast<float>(pixels.width), static_cast<float>(pixels.height)});
@@ -120,7 +120,7 @@ namespace rendering_engine
 
     ui_rect drawable_rect()
     {
-        const window_extent pixels = runtime::current_engine().window->pixel_size();
+        const platform::window_extent pixels = runtime::current_engine().window->pixel_size();
         ui_rect rect{};
         rect.max = core::math::vec2{static_cast<float>(pixels.width), static_cast<float>(pixels.height)};
         return rect;

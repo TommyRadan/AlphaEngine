@@ -5,9 +5,10 @@
 
 #include <core/event_engine.hpp>
 #include <core/log.hpp>
-#include <core/platform/platform.hpp>
+#include <core/os/os.hpp>
 #include <core/settings.hpp>
 #include <core/time.hpp>
+#include <platform/window.hpp>
 #include <rendering_engine/assets/asset_cache.hpp>
 #include <rendering_engine/assets/texture_asset.hpp>
 #include <rendering_engine/camera/camera_registry.hpp>
@@ -43,7 +44,6 @@
 #include <rendering_engine/passes/spot_shadow_pass.hpp>
 #include <rendering_engine/passes/ui_pass.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
-#include <rendering_engine/window.hpp>
 #include <runtime/engine.hpp>
 
 #include <algorithm>
@@ -118,8 +118,6 @@ void rendering_engine::renderer::init()
     LOG_INF("Init Rendering Engine");
 
     auto& eng = runtime::current_engine();
-    eng.window->init();
-    eng.gpu->init();
 
 #if _DEBUG
     // Debug builds watch the directory the shader library reads its
@@ -138,7 +136,7 @@ void rendering_engine::renderer::init()
     // drawable is measured in pixels rather than taken from the settings'
     // logical size: on a high-density display the two differ by the
     // display scale, and the swapchain and render targets follow pixels.
-    const window_extent drawable = eng.window->pixel_size();
+    const platform::window_extent drawable = eng.window->pixel_size();
     const uint32_t width = drawable.width;
     const uint32_t height = drawable.height;
     eng.gpu->resize_swapchain(width, height);
@@ -413,7 +411,8 @@ void rendering_engine::renderer::quit()
     auto& eng = runtime::current_engine();
 
     // The teardown walks the members from the last declared to the first
-    // (see renderer.hpp), ahead of the device and the window.
+    // (see renderer.hpp); the engine takes the device and the window down
+    // after it.
 
     // Stop tracking window resizes before the device the listener
     // resizes goes away.
@@ -474,9 +473,6 @@ void rendering_engine::renderer::quit()
     // cameras, since there is no drawable to match now. Every renderable,
     // pass and helper that pointed into its registries is gone.
     m_world.quit();
-
-    eng.gpu->quit();
-    eng.window->quit();
 
     LOG_INF("Quit Rendering Engine");
 }
@@ -900,7 +896,7 @@ void rendering_engine::renderer::update_grading_lut()
     std::shared_ptr<texture_asset> lut;
     try
     {
-        lut = eng.assets->load_texture(core::platform::utf8_path(path), gpu::color_space::linear);
+        lut = eng.assets->load_texture(core::os::utf8_path(path), gpu::color_space::linear);
     }
     catch (const std::exception& error)
     {

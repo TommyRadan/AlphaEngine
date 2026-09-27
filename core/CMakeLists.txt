@@ -32,5 +32,5 @@ target_sources(AlphaEngine PRIVATE
 
 add_subdirectory(audio)
 add_subdirectory(math)
-add_subdirectory(platform)
+add_subdirectory(os)
 add_subdirectory(vfs)

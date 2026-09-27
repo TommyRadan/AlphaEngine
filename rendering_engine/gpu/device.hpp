@@ -24,6 +24,7 @@
 #include <rendering_engine/gpu/pipeline.hpp>
 #include <rendering_engine/gpu/render_target.hpp>
 #include <rendering_engine/gpu/shader.hpp>
+#include <rendering_engine/gpu/surface.hpp>
 #include <rendering_engine/gpu/texture.hpp>
 #include <rendering_engine/gpu/types.hpp>
 
@@ -133,9 +134,12 @@ namespace rendering_engine::gpu
         // every translation unit that includes this header.
         virtual ~device();
 
-        // Bring the backend up. Must be called once after the window
+        // Bring the backend up against the window @p surface describes,
+        // with @p frames_in_flight frame slots (clamped to what the
+        // backend supports; fixed for the device's lifetime, see
+        // @ref frames_in_flight). Must be called once, while that window
         // is alive. Throws on failure.
-        virtual void init() = 0;
+        virtual void init(const surface_desc& surface, uint32_t frames_in_flight) = 0;
 
         // Tear the backend down. Resources still alive at this
         // point are released by the backend.
@@ -343,9 +347,9 @@ namespace rendering_engine::gpu
 
         // Frames the backend may have in flight at once: how many
         // frames' command buffers can be executing or queued while the
-        // renderer records the next. The Vulkan backend reads
-        // @c core::graphics_settings::frames_in_flight at init. Fixed
-        // for the device's lifetime.
+        // renderer records the next: the count @ref init was given
+        // (the engine passes @c core::graphics_settings::frames_in_flight),
+        // clamped to the backend's ring. Fixed for the device's lifetime.
         virtual uint32_t frames_in_flight() const noexcept = 0;
 
         // The slot, in [0, @ref frames_in_flight), the current frame
@@ -423,6 +427,6 @@ namespace rendering_engine::gpu
 
     // Construct a concrete device for the requested backend. The
     // returned device is in a not-yet-initialised state — the caller
-    // must invoke @c init() once the window is live.
+    // must invoke @c init() with the live window's surface.
     std::unique_ptr<device> create_device(backend_type type);
 } // namespace rendering_engine::gpu
