@@ -251,6 +251,17 @@ void runtime::node::remove_all_components()
     release_components();
 }
 
+std::vector<std::type_index> runtime::node::component_types() const
+{
+    std::vector<std::type_index> types;
+    types.reserve(m_components.size());
+    for (const component_entry& entry : m_components)
+    {
+        types.push_back(entry.type);
+    }
+    return types;
+}
+
 void runtime::node::copy_components_from(node& source)
 {
     if (source.m_store == nullptr || m_store == nullptr)

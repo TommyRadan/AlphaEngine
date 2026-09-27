@@ -110,6 +110,13 @@ void rendering_engine::util::transform::set_trs(const core::math::trs& pose)
     mark_local_dirty();
 }
 
+void rendering_engine::util::transform::set_quaternion_exact(const core::math::quat& rotation)
+{
+    m_quaternion = rotation;
+    m_rotation = core::math::euler_from_quat(m_quaternion);
+    mark_local_dirty();
+}
+
 void rendering_engine::util::transform::look_at(const core::math::vec3& target, const core::math::vec3& up)
 {
     const core::math::vec3 direction = target - m_position;

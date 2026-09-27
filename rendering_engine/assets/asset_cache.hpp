@@ -232,6 +232,16 @@ namespace rendering_engine
                                                        const std::function<mesh_data()>& builder);
 
         /**
+         * @brief The live mesh cached under @p key, or @c nullptr; never
+         *        builds one.
+         *
+         * For a caller that holds only a key (a scene file's mesh reference,
+         * see @ref mesh_asset::key) and so has no builder to hand
+         * @ref get_or_create_mesh.
+         */
+        std::shared_ptr<mesh_asset> find_mesh(const std::string& key) const;
+
+        /**
          * @brief Drops cache entries whose asset is no longer referenced.
          *
          * Sweeps the weak indices and erases any whose @c shared_ptr count has

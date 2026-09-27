@@ -445,6 +445,7 @@ namespace rendering_engine
 
         auto& gpu = asset_device();
         auto asset = std::make_shared<mesh_asset>();
+        asset->key = key;
 
         gpu::buffer_descriptor vertex_descriptor{};
         vertex_descriptor.size = data.vertex_bytes.size();
@@ -487,6 +488,12 @@ namespace rendering_engine
         }
         m_meshes[key] = asset;
         return asset;
+    }
+
+    std::shared_ptr<mesh_asset> asset_cache::find_mesh(const std::string& key) const
+    {
+        std::shared_lock lock{m_mutex};
+        return find_live(m_meshes, key);
     }
 
     std::size_t asset_cache::collect_unused()

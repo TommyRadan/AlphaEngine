@@ -408,6 +408,16 @@ namespace runtime
          */
         void remove_all_components();
 
+        /**
+         * @brief The type of every component on this node, in the order they
+         *        were added (a replaced component counts as added last).
+         *
+         * For code that walks a node's components without naming their
+         * types, such as the scene serializer, which maps each one to its
+         * registered name (runtime/reflection.hpp).
+         */
+        std::vector<std::type_index> component_types() const;
+
     private:
         // The scene applies deferred commands against these and owns the
         // pool slot, name and visit bookkeeping.

@@ -11,10 +11,12 @@ target_sources(AlphaEngine PRIVATE
     camera_component.hpp
     collider_component.cpp
     collider_component.hpp
+    component_types.cpp
     light_component.cpp
     light_component.hpp
     mesh_component.cpp
     mesh_component.hpp
+    placeholder_component.hpp
     renderable_component.cpp
     renderable_component.hpp
     rigidbody_component.cpp

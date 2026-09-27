@@ -111,6 +111,12 @@ namespace
     // the scene only while its node is enabled.
     struct orbiting_sun final : runtime::behavior
     {
+        // Saved with the scene: the orbit's rate and where along it the sun is.
+        static void reflect(runtime::type_builder<orbiting_sun>& type)
+        {
+            type.field("speed", &orbiting_sun::m_speed).field("angle", &orbiting_sun::m_angle);
+        }
+
         orbiting_sun() : m_light{std::make_unique<rendering_engine::directional_light>()}
         {
             m_light->color = math::vec3{1.0f, 0.97f, 0.9f};
@@ -132,7 +138,7 @@ namespace
 
         void on_update(float delta_time) override
         {
-            m_angle += sun_orbit_speed * (delta_time / 1000.0f);
+            m_angle += m_speed * (delta_time / 1000.0f);
             aim();
         }
 
@@ -143,6 +149,7 @@ namespace
         }
 
         std::unique_ptr<rendering_engine::directional_light> m_light;
+        float m_speed{sun_orbit_speed}; // radians / second
         float m_angle{0.0f};
     };
 
@@ -157,6 +164,12 @@ namespace
         prop.add_component(runtime::renderable_component{std::move(shape)});
     }
 } // namespace
+
+REFLECT_TYPES()
+{
+    registry.register_behavior<shadow_field>("shadow_field");
+    registry.register_behavior<orbiting_sun>("orbiting_sun");
+}
 
 GAME_MODULE()
 {

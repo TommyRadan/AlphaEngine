@@ -28,6 +28,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 #include <vector>
 
 namespace core
@@ -51,5 +52,10 @@ namespace core
     {
         std::vector<float> samples;   // interleaved, k_mixer_channels floats per frame
         std::uint32_t frame_count{0}; // samples.size() / k_mixer_channels
+
+        // The VFS canonical identity (@c vfs::canonical_key) of the file
+        // @ref audio::load_clip decoded it from, or empty for a clip built
+        // in memory. A scene file names the clip's file through it.
+        std::string key;
     };
 } // namespace core

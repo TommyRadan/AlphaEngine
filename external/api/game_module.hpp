@@ -56,6 +56,23 @@
  * persistent scene); a module may load scenes of its own through
  * @c runtime::current_engine().scenes. A game-wide concern that belongs to
  * no object may still subscribe to the event bus from its bootstrap.
+ *
+ * A module names its behaviours in a @c REFLECT_TYPES() block
+ * (runtime/reflection.hpp) so scene files and prefabs can carry them. A
+ * behaviour marks the fields worth saving from a @c static @c reflect
+ * function, which reaches its private members:
+ * @code
+ * // In spinner:
+ * static void reflect(runtime::type_builder<spinner>& type)
+ * {
+ *     type.field("angle", &spinner::m_angle);
+ * }
+ *
+ * REFLECT_TYPES()
+ * {
+ *     registry.register_behavior<spinner>("spinner");
+ * }
+ * @endcode
  */
 
 #pragma once
@@ -63,6 +80,7 @@
 #include <runtime/components/behavior_component.hpp>
 #include <runtime/game_module.hpp>
 #include <runtime/node.hpp>
+#include <runtime/reflection.hpp>
 #include <runtime/scene_graph.hpp>
 
 /**

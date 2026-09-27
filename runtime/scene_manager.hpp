@@ -56,10 +56,10 @@ namespace runtime
      * - The **persistent scene** exists from construction to destruction and
      *   is never unloaded, so a @ref load_mode::single load leaves it alone:
      *   it is the place for what lives across levels.
-     * - @ref load makes a named scene. There is no scene file format yet, so
-     *   a freshly loaded scene is empty and the caller populates it (through
-     *   @c context::create_node); loading a name that is already loaded
-     *   returns that scene.
+     * - @ref load makes a named scene. A freshly loaded scene is empty and the
+     *   caller populates it (through @c context::create_node, or from a scene
+     *   file with @c runtime::load_scene, runtime/scene_serializer.hpp);
+     *   loading a name that is already loaded returns that scene.
      * - @ref unload quits and destroys a scene: its nodes are freed and their
      *   components unwind their renderer, light and camera registrations.
      *   Requested while a scene is updating (from a component hook, say), the

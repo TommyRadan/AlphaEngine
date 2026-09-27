@@ -235,6 +235,7 @@ namespace core
             return nullptr;
         }
 
+        clip->key = key;
         m_clips[key] = clip;
         return clip;
     }

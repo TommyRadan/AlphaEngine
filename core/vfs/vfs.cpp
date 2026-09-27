@@ -194,16 +194,20 @@ namespace core
 
     std::string vfs::canonical_key(const std::filesystem::path& path) const
     {
-        const std::filesystem::path resolved = resolve(path);
+        return canonical_form(resolve(path));
+    }
+
+    std::string vfs::canonical_form(const std::filesystem::path& native)
+    {
         std::error_code error;
-        std::filesystem::path canonical = std::filesystem::weakly_canonical(resolved, error);
+        std::filesystem::path canonical = std::filesystem::weakly_canonical(native, error);
         if (error)
         {
-            canonical = std::filesystem::absolute(resolved, error);
+            canonical = std::filesystem::absolute(native, error);
         }
         if (error)
         {
-            canonical = resolved;
+            canonical = native;
         }
         std::string key = canonical.lexically_normal().generic_string();
         if (platform::case_insensitive_paths())
@@ -211,6 +215,113 @@ namespace core
             key = platform::fold_path_case(std::move(key));
         }
         return key;
+    }
+
+    bool vfs::write_file(const std::filesystem::path& path, const void* data, std::size_t size, std::string* error)
+    {
+        std::string reason;
+        auto finish = [&](bool ok)
+        {
+            if (!ok && error != nullptr)
+            {
+                *error = reason;
+            }
+            return ok;
+        };
+
+        // A native target (absolute, or the working-directory fallback) gets
+        // its missing parent directories, as a mount's does.
+        auto write_native = [&](const std::filesystem::path& target)
+        {
+            std::error_code ignored;
+            if (target.has_parent_path())
+            {
+                std::filesystem::create_directories(target.parent_path(), ignored);
+            }
+            return platform::write_file(target, data, size, &reason);
+        };
+
+        if (is_native(path))
+        {
+            return finish(write_native(path));
+        }
+
+        const std::optional<std::string> relative = mount_relative(path);
+        if (!relative.has_value())
+        {
+            reason = "path escapes the mount";
+            return finish(false);
+        }
+        {
+            std::shared_lock lock{m_mutex};
+            vfs_mount* target = nullptr;
+            for (auto it = m_mounts.rbegin(); it != m_mounts.rend(); ++it)
+            {
+                if ((*it)->exists(*relative) && (*it)->writable())
+                {
+                    target = it->get();
+                    break;
+                }
+            }
+            if (target == nullptr)
+            {
+                for (auto it = m_mounts.rbegin(); it != m_mounts.rend(); ++it)
+                {
+                    if ((*it)->writable())
+                    {
+                        target = it->get();
+                        break;
+                    }
+                }
+            }
+            if (target != nullptr)
+            {
+                return finish(target->write(*relative, data, size, reason));
+            }
+        }
+
+        // No writable mount: the working-directory fallback reads use.
+        return finish(write_native(path));
+    }
+
+    bool vfs::write_text_file(const std::filesystem::path& path, std::string_view text, std::string* error)
+    {
+        return write_file(path, text.data(), text.size(), error);
+    }
+
+    std::optional<std::string> vfs::virtual_path(const std::filesystem::path& native) const
+    {
+        const std::string target = canonical_form(native);
+        std::shared_lock lock{m_mutex};
+        for (auto it = m_mounts.rbegin(); it != m_mounts.rend(); ++it)
+        {
+            const std::filesystem::path root = (*it)->native_path(std::string{});
+            if (root.empty())
+            {
+                continue;
+            }
+            std::string prefix = canonical_form(root);
+            while (!prefix.empty() && prefix.back() == '/')
+            {
+                prefix.pop_back();
+            }
+            if (target.size() <= prefix.size() + 1 || target.compare(0, prefix.size(), prefix) != 0 ||
+                target[prefix.size()] != '/')
+            {
+                continue;
+            }
+            std::string relative = target.substr(prefix.size() + 1);
+            // Under that path a read looks in the higher mounts first.
+            for (auto higher = m_mounts.rbegin(); higher != it; ++higher)
+            {
+                if ((*higher)->exists(relative))
+                {
+                    return std::nullopt;
+                }
+            }
+            return relative;
+        }
+        return std::nullopt;
     }
 
     std::optional<std::filesystem::file_time_type> vfs::last_write_time(const std::filesystem::path& path) const

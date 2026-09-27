@@ -52,6 +52,10 @@ namespace core
         std::filesystem::path native_path(const std::string& relative) const override;
         std::optional<std::filesystem::file_time_type> last_write_time(const std::string& relative) const override;
 
+        /** @brief A directory is writable: files are written under the root, which is created on demand. */
+        bool writable() const override;
+        bool write(const std::string& relative, const void* data, std::size_t size, std::string& error) override;
+
     private:
         std::filesystem::path m_root;
     };
