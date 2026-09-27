@@ -3,6 +3,8 @@ target_sources(AlphaEngine PRIVATE
     ambient_light.hpp
     directional_light.cpp
     directional_light.hpp
+    environment_probe.cpp
+    environment_probe.hpp
     light.cpp
     light.hpp
     lights_ubo.cpp

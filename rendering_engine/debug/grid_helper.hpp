@@ -22,8 +22,8 @@
 
 #pragma once
 
+#include <rendering_engine/assets/color.hpp>
 #include <rendering_engine/debug/line_helper.hpp>
-#include <rendering_engine/util/color.hpp>
 
 namespace rendering_engine::debug
 {
@@ -42,7 +42,7 @@ namespace rendering_engine::debug
         // construction.
         explicit grid_helper(float size = 10.0f,
                              int divisions = 10,
-                             util::color color = util::color{120, 120, 120, 255},
-                             util::color center_color = util::color{70, 70, 70, 255});
+                             color color = rendering_engine::color{120, 120, 120, 255},
+                             rendering_engine::color center_color = rendering_engine::color{70, 70, 70, 255});
     };
 } // namespace rendering_engine::debug

@@ -23,7 +23,7 @@
 #include <atomic>
 
 #include <core/math/math.hpp>
-#include <rendering_engine/util/transform.hpp>
+#include <core/math/transform.hpp>
 
 namespace
 {
@@ -37,71 +37,71 @@ namespace
     }
 } // namespace
 
-rendering_engine::util::transform::transform()
+core::transform::transform()
     : m_is_transform_matrix_dirty{true}, m_position{0.0f, 0.0f, 0.0f}, m_rotation{0.0f, 0.0f, 0.0f}, m_quaternion{},
       m_scale{1.0f, 1.0f, 1.0f}, m_parent{nullptr}, m_local_version{1}, m_world_version{0}, m_seen_local_version{0},
       m_seen_parent_world_version{0}
 {
 }
 
-void rendering_engine::util::transform::mark_local_dirty()
+void core::transform::mark_local_dirty()
 {
     m_is_transform_matrix_dirty = true;
     ++m_local_version;
 }
 
-void rendering_engine::util::transform::set_position(const core::math::vec3& position)
+void core::transform::set_position(const core::math::vec3& position)
 {
     m_position = position;
     mark_local_dirty();
 }
 
-void rendering_engine::util::transform::set_rotation(const core::math::vec3& rotation)
+void core::transform::set_rotation(const core::math::vec3& rotation)
 {
     m_rotation = rotation;
     m_quaternion = core::math::quat_from_euler(rotation);
     mark_local_dirty();
 }
 
-void rendering_engine::util::transform::set_quaternion(const core::math::quat& rotation)
+void core::transform::set_quaternion(const core::math::quat& rotation)
 {
     m_quaternion = core::math::normalize(rotation);
     m_rotation = core::math::euler_from_quat(m_quaternion);
     mark_local_dirty();
 }
 
-void rendering_engine::util::transform::set_scale(const core::math::vec3& scale)
+void core::transform::set_scale(const core::math::vec3& scale)
 {
     m_scale = scale;
     mark_local_dirty();
 }
 
-core::math::vec3 rendering_engine::util::transform::get_position() const
+core::math::vec3 core::transform::get_position() const
 {
     return m_position;
 }
 
-core::math::vec3 rendering_engine::util::transform::get_rotation() const
+core::math::vec3 core::transform::get_rotation() const
 {
     return m_rotation;
 }
 
-core::math::quat rendering_engine::util::transform::get_quaternion() const
+core::math::quat core::transform::get_quaternion() const
 {
     return m_quaternion;
 }
 
-core::math::vec3 rendering_engine::util::transform::get_scale() const
+core::math::vec3 core::transform::get_scale() const
 {
     return m_scale;
 }
 
-core::math::trs rendering_engine::util::transform::get_trs() const
+core::math::trs core::transform::get_trs() const
 {
     return core::math::trs{m_position, m_quaternion, m_scale};
 }
 
-void rendering_engine::util::transform::set_trs(const core::math::trs& pose)
+void core::transform::set_trs(const core::math::trs& pose)
 {
     m_position = pose.translation;
     m_quaternion = core::math::normalize(pose.rotation);
@@ -110,14 +110,14 @@ void rendering_engine::util::transform::set_trs(const core::math::trs& pose)
     mark_local_dirty();
 }
 
-void rendering_engine::util::transform::set_quaternion_exact(const core::math::quat& rotation)
+void core::transform::set_quaternion_exact(const core::math::quat& rotation)
 {
     m_quaternion = rotation;
     m_rotation = core::math::euler_from_quat(m_quaternion);
     mark_local_dirty();
 }
 
-void rendering_engine::util::transform::look_at(const core::math::vec3& target, const core::math::vec3& up)
+void core::transform::look_at(const core::math::vec3& target, const core::math::vec3& up)
 {
     const core::math::vec3 direction = target - m_position;
     if (core::math::length(direction) <= 0.0f)
@@ -132,22 +132,22 @@ void rendering_engine::util::transform::look_at(const core::math::vec3& target, 
     mark_local_dirty();
 }
 
-core::math::vec3 rendering_engine::util::transform::get_forward() const
+core::math::vec3 core::transform::get_forward() const
 {
     return core::math::normalize(m_quaternion * core::math::world_forward);
 }
 
-core::math::vec3 rendering_engine::util::transform::get_right() const
+core::math::vec3 core::transform::get_right() const
 {
     return core::math::normalize(m_quaternion * core::math::world_right);
 }
 
-core::math::vec3 rendering_engine::util::transform::get_up() const
+core::math::vec3 core::transform::get_up() const
 {
     return core::math::normalize(m_quaternion * core::math::world_up);
 }
 
-core::math::mat4 rendering_engine::util::transform::get_transform_matrix() const
+core::math::mat4 core::transform::get_transform_matrix() const
 {
     if (!m_is_transform_matrix_dirty)
     {
@@ -168,7 +168,7 @@ core::math::mat4 rendering_engine::util::transform::get_transform_matrix() const
     return m_transform_matrix;
 }
 
-core::math::mat4 rendering_engine::util::transform::get_world_matrix() const
+core::math::mat4 core::transform::get_world_matrix() const
 {
     const core::math::mat4 local = get_transform_matrix();
 
@@ -200,21 +200,21 @@ core::math::mat4 rendering_engine::util::transform::get_world_matrix() const
     return m_world_matrix;
 }
 
-uint64_t rendering_engine::util::transform::get_world_version() const
+uint64_t core::transform::get_world_version() const
 {
     // Resolving the matrix brings the stamp up to date with the inputs.
     (void)get_world_matrix();
     return m_world_version;
 }
 
-void rendering_engine::util::transform::set_parent(const transform* parent)
+void core::transform::set_parent(const transform* parent)
 {
     m_parent = parent;
     // Re-parenting changes the world inputs; force a world recompute next query.
     ++m_local_version;
 }
 
-const rendering_engine::util::transform* rendering_engine::util::transform::get_parent() const
+const core::transform* core::transform::get_parent() const
 {
     return m_parent;
 }

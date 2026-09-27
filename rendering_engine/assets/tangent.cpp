@@ -20,7 +20,7 @@
  * SOFTWARE.
  */
 
-#include <rendering_engine/mesh/tangent.hpp>
+#include <rendering_engine/assets/tangent.hpp>
 
 #include <algorithm>
 #include <cmath>

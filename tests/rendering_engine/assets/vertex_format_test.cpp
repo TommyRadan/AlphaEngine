@@ -1,4 +1,4 @@
-// Unit tests for the vertex_format table in rendering_engine/mesh/vertex.hpp:
+// Unit tests for the vertex_format table in rendering_engine/assets/vertex.hpp:
 // every vertex struct maps to its format with the matching stride, the named
 // strides pin the attribute offsets the built-in materials hard-code, the
 // compatibility relation admits exactly the prefix layouts, and
@@ -12,7 +12,7 @@
 #include <vector>
 
 #include <rendering_engine/assets/mesh_asset.hpp>
-#include <rendering_engine/mesh/vertex.hpp>
+#include <rendering_engine/assets/vertex.hpp>
 
 using rendering_engine::vertex_format;
 using rendering_engine::vertex_format_compatible;

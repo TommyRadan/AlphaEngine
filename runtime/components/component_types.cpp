@@ -96,7 +96,7 @@ namespace
     // unit length (hand-written) is normalised instead.
     constexpr float k_unit_tolerance = 1e-4f;
 
-    void restore_rotation(rendering_engine::util::transform& target, const math::quat& rotation)
+    void restore_rotation(core::transform& target, const math::quat& rotation)
     {
         const float length = std::sqrt(rotation.w * rotation.w + rotation.x * rotation.x + rotation.y * rotation.y +
                                        rotation.z * rotation.z);

@@ -192,7 +192,7 @@ void rendering_engine::instanced_mesh::set_instance_transform(uint32_t index, co
     m_world_bounds_dirty = true;
 }
 
-void rendering_engine::instanced_mesh::set_instance_color(uint32_t index, const util::color& color)
+void rendering_engine::instanced_mesh::set_instance_color(uint32_t index, const color& color)
 {
     if (index >= m_capacity)
     {

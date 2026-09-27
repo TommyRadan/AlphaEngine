@@ -25,9 +25,9 @@
 #include <vector>
 
 #include <core/math/math.hpp>
+#include <core/math/transform.hpp>
 #include <rendering_engine/debug/helper.hpp>
 #include <rendering_engine/renderables/line.hpp>
-#include <rendering_engine/util/transform.hpp>
 
 namespace rendering_engine::debug
 {
@@ -45,7 +45,7 @@ namespace rendering_engine::debug
         // World placement of the gizmo. Helpers that bake their geometry
         // around the origin (axes) use it; helpers that bake world-space
         // geometry directly (box, light, camera) leave it at identity.
-        util::transform transform;
+        core::transform transform;
 
         void upload() final;
         void collect_draw_items(std::vector<draw_item>& out) final;

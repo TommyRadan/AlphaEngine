@@ -24,10 +24,10 @@
 
 #include <utility>
 
+#include <rendering_engine/assets/color.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/gpu/texture.hpp>
 #include <rendering_engine/materials/material_template.hpp>
-#include <rendering_engine/util/color.hpp>
 
 namespace rendering_engine
 {
@@ -243,7 +243,7 @@ namespace rendering_engine
         }
     }
 
-    gpu::texture material::upload_map(const util::image& image, gpu::color_space space, gpu::address_mode address) const
+    gpu::texture material::upload_map(const image& image, gpu::color_space space, gpu::address_mode address) const
     {
         auto& gpu = device();
 
@@ -261,7 +261,7 @@ namespace rendering_engine
         gpu::texture map = gpu.create_texture(descriptor);
 
         const size_t pixel_bytes =
-            static_cast<size_t>(image.get_width()) * static_cast<size_t>(image.get_height()) * sizeof(util::color);
+            static_cast<size_t>(image.get_width()) * static_cast<size_t>(image.get_height()) * sizeof(color);
         gpu.write_texture(map, image.get_pixels(), pixel_bytes);
         gpu.generate_mipmaps(map);
         return map;

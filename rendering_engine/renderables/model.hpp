@@ -28,17 +28,17 @@
 
 #include <core/math/aabb.hpp>
 #include <core/math/mat4.hpp>
+#include <core/math/transform.hpp>
+#include <rendering_engine/assets/vertex.hpp>
 #include <rendering_engine/gpu/handle.hpp>
-#include <rendering_engine/mesh/mesh.hpp>
-#include <rendering_engine/mesh/vertex.hpp>
 #include <rendering_engine/renderables/per_draw_ring.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
-#include <rendering_engine/util/transform.hpp>
 
 namespace rendering_engine
 {
     struct material;
     struct mesh_asset;
+    struct mesh_data;
 
     struct model : public renderable
     {
@@ -48,12 +48,14 @@ namespace rendering_engine
         explicit model(material* mat);
         ~model() override;
 
-        rendering_engine::util::transform transform;
+        core::transform transform;
 
-        // Uploads a private copy of @p mesh owned by this model. Prefer
-        // @ref set_mesh to share a cached upload between models drawing the
-        // same geometry.
-        void upload_mesh(const rendering_engine::mesh& mesh);
+        // Uploads a private copy of @p mesh owned by this model: its vertex
+        // records (stride and format as the data declares them) and, when it
+        // carries any, its indices, which the model then draws indexed.
+        // Prefer @ref set_mesh to share a cached upload between models
+        // drawing the same geometry.
+        void upload_mesh(const mesh_data& mesh);
 
         // Draws geometry cached by @ref asset_cache instead of uploading a
         // private copy. The model holds a reference for as long as it draws the
@@ -121,6 +123,12 @@ namespace rendering_engine
         std::shared_ptr<mesh_asset> m_mesh;
 
         gpu::buffer m_vertex_buffer{};
+
+        // Indices of the private upload, when its @ref mesh_data carried any;
+        // invalid otherwise, and the private buffer is drawn as a plain
+        // vertex array.
+        gpu::buffer m_index_buffer{};
+        uint32_t m_index_count{0};
 
         // The PerDraw block, recomputed when the transform moves, and its
         // slot in the per-draw ring while the material is rigid (on a

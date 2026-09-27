@@ -40,7 +40,7 @@
 #include <rendering_engine/gpu/shader_compiler.hpp>
 #include <rendering_engine/gpu/shader_hot_reload.hpp>
 #include <rendering_engine/gpu/shader_library.hpp>
-#include <rendering_engine/ibl/environment.hpp>
+#include <rendering_engine/lighting/environment_probe.hpp>
 #include <rendering_engine/materials/basic_material.hpp>
 #include <rendering_engine/materials/grid_material.hpp>
 #include <rendering_engine/materials/instanced_material.hpp>
@@ -1098,7 +1098,7 @@ rendering_engine::renderer::get_standard_material_template() const
     return m_standard_template;
 }
 
-void rendering_engine::renderer::set_environment(const environment* env)
+void rendering_engine::renderer::set_environment(const environment_probe* env)
 {
     m_environment = env;
 

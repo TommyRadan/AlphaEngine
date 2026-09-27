@@ -29,19 +29,19 @@
 
 #include <string>
 
+#include <rendering_engine/assets/font.hpp>
 #include <rendering_engine/gpu/handle.hpp>
-#include <rendering_engine/util/font.hpp>
 
 namespace rendering_engine
 {
     /**
-     * @brief A @c util::font loaded from a TTF file at a fixed pixel size,
+     * @brief A @c font loaded from a TTF file at a fixed pixel size,
      *        with its glyph atlas uploaded to the GPU.
      *
      * Produced by @ref asset_cache::load_font and handed out as a
      * @c std::shared_ptr, keyed on @c (path, size) so two callers asking for
      * the same face at the same size share one atlas. The constructor packs
-     * the face (see @ref util::font) and uploads the atlas once as an
+     * the face (see @ref font) and uploads the atlas once as an
      * @c rgba8_unorm texture — linear, so the coverage reaches the LDR
      * swapchain the UI composites onto with the bytes it was rasterized as —
      * sampled bilinearly without mipmaps (a mip level would blend packed
@@ -49,7 +49,7 @@ namespace rendering_engine
      * it, so the atlas lives exactly as long as the last handle; text
      * renderables hold one for as long as they draw.
      *
-     * Throws @c std::runtime_error, as @ref util::font does, when the file
+     * Throws @c std::runtime_error, as @ref font does, when the file
      * cannot be loaded. Non-copyable and non-movable: the GPU handle has a
      * single owner and is freed exactly once.
      */
@@ -64,9 +64,9 @@ namespace rendering_engine
         font_asset& operator=(font_asset&&) = delete;
 
         /** @brief The glyph metrics, kerning, vertical metrics and the CPU copy of the atlas. */
-        util::font font;
+        rendering_engine::font font;
 
-        /** @brief @ref util::font::atlas on the GPU; the uv rects in the glyph metrics address it. */
+        /** @brief @ref font::atlas on the GPU; the uv rects in the glyph metrics address it. */
         gpu::texture atlas{};
     };
 } // namespace rendering_engine

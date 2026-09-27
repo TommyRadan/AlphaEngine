@@ -27,11 +27,11 @@
 #include <vector>
 
 #include <core/math/vec2.hpp>
+#include <rendering_engine/assets/color.hpp>
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/materials/ui_material.hpp>
 #include <rendering_engine/renderables/premade_2d/rect_transform.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
-#include <rendering_engine/util/color.hpp>
 
 namespace rendering_engine
 {
@@ -57,7 +57,7 @@ namespace rendering_engine
         float rotation{0.0f};
         core::math::vec2 uv_min{0.0f, 0.0f};
         core::math::vec2 uv_max{1.0f, 1.0f};
-        util::color color{255, 255, 255, 255};
+        rendering_engine::color color{255, 255, 255, 255};
     };
 
     /**
@@ -115,7 +115,7 @@ namespace rendering_engine
          */
         void add(gpu::texture texture,
                  const rect_transform& rect,
-                 const util::color& color,
+                 const color& color,
                  const core::math::vec2& uv_min = core::math::vec2{0.0f, 0.0f},
                  const core::math::vec2& uv_max = core::math::vec2{1.0f, 1.0f});
 

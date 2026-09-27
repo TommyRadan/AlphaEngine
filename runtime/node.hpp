@@ -36,8 +36,8 @@
 
 #include <core/log.hpp>
 #include <core/math/math.hpp>
+#include <core/math/transform.hpp>
 #include <core/string_id.hpp>
-#include <rendering_engine/util/transform.hpp>
 #include <runtime/component.hpp>
 
 namespace runtime
@@ -109,7 +109,7 @@ namespace runtime
          * Its parent pointer is kept in sync with @ref add / @ref remove, so
          * @c transform.get_world_matrix() and @ref world_matrix agree.
          */
-        rendering_engine::util::transform transform;
+        core::transform transform;
 
         /** @brief Optional label, used by @ref find. Not required to be unique. */
         const core::string_id& name() const noexcept;

@@ -11,8 +11,8 @@
 #include <vector>
 
 #include <core/math/math.hpp>
-#include <rendering_engine/mesh/tangent.hpp>
-#include <rendering_engine/mesh/vertex.hpp>
+#include <rendering_engine/assets/tangent.hpp>
+#include <rendering_engine/assets/vertex.hpp>
 
 namespace math = core::math;
 using rendering_engine::generate_tangents;

@@ -24,12 +24,12 @@
 
 #include <memory>
 
+#include <rendering_engine/assets/color.hpp>
+#include <rendering_engine/assets/image.hpp>
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/gpu/types.hpp>
 #include <rendering_engine/materials/material.hpp>
 #include <rendering_engine/materials/material_template.hpp>
-#include <rendering_engine/util/color.hpp>
-#include <rendering_engine/util/image.hpp>
 
 namespace rendering_engine
 {
@@ -63,7 +63,7 @@ namespace rendering_engine
         // Tint multiplied into every point's colour (white leaves the
         // per-point colour unchanged). Alpha participates when the
         // material is transparent.
-        void set_color(const util::color& color);
+        void set_color(const color& color);
 
         // Point size. When @ref set_size_attenuation is off this is the
         // sprite diameter in pixels; when on it is the size at one unit
@@ -81,7 +81,7 @@ namespace rendering_engine
         // authored in: sRGB by default (uploaded as @c rgba8_srgb so it
         // modulates the linear point colour correctly); pass @c linear
         // for an already-linear mask.
-        void set_sprite(const util::image& image, gpu::color_space space = gpu::color_space::srgb);
+        void set_sprite(const image& image, gpu::color_space space = gpu::color_space::srgb);
 
         // Drop the sprite texture; points fall back to flat square
         // sprites tinted by their colour. No-op when no sprite is set.
@@ -97,7 +97,7 @@ namespace rendering_engine
         // per-material UBO.
         void upload_params();
 
-        util::color m_color{255, 255, 255, 255};
+        color m_color{255, 255, 255, 255};
         float m_size{4.0f};
         bool m_size_attenuation{false};
         gpu::buffer m_material_ubo{};

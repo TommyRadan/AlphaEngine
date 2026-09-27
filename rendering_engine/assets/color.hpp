@@ -24,7 +24,7 @@
 
 #include <cstdint>
 
-namespace rendering_engine::util
+namespace rendering_engine
 {
     struct color
     {
@@ -37,5 +37,5 @@ namespace rendering_engine::util
     // Pixel buffers are handed to the GPU as tightly packed RGBA8 texels
     // (width * height * sizeof(color) bytes), so the struct must be exactly
     // four bytes with no padding.
-    static_assert(sizeof(color) == 4, "util::color must be a packed 4-byte RGBA8 texel");
-} // namespace rendering_engine::util
+    static_assert(sizeof(color) == 4, "color must be a packed 4-byte RGBA8 texel");
+} // namespace rendering_engine

@@ -29,9 +29,9 @@
 #include <core/log.hpp>
 #include <core/settings.hpp>
 #include <core/time.hpp>
+#include <rendering_engine/assets/color.hpp>
 #include <rendering_engine/debug_ui/imgui_layer.hpp>
 #include <rendering_engine/sdl_input.hpp>
-#include <rendering_engine/util/color.hpp>
 #include <rendering_engine/window.hpp>
 #include <runtime/engine.hpp>
 #include <SDL3/SDL.h>

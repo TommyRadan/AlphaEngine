@@ -32,11 +32,11 @@
 #include <core/log.hpp>
 #include <core/math/math.hpp>
 #include <rendering_engine/assets/asset_cache.hpp>
+#include <rendering_engine/assets/tangent.hpp>
+#include <rendering_engine/assets/vertex.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/materials/material.hpp>
-#include <rendering_engine/mesh/tangent.hpp>
-#include <rendering_engine/mesh/vertex.hpp>
 #include <rendering_engine/renderables/mesh_bounds.hpp>
 #include <rendering_engine/renderables/per_draw_ring.hpp>
 #include <rendering_engine/renderables/vertex_format_check.hpp>

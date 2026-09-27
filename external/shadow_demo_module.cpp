@@ -23,6 +23,7 @@
 #include "api/game_module.hpp"
 
 #include <core/math/math.hpp>
+#include <rendering_engine/assets/color.hpp>
 #include <rendering_engine/lighting/ambient_light.hpp>
 #include <rendering_engine/lighting/directional_light.hpp>
 #include <rendering_engine/materials/standard_material.hpp>
@@ -30,7 +31,6 @@
 #include <rendering_engine/renderables/premade_3d/plane.hpp>
 #include <rendering_engine/renderables/premade_3d/sphere.hpp>
 #include <rendering_engine/renderer.hpp>
-#include <rendering_engine/util/color.hpp>
 #include <runtime/components/light_component.hpp>
 #include <runtime/components/renderable_component.hpp>
 #include <runtime/engine.hpp>
@@ -94,7 +94,7 @@ namespace
     // are its children, so the scene frees them before it.
     struct shadow_field final : runtime::behavior
     {
-        rendering_engine::standard_material* make_material(const rendering_engine::util::color& base, float roughness)
+        rendering_engine::standard_material* make_material(const rendering_engine::color& base, float roughness)
         {
             auto material = runtime::current_engine().renderer->create_standard_material();
             material->set_base_color(base);
@@ -192,21 +192,18 @@ GAME_MODULE()
     // A wide, neutral ground plane to catch the shadows. World up is +Z,
     // so the plane's default +Z normal already faces the sky.
     rendering_engine::standard_material* ground_material =
-        field->make_material(rendering_engine::util::color{185, 188, 195, 255}, 0.95f);
+        field->make_material(rendering_engine::color{185, 188, 195, 255}, 0.95f);
     spawn_prop(scene,
                demo,
                math::vec3{6.0f, 0.0f, ground_z},
                std::make_unique<rendering_engine::plane>(ground_material, 60.0f, 60.0f));
 
     // A few coloured surfaces shared across the field.
-    rendering_engine::standard_material* warm =
-        field->make_material(rendering_engine::util::color{230, 126, 34, 255}, 0.55f);
-    rendering_engine::standard_material* cool =
-        field->make_material(rendering_engine::util::color{52, 152, 219, 255}, 0.4f);
-    rendering_engine::standard_material* pale =
-        field->make_material(rendering_engine::util::color{236, 240, 241, 255}, 0.7f);
+    rendering_engine::standard_material* warm = field->make_material(rendering_engine::color{230, 126, 34, 255}, 0.55f);
+    rendering_engine::standard_material* cool = field->make_material(rendering_engine::color{52, 152, 219, 255}, 0.4f);
+    rendering_engine::standard_material* pale = field->make_material(rendering_engine::color{236, 240, 241, 255}, 0.7f);
     rendering_engine::standard_material* pillar_material =
-        field->make_material(rendering_engine::util::color{120, 200, 140, 255}, 0.6f);
+        field->make_material(rendering_engine::color{120, 200, 140, 255}, 0.6f);
 
     // A grid of unit spheres spread across the plane. The camera looks
     // from -X, so the grid recedes along +X and spreads across +/-Y. It is

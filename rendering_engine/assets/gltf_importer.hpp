@@ -38,11 +38,11 @@
 #include <core/math/math.hpp>
 #include <rendering_engine/animation/animation_clip.hpp>
 #include <rendering_engine/animation/skeleton.hpp>
+#include <rendering_engine/assets/image.hpp>
 #include <rendering_engine/assets/mesh_asset.hpp>
 #include <rendering_engine/assets/texture_asset.hpp>
 #include <rendering_engine/gpu/types.hpp>
 #include <rendering_engine/materials/standard_material.hpp>
-#include <rendering_engine/util/image.hpp>
 
 namespace rendering_engine
 {
@@ -146,19 +146,19 @@ namespace rendering_engine
         gpu::color_space base_color_space{gpu::color_space::srgb};
 
         // Decoded maps, or nullptr when the material has none.
-        const util::image* base_color_map{nullptr};
-        const util::image* normal_map{nullptr};
+        const image* base_color_map{nullptr};
+        const image* normal_map{nullptr};
 
         // The packed metallicRoughnessTexture: G roughness, B metallic. Its
         // R channel is occlusion only when @ref occlusion_map points at the
         // same image (glTF's usual ORM packing).
-        const util::image* metallic_roughness_map{nullptr};
+        const image* metallic_roughness_map{nullptr};
 
         // The occlusionTexture (R channel), which may be the very image
         // @ref metallic_roughness_map names; nullptr without one.
-        const util::image* occlusion_map{nullptr};
+        const image* occlusion_map{nullptr};
 
-        const util::image* emissive_map{nullptr};
+        const image* emissive_map{nullptr};
 
         // occlusionTexture.strength; 1 when @ref occlusion_map is null.
         float occlusion_strength{1.0f};

@@ -29,7 +29,7 @@
 
 namespace rendering_engine::debug
 {
-    grid_helper::grid_helper(float size, int divisions, util::color color, util::color center_color)
+    grid_helper::grid_helper(float size, int divisions, color color, rendering_engine::color center_color)
         : line_helper("Grid")
     {
         namespace math = core::math;

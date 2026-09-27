@@ -28,10 +28,10 @@
 #include <vector>
 
 #include <core/math/math.hpp>
+#include <rendering_engine/assets/color.hpp>
 #include <rendering_engine/materials/line_material.hpp>
 #include <rendering_engine/renderables/line.hpp>
 #include <rendering_engine/renderer.hpp>
-#include <rendering_engine/util/color.hpp>
 #include <runtime/components/renderable_component.hpp>
 #include <runtime/engine.hpp>
 
@@ -61,7 +61,7 @@ namespace
 GAME_MODULE()
 {
     auto& material = runtime::current_engine().renderer->get_line_material();
-    material.set_color(rendering_engine::util::color{255, 255, 255, 255});
+    material.set_color(rendering_engine::color{255, 255, 255, 255});
 
     // Sample a vertical helix and colour each vertex along the way so the
     // strip reads as a continuous rainbow ribbon.

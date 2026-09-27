@@ -41,7 +41,7 @@ rendering_engine::camera::~camera()
 
 void rendering_engine::camera::look_at(const core::math::vec3& target, const core::math::vec3& up)
 {
-    const util::transform* parent = transform.get_parent();
+    const core::transform* parent = transform.get_parent();
     if (parent == nullptr)
     {
         transform.look_at(target, up);

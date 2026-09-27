@@ -29,10 +29,10 @@
 #include <vector>
 
 #include <core/math/math.hpp>
+#include <rendering_engine/assets/color.hpp>
 #include <rendering_engine/materials/points_material.hpp>
 #include <rendering_engine/renderables/points.hpp>
 #include <rendering_engine/renderer.hpp>
-#include <rendering_engine/util/color.hpp>
 #include <runtime/components/renderable_component.hpp>
 #include <runtime/engine.hpp>
 
@@ -64,7 +64,7 @@ GAME_MODULE()
     auto& material = runtime::current_engine().renderer->get_points_material();
     material.set_size(6.0f);
     material.set_size_attenuation(true);
-    material.set_color(rendering_engine::util::color{255, 255, 255, 255});
+    material.set_color(rendering_engine::color{255, 255, 255, 255});
 
     // Scatter points evenly over a unit sphere with the Fibonacci
     // spiral, colouring each by its position so the cloud reads in 3D.

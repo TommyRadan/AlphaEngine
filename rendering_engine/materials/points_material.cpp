@@ -104,7 +104,7 @@ namespace rendering_engine
         }
     }
 
-    void points_material::set_color(const util::color& color)
+    void points_material::set_color(const color& color)
     {
         m_color = color;
         upload_params();
@@ -122,7 +122,7 @@ namespace rendering_engine
         upload_params();
     }
 
-    void points_material::set_sprite(const util::image& image, gpu::color_space space)
+    void points_material::set_sprite(const image& image, gpu::color_space space)
     {
         release_map(m_sprite);
         m_sprite = upload_map(image, space, gpu::address_mode::clamp_edge);

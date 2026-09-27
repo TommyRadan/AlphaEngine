@@ -31,13 +31,13 @@
 
 #include <core/log.hpp>
 #include <core/math/math.hpp>
-#include <rendering_engine/ibl/environment.hpp>
+#include <rendering_engine/assets/color.hpp>
 #include <rendering_engine/lighting/directional_light.hpp>
+#include <rendering_engine/lighting/environment_probe.hpp>
 #include <rendering_engine/materials/standard_material.hpp>
 #include <rendering_engine/renderables/premade_3d/plane.hpp>
 #include <rendering_engine/renderables/premade_3d/sphere.hpp>
 #include <rendering_engine/renderer.hpp>
-#include <rendering_engine/util/color.hpp>
 #include <runtime/components/light_component.hpp>
 #include <runtime/components/renderable_component.hpp>
 #include <runtime/engine.hpp>
@@ -152,7 +152,8 @@ namespace
     // scene frees them before it.
     struct sky_showcase final : runtime::behavior
     {
-        sky_showcase() : m_environment{std::make_unique<rendering_engine::environment>(face_size, generate_sky_faces())}
+        sky_showcase()
+            : m_environment{std::make_unique<rendering_engine::environment_probe>(face_size, generate_sky_faces())}
         {
         }
 
@@ -179,7 +180,7 @@ namespace
 
     private:
         // Declared first so it is destroyed last, after the materials.
-        std::unique_ptr<rendering_engine::environment> m_environment;
+        std::unique_ptr<rendering_engine::environment_probe> m_environment;
         std::vector<std::unique_ptr<rendering_engine::standard_material>> m_materials;
     };
 
@@ -220,8 +221,8 @@ GAME_MODULE()
             // Crisp mirror at the left, fully rough at the right.
             const float roughness = 0.05f + 0.95f * static_cast<float>(col) / static_cast<float>(grid_columns - 1);
             material->set_roughness(roughness);
-            material->set_base_color(metal ? rendering_engine::util::color{245, 245, 245, 255}
-                                           : rendering_engine::util::color{220, 70, 50, 255});
+            material->set_base_color(metal ? rendering_engine::color{245, 245, 245, 255}
+                                           : rendering_engine::color{220, 70, 50, 255});
 
             const float y = (static_cast<float>(col) - static_cast<float>(grid_columns - 1) * 0.5f) * grid_spacing;
             const float z = (static_cast<float>(grid_rows - 1) * 0.5f - static_cast<float>(row)) * grid_row_height;
@@ -238,7 +239,7 @@ GAME_MODULE()
     rendering_engine::standard_material* ground_material = sky->make_material();
     ground_material->set_metalness(0.0f);
     ground_material->set_roughness(0.9f);
-    ground_material->set_base_color(rendering_engine::util::color{180, 180, 185, 255});
+    ground_material->set_base_color(rendering_engine::color{180, 180, 185, 255});
     spawn_prop(scene,
                demo,
                math::vec3{0.0f, 0.0f, ground_z},

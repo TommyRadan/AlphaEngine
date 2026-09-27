@@ -28,13 +28,13 @@
 #include <initializer_list>
 #include <utility>
 
+#include <rendering_engine/assets/tangent.hpp>
 #include <rendering_engine/assets/texture_asset.hpp>
+#include <rendering_engine/assets/vertex.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/gpu/shader_bindings.hpp>
-#include <rendering_engine/ibl/environment.hpp>
-#include <rendering_engine/mesh/tangent.hpp>
-#include <rendering_engine/mesh/vertex.hpp>
+#include <rendering_engine/lighting/environment_probe.hpp>
 #include <rendering_engine/renderables/per_draw_ubo.hpp>
 
 namespace
@@ -179,7 +179,7 @@ namespace rendering_engine
         }
     }
 
-    void standard_material::set_base_color(const util::color& color)
+    void standard_material::set_base_color(const color& color)
     {
         m_base_color = color;
         upload_params();
@@ -197,7 +197,7 @@ namespace rendering_engine
         upload_params();
     }
 
-    void standard_material::set_emissive(const util::color& color)
+    void standard_material::set_emissive(const color& color)
     {
         m_emissive = color;
         upload_params();
@@ -209,7 +209,7 @@ namespace rendering_engine
         upload_params();
     }
 
-    void standard_material::set_albedo_map(const util::image& image, gpu::color_space space)
+    void standard_material::set_albedo_map(const image& image, gpu::color_space space)
     {
         set_slot_image(m_albedo_map, image, space);
     }
@@ -224,7 +224,7 @@ namespace rendering_engine
         clear_slot(m_albedo_map);
     }
 
-    void standard_material::set_normal_map(const util::image& image, gpu::color_space space)
+    void standard_material::set_normal_map(const image& image, gpu::color_space space)
     {
         set_slot_image(m_normal_map, image, space);
     }
@@ -239,7 +239,7 @@ namespace rendering_engine
         clear_slot(m_normal_map);
     }
 
-    void standard_material::set_metalness_map(const util::image& image, gpu::color_space space)
+    void standard_material::set_metalness_map(const image& image, gpu::color_space space)
     {
         set_slot_image(m_metalness_map, image, space);
     }
@@ -254,7 +254,7 @@ namespace rendering_engine
         clear_slot(m_metalness_map);
     }
 
-    void standard_material::set_roughness_map(const util::image& image, gpu::color_space space)
+    void standard_material::set_roughness_map(const image& image, gpu::color_space space)
     {
         set_slot_image(m_roughness_map, image, space);
     }
@@ -269,7 +269,7 @@ namespace rendering_engine
         clear_slot(m_roughness_map);
     }
 
-    void standard_material::set_occlusion_map(const util::image& image, gpu::color_space space)
+    void standard_material::set_occlusion_map(const image& image, gpu::color_space space)
     {
         set_slot_image(m_occlusion_map, image, space);
     }
@@ -284,7 +284,7 @@ namespace rendering_engine
         clear_slot(m_occlusion_map);
     }
 
-    void standard_material::set_orm_map(const util::image& image, gpu::color_space space)
+    void standard_material::set_orm_map(const image& image, gpu::color_space space)
     {
         set_slot_image(m_orm_map, image, space);
     }
@@ -305,7 +305,7 @@ namespace rendering_engine
         upload_params();
     }
 
-    void standard_material::set_emissive_map(const util::image& image, gpu::color_space space)
+    void standard_material::set_emissive_map(const image& image, gpu::color_space space)
     {
         set_slot_image(m_emissive_map, image, space);
     }
@@ -337,7 +337,7 @@ namespace rendering_engine
         slot.generation = 0;
     }
 
-    void standard_material::set_slot_image(map_slot& slot, const util::image& image, gpu::color_space space)
+    void standard_material::set_slot_image(map_slot& slot, const image& image, gpu::color_space space)
     {
         release_slot(slot);
         slot.owned = upload_map(image, space);
@@ -387,7 +387,7 @@ namespace rendering_engine
         return true;
     }
 
-    void standard_material::set_environment(const environment& env)
+    void standard_material::set_environment(const environment_probe& env)
     {
         m_environment = &env;
         rebuild_bind_group();

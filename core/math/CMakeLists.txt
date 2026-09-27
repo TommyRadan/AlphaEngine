@@ -18,6 +18,8 @@ target_sources(AlphaEngine PRIVATE
     ray.hpp
     sphere.cpp
     sphere.hpp
+    transform.cpp
+    transform.hpp
     trs.cpp
     trs.hpp
     vec2.cpp

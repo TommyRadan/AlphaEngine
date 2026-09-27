@@ -25,8 +25,8 @@
 #include <cstdint>
 #include <vector>
 
+#include <rendering_engine/assets/vertex.hpp>
 #include <rendering_engine/gpu/shader.hpp>
-#include <rendering_engine/mesh/vertex.hpp>
 
 namespace rendering_engine
 {

@@ -40,11 +40,11 @@
 #include <core/platform/platform.hpp>
 #include <core/vfs/vfs.hpp>
 #include <rendering_engine/assets/asset_cache.hpp>
-#include <rendering_engine/mesh/tangent.hpp>
-#include <rendering_engine/mesh/vertex.hpp>
+#include <rendering_engine/assets/tangent.hpp>
+#include <rendering_engine/assets/vertex.hpp>
 
 // cgltf is a single-header library; this is its one implementation unit
-// (the same arrangement as stb_image in util/image.cpp).
+// (the same arrangement as stb_image in assets/image.cpp).
 #define CGLTF_IMPLEMENTATION
 #include "cgltf.h"
 
@@ -636,7 +636,7 @@ namespace rendering_engine
 
         // Index-aligned with data.images; an entry is decoded on first use
         // and left empty (with the failure remembered) when it cannot be.
-        std::vector<std::optional<util::image>> images;
+        std::vector<std::optional<image>> images;
         std::vector<bool> image_failed;
 
         // geometry[i][j] is primitive j of mesh i when prebuilt; the inner
@@ -656,7 +656,7 @@ namespace rendering_engine
 
         // The decoded pixels of image @p index, or nullptr when it cannot
         // be decoded (warned about once).
-        const util::image* decoded_image(std::size_t index)
+        const image* decoded_image(std::size_t index)
         {
             if (index >= images.size() || image_failed[index])
             {
@@ -675,7 +675,7 @@ namespace rendering_engine
             return &*images[index];
         }
 
-        std::optional<util::image> decode_image(const cgltf_image& image, std::size_t index)
+        std::optional<image> decode_image(const cgltf_image& image, std::size_t index)
         {
             try
             {
@@ -687,7 +687,7 @@ namespace rendering_engine
                         LOG_WRN("gltf: image %zu of '%s' has no buffer data", index, path_name());
                         return std::nullopt;
                     }
-                    return util::image{bytes, image.buffer_view->size};
+                    return rendering_engine::image{bytes, image.buffer_view->size};
                 }
                 if (const char* payload = data_uri_payload(image.uri); payload != nullptr)
                 {
@@ -697,7 +697,7 @@ namespace rendering_engine
                         LOG_WRN("gltf: image %zu of '%s' has a malformed data URI", index, path_name());
                         return std::nullopt;
                     }
-                    return util::image{bytes.data(), bytes.size()};
+                    return rendering_engine::image{bytes.data(), bytes.size()};
                 }
                 if (!is_file_uri(image.uri))
                 {
@@ -707,11 +707,11 @@ namespace rendering_engine
                             image.uri != nullptr ? image.uri : "none");
                     return std::nullopt;
                 }
-                return util::image{resolve_file_uri(base_dir, image.uri).string()};
+                return rendering_engine::image{resolve_file_uri(base_dir, image.uri).string()};
             }
             catch (const std::runtime_error&)
             {
-                // util::image already logged the decoder's reason.
+                // rendering_engine::image already logged the decoder's reason.
                 LOG_WRN("gltf: image %zu of '%s' could not be decoded; maps using it are skipped", index, path_name());
                 return std::nullopt;
             }
@@ -719,7 +719,7 @@ namespace rendering_engine
 
         // The map a texture view samples, decoded, or nullptr when the
         // view names no texture or its image failed to decode.
-        const util::image* map_image(const cgltf_texture_view& view, const char* slot)
+        const image* map_image(const cgltf_texture_view& view, const char* slot)
         {
             if (view.texture == nullptr || view.texture->image == nullptr)
             {
@@ -822,7 +822,7 @@ namespace rendering_engine
                     return nullptr; // the decoder logged why
                 }
             }
-            const util::image* decoded = ctx.decoded_image(index);
+            const rendering_engine::image* decoded = ctx.decoded_image(index);
             if (decoded == nullptr)
             {
                 return nullptr;
@@ -978,7 +978,7 @@ namespace rendering_engine
         std::shared_ptr<texture_asset> slot_texture(gltf_import& ctx,
                                                     asset_cache& cache,
                                                     const cgltf_texture_view& view,
-                                                    const util::image* image,
+                                                    const image* image,
                                                     gpu::color_space space)
         {
             if (image == nullptr)

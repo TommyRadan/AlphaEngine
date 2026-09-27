@@ -34,8 +34,8 @@
 namespace rendering_engine
 {
     struct material;
-    struct mesh;
     struct mesh_asset;
+    struct mesh_data;
 } // namespace rendering_engine
 
 namespace runtime
@@ -70,7 +70,7 @@ namespace runtime
          * Uploads the mesh immediately; the model is registered for drawing
          * later, in @ref on_attach, once the owning node is known.
          */
-        mesh_component(rendering_engine::material* material, const rendering_engine::mesh& mesh);
+        mesh_component(rendering_engine::material* material, const rendering_engine::mesh_data& mesh);
 
         /**
          * @brief Builds a model drawing a cached @p mesh with @p material.

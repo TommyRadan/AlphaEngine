@@ -24,10 +24,10 @@
 
 #include <memory>
 
+#include <core/math/transform.hpp>
 #include <rendering_engine/debug/helper.hpp>
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/renderables/per_draw_ring.hpp>
-#include <rendering_engine/util/transform.hpp>
 
 namespace rendering_engine
 {
@@ -69,7 +69,7 @@ namespace rendering_engine::debug
         // The grid sits at the world origin: an identity transform whose
         // PerDraw block is computed once and copied into the per-draw
         // ring each frame the grid draws.
-        util::transform m_transform;
+        core::transform m_transform;
         per_draw_binding m_per_draw;
     };
 } // namespace rendering_engine::debug

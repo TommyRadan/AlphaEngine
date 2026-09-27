@@ -26,7 +26,7 @@
 
 #include <core/math/math.hpp>
 
-namespace rendering_engine::util
+namespace core
 {
     struct transform
     {
@@ -125,4 +125,4 @@ namespace rendering_engine::util
         mutable uint64_t m_seen_local_version;
         mutable uint64_t m_seen_parent_world_version;
     };
-} // namespace rendering_engine::util
+} // namespace core

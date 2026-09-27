@@ -23,6 +23,7 @@
 #include "api/game_module.hpp"
 
 #include <core/math/math.hpp>
+#include <rendering_engine/assets/color.hpp>
 #include <rendering_engine/fog.hpp>
 #include <rendering_engine/lighting/ambient_light.hpp>
 #include <rendering_engine/lighting/directional_light.hpp>
@@ -30,7 +31,6 @@
 #include <rendering_engine/renderables/premade_3d/plane.hpp>
 #include <rendering_engine/renderables/premade_3d/sphere.hpp>
 #include <rendering_engine/renderer.hpp>
-#include <rendering_engine/util/color.hpp>
 #include <runtime/components/light_component.hpp>
 #include <runtime/components/renderable_component.hpp>
 #include <runtime/engine.hpp>
@@ -48,7 +48,7 @@ namespace
 {
     // Linear RGB the scene fades into; matched to the fog colour so the
     // receding plane and spheres melt into a uniform haze.
-    constexpr rendering_engine::util::color fog_color{90, 115, 160, 255};
+    constexpr rendering_engine::color fog_color{90, 115, 160, 255};
 
     // Holds the scene-wide fog on while its node is enabled, and clears it
     // when the node is disabled or destroyed.
@@ -91,8 +91,8 @@ namespace
 GAME_MODULE()
 {
     auto& material = runtime::current_engine().renderer->get_phong_material();
-    material.set_diffuse(rendering_engine::util::color{230, 126, 34, 255});
-    material.set_specular(rendering_engine::util::color{255, 255, 255, 255});
+    material.set_diffuse(rendering_engine::color{230, 126, 34, 255});
+    material.set_specular(rendering_engine::color{255, 255, 255, 255});
     material.set_shininess(48.0f);
 
     runtime::node& demo = scene.create_node("fog_demo");

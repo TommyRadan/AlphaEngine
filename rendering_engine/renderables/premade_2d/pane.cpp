@@ -48,18 +48,18 @@ void rendering_engine::pane::release_owned_texture()
     m_owns_texture = false;
 }
 
-void rendering_engine::pane::set_color(const rendering_engine::util::color& color)
+void rendering_engine::pane::set_color(const rendering_engine::color& color)
 {
     m_color = color;
     m_dirty = true;
 }
 
-const rendering_engine::util::color& rendering_engine::pane::get_color() const
+const rendering_engine::color& rendering_engine::pane::get_color() const
 {
     return m_color;
 }
 
-void rendering_engine::pane::set_image(const rendering_engine::util::image& image, gpu::color_space space)
+void rendering_engine::pane::set_image(const rendering_engine::image& image, gpu::color_space space)
 {
     // The batch still names the old texture until the next collect
     // rebuilds the quad; it draws nothing with it in between, and the
@@ -80,8 +80,8 @@ void rendering_engine::pane::set_image(const rendering_engine::util::image& imag
 
     auto& gpu = *runtime::current_engine().gpu;
     m_texture = gpu.create_texture(descriptor);
-    const std::size_t pixel_bytes = static_cast<std::size_t>(image.get_width()) *
-                                    static_cast<std::size_t>(image.get_height()) * sizeof(util::color);
+    const std::size_t pixel_bytes =
+        static_cast<std::size_t>(image.get_width()) * static_cast<std::size_t>(image.get_height()) * sizeof(color);
     gpu.write_texture(m_texture, image.get_pixels(), pixel_bytes);
     gpu.generate_mipmaps(m_texture);
     m_owns_texture = true;

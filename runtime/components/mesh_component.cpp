@@ -23,12 +23,12 @@
 #include <runtime/components/mesh_component.hpp>
 
 #include <core/log.hpp>
-#include <rendering_engine/mesh/mesh.hpp>
+#include <rendering_engine/assets/mesh_asset.hpp>
 #include <rendering_engine/renderer.hpp>
 #include <runtime/engine.hpp>
 #include <runtime/node.hpp>
 
-runtime::mesh_component::mesh_component(rendering_engine::material* material, const rendering_engine::mesh& mesh)
+runtime::mesh_component::mesh_component(rendering_engine::material* material, const rendering_engine::mesh_data& mesh)
     : m_model{std::make_unique<rendering_engine::model>(material)}, m_material{material}
 {
     m_model->upload_mesh(mesh);

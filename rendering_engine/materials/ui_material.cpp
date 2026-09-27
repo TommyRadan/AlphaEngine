@@ -109,7 +109,7 @@ namespace rendering_engine
         descriptor.address_v = gpu::address_mode::clamp_edge;
         descriptor.address_w = gpu::address_mode::clamp_edge;
         m_white_texture = device().create_texture(descriptor);
-        const util::color white{255, 255, 255, 255};
+        const color white{255, 255, 255, 255};
         device().write_texture(m_white_texture, &white, sizeof(white));
     }
 

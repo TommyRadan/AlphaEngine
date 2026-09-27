@@ -24,12 +24,12 @@
 
 #include <memory>
 
+#include <rendering_engine/assets/color.hpp>
+#include <rendering_engine/assets/image.hpp>
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/gpu/types.hpp>
 #include <rendering_engine/materials/material.hpp>
 #include <rendering_engine/materials/material_template.hpp>
-#include <rendering_engine/util/color.hpp>
-#include <rendering_engine/util/image.hpp>
 
 namespace rendering_engine
 {
@@ -58,7 +58,7 @@ namespace rendering_engine
 
         // Base colour tint. When an albedo texture is set the sampled
         // texel is multiplied by this tint (white leaves it unchanged).
-        void set_color(const util::color& color);
+        void set_color(const color& color);
 
         // Bind an albedo texture; the fragment shader switches to
         // sampling it (modulated by the tint). Replaces any previous
@@ -67,7 +67,7 @@ namespace rendering_engine
         // (the default), uploaded as @c rgba8_srgb so the sampler hands
         // the shader linear values; pass @c linear only for an image
         // whose bytes are already linear.
-        void set_albedo(const util::image& image, gpu::color_space space = gpu::color_space::srgb);
+        void set_albedo(const image& image, gpu::color_space space = gpu::color_space::srgb);
 
         // Drop the albedo texture; the material falls back to the flat
         // tint. No-op when no texture is set.
@@ -82,7 +82,7 @@ namespace rendering_engine
         // Push {color, useTexture} into the per-material UBO.
         void upload_params();
 
-        util::color m_color{255, 255, 255, 255};
+        color m_color{255, 255, 255, 255};
         gpu::buffer m_material_ubo{};
         gpu::texture m_albedo{};
     };

@@ -39,7 +39,7 @@ namespace core::math
      *
      * The matrix it stands for is @c translate(translation) *
      * to_mat4(rotation) * scale(scale) — scale first, then rotation, then
-     * translation — the order @c util::transform composes and glTF node
+     * translation — the order @c core::transform composes and glTF node
      * poses are authored in. A skeleton joint's bind pose and every sampled
      * animation pose are @c trs values.
      */

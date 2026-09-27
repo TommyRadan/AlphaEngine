@@ -24,7 +24,7 @@
 
 #include <cstdint>
 
-#include <rendering_engine/mesh/vertex.hpp>
+#include <rendering_engine/assets/vertex.hpp>
 
 namespace rendering_engine
 {

@@ -24,10 +24,10 @@
 
 #include <memory>
 
+#include <rendering_engine/assets/color.hpp>
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/materials/material.hpp>
 #include <rendering_engine/materials/material_template.hpp>
-#include <rendering_engine/util/color.hpp>
 
 namespace rendering_engine
 {
@@ -77,13 +77,13 @@ namespace rendering_engine
         // Tint multiplied into every vertex's colour (white leaves the
         // per-vertex colour unchanged). Alpha participates when the
         // material is transparent.
-        void set_color(const util::color& color);
+        void set_color(const color& color);
 
     private:
         // Push the tint colour into the per-material UBO.
         void upload_params();
 
-        util::color m_color{255, 255, 255, 255};
+        color m_color{255, 255, 255, 255};
         gpu::buffer m_material_ubo{};
     };
 } // namespace rendering_engine

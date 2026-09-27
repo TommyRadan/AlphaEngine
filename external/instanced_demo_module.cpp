@@ -25,11 +25,11 @@
 #include <core/log.hpp>
 #include <core/math/math.hpp>
 #include <rendering_engine/assets/asset_cache.hpp>
+#include <rendering_engine/assets/color.hpp>
+#include <rendering_engine/assets/vertex.hpp>
 #include <rendering_engine/materials/instanced_material.hpp>
-#include <rendering_engine/mesh/vertex.hpp>
 #include <rendering_engine/renderables/instanced_mesh.hpp>
 #include <rendering_engine/renderer.hpp>
-#include <rendering_engine/util/color.hpp>
 #include <runtime/components/renderable_component.hpp>
 #include <runtime/engine.hpp>
 
@@ -146,7 +146,7 @@ namespace
 GAME_MODULE()
 {
     auto& material = runtime::current_engine().renderer->get_instanced_material();
-    material.set_color(rendering_engine::util::color{255, 255, 255, 255});
+    material.set_color(rendering_engine::color{255, 255, 255, 255});
 
     // Fetch the cube geometry through the asset cache so the upload is
     // shared and deduplicated by key rather than baked into this renderable.
@@ -182,7 +182,7 @@ GAME_MODULE()
                 const auto r = static_cast<uint8_t>(40 + (215 * i) / (grid_side - 1));
                 const auto g = static_cast<uint8_t>(40 + (215 * j) / (grid_side - 1));
                 const auto b = static_cast<uint8_t>(40 + (215 * k) / (grid_side - 1));
-                cubes->set_instance_color(index, rendering_engine::util::color{r, g, b, 255});
+                cubes->set_instance_color(index, rendering_engine::color{r, g, b, 255});
             }
         }
     }
