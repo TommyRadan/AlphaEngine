@@ -30,6 +30,8 @@
  * SPIR-V upstream. The bind-group kinds map directly:
  *
  *   uniform_buffer  -> VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER
+ *                      (VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC when
+ *                       the layout entry sets has_dynamic_offset)
  *   storage_buffer  -> VK_DESCRIPTOR_TYPE_STORAGE_BUFFER
  *   storage_texture -> VK_DESCRIPTOR_TYPE_STORAGE_IMAGE
  *   texture         -> VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER
@@ -95,12 +97,12 @@ namespace rendering_engine::gpu::backend::vulkan
             return out != 0u ? out : (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
         }
 
-        VkDescriptorType to_descriptor_type(binding_kind kind)
+        VkDescriptorType to_descriptor_type(binding_kind kind, bool dynamic_offset)
         {
             switch (kind)
             {
             case binding_kind::uniform_buffer:
-                return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+                return dynamic_offset ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC : VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
             case binding_kind::storage_buffer:
                 return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
             case binding_kind::storage_texture:
@@ -133,7 +135,7 @@ namespace rendering_engine::gpu::backend::vulkan
             }
             VkDescriptorSetLayoutBinding b{};
             b.binding = entry.binding;
-            b.descriptorType = to_descriptor_type(entry.kind);
+            b.descriptorType = to_descriptor_type(entry.kind, entry.has_dynamic_offset);
             b.descriptorCount = 1;
             b.stageFlags = to_vk_stage_flags(entry.stages);
             bindings.push_back(b);
@@ -655,6 +657,28 @@ namespace rendering_engine::gpu::backend::vulkan
         record.layout = descriptor.layout;
         record.entries = descriptor.entries;
 
+        // Whether the layout declares @p binding as a dynamic uniform
+        // buffer: its descriptor is then written with the _DYNAMIC type
+        // the set layout baked, and every bind supplies its offset.
+        const auto dynamic_binding = [&](uint32_t binding)
+        {
+            for (const auto& layout_entry : layout_record->descriptor.entries)
+            {
+                if (layout_entry.binding == binding)
+                {
+                    return layout_entry.kind == binding_kind::uniform_buffer && layout_entry.has_dynamic_offset;
+                }
+            }
+            return false;
+        };
+        for (const auto& layout_entry : layout_record->descriptor.entries)
+        {
+            if (layout_entry.kind == binding_kind::uniform_buffer && layout_entry.has_dynamic_offset)
+            {
+                ++record.dynamic_count;
+            }
+        }
+
         // From the pool chain: an exhausted pool grows the chain and
         // the allocation is retried, so the per-draw / per-material
         // churn of a larger scene never silently produces an invalid
@@ -713,12 +737,21 @@ namespace rendering_engine::gpu::backend::vulkan
                 {
                     continue;
                 }
+                const bool dynamic = entry.kind == binding_kind::uniform_buffer && dynamic_binding(entry.binding);
+                if (dynamic && entry.size == 0)
+                {
+                    // VK_WHOLE_SIZE resolves against the base offset, so
+                    // any non-zero dynamic offset would run past the end.
+                    LOG_WRN("vk_device::create_bind_group: dynamic uniform buffer at binding %u has no size; "
+                            "only a zero dynamic offset stays inside the buffer",
+                            entry.binding);
+                }
                 VkDescriptorBufferInfo bi{};
                 bi.buffer = buf->object;
-                bi.range = VK_WHOLE_SIZE;
+                bi.offset = entry.offset;
+                bi.range = entry.size != 0 ? entry.size : VK_WHOLE_SIZE;
                 buffer_infos.push_back(bi);
-                w.descriptorType = entry.kind == binding_kind::uniform_buffer ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER
-                                                                              : VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+                w.descriptorType = to_descriptor_type(entry.kind, dynamic);
                 w.pBufferInfo = &buffer_infos.back();
                 writes.push_back(w);
                 break;

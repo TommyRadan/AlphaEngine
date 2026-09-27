@@ -20,8 +20,22 @@
  * SOFTWARE.
  */
 
+#include <atomic>
+
 #include <core/math/math.hpp>
 #include <rendering_engine/util/transform.hpp>
+
+namespace
+{
+    // Source of world-matrix stamps (see transform::get_world_version).
+    // Starts at 1: a version of 0 means "never computed".
+    std::atomic<uint64_t> next_world_version{1};
+
+    uint64_t take_world_version()
+    {
+        return next_world_version.fetch_add(1, std::memory_order_relaxed);
+    }
+} // namespace
 
 rendering_engine::util::transform::transform()
     : m_is_transform_matrix_dirty{true}, m_position{0.0f, 0.0f, 0.0f}, m_rotation{0.0f, 0.0f, 0.0f}, m_quaternion{},
@@ -160,7 +174,7 @@ core::math::mat4 rendering_engine::util::transform::get_world_matrix() const
             m_world_matrix = local;
             m_seen_local_version = m_local_version;
             m_seen_parent_world_version = 0;
-            ++m_world_version;
+            m_world_version = take_world_version();
         }
         return m_world_matrix;
     }
@@ -174,9 +188,16 @@ core::math::mat4 rendering_engine::util::transform::get_world_matrix() const
         m_world_matrix = parent_world * local;
         m_seen_local_version = m_local_version;
         m_seen_parent_world_version = m_parent->m_world_version;
-        ++m_world_version;
+        m_world_version = take_world_version();
     }
     return m_world_matrix;
+}
+
+uint64_t rendering_engine::util::transform::get_world_version() const
+{
+    // Resolving the matrix brings the stamp up to date with the inputs.
+    (void)get_world_matrix();
+    return m_world_version;
 }
 
 void rendering_engine::util::transform::set_parent(const transform* parent)

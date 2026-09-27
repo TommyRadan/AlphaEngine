@@ -169,6 +169,19 @@ namespace rendering_engine::gpu::backend::opengl
     {
         bind_group_layout layout{};
         std::vector<binding_value> entries;
+
+        // Per entry, which of the bind-time dynamic offsets applies to
+        // it (its rank, by binding number, among the layout's dynamic
+        // uniform-buffer slots), or @ref no_dynamic_offset. Resolved at
+        // creation so a bind reads no layout; @ref dynamic_count is how
+        // many offsets every @c set_bind_group of the group must pass.
+        static constexpr uint32_t no_dynamic_offset = UINT32_MAX;
+        std::vector<uint32_t> dynamic_index;
+        uint32_t dynamic_count{0};
+
+        // Set once a bind with the wrong number of dynamic offsets has
+        // been reported, so a broken call site logs once, not per draw.
+        bool offset_mismatch_reported{false};
     };
 
     // One attachment of an off-screen target: the texture it renders

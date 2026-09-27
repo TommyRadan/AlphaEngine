@@ -488,7 +488,7 @@ namespace rendering_engine
             pass_encoder->set_pipeline(pipeline);
             pass_encoder->set_bind_group(0, bind_group);
             pass_encoder->set_vertex_buffer(0, m_vertex_buffer, 0, 0);
-            pass_encoder->draw(3, 0);
+            pass_encoder->draw(3);
         };
 
         // 1. Bright pass: scene colour → half-res threshold target.
@@ -549,7 +549,7 @@ namespace rendering_engine
             {
                 pass_encoder->set_bind_group(0, level.composite_bind_group);
                 pass_encoder->set_vertex_buffer(0, m_vertex_buffer, 0, 0);
-                pass_encoder->draw(3, 0);
+                pass_encoder->draw(3);
             }
             pass_encoder->end();
         }

@@ -265,6 +265,59 @@ namespace rendering_engine::gpu::backend::opengl
         gl_bind_group record{};
         record.layout = descriptor.layout;
         record.entries = descriptor.entries;
+
+        // Resolve which bind-time dynamic offset each entry takes: the
+        // layout's dynamic uniform-buffer slots consume the offsets in
+        // ascending binding order, as Vulkan's pDynamicOffsets does.
+        record.dynamic_index.assign(record.entries.size(), gl_bind_group::no_dynamic_offset);
+        if (const auto* layout = lookup_bind_group_layout(descriptor.layout))
+        {
+            const auto is_dynamic = [](const bind_group_layout_entry& entry)
+            { return entry.kind == binding_kind::uniform_buffer && entry.has_dynamic_offset; };
+            for (const auto& entry : layout->descriptor.entries)
+            {
+                if (is_dynamic(entry))
+                {
+                    ++record.dynamic_count;
+                }
+            }
+            for (size_t i = 0; i < record.entries.size(); ++i)
+            {
+                const binding_value& value = record.entries[i];
+                if (value.kind != binding_kind::uniform_buffer)
+                {
+                    continue;
+                }
+                uint32_t rank = 0;
+                bool dynamic = false;
+                for (const auto& entry : layout->descriptor.entries)
+                {
+                    if (!is_dynamic(entry))
+                    {
+                        continue;
+                    }
+                    if (entry.binding == value.binding)
+                    {
+                        dynamic = true;
+                    }
+                    else if (entry.binding < value.binding)
+                    {
+                        ++rank;
+                    }
+                }
+                if (dynamic)
+                {
+                    record.dynamic_index[i] = rank;
+                    if (value.size == 0)
+                    {
+                        LOG_WRN("create_bind_group: dynamic uniform buffer at binding %u has no size; each bind "
+                                "exposes the rest of the buffer from its offset",
+                                value.binding);
+                    }
+                }
+            }
+        }
+
         bind_group h{};
         h.id = m_bind_groups.insert(record);
         return h;

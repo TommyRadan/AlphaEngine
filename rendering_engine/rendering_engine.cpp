@@ -59,6 +59,7 @@
 #include <rendering_engine/passes/skybox_pass.hpp>
 #include <rendering_engine/passes/spot_shadow_pass.hpp>
 #include <rendering_engine/passes/ui_pass.hpp>
+#include <rendering_engine/renderables/per_draw_ring.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
 #include <rendering_engine/window.hpp>
 #include <runtime/engine.hpp>
@@ -76,6 +77,10 @@ void rendering_engine::context::init()
     auto& eng = runtime::current_engine();
     eng.window->init();
     eng.gpu->init();
+
+    // The per-draw ring sizes its slots by the device's uniform-buffer
+    // offset alignment, so it follows the device's init.
+    m_per_draw_ring = std::make_unique<per_draw_ring>(*eng.gpu);
 
     // Tell the device about the initial backbuffer dimensions so that
     // begin_render_pass can default the viewport to the full window. The
@@ -395,6 +400,11 @@ void rendering_engine::context::quit()
     // standard one is held here too and must go before the device.
     m_standard_template.reset();
 
+    // The per-draw ring's buffers and shared groups go before the device.
+    // Every renderable has released its per-draw state by now (they hold
+    // no ring resources, only offsets).
+    m_per_draw_ring.reset();
+
     // Release the off-screen HDR and LDR targets before the device tears
     // its pools down. The colour and depth attachments are owned by the
     // targets so destroy() releases them too.
@@ -420,6 +430,12 @@ void rendering_engine::context::render()
     // the GPU.
     gpu.begin_frame();
     m_in_frame = true;
+
+    // Rewind the per-draw ring to this frame's region. It must follow
+    // begin_frame: the region is rewritten from its first slot, which is
+    // only safe once the frame that last read it has retired (see
+    // per_draw_ring).
+    m_per_draw_ring->begin_frame();
 
     // The previous frame's work has retired (or its queries are polled
     // without waiting), so its per-pass timestamps can be read now.
@@ -715,6 +731,11 @@ std::unique_ptr<rendering_engine::grid_material> rendering_engine::context::crea
 rendering_engine::ui_material& rendering_engine::context::get_ui_material()
 {
     return *m_ui_material;
+}
+
+rendering_engine::per_draw_ring& rendering_engine::context::get_per_draw_ring()
+{
+    return *m_per_draw_ring;
 }
 
 rendering_engine::tonemap_pass& rendering_engine::context::tonemap()

@@ -46,7 +46,9 @@ namespace rendering_engine::gpu::backend::vulkan
         void set_pipeline(pipeline pipeline_handle) override;
         void set_vertex_buffer(uint32_t slot, buffer buffer_handle, size_t offset, uint32_t stride_override) override;
         void set_index_buffer(buffer buffer_handle, index_format format) override;
-        void set_bind_group(uint32_t group, bind_group bind_group_handle) override;
+        void set_bind_group(uint32_t group,
+                            bind_group bind_group_handle,
+                            std::span<const uint32_t> dynamic_offsets) override;
         // @p x / @p y are the rectangle's bottom-left corner in
         // window (OpenGL) convention, matching the GL backend's
         // glViewport / glScissor. A swapchain pass renders through a
@@ -56,8 +58,13 @@ namespace rendering_engine::gpu::backend::vulkan
         void set_viewport(int x, int y, int width, int height) override;
         void set_scissor(int x, int y, int width, int height) override;
         void set_stencil_reference(uint32_t reference) override;
-        void draw(uint32_t vertex_count, uint32_t first_vertex) override;
-        void draw_indexed(uint32_t index_count, uint32_t first_index) override;
+        void
+        draw(uint32_t vertex_count, uint32_t instance_count, uint32_t first_vertex, uint32_t first_instance) override;
+        void draw_indexed(uint32_t index_count,
+                          uint32_t instance_count,
+                          uint32_t first_index,
+                          int32_t base_vertex,
+                          uint32_t first_instance) override;
         void draw_indexed_indirect(buffer indirect_buffer, size_t offset) override;
         void multi_draw_indexed_indirect(buffer indirect_buffer,
                                          size_t offset,
@@ -118,7 +125,9 @@ namespace rendering_engine::gpu::backend::vulkan
         ~vk_compute_pass_encoder() override;
 
         void set_pipeline(pipeline pipeline_handle) override;
-        void set_bind_group(uint32_t group, bind_group bind_group_handle) override;
+        void set_bind_group(uint32_t group,
+                            bind_group bind_group_handle,
+                            std::span<const uint32_t> dynamic_offsets) override;
         void dispatch(uint32_t group_count_x, uint32_t group_count_y, uint32_t group_count_z) override;
         void end() override;
 

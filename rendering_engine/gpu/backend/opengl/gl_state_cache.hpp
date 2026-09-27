@@ -114,8 +114,14 @@ namespace rendering_engine::gpu::backend::opengl
         void set_viewport(GLint x, GLint y, GLsizei width, GLsizei height);
         void bind_texture_unit(GLuint unit, GLuint texture);
         void bind_sampler(GLuint unit, GLuint sampler);
-        void bind_uniform_buffer(GLuint index, GLuint buffer);
-        void bind_storage_buffer(GLuint index, GLuint buffer);
+        // Indexed buffer bindings. A @p size of 0 binds the whole
+        // buffer (@c glBindBufferBase, @p offset must be 0); otherwise
+        // @p size bytes from @p offset (@c glBindBufferRange). The
+        // shadow keeps the range, so a dynamic-offset slot rebound per
+        // draw at a new offset reaches the driver each time while a
+        // repeat of the same range does not.
+        void bind_uniform_buffer(GLuint index, GLuint buffer, GLintptr offset, GLsizeiptr size);
+        void bind_storage_buffer(GLuint index, GLuint buffer, GLintptr offset, GLsizeiptr size);
 
     private:
         struct blend_func
@@ -159,6 +165,14 @@ namespace rendering_engine::gpu::backend::opengl
             bool operator==(const polygon_offset&) const = default;
         };
 
+        struct buffer_range
+        {
+            GLuint buffer{0};
+            GLintptr offset{0};
+            GLsizeiptr size{0};
+            bool operator==(const buffer_range&) const = default;
+        };
+
         struct rect
         {
             GLint x{0};
@@ -199,7 +213,7 @@ namespace rendering_engine::gpu::backend::opengl
         gl_cached<rect> m_viewport;
         std::array<gl_cached<GLuint>, cached_units> m_textures;
         std::array<gl_cached<GLuint>, cached_units> m_samplers;
-        std::array<gl_cached<GLuint>, cached_buffer_bindings> m_uniform_buffers;
-        std::array<gl_cached<GLuint>, cached_buffer_bindings> m_storage_buffers;
+        std::array<gl_cached<buffer_range>, cached_buffer_bindings> m_uniform_buffers;
+        std::array<gl_cached<buffer_range>, cached_buffer_bindings> m_storage_buffers;
     };
 } // namespace rendering_engine::gpu::backend::opengl

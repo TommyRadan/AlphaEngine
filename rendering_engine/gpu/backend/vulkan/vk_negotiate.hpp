@@ -76,6 +76,9 @@ namespace rendering_engine::gpu::backend::vulkan
     {
         uint32_t max_sets{0};
         uint32_t uniform_buffers{0};
+        // VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, a pool size of its
+        // own: the per-draw ring's shared groups.
+        uint32_t dynamic_uniform_buffers{0};
         uint32_t combined_image_samplers{0};
         uint32_t storage_buffers{0};
         uint32_t storage_images{0};
@@ -83,8 +86,9 @@ namespace rendering_engine::gpu::backend::vulkan
 
     // Budget of the @p pool_index-th pool (0-based). The first pool
     // holds a base budget sized for the engine's material sets (one
-    // UBO + up to eight samplers each, plus a per-draw UBO set per
-    // renderable); every later pool doubles the previous one until
+    // UBO + up to eight samplers each) and the per-draw sets (one
+    // dynamic UBO per shared ring group, a plain UBO + joint palette
+    // per skinned draw); every later pool doubles the previous one until
     // the growth cap, so a scene that outgrows the first pool settles
     // into a few large pools instead of a long chain of small ones.
     descriptor_pool_budget descriptor_pool_budget_for(uint32_t pool_index);

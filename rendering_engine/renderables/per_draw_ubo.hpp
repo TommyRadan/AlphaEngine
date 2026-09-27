@@ -33,6 +33,13 @@
  * records in @ref draw_item::mirrored so the pass can draw it with the
  * material's clockwise-front-face pipeline variant instead of culling
  * its outside.
+ *
+ * Rigid renderables do not own a buffer for the block: they write it
+ * into the frame's slice of the shared @ref per_draw_ring and bind the
+ * ring's group with the slot's dynamic offset, which is why the block's
+ * layout entry (@ref per_draw_model_layout_entry) is dynamic. Only the
+ * skinned per-draw group, which also carries a draw's own joint palette,
+ * keeps a private uniform buffer.
  */
 
 #pragma once
@@ -42,6 +49,7 @@
 #include <span>
 
 #include <core/math/mat4.hpp>
+#include <rendering_engine/gpu/bind_group.hpp>
 #include <rendering_engine/gpu/handle.hpp>
 
 namespace rendering_engine
@@ -75,11 +83,22 @@ namespace rendering_engine
     // back to the model's own 3x3 so the upload never carries NaNs.
     per_draw_payload make_per_draw_payload(const core::math::mat4& model);
 
+    // The PerDraw entry of a rigid per-draw layout: the block's uniform
+    // buffer at @c shader_bindings::per_draw_model, taking a dynamic
+    // offset so one group over the per-draw ring serves every draw. Every
+    // layout a renderable's per-draw group is bound against (each 3D
+    // material's slot 1 and the shadow passes' draw layouts) is built
+    // from it, so the groups stay interchangeable between them.
+    gpu::bind_group_layout_entry per_draw_model_layout_entry();
+
     // A dynamic uniform buffer sized for the block.
     gpu::buffer create_per_draw_ubo(gpu::device& device);
 
     // A bind group over @p ubo against @p layout at the shared
-    // @c shader_bindings::per_draw_model binding.
+    // @c shader_bindings::per_draw_model binding, exposing one block
+    // (@ref per_draw_ubo_size bytes) from the start of the buffer. Under
+    // a dynamic layout entry each bind's offset then selects which block
+    // of a larger buffer that is.
     gpu::bind_group create_per_draw_bind_group(gpu::device& device, gpu::bind_group_layout layout, gpu::buffer ubo);
 
     // Upload the block for @p model into @p ubo; returns

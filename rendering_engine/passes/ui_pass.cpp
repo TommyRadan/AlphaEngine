@@ -199,17 +199,18 @@ namespace rendering_engine
             // in the scene pass.
             if (item.per_draw_bind_group.valid())
             {
-                pass_encoder->set_bind_group(item.mat->per_draw_slot(), item.per_draw_bind_group);
+                pass_encoder->set_bind_group(
+                    item.mat->per_draw_slot(), item.per_draw_bind_group, item.per_draw_offsets());
             }
             pass_encoder->set_vertex_buffer(0, item.vertex_buffer, 0, item.vertex_stride);
             if (item.index_buffer.valid())
             {
                 pass_encoder->set_index_buffer(item.index_buffer, item.index_format);
-                pass_encoder->draw_indexed(item.index_count, 0);
+                pass_encoder->draw_indexed(item.index_count, item.instance_count, item.first_index, item.vertex_offset);
             }
             else
             {
-                pass_encoder->draw(item.vertex_count, 0);
+                pass_encoder->draw(item.vertex_count, item.instance_count, static_cast<uint32_t>(item.vertex_offset));
             }
         }
 

@@ -102,7 +102,59 @@ namespace rendering_engine::gpu::backend::opengl
             pipe.shadow_epoch = device.state_epoch();
         }
 
-        void apply_bind_group(gl_device& device, const gl_bind_group& bg)
+        // The byte range @p value exposes of @p buf once @p dynamic_offset
+        // is added: @p offset / @p size for glBindBufferRange, or a size
+        // of 0 for a whole-buffer glBindBufferBase. False, with the
+        // problem logged, when the range leaves the buffer.
+        bool resolve_buffer_range(
+            const binding_value& value, const gl_buffer& buf, size_t dynamic_offset, GLintptr& offset, GLsizeiptr& size)
+        {
+            const size_t start = value.offset + dynamic_offset;
+            if (start == 0 && value.size == 0)
+            {
+                offset = 0;
+                size = 0;
+                return true;
+            }
+            const size_t length = value.size != 0 ? value.size : (start < buf.size ? buf.size - start : 0);
+            if (start > buf.size || length == 0 || length > buf.size - start)
+            {
+                LOG_WRN("set_bind_group: binding %u range of %zu bytes at offset %zu leaves the %zu-byte buffer",
+                        value.binding,
+                        length,
+                        start,
+                        buf.size);
+                return false;
+            }
+            offset = static_cast<GLintptr>(start);
+            size = static_cast<GLsizeiptr>(length);
+            return true;
+        }
+
+        // True when @p dynamic_offsets carries exactly one offset per
+        // dynamic slot of @p bg. A mismatch is a call-site bug (Vulkan
+        // rejects the bind outright), so the group is not bound and the
+        // problem is logged once per group rather than once per draw.
+        bool dynamic_offsets_match(gl_bind_group& bg, std::span<const uint32_t> dynamic_offsets, uint32_t group)
+        {
+            if (dynamic_offsets.size() == bg.dynamic_count)
+            {
+                return true;
+            }
+            if (!bg.offset_mismatch_reported)
+            {
+                bg.offset_mismatch_reported = true;
+                LOG_ERR("set_bind_group: slot %u takes %u dynamic offsets, %zu given; the group is not bound",
+                        group,
+                        bg.dynamic_count,
+                        dynamic_offsets.size());
+            }
+            return false;
+        }
+
+        // Bind every entry of @p bg. @p dynamic_offsets has been checked
+        // against @c gl_bind_group::dynamic_count by the caller.
+        void apply_bind_group(gl_device& device, const gl_bind_group& bg, std::span<const uint32_t> dynamic_offsets)
         {
             // Bindings come straight from the SPIR-V @c Binding
             // decoration. UBO / SSBO / texture / image binding
@@ -128,25 +180,44 @@ namespace rendering_engine::gpu::backend::opengl
                 }
             }
 
-            for (const auto& value : bg.entries)
+            for (size_t i = 0; i < bg.entries.size(); ++i)
             {
+                const binding_value& value = bg.entries[i];
                 switch (value.kind)
                 {
                 case binding_kind::uniform_buffer:
                 {
                     auto* buf = device.lookup_buffer(value.buffer_value);
-                    if (buf != nullptr && buf->object_id != 0)
+                    if (buf == nullptr || buf->object_id == 0)
                     {
-                        cache.bind_uniform_buffer(value.binding, buf->object_id);
+                        break;
+                    }
+                    // A dynamic slot adds its bind-time offset to the
+                    // range the group was written with.
+                    const uint32_t dynamic =
+                        i < bg.dynamic_index.size() ? bg.dynamic_index[i] : gl_bind_group::no_dynamic_offset;
+                    const size_t dynamic_offset =
+                        dynamic < dynamic_offsets.size() ? static_cast<size_t>(dynamic_offsets[dynamic]) : 0u;
+                    GLintptr offset = 0;
+                    GLsizeiptr size = 0;
+                    if (resolve_buffer_range(value, *buf, dynamic_offset, offset, size))
+                    {
+                        cache.bind_uniform_buffer(value.binding, buf->object_id, offset, size);
                     }
                     break;
                 }
                 case binding_kind::storage_buffer:
                 {
                     auto* buf = device.lookup_buffer(value.buffer_value);
-                    if (buf != nullptr && buf->object_id != 0)
+                    if (buf == nullptr || buf->object_id == 0)
                     {
-                        cache.bind_storage_buffer(value.binding, buf->object_id);
+                        break;
+                    }
+                    GLintptr offset = 0;
+                    GLsizeiptr size = 0;
+                    if (resolve_buffer_range(value, *buf, 0, offset, size))
+                    {
+                        cache.bind_storage_buffer(value.binding, buf->object_id, offset, size);
                     }
                     break;
                 }
@@ -536,7 +607,9 @@ namespace rendering_engine::gpu::backend::opengl
         m_index_buffer_bound = true;
     }
 
-    void gl_render_pass_encoder::set_bind_group(uint32_t group, bind_group bind_group_handle)
+    void gl_render_pass_encoder::set_bind_group(uint32_t group,
+                                                bind_group bind_group_handle,
+                                                std::span<const uint32_t> dynamic_offsets)
     {
         auto* pipe = m_device.lookup_pipeline(m_pipeline_handle);
         auto* bg = m_device.lookup_bind_group(bind_group_handle);
@@ -550,7 +623,11 @@ namespace rendering_engine::gpu::backend::opengl
             LOG_WRN("set_bind_group: group index out of range");
             return;
         }
-        apply_bind_group(m_device, *bg);
+        if (!dynamic_offsets_match(*bg, dynamic_offsets, group))
+        {
+            return;
+        }
+        apply_bind_group(m_device, *bg, dynamic_offsets);
     }
 
     void gl_render_pass_encoder::set_viewport(int x, int y, int width, int height)
@@ -586,12 +663,23 @@ namespace rendering_engine::gpu::backend::opengl
         apply_stencil_face(cache, GL_BACK, pipe->stencil.back, reference, pipe->stencil);
     }
 
-    void gl_render_pass_encoder::draw(uint32_t vertex_count, uint32_t first_vertex)
+    void gl_render_pass_encoder::draw(uint32_t vertex_count,
+                                      uint32_t instance_count,
+                                      uint32_t first_vertex,
+                                      uint32_t first_instance)
     {
-        glDrawArrays(m_topology, static_cast<GLint>(first_vertex), static_cast<GLsizei>(vertex_count));
+        glDrawArraysInstancedBaseInstance(m_topology,
+                                          static_cast<GLint>(first_vertex),
+                                          static_cast<GLsizei>(vertex_count),
+                                          static_cast<GLsizei>(instance_count),
+                                          first_instance);
     }
 
-    void gl_render_pass_encoder::draw_indexed(uint32_t index_count, uint32_t first_index)
+    void gl_render_pass_encoder::draw_indexed(uint32_t index_count,
+                                              uint32_t instance_count,
+                                              uint32_t first_index,
+                                              int32_t base_vertex,
+                                              uint32_t first_instance)
     {
         if (!m_index_buffer_bound)
         {
@@ -599,8 +687,13 @@ namespace rendering_engine::gpu::backend::opengl
             return;
         }
         const auto byte_offset = static_cast<intptr_t>(first_index) * m_index_size;
-        glDrawElements(
-            m_topology, static_cast<GLsizei>(index_count), m_index_type, reinterpret_cast<const GLvoid*>(byte_offset));
+        glDrawElementsInstancedBaseVertexBaseInstance(m_topology,
+                                                      static_cast<GLsizei>(index_count),
+                                                      m_index_type,
+                                                      reinterpret_cast<const GLvoid*>(byte_offset),
+                                                      static_cast<GLsizei>(instance_count),
+                                                      base_vertex,
+                                                      first_instance);
     }
 
     void gl_render_pass_encoder::draw_indexed_indirect(buffer indirect_buffer, size_t offset)
@@ -709,7 +802,9 @@ namespace rendering_engine::gpu::backend::opengl
         m_device.state_cache().use_program(m_program_id);
     }
 
-    void gl_compute_pass_encoder::set_bind_group(uint32_t group, bind_group bind_group_handle)
+    void gl_compute_pass_encoder::set_bind_group(uint32_t group,
+                                                 bind_group bind_group_handle,
+                                                 std::span<const uint32_t> dynamic_offsets)
     {
         auto* pipe = m_device.lookup_pipeline(m_pipeline_handle);
         auto* bg = m_device.lookup_bind_group(bind_group_handle);
@@ -723,7 +818,11 @@ namespace rendering_engine::gpu::backend::opengl
             LOG_WRN("compute set_bind_group: group index out of range");
             return;
         }
-        apply_bind_group(m_device, *bg);
+        if (!dynamic_offsets_match(*bg, dynamic_offsets, group))
+        {
+            return;
+        }
+        apply_bind_group(m_device, *bg, dynamic_offsets);
     }
 
     void gl_compute_pass_encoder::dispatch(uint32_t group_count_x, uint32_t group_count_y, uint32_t group_count_z)

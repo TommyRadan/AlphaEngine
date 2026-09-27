@@ -565,10 +565,13 @@ namespace rendering_engine
 
             // Instanced renderables keep their per-instance data in a
             // vertex stream (slot 1), not a per-draw bind group, so the
-            // per-draw group is optional.
+            // per-draw group is optional. A rigid renderable's group is
+            // the per-draw ring's shared one; its dynamic offset picks
+            // the renderable's block.
             if (item.per_draw_bind_group.valid())
             {
-                pass_encoder->set_bind_group(item.mat->per_draw_slot(), item.per_draw_bind_group);
+                pass_encoder->set_bind_group(
+                    item.mat->per_draw_slot(), item.per_draw_bind_group, item.per_draw_offsets());
             }
             pass_encoder->set_vertex_buffer(0, item.vertex_buffer, 0, item.vertex_stride);
             if (item.instance_buffer.valid())
@@ -586,12 +589,13 @@ namespace rendering_engine
                 }
                 else
                 {
-                    pass_encoder->draw_indexed(item.index_count, 0);
+                    pass_encoder->draw_indexed(
+                        item.index_count, item.instance_count, item.first_index, item.vertex_offset);
                 }
             }
             else
             {
-                pass_encoder->draw(item.vertex_count, 0);
+                pass_encoder->draw(item.vertex_count, item.instance_count, static_cast<uint32_t>(item.vertex_offset));
             }
         }
 

@@ -53,9 +53,10 @@ namespace rendering_engine
     struct instanced_mesh : public renderable
     {
         // @p mat is non-owning and is expected to be an
-        // @ref instanced_material. @p instance_count is the fixed capacity
-        // of the per-instance buffer; the active draw count starts equal to
-        // it and can be lowered via @ref set_instance_count.
+        // @ref instanced_material. @p instance_count is the initial
+        // capacity of the per-instance buffer (see @ref reserve_instances);
+        // the active draw count starts equal to it and can be lowered via
+        // @ref set_instance_count.
         instanced_mesh(material* mat, uint32_t instance_count);
         ~instanced_mesh() override;
 
@@ -88,8 +89,16 @@ namespace rendering_engine
         // set or while the instance count is zero.
         bool world_bounds(core::math::aabb& out) const final;
 
-        // Fixed per-instance buffer capacity set at construction.
+        // Per-instance record capacity: the construction count, raised by
+        // @ref reserve_instances.
         uint32_t instance_capacity() const;
+
+        // Grow the capacity to at least @p capacity records (never
+        // shrinks). New records start as an identity transform with a
+        // white tint. The per-instance buffer is reallocated at the next
+        // draw and refilled whole; the active count is left alone, so
+        // raise it with @ref set_instance_count.
+        void reserve_instances(uint32_t capacity);
 
         // Number of instances drawn this frame. Clamped to the capacity.
         void set_instance_count(uint32_t count);
@@ -118,10 +127,20 @@ namespace rendering_engine
         uint32_t m_capacity{0};
         uint32_t m_instance_count{0};
 
-        // CPU mirror of the per-instance vertex stream, re-uploaded when an
-        // instance changes.
+        // CPU mirror of the per-instance vertex stream. Only the span of
+        // records changed since the last upload, [m_dirty_begin,
+        // m_dirty_end), is re-uploaded; an empty span uploads nothing.
         std::vector<instance_record> m_instances;
-        bool m_instances_dirty{true};
+        uint32_t m_dirty_begin{0};
+        uint32_t m_dirty_end{0};
+
+        // Records the GPU-side per-instance buffer has room for; below
+        // @ref m_capacity after @ref reserve_instances, which makes the
+        // next draw reallocate it.
+        uint32_t m_buffer_capacity{0};
+
+        // Widen the dirty span to cover record @p index.
+        void mark_dirty(uint32_t index);
 
         // Whether the indirect command must be (re)written before the next
         // draw. Set whenever either field it carries changes: the index count

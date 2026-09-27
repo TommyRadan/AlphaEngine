@@ -30,7 +30,7 @@
 #include <rendering_engine/materials/material.hpp>
 #include <rendering_engine/mesh/vertex.hpp>
 #include <rendering_engine/renderables/mesh_bounds.hpp>
-#include <rendering_engine/renderables/per_draw_ubo.hpp>
+#include <rendering_engine/renderables/per_draw_ring.hpp>
 #include <rendering_engine/renderables/vertex_format_check.hpp>
 #include <runtime/engine.hpp>
 
@@ -170,64 +170,18 @@ void rendering_engine::model::collect_draw_items(std::vector<draw_item>& out)
         return;
     }
 
-    auto& gpu = *runtime::current_engine().gpu;
-
-    if (!m_draw_ubo.valid())
-    {
-        // The PerDraw block: model + normal matrix (see per_draw_ubo.hpp).
-        m_draw_ubo = create_per_draw_ubo(gpu);
-    }
-
-    const gpu::bind_group_layout layout = m_material->per_draw_layout();
-    if (m_draw_bind_group.valid() && m_draw_bind_group_layout != layout)
-    {
-        // The material moved between its rigid and skinned variants.
-        gpu.destroy(m_draw_bind_group);
-        m_draw_bind_group = {};
-    }
-
-    if (skinned)
-    {
-        if (!m_joint_buffer.valid() || m_joint_capacity < m_joint_matrices.size())
-        {
-            // A larger palette than the buffer holds: reallocate, and
-            // rebuild the group that references the old buffer.
-            if (m_joint_buffer.valid())
-            {
-                gpu.destroy(m_joint_buffer);
-            }
-            if (m_draw_bind_group.valid())
-            {
-                gpu.destroy(m_draw_bind_group);
-                m_draw_bind_group = {};
-            }
-            m_joint_buffer = create_joint_buffer(gpu, m_joint_matrices.size());
-            m_joint_capacity = m_joint_matrices.size();
-            m_joints_dirty = true;
-        }
-        if (m_joints_dirty)
-        {
-            write_joint_buffer(gpu, m_joint_buffer, m_joint_matrices);
-            m_joints_dirty = false;
-        }
-    }
-
-    if (!m_draw_bind_group.valid())
-    {
-        m_draw_bind_group = skinned ? create_skinned_per_draw_bind_group(gpu, layout, m_draw_ubo, m_joint_buffer)
-                                    : create_per_draw_bind_group(gpu, layout, m_draw_ubo);
-        m_draw_bind_group_layout = layout;
-    }
-
-    // Upload the model + normal matrix; a mirroring transform flags the
-    // item so the pass draws it with the clockwise-front-face variant.
-    const bool mirrored = write_per_draw_ubo(gpu, m_draw_ubo, transform.get_world_matrix());
-
     draw_item item{};
     item.mat = m_material;
+    // The model + normal matrix (recomputed only when the transform
+    // moved); a mirroring transform flags the item so the pass draws it
+    // with the clockwise-front-face variant. A rigid model writes them
+    // into this frame's slot of the per-draw ring; a skinned one keeps
+    // them in the private group that also carries its joint palette.
+    if (!(skinned ? bind_skinned(item) : m_per_draw.bind(transform, m_material->per_draw_layout(), item)))
+    {
+        return;
+    }
     item.vertex_buffer = vertex_buffer;
-    item.per_draw_bind_group = m_draw_bind_group;
-    item.mirrored = mirrored;
     item.vertex_count = vertex_count;
     item.vertex_stride = m_vertex_stride;
     // A cached asset that carries indices is drawn indexed; the private
@@ -239,4 +193,71 @@ void rendering_engine::model::collect_draw_items(std::vector<draw_item>& out)
         item.index_format = gpu::index_format::uint32;
     }
     out.push_back(item);
+}
+
+bool rendering_engine::model::bind_skinned(draw_item& item)
+{
+    auto& gpu = *runtime::current_engine().gpu;
+
+    if (!m_draw_ubo.valid())
+    {
+        // The PerDraw block: model + normal matrix (see per_draw_ubo.hpp).
+        m_draw_ubo = create_per_draw_ubo(gpu);
+        m_draw_ubo_version = 0;
+    }
+
+    const gpu::bind_group_layout layout = m_material->per_draw_layout();
+    if (m_draw_bind_group.valid() && m_draw_bind_group_layout != layout)
+    {
+        // The material moved to another skinned variant layout.
+        gpu.destroy(m_draw_bind_group);
+        m_draw_bind_group = {};
+    }
+
+    if (!m_joint_buffer.valid() || m_joint_capacity < m_joint_matrices.size())
+    {
+        // A larger palette than the buffer holds: reallocate, and
+        // rebuild the group that references the old buffer.
+        if (m_joint_buffer.valid())
+        {
+            gpu.destroy(m_joint_buffer);
+        }
+        if (m_draw_bind_group.valid())
+        {
+            gpu.destroy(m_draw_bind_group);
+            m_draw_bind_group = {};
+        }
+        m_joint_buffer = create_joint_buffer(gpu, m_joint_matrices.size());
+        m_joint_capacity = m_joint_matrices.size();
+        m_joints_dirty = true;
+    }
+    if (m_joints_dirty)
+    {
+        write_joint_buffer(gpu, m_joint_buffer, m_joint_matrices);
+        m_joints_dirty = false;
+    }
+
+    if (!m_draw_bind_group.valid())
+    {
+        m_draw_bind_group = create_skinned_per_draw_bind_group(gpu, layout, m_draw_ubo, m_joint_buffer);
+        m_draw_bind_group_layout = layout;
+    }
+    if (!m_draw_bind_group.valid())
+    {
+        return false;
+    }
+
+    // The private buffer keeps its contents between frames, so it is
+    // rewritten only when the block changed.
+    m_per_draw.refresh(transform);
+    if (m_draw_ubo_version != m_per_draw.world_version())
+    {
+        gpu.write_buffer(m_draw_ubo, &m_per_draw.payload(), per_draw_ubo_size, 0);
+        m_draw_ubo_version = m_per_draw.world_version();
+    }
+
+    item.per_draw_bind_group = m_draw_bind_group;
+    item.per_draw_dynamic = false;
+    item.mirrored = m_per_draw.mirrored();
+    return true;
 }

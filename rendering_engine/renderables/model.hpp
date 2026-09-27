@@ -31,6 +31,7 @@
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/mesh/mesh.hpp>
 #include <rendering_engine/mesh/vertex.hpp>
+#include <rendering_engine/renderables/per_draw_ring.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
 #include <rendering_engine/util/transform.hpp>
 
@@ -103,6 +104,11 @@ namespace rendering_engine
         bool casts_shadow() const override;
 
     private:
+        // Point @p item at the skinned per-draw group, (re)building it,
+        // the joint palette buffer and the block as needed. False when the
+        // group could not be created.
+        bool bind_skinned(draw_item& item);
+
         material* m_material{nullptr};
 
         // Shared geometry from @ref asset_cache, set via @ref set_mesh. When
@@ -111,12 +117,23 @@ namespace rendering_engine
         std::shared_ptr<mesh_asset> m_mesh;
 
         gpu::buffer m_vertex_buffer{};
+
+        // The PerDraw block, recomputed when the transform moves, and its
+        // slot in the per-draw ring while the material is rigid.
+        per_draw_binding m_per_draw;
+
+        // A skinned draw's own per-draw group: its joint palette cannot
+        // live in the ring's shared group, so the block sits in a private
+        // uniform buffer beside it, bound without a dynamic offset and
+        // rewritten only when @ref m_draw_ubo_version falls behind the
+        // block. Allocated on the first skinned draw.
         gpu::buffer m_draw_ubo{};
         gpu::bind_group m_draw_bind_group{};
+        uint64_t m_draw_ubo_version{0};
 
         // The layout @ref m_draw_bind_group was built against; a material
-        // that switches between its rigid and skinned variants changes it,
-        // and the group is rebuilt.
+        // that switches skinned variants changes it, and the group is
+        // rebuilt.
         gpu::bind_group_layout m_draw_bind_group_layout{};
 
         // The skinning palette (see @ref set_joint_matrices), its storage

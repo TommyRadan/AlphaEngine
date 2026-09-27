@@ -76,6 +76,16 @@ namespace rendering_engine::util
         // static hierarchy costs no repeated matrix multiplies.
         core::math::mat4 get_world_matrix() const;
 
+        // A stamp of the world matrix: resolves the cache as
+        // @ref get_world_matrix does and returns the stamp the result was
+        // computed under, which changes exactly when the matrix is
+        // recomputed. Stamps come from one process-wide counter, so a stamp
+        // names one computed matrix on whichever transform holds it (a
+        // copied transform carries the matrix along with it), and a caller
+        // may key data derived from the matrix (the renderables' per-draw
+        // block) on the stamp alone.
+        uint64_t get_world_version() const;
+
         // Parents this transform under @p parent so @ref get_world_matrix composes
         // the parent chain. Non-owning; pass @c nullptr to detach back to world space.
         // The scene graph keeps these links in sync with its node hierarchy.
@@ -97,9 +107,10 @@ namespace rendering_engine::util
         const transform* m_parent;
 
         // World-matrix cache. @ref m_local_version bumps on any local change;
-        // @ref m_world_version bumps whenever @ref m_world_matrix is recomputed,
-        // so children can detect that this transform moved. The two "seen"
-        // counters record the inputs the cache was last built from.
+        // @ref m_world_version takes a fresh process-wide stamp whenever
+        // @ref m_world_matrix is recomputed, so children can detect that this
+        // transform moved. The two "seen" counters record the inputs the
+        // cache was last built from.
         mutable core::math::mat4 m_world_matrix;
         mutable uint64_t m_local_version;
         mutable uint64_t m_world_version;
