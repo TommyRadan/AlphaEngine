@@ -33,18 +33,18 @@ namespace rendering_engine::editor
         m_last_view_projection = view_projection;
         m_built = true;
 
-        // Unproject the eight clip-cube corners back into world space.
-        // GLM builds projections with z in [-1, 1] (the camera's frustum
-        // extraction uses the same matrix), so the near plane is z = -1
-        // and the far plane z = 1. Corners are indexed bit 0 = X,
-        // bit 1 = Y, bit 2 = Z to match build_box_edges().
+        // Unproject the eight clip-volume corners back into world space.
+        // The projections put depth in [0, 1] (core::math::perspective),
+        // so the near plane is z = 0 and the far plane z = 1. Corners are
+        // indexed bit 0 = X, bit 1 = Y, bit 2 = Z to match
+        // build_box_edges().
         const math::mat4 inverse_vp = math::inverse(view_projection);
         std::array<math::vec3, 8> corners{};
         for (int i = 0; i < 8; ++i)
         {
             const float x = (i & 1) != 0 ? 1.0f : -1.0f;
             const float y = (i & 2) != 0 ? 1.0f : -1.0f;
-            const float z = (i & 4) != 0 ? 1.0f : -1.0f;
+            const float z = (i & 4) != 0 ? 1.0f : 0.0f;
             const math::vec4 clip = inverse_vp * math::vec4{x, y, z, 1.0f};
             const float inv_w = clip.w != 0.0f ? 1.0f / clip.w : 1.0f;
             corners[static_cast<size_t>(i)] = math::vec3{clip.x * inv_w, clip.y * inv_w, clip.z * inv_w};

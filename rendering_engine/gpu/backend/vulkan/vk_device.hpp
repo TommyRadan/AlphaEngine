@@ -255,7 +255,6 @@ namespace rendering_engine::gpu::backend::vulkan
         // the current frame slot's depth image (one per slot, so two
         // frames in flight never share a depth buffer).
         uint32_t swapchain_framebuffer_index(uint32_t image_index) const noexcept;
-        bool depth_clip_control_enabled() const noexcept;
         // True when VK_EXT_extended_dynamic_state is enabled. Lets
         // the encoder fall back to vkCmdBindVertexBuffers when the
         // extension is missing; without dynamic stride, materials
@@ -969,16 +968,6 @@ namespace rendering_engine::gpu::backend::vulkan
         frame_stats m_frame_stats{};
         uint32_t m_frame_index{0};
         static constexpr uint32_t k_diagnostic_frames = 3;
-
-        // VK_EXT_depth_clip_control lets Vulkan accept clip-space Z
-        // in [-w, w] instead of the default [0, w] range. The
-        // engine's projection matrices produce the [-w, w] range;
-        // without this extension every pipeline would clip half the
-        // view frustum and the framebuffer would stay at the clear
-        // colour. We enable the extension when
-        // available and chain VkPipelineViewportDepthClipControlCreateInfoEXT
-        // into the viewport state of every graphics pipeline.
-        bool m_depth_clip_control_enabled{false};
 
         // VK_EXT_extended_dynamic_state — needed for runtime stride
         // override on @c set_vertex_buffer. See the public accessor

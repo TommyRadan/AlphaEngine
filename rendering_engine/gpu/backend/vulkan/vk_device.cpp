@@ -1034,7 +1034,6 @@ namespace rendering_engine::gpu::backend::vulkan
                 continue;
             }
             bool has_swap = false;
-            bool has_depth_clip_control = false;
             bool has_extended_dynamic_state = false;
             bool has_portability_subset = false;
             for (const auto& e : exts)
@@ -1042,10 +1041,6 @@ namespace rendering_engine::gpu::backend::vulkan
                 if (std::strcmp(e.extensionName, VK_KHR_SWAPCHAIN_EXTENSION_NAME) == 0)
                 {
                     has_swap = true;
-                }
-                else if (std::strcmp(e.extensionName, VK_EXT_DEPTH_CLIP_CONTROL_EXTENSION_NAME) == 0)
-                {
-                    has_depth_clip_control = true;
                 }
                 else if (std::strcmp(e.extensionName, VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME) == 0)
                 {
@@ -1069,7 +1064,6 @@ namespace rendering_engine::gpu::backend::vulkan
                 best_graphics = *graphics_family;
                 best_present = *present_family;
                 best_timestamp_bits = qfs[*graphics_family].timestampValidBits;
-                m_depth_clip_control_enabled = has_depth_clip_control;
                 m_extended_dynamic_state_enabled = has_extended_dynamic_state;
                 m_has_portability_subset = has_portability_subset;
             }
@@ -1123,37 +1117,20 @@ namespace rendering_engine::gpu::backend::vulkan
             queue_infos.push_back(qi);
         }
 
-        // Query the chained features for the optional extensions —
-        // depth_clip_control and extended_dynamic_state both expose
-        // their feature bit through @c VkPhysicalDeviceFeatures2.
-        VkPhysicalDeviceDepthClipControlFeaturesEXT dcc_query{};
-        dcc_query.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLIP_CONTROL_FEATURES_EXT;
+        // Query the chained feature of the optional extension —
+        // extended_dynamic_state exposes its feature bit through
+        // @c VkPhysicalDeviceFeatures2.
         VkPhysicalDeviceExtendedDynamicStateFeaturesEXT eds_query{};
         eds_query.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT;
         VkPhysicalDeviceFeatures2 features2_query{};
         features2_query.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
         void** features2_query_pnext = &features2_query.pNext;
-        if (m_depth_clip_control_enabled)
-        {
-            *features2_query_pnext = &dcc_query;
-            features2_query_pnext = &dcc_query.pNext;
-        }
         if (m_extended_dynamic_state_enabled)
         {
             *features2_query_pnext = &eds_query;
             features2_query_pnext = &eds_query.pNext;
         }
         vkGetPhysicalDeviceFeatures2(m_physical_device, &features2_query);
-        if (m_depth_clip_control_enabled && dcc_query.depthClipControl != VK_TRUE)
-        {
-            // Extension exposed but the feature bit is off — fall
-            // back to building pipelines without the negativeOneToOne
-            // hint, and Vulkan clips the [-1, 0) half of the
-            // projections' clip-space depth.
-            m_depth_clip_control_enabled = false;
-            LOG_WRN("VK_EXT_depth_clip_control extension exposed but depthClipControl feature unavailable; "
-                    "projection matrices with [-1, 1] clip depth may be clipped");
-        }
         if (m_extended_dynamic_state_enabled && eds_query.extendedDynamicState != VK_TRUE)
         {
             m_extended_dynamic_state_enabled = false;
@@ -1216,10 +1193,6 @@ namespace rendering_engine::gpu::backend::vulkan
         features.textureCompressionASTC_LDR = supported.textureCompressionASTC_LDR;
 
         std::vector<const char*> device_extensions{VK_KHR_SWAPCHAIN_EXTENSION_NAME};
-        if (m_depth_clip_control_enabled)
-        {
-            device_extensions.push_back(VK_EXT_DEPTH_CLIP_CONTROL_EXTENSION_NAME);
-        }
         if (m_extended_dynamic_state_enabled)
         {
             device_extensions.push_back(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
@@ -1233,9 +1206,6 @@ namespace rendering_engine::gpu::backend::vulkan
             m_features.portability_subset = true;
         }
 
-        VkPhysicalDeviceDepthClipControlFeaturesEXT dcc_feature{};
-        dcc_feature.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLIP_CONTROL_FEATURES_EXT;
-        dcc_feature.depthClipControl = VK_TRUE;
         VkPhysicalDeviceExtendedDynamicStateFeaturesEXT eds_feature{};
         eds_feature.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT;
         eds_feature.extendedDynamicState = VK_TRUE;
@@ -1243,11 +1213,6 @@ namespace rendering_engine::gpu::backend::vulkan
         features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
         features2.features = features;
         void** features2_pnext = &features2.pNext;
-        if (m_depth_clip_control_enabled)
-        {
-            *features2_pnext = &dcc_feature;
-            features2_pnext = &dcc_feature.pNext;
-        }
         if (m_extended_dynamic_state_enabled)
         {
             *features2_pnext = &eds_feature;
@@ -1282,10 +1247,9 @@ namespace rendering_engine::gpu::backend::vulkan
             }
         }
 
-        LOG_INF("Vulkan logical device created (depth_clip_control: %s, extended_dynamic_state: %s, "
+        LOG_INF("Vulkan logical device created (extended_dynamic_state: %s, "
                 "portability_subset: %s; features: fillModeNonSolid %s, geometryShader %s, tessellationShader %s, "
                 "multiDrawIndirect %s, samplerAnisotropy %s, depthBiasClamp %s, independentBlend %s)",
-                m_depth_clip_control_enabled ? "on" : "off",
                 m_extended_dynamic_state_enabled ? "on" : "off",
                 m_features.portability_subset ? "on" : "off",
                 m_features.fill_mode_non_solid ? "on" : "off",
@@ -3931,10 +3895,6 @@ namespace rendering_engine::gpu::backend::vulkan
     uint32_t vk_device::frame_slot() const noexcept
     {
         return m_frame_slot;
-    }
-    bool vk_device::depth_clip_control_enabled() const noexcept
-    {
-        return m_depth_clip_control_enabled;
     }
     bool vk_device::extended_dynamic_state_enabled() const noexcept
     {

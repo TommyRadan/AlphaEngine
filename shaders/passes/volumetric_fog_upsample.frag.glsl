@@ -17,8 +17,6 @@
 // volumetric_fog.frag.glsl), so an even pixel sits exactly on its texel
 // and an odd one halfway between two.
 
-#include "include/depth_utils.glsl"
-
 layout(location = 0) in vec2 texCoord;
 layout(location = 0) out vec4 fragColor;
 
@@ -39,13 +37,14 @@ layout(set = 0, binding = 2, std140) uniform VolumetricFog
 const float DEPTH_TOLERANCE = 0.1;
 
 // Positive view-space depth of the scene at a full-resolution pixel,
-// through the unjittered inverse projection. Only its z and w rows are
-// involved, which the temporal-AA jitter does not touch, and it holds for
-// perspective and orthographic cameras alike.
+// through the unjittered inverse projection; the sampled depth is the
+// pixel's NDC z. Only its z and w rows are involved, which the
+// temporal-AA jitter does not touch, and it holds for perspective and
+// orthographic cameras alike.
 float view_depth(ivec2 pixel)
 {
     float depth = texelFetch(sceneDepth, pixel, 0).r;
-    vec4 view = u_fog.inverseProjection * vec4(0.0, 0.0, depth_to_ndc(depth), 1.0);
+    vec4 view = u_fog.inverseProjection * vec4(0.0, 0.0, depth, 1.0);
     return -view.z / view.w;
 }
 

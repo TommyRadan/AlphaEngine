@@ -35,7 +35,6 @@
 
 #include "include/bindings.glsl"
 #include "include/constants.glsl"
-#include "include/depth_utils.glsl"
 #include "include/lights.glsl"
 #include "include/per_frame.glsl"
 #include "include/shadows.glsl"
@@ -123,7 +122,9 @@ float volume_directional_shadow(vec3 p, int lightIndex)
         }
     }
     vec4 lightClip = u_shadow.lightViewProj[cascade] * vec4(p, 1.0);
-    vec3 proj = lightClip.xyz / lightClip.w * 0.5 + 0.5;
+    // NDC xy in [-1, 1] -> map UV; the depth is already in [0, 1].
+    vec3 proj = lightClip.xyz / lightClip.w;
+    proj.xy = proj.xy * 0.5 + 0.5;
     if (proj.z > 1.0 || proj.x < 0.0 || proj.x > 1.0 || proj.y < 0.0 || proj.y > 1.0)
     {
         return 1.0;
@@ -163,7 +164,8 @@ float volume_spot_shadow(vec3 p, int lightIndex)
         return 1.0;
     }
     vec4 lightClip = u_spot_shadow.lightViewProj * vec4(p, 1.0);
-    vec3 proj = lightClip.xyz / lightClip.w * 0.5 + 0.5;
+    vec3 proj = lightClip.xyz / lightClip.w;
+    proj.xy = proj.xy * 0.5 + 0.5;
     if (proj.z > 1.0 || proj.x < 0.0 || proj.x > 1.0 || proj.y < 0.0 || proj.y > 1.0)
     {
         return 1.0;
@@ -230,11 +232,12 @@ void main()
     ivec2 fullPixel = min(halfPixel * 2, fullSize - 1);
     float depth = texelFetch(sceneDepth, fullPixel, 0).r;
 
-    // Its world position: the surface under it, or the far plane where
+    // Its world position, unprojected from the pixel's NDC (the sampled
+    // depth is its NDC z): the surface under it, or the far plane where
     // nothing was drawn (the scene pass clears depth to 1), which the max
     // distance then caps.
     vec2 uv = (vec2(fullPixel) + 0.5) / vec2(fullSize);
-    vec4 world = u_frame.inverseViewProjectionMatrix * vec4(uv * 2.0 - 1.0, depth_to_ndc(depth), 1.0);
+    vec4 world = u_frame.inverseViewProjectionMatrix * vec4(uv * 2.0 - 1.0, depth, 1.0);
     vec3 target = world.xyz / world.w;
 
     vec3 origin = u_frame.cameraPosition.xyz;

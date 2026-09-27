@@ -39,7 +39,9 @@ namespace core::math
         f.planes[right] = normalize_plane(vec4{r3.x - r0.x, r3.y - r0.y, r3.z - r0.z, r3.w - r0.w});
         f.planes[bottom] = normalize_plane(vec4{r3.x + r1.x, r3.y + r1.y, r3.z + r1.z, r3.w + r1.w});
         f.planes[top] = normalize_plane(vec4{r3.x - r1.x, r3.y - r1.y, r3.z - r1.z, r3.w - r1.w});
-        f.planes[near_p] = normalize_plane(vec4{r3.x + r2.x, r3.y + r2.y, r3.z + r2.z, r3.w + r2.w});
+        // Clip-space depth spans [0, w] (see perspective / ortho), so the
+        // near plane is z >= 0: row 2 on its own.
+        f.planes[near_p] = normalize_plane(r2);
         f.planes[far_p] = normalize_plane(vec4{r3.x - r2.x, r3.y - r2.y, r3.z - r2.z, r3.w - r2.w});
         return f;
     }

@@ -138,13 +138,13 @@ namespace rendering_engine
         // velocity_pass).
         // Passes that sample it declare @c io.read("scene_depth").
         //
-        // Encoding: non-linear depth24, @c .r in [0, 1], holding the
-        // window-space depth 0.5 * z_ndc + 0.5. The camera's projection
-        // comes from core::math::perspective, whose clip z spans [-w, w]
-        // (NDC z in [-1, 1]); every pipeline opts into that clip range
-        // via VK_EXT_depth_clip_control with a [0, 1] viewport depth.
-        // shaders/include/depth_utils.glsl ships the GLSL to invert it:
-        // depth_to_ndc(d) = 2d - 1 and linearize_depth(d, near, far) =
+        // Encoding: non-linear depth24, @c .r in [0, 1], holding the NDC
+        // z itself. The camera's projection comes from
+        // core::math::perspective, whose clip-space depth spans [0, w]
+        // (NDC z in [0, 1]), and the viewport depth range is [0, 1], so a
+        // clip-space reprojection takes the sampled value unchanged.
+        // shaders/include/depth_utils.glsl ships the GLSL to linearise it:
+        // linearize_depth(d, near, far) =
         // near * far / (far - d * (far - near)), the positive view-space
         // distance in [near, far]. The scene pass (or, on frames it runs,
         // the depth pre-pass ahead of it) clears it to 1.0, so untouched

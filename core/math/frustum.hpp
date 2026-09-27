@@ -37,8 +37,9 @@ namespace core::math
         vec4 planes[count]{};
 
         /**
-         * @brief Extract a frustum from a view-projection matrix using
-         *        the Gribb/Hartmann method (planes in world space).
+         * @brief Extract a frustum from a view-projection matrix with the
+         *        engine's [0, w] clip-space depth (see @ref perspective)
+         *        using the Gribb/Hartmann method (planes in world space).
          */
         static frustum from_view_projection(const mat4& view_projection) noexcept;
 
