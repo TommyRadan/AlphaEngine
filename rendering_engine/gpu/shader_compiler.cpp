@@ -207,9 +207,12 @@ namespace rendering_engine::gpu
             return line.substr(1, end - 1);
         }
 
-        // Folds every library file text (transitively) includes into the
-        // hasher, each once, in first-seen order.
-        void mix_includes(std::string_view text, std::vector<std::string>& seen, core::fnv1a_64_hasher& hasher)
+        // Calls visit(name, included_text) for every library file text
+        // (transitively) includes, each once, in first-seen order: a file
+        // is visited before the files it includes itself. seen collects
+        // the names visited.
+        template<typename Visit>
+        void visit_includes(std::string_view text, std::vector<std::string>& seen, Visit&& visit)
         {
             std::size_t pos = 0;
             while (pos < text.size())
@@ -228,12 +231,24 @@ namespace rendering_engine::gpu
                 }
                 seen.emplace_back(name);
                 const std::string_view included = shader_library::source(name);
-                hasher.mix(name);
-                hasher.mix("\0", 1);
-                hasher.mix(included);
-                hasher.mix("\0", 1);
-                mix_includes(included, seen, hasher);
+                visit(name, included);
+                visit_includes(included, seen, visit);
             }
+        }
+
+        // Folds every library file text (transitively) includes into the
+        // hasher, each once, in first-seen order.
+        void mix_includes(std::string_view text, std::vector<std::string>& seen, core::fnv1a_64_hasher& hasher)
+        {
+            visit_includes(text,
+                           seen,
+                           [&hasher](std::string_view name, std::string_view included)
+                           {
+                               hasher.mix(name);
+                               hasher.mix("\0", 1);
+                               hasher.mix(included);
+                               hasher.mix("\0", 1);
+                           });
         }
 
         uint64_t cache_key(std::string_view source, shader_stage stage, const std::string& preamble)
@@ -499,6 +514,19 @@ namespace rendering_engine::gpu
     std::vector<uint32_t> compile_library_shader(const shader_variant& variant, shader_stage stage)
     {
         return compile_library_shader(variant.path, stage, variant.defines);
+    }
+
+    std::vector<std::string> shader_dependencies(std::string_view path)
+    {
+        std::vector<std::string> files{std::string{path}};
+        if (!shader_library::contains(path))
+        {
+            return files;
+        }
+        std::vector<std::string> includes;
+        visit_includes(shader_library::source(path), includes, [](std::string_view, std::string_view) {});
+        files.insert(files.end(), includes.begin(), includes.end());
+        return files;
     }
 
     void set_shader_cache_directory(const std::filesystem::path& directory)

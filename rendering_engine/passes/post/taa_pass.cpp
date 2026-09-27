@@ -31,7 +31,7 @@
 #include <rendering_engine/gpu/pipeline.hpp>
 #include <rendering_engine/gpu/render_target.hpp>
 #include <rendering_engine/gpu/shader.hpp>
-#include <rendering_engine/gpu/shader_compiler.hpp>
+#include <rendering_engine/gpu/shader_hot_reload.hpp>
 #include <rendering_engine/passes/post/fullscreen_triangle.hpp>
 #include <runtime/engine.hpp>
 
@@ -64,16 +64,10 @@ namespace rendering_engine
         }
 
         // -- Shaders --------------------------------------------------
-        gpu::shader_module_descriptor vs_descriptor{};
-        vs_descriptor.stage = gpu::shader_stage::vertex;
-        vs_descriptor.spirv = gpu::compile_library_shader("passes/fullscreen.vert.glsl", gpu::shader_stage::vertex);
-        m_vertex_shader = gpu.create_shader_module(vs_descriptor);
-
-        gpu::shader_module_descriptor resolve_descriptor{};
-        resolve_descriptor.stage = gpu::shader_stage::fragment;
-        resolve_descriptor.spirv =
-            gpu::compile_library_shader("passes/taa_resolve.frag.glsl", gpu::shader_stage::fragment);
-        m_resolve_shader = gpu.create_shader_module(resolve_descriptor);
+        m_vertex_shader =
+            gpu::create_library_shader_module(gpu, "passes/fullscreen.vert.glsl", gpu::shader_stage::vertex);
+        m_resolve_shader =
+            gpu::create_library_shader_module(gpu, "passes/taa_resolve.frag.glsl", gpu::shader_stage::fragment);
 
         // -- Fullscreen-triangle vertex buffer ------------------------
         gpu::buffer_descriptor vb_descriptor{};

@@ -193,8 +193,11 @@ namespace rendering_engine::gpu::backend::vulkan
         bool is_compute{false};
 
         // Compute pipelines are render-pass independent and built
-        // up-front in @c create_compute_pipeline.
+        // up-front in @c create_compute_pipeline, from
+        // @c compute_shader (kept so the debug hot reload can rebuild
+        // the pipeline when that module's code is replaced).
         VkPipeline compute_object{VK_NULL_HANDLE};
+        shader_module compute_shader{};
 
         // Graphics pipelines are bound to a specific render pass at
         // VkPipeline creation time. The engine renders into an
@@ -227,6 +230,10 @@ namespace rendering_engine::gpu::backend::vulkan
             // variants are otherwise identical, so they're keyed by
             // the @c y_flipped flag in addition to render_pass.
             bool y_flipped{false};
+            // The pass attachments the variant was built for, so the
+            // debug hot reload can rebuild it for the same render pass.
+            uint32_t color_count{1};
+            VkSampleCountFlagBits samples{VK_SAMPLE_COUNT_1_BIT};
         };
         std::vector<variant> graphics_variants;
 

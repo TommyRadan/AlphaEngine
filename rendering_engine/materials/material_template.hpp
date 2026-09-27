@@ -41,6 +41,12 @@
  * template with the same key therefore cost one pipeline, and a scene
  * of many standard materials sorts down to a handful of pipeline
  * switches.
+ *
+ * The modules are created through @ref gpu::create_library_shader_module,
+ * so in a debug build an edit of a template's shader (or of an include it
+ * reads) is swapped in behind the cached module handles and every variant
+ * built from them is rebuilt in place (see shader_hot_reload.hpp); the
+ * cache and the handles instances hold stay valid.
  */
 
 #pragma once

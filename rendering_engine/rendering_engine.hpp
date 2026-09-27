@@ -72,6 +72,13 @@ namespace rendering_engine
         struct helper;
     }
 
+#if _DEBUG
+    namespace gpu
+    {
+        struct shader_hot_reload;
+    }
+#endif
+
     /**
      * @brief Orchestrates the rendering subsystem (window, GL context, materials, passes).
      *
@@ -523,6 +530,16 @@ namespace rendering_engine
 
         // The per-draw ring (see @ref get_per_draw_ring).
         std::unique_ptr<per_draw_ring> m_per_draw_ring;
+
+#if _DEBUG
+        // Debug-build shader hot reload over the shader library's
+        // override root (see gpu/shader_hot_reload.hpp). Installed in
+        // @ref init right after the device, before any pass or template
+        // creates a module, so every library module registers with it;
+        // polled at the top of @ref render, between frames; released at
+        // the start of @ref quit. Null when overrides are off.
+        std::unique_ptr<gpu::shader_hot_reload> m_shader_hot_reload;
+#endif
 
         // This frame's draw statistics, filled by the scene pass (which
         // holds a pointer to it) and surfaced via @ref get_render_stats.

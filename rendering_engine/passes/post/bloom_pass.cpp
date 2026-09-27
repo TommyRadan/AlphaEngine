@@ -32,7 +32,7 @@
 #include <rendering_engine/gpu/pipeline.hpp>
 #include <rendering_engine/gpu/render_target.hpp>
 #include <rendering_engine/gpu/shader.hpp>
-#include <rendering_engine/gpu/shader_compiler.hpp>
+#include <rendering_engine/gpu/shader_hot_reload.hpp>
 #include <rendering_engine/passes/post/fullscreen_triangle.hpp>
 #include <runtime/engine.hpp>
 
@@ -78,27 +78,14 @@ namespace rendering_engine
         }
 
         // -- Shaders --------------------------------------------------
-        gpu::shader_module_descriptor vs_descriptor{};
-        vs_descriptor.stage = gpu::shader_stage::vertex;
-        vs_descriptor.spirv = gpu::compile_library_shader("passes/fullscreen.vert.glsl", gpu::shader_stage::vertex);
-        m_vertex_shader = gpu.create_shader_module(vs_descriptor);
-
-        gpu::shader_module_descriptor threshold_descriptor{};
-        threshold_descriptor.stage = gpu::shader_stage::fragment;
-        threshold_descriptor.spirv =
-            gpu::compile_library_shader("passes/bloom_threshold.frag.glsl", gpu::shader_stage::fragment);
-        m_threshold_shader = gpu.create_shader_module(threshold_descriptor);
-
-        gpu::shader_module_descriptor blur_descriptor{};
-        blur_descriptor.stage = gpu::shader_stage::fragment;
-        blur_descriptor.spirv = gpu::compile_library_shader("passes/bloom_blur.frag.glsl", gpu::shader_stage::fragment);
-        m_blur_shader = gpu.create_shader_module(blur_descriptor);
-
-        gpu::shader_module_descriptor composite_descriptor{};
-        composite_descriptor.stage = gpu::shader_stage::fragment;
-        composite_descriptor.spirv =
-            gpu::compile_library_shader("passes/bloom_composite.frag.glsl", gpu::shader_stage::fragment);
-        m_composite_shader = gpu.create_shader_module(composite_descriptor);
+        m_vertex_shader =
+            gpu::create_library_shader_module(gpu, "passes/fullscreen.vert.glsl", gpu::shader_stage::vertex);
+        m_threshold_shader =
+            gpu::create_library_shader_module(gpu, "passes/bloom_threshold.frag.glsl", gpu::shader_stage::fragment);
+        m_blur_shader =
+            gpu::create_library_shader_module(gpu, "passes/bloom_blur.frag.glsl", gpu::shader_stage::fragment);
+        m_composite_shader =
+            gpu::create_library_shader_module(gpu, "passes/bloom_composite.frag.glsl", gpu::shader_stage::fragment);
 
         // -- Fullscreen-triangle vertex buffer ------------------------
         gpu::buffer_descriptor vb_descriptor{};

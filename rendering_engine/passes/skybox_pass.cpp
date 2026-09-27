@@ -32,7 +32,7 @@
 #include <rendering_engine/gpu/pipeline.hpp>
 #include <rendering_engine/gpu/render_target.hpp>
 #include <rendering_engine/gpu/shader.hpp>
-#include <rendering_engine/gpu/shader_compiler.hpp>
+#include <rendering_engine/gpu/shader_hot_reload.hpp>
 #include <rendering_engine/passes/post/fullscreen_triangle.hpp>
 #include <rendering_engine/passes/projection_jitter.hpp>
 #include <runtime/engine.hpp>
@@ -53,15 +53,9 @@ namespace rendering_engine
     {
         auto& gpu = *runtime::current_engine().gpu;
 
-        gpu::shader_module_descriptor vs_descriptor{};
-        vs_descriptor.stage = gpu::shader_stage::vertex;
-        vs_descriptor.spirv = gpu::compile_library_shader("passes/skybox.vert.glsl", gpu::shader_stage::vertex);
-        m_vertex_shader = gpu.create_shader_module(vs_descriptor);
-
-        gpu::shader_module_descriptor fs_descriptor{};
-        fs_descriptor.stage = gpu::shader_stage::fragment;
-        fs_descriptor.spirv = gpu::compile_library_shader("passes/skybox.frag.glsl", gpu::shader_stage::fragment);
-        m_fragment_shader = gpu.create_shader_module(fs_descriptor);
+        m_vertex_shader = gpu::create_library_shader_module(gpu, "passes/skybox.vert.glsl", gpu::shader_stage::vertex);
+        m_fragment_shader =
+            gpu::create_library_shader_module(gpu, "passes/skybox.frag.glsl", gpu::shader_stage::fragment);
 
         gpu::buffer_descriptor vb_descriptor{};
         vb_descriptor.size = fullscreen_triangle_vertices.size() * sizeof(float);

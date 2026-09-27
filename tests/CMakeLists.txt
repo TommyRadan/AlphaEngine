@@ -125,7 +125,10 @@ set(ALPHAENGINE_TEST_SOURCES_UNDER_TEST
     # shaders/) and the glslang front end behind every pipeline. Compiling
     # every embedded shader here, headless, is what catches an #include or
     # binding mistake before a GPU sees it; no backend is linked.
+    # gpu/shader_hot_reload supplies create_library_shader_module, which the
+    # material template creates its modules through.
     ${CMAKE_SOURCE_DIR}/rendering_engine/gpu/shader_compiler.cpp
+    ${CMAKE_SOURCE_DIR}/rendering_engine/gpu/shader_hot_reload.cpp
     ${CMAKE_SOURCE_DIR}/rendering_engine/gpu/shader_library.cpp
     # materials — the variant key / keyword mapping (pure), the template
     # with its pipeline-variant cache and the instance base, plus the

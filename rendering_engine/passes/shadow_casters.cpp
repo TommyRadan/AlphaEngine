@@ -27,7 +27,7 @@
 #include <rendering_engine/gpu/command_encoder.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/gpu/shader.hpp>
-#include <rendering_engine/gpu/shader_compiler.hpp>
+#include <rendering_engine/gpu/shader_hot_reload.hpp>
 #include <rendering_engine/materials/instanced_material.hpp>
 #include <runtime/engine.hpp>
 
@@ -52,11 +52,8 @@ namespace rendering_engine
         auto& gpu = *runtime::current_engine().gpu;
         instanced_shadow_pipeline instanced{};
 
-        gpu::shader_module_descriptor vs_descriptor{};
-        vs_descriptor.stage = gpu::shader_stage::vertex;
-        vs_descriptor.spirv =
-            gpu::compile_library_shader("passes/shadow_instanced.vert.glsl", gpu::shader_stage::vertex);
-        instanced.vertex_shader = gpu.create_shader_module(vs_descriptor);
+        instanced.vertex_shader =
+            gpu::create_library_shader_module(gpu, "passes/shadow_instanced.vert.glsl", gpu::shader_stage::vertex);
 
         // Slot 0: the shared geometry, position only, stride supplied per
         // draw (the renderables' records differ in width).

@@ -13,6 +13,8 @@ target_sources(AlphaEngine PRIVATE
     shader_bindings.hpp
     shader_compiler.cpp
     shader_compiler.hpp
+    shader_hot_reload.cpp
+    shader_hot_reload.hpp
     shader_library.cpp
     shader_library.hpp
     texture.hpp

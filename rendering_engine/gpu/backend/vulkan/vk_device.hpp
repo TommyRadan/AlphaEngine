@@ -60,6 +60,7 @@
 
 #include <array>
 #include <cstdint>
+#include <filesystem>
 #include <functional>
 #include <memory>
 #include <vector>
@@ -192,6 +193,18 @@ namespace rendering_engine::gpu::backend::vulkan
         uint32_t frames_in_flight() const noexcept override;
         uint32_t frame_slot() const noexcept override;
 
+#if defined(_DEBUG)
+        // Debug hot reload (see gpu::device). The new VkShaderModules are
+        // created first, then every pipeline built from a replaced module
+        // is rebuilt against them — the compute object, and each graphics
+        // variant for the render pass, orientation and attachments it was
+        // built for — before anything is installed, so a failure puts the
+        // old modules back and leaves every pipeline as it was. The old
+        // modules and pipeline objects go through enqueue_destroy.
+        bool reload_shader_modules(const std::vector<shader_module_update>& updates) override;
+        bool shader_module_live(shader_module module) override;
+#endif
+
         // Internal accessors used by the encoder to map handles
         // back to records. Definitions in vk_device.cpp.
         vk_buffer* lookup_buffer(buffer h);
@@ -213,6 +226,14 @@ namespace rendering_engine::gpu::backend::vulkan
         // The memory allocator every buffer and image is allocated
         // from; alive from create_logical_device until quit.
         VmaAllocator allocator() const noexcept;
+        // The pipeline cache every graphics and compute pipeline is
+        // created through — the backend's own and the Dear ImGui
+        // backend's. Seeded at init from the file the previous run
+        // wrote (see vk_pipeline_cache.hpp) and written back at quit;
+        // VK_NULL_HANDLE when the shader cache is disabled or the cache
+        // could not be created, which every vkCreate*Pipelines call
+        // accepts.
+        VkPipelineCache pipeline_cache() const noexcept;
         // True once a queue operation reported VK_ERROR_DEVICE_LOST.
         // From then on every submit, acquire and present is a no-op
         // and the next end_frame throws, once, so the main loop's
@@ -529,6 +550,18 @@ namespace rendering_engine::gpu::backend::vulkan
         // descriptor_pool_budget_for(chain length). Returns false with
         // an error logged when the driver refuses.
         bool create_descriptor_pool();
+        // Create m_pipeline_cache, seeded from the pipeline-cache file
+        // of this GPU in the shader cache directory when that file is
+        // intact and was written by this GPU and driver (logged either
+        // way). With the shader cache disabled no cache is created.
+        void create_pipeline_cache();
+        // Write the cache's data back to its file (skipped when it did
+        // not change since it was read, and after a device loss), then
+        // destroy it. Runs in quit, with the device idle.
+        void save_and_destroy_pipeline_cache();
+        // A compute VkPipeline over @p module and @p layout, through the
+        // pipeline cache; VK_NULL_HANDLE (logged) on failure.
+        VkPipeline build_compute_pipeline(VkShaderModule module, VkPipelineLayout layout);
         // Resolve the three engine depth formats against
         // vkGetPhysicalDeviceFormatProperties through the fallback
         // chains in vk_negotiate.hpp, log the outcome, and throw when a
@@ -696,6 +729,13 @@ namespace rendering_engine::gpu::backend::vulkan
         // queue writes no usable timestamps.
         uint32_t m_timestamp_valid_bits{0};
         VmaAllocator m_allocator{VK_NULL_HANDLE};
+        // See pipeline_cache(). m_pipeline_cache_file is empty when the
+        // shader cache directory is disabled; m_pipeline_cache_digest is
+        // the digest of the data read from it (0 when nothing was), so
+        // quit skips rewriting an unchanged cache.
+        VkPipelineCache m_pipeline_cache{VK_NULL_HANDLE};
+        std::filesystem::path m_pipeline_cache_file;
+        uint64_t m_pipeline_cache_digest{0};
 
         // Frame command buffers. Each slot is a command pool plus the
         // primary buffers allocated from it so far, handed out in order

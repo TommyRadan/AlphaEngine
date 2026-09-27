@@ -48,6 +48,17 @@ namespace rendering_engine::gpu
         std::vector<uint32_t> spirv;
     };
 
+#if defined(_DEBUG)
+    // New code for a live shader module: what the debug hot reload hands
+    // @c device::reload_shader_modules once an edited source recompiled.
+    // The stage stays the module's own.
+    struct shader_module_update
+    {
+        shader_module module{};
+        std::vector<uint32_t> spirv;
+    };
+#endif
+
     // One attribute fed into the vertex shader. @ref location is the
     // shader-side input slot (matches GLSL @c layout(location=N)).
     // @ref components is the per-vertex element count (e.g. 3 for a

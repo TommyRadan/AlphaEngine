@@ -27,6 +27,7 @@
 
 #include <core/log.hpp>
 #include <rendering_engine/gpu/device.hpp>
+#include <rendering_engine/gpu/shader_hot_reload.hpp>
 
 namespace
 {
@@ -282,19 +283,16 @@ namespace rendering_engine
 
         shader_set shaders{};
 
+        // Created through the library helper so a debug build's hot
+        // reload can swap an edited stage in behind these handles and
+        // rebuild every variant built from them in place.
         gpu::shader_variant vertex = m_descriptor.vertex_shader;
         vertex.defines = keyword_defines(keywords, m_descriptor.vertex_shader.defines);
-        gpu::shader_module_descriptor vs_descriptor{};
-        vs_descriptor.stage = gpu::shader_stage::vertex;
-        vs_descriptor.spirv = gpu::compile_library_shader(vertex, gpu::shader_stage::vertex);
-        shaders.vertex = m_device->create_shader_module(vs_descriptor);
+        shaders.vertex = gpu::create_library_shader_module(*m_device, vertex, gpu::shader_stage::vertex);
 
         gpu::shader_variant fragment = m_descriptor.fragment_shader;
         fragment.defines = keyword_defines(keywords, m_descriptor.fragment_shader.defines);
-        gpu::shader_module_descriptor fs_descriptor{};
-        fs_descriptor.stage = gpu::shader_stage::fragment;
-        fs_descriptor.spirv = gpu::compile_library_shader(fragment, gpu::shader_stage::fragment);
-        shaders.fragment = m_device->create_shader_module(fs_descriptor);
+        shaders.fragment = gpu::create_library_shader_module(*m_device, fragment, gpu::shader_stage::fragment);
 
         return m_shaders.emplace(keywords, shaders).first->second;
     }

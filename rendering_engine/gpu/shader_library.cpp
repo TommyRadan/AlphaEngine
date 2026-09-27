@@ -85,13 +85,19 @@ namespace rendering_engine::gpu::shader_library
         // On-disk override state. The root is resolved lazily on the first
         // lookup (environment variable, else the build-time source
         // directory); set_override_root replaces it. Files read from disk
-        // are kept for the process so the returned views stay valid.
+        // are kept for the process so the returned views stay valid;
+        // refresh moves an entry's map node to retired (a node handle
+        // keeps the string where it is), so a view taken before the file
+        // was re-read still points at live text.
+        using file_map = std::map<std::string, std::string, std::less<>>;
+
         struct override_state
         {
             bool resolved{false};
             std::filesystem::path root;
             bool announced{false};
-            std::map<std::string, std::string, std::less<>> files;
+            file_map files;
+            std::vector<file_map::node_type> retired;
         };
 
         override_state& overrides()
@@ -216,8 +222,22 @@ namespace rendering_engine::gpu::shader_library
         state.root = root;
         state.announced = false;
         state.files.clear();
+        state.retired.clear();
 #else
         (void)root;
+#endif
+    }
+
+    void refresh(std::string_view path)
+    {
+#if defined(_DEBUG)
+        override_state& state = overrides();
+        if (const auto cached = state.files.find(path); cached != state.files.end())
+        {
+            state.retired.push_back(state.files.extract(cached));
+        }
+#else
+        (void)path;
 #endif
     }
 
