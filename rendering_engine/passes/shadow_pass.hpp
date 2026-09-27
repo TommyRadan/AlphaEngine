@@ -40,11 +40,11 @@ namespace rendering_engine
      *
      * Runs ahead of the @ref scene_pass and renders the scene's depth
      * from the first shadow-casting @ref directional_light's point of
-     * view into an off-screen @c depth32_float target (the shadow map).
-     * The @ref scene_pass exposes that depth texture plus the
-     * light-space view-projection matrix to the lit materials through
-     * its per-frame bind group, and the lit fragment shaders sample it
-     * to occlude that light's contribution.
+     * view into an off-screen depth-only @c depth32_float target (the
+     * shadow map). The @ref scene_pass exposes that depth texture plus
+     * the light-space view-projection matrix to the lit materials
+     * through its per-frame bind group, and the lit fragment shaders
+     * sample it to occlude that light's contribution.
      *
      * The light's view is an orthographic box oriented along the light
      * direction. When a camera is attached (@ref frame_context::active_camera)
@@ -61,7 +61,8 @@ namespace rendering_engine
      * @ref scene_pass and the per-draw model-matrix bind group each
      * renderable already builds (binding 1), so every scene renderable
      * casts without any per-renderable wiring; only the depth-only
-     * pipeline and the light-space matrix differ. Instanced batches cast
+     * pipeline (vertex stage only, rasteriser depth bias against acne)
+     * and the light-space matrix differ. Instanced batches cast
      * through the instanced twin of that pipeline, which reads their
      * per-instance transform stream (see @ref shadow_caster_dispatch).
      */
@@ -118,13 +119,12 @@ namespace rendering_engine
         // walks. The context outlives every pass.
         std::vector<renderable*>* m_registry;
 
-        // Off-screen shadow-map target (small colour attachment plus
-        // the sampled @c depth32_float depth attachment) and the
+        // Off-screen depth-only shadow-map target (the sampled
+        // @c depth32_float attachment is its only attachment) and the
         // depth-only pipeline that fills it.
         gpu::render_target m_target{};
         gpu::texture m_depth_texture{};
         gpu::shader_module m_vertex_shader{};
-        gpu::shader_module m_fragment_shader{};
         gpu::pipeline m_pipeline{};
 
         // The instanced twin of @ref m_pipeline for instanced casters;

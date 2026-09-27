@@ -187,7 +187,7 @@ namespace rendering_engine
     {
         auto& gpu = *runtime::current_engine().gpu;
         gpu::render_target_descriptor descriptor{};
-        descriptor.color_format = gpu::texture_format::rgba16_float;
+        descriptor.color = {{gpu::texture_format::rgba16_float}};
         descriptor.width = width;
         descriptor.height = height;
         descriptor.with_depth = false;
@@ -459,8 +459,8 @@ namespace rendering_engine
         {
             gpu::render_pass_descriptor descriptor{};
             descriptor.target = m_bright_target;
-            descriptor.color.load = gpu::load_op::clear;
-            descriptor.color.clear_color = {0.0f, 0.0f, 0.0f, 1.0f};
+            descriptor.color[0].load = gpu::load_op::clear;
+            descriptor.color[0].clear_color = {0.0f, 0.0f, 0.0f, 1.0f};
             descriptor.use_depth = false;
 
             auto pass_encoder = encoder.begin_render_pass(descriptor);
@@ -476,8 +476,8 @@ namespace rendering_engine
             {
                 gpu::render_pass_descriptor descriptor{};
                 descriptor.target = level.horizontal_target;
-                descriptor.color.load = gpu::load_op::clear;
-                descriptor.color.clear_color = {0.0f, 0.0f, 0.0f, 1.0f};
+                descriptor.color[0].load = gpu::load_op::clear;
+                descriptor.color[0].clear_color = {0.0f, 0.0f, 0.0f, 1.0f};
                 descriptor.use_depth = false;
 
                 auto pass_encoder = encoder.begin_render_pass(descriptor);
@@ -487,8 +487,8 @@ namespace rendering_engine
             {
                 gpu::render_pass_descriptor descriptor{};
                 descriptor.target = level.vertical_target;
-                descriptor.color.load = gpu::load_op::clear;
-                descriptor.color.clear_color = {0.0f, 0.0f, 0.0f, 1.0f};
+                descriptor.color[0].load = gpu::load_op::clear;
+                descriptor.color[0].clear_color = {0.0f, 0.0f, 0.0f, 1.0f};
                 descriptor.use_depth = false;
 
                 auto pass_encoder = encoder.begin_render_pass(descriptor);
@@ -504,7 +504,7 @@ namespace rendering_engine
         {
             gpu::render_pass_descriptor descriptor{};
             descriptor.target = ctx.scene_color_target;
-            descriptor.color.load = gpu::load_op::load;
+            descriptor.color[0].load = gpu::load_op::load;
             descriptor.use_depth = false;
 
             auto pass_encoder = encoder.begin_render_pass(descriptor);

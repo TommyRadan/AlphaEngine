@@ -244,8 +244,9 @@ TEST_F(shader_compiler, every_embedded_shader_compiles)
         EXPECT_EQ(spirv.front(), spirv_magic);
         ++compiled;
     }
-    // Eight materials x two stages plus the passes and the IBL kernels.
-    EXPECT_GE(compiled, 16u + 16u);
+    // Eight materials x two stages plus the passes (the depth-only shadow
+    // stage is vertex-only) and the IBL kernels.
+    EXPECT_GE(compiled, 16u + 15u);
 }
 
 TEST_F(shader_compiler, standard_material_keyword_variants_compile)

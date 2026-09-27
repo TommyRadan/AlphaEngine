@@ -56,6 +56,86 @@ namespace rendering_engine::gpu
         vulkan,
     };
 
+    // What the device can do, filled by the backend during @c init
+    // from the context / physical device it brought up and read
+    // through @ref device::features. Every flag is a hard gate:
+    // consumers ask before they rely on the feature, and a backend
+    // that lacks it either degrades (a wireframe material rasterises
+    // filled, multi-draw indirect unrolls, anisotropy is ignored) or
+    // refuses (a pipeline with an ungranted stage). The OpenGL 4.6
+    // core profile grants almost everything; the Vulkan backend
+    // requests each optional core feature only when the physical
+    // device reports it and records the grant here.
+    struct device_features
+    {
+        // Compute pipelines and storage bindings.
+        bool compute{false};
+        // @c draw_indexed_indirect; @c multi_draw_indirect adds a draw
+        // count above one per call.
+        bool indirect_draw{false};
+        bool multi_draw_indirect{false};
+        bool geometry_shader{false};
+        bool tessellation_shader{false};
+        // @c polygon_mode::line / @c point (Vulkan's fillModeNonSolid).
+        bool fill_mode_non_solid{false};
+        // @c sampler_descriptor::max_anisotropy above 1.
+        bool sampler_anisotropy{false};
+        // @c depth_bias_state::clamp (Vulkan's depthBiasClamp).
+        bool depth_bias_clamp{false};
+        // Differing @c pipeline_descriptor::attachment_blend entries
+        // (Vulkan's independentBlend).
+        bool independent_blend{false};
+        // @c command_encoder::write_timestamp produces readable ticks.
+        bool timestamp_queries{false};
+        // Debug groups and object names reach a debugger / the driver's
+        // debug output (KHR_debug; VK_EXT_debug_utils enabled).
+        bool debug_labels{false};
+        // The device runs on a layered implementation
+        // (VK_KHR_portability_subset — MoltenVK). Informational.
+        bool portability_subset{false};
+        // The image-based-lighting tables can be convolved on the GPU:
+        // compute pipelines writing storage images into specific
+        // cube-map mip levels, plus a real mip chain to sample. Both
+        // backends implement this today; the IBL builder falls back to
+        // the CPU convolution when it is false.
+        bool compute_prefilter{false};
+    };
+
+    // Numeric limits of the device, filled beside @ref device_features.
+    struct device_limits
+    {
+        uint32_t max_texture_size_2d{0};
+        uint32_t max_texture_size_3d{0};
+        uint32_t max_texture_size_cube{0};
+        uint32_t max_array_layers{0};
+        // Colour attachments one render target may carry (at least
+        // @c max_color_attachments on supported hardware).
+        uint32_t max_color_attachments{0};
+        // Required alignment of a dynamic uniform / storage buffer
+        // offset, for callers that sub-allocate one buffer.
+        uint32_t uniform_buffer_offset_alignment{0};
+        uint32_t storage_buffer_offset_alignment{0};
+        // Multisample counts a colour / depth attachment may use (see
+        // @ref sample_count_supported).
+        sample_count_mask color_sample_counts{1};
+        sample_count_mask depth_sample_counts{1};
+        // Largest @c sampler_descriptor::max_anisotropy honoured.
+        float max_anisotropy{1.0f};
+        // Nanoseconds per timestamp tick (@c resolve_queries returns
+        // ticks); 1.0 when timestamps are in nanoseconds already.
+        float timestamp_period_ns{1.0f};
+        uint32_t max_compute_workgroup_count[3]{0, 0, 0};
+        uint32_t max_compute_workgroup_invocations{0};
+    };
+
+    // Timestamp queries a frame writes and later reads back. A set is
+    // a fixed number of slots; @c command_encoder::write_timestamp
+    // fills one, @c device::resolve_queries reads them.
+    struct query_set_descriptor
+    {
+        uint32_t count{0};
+    };
+
     // Top-level GPU device interface. All resource creation,
     // destruction and command recording flows through this struct.
     // Methods are main-thread-only — there is no internal locking.
@@ -76,17 +156,23 @@ namespace rendering_engine::gpu
 
         // -- Capabilities -------------------------------------------------
 
-        // Whether the backend can convolve image-based-lighting tables on
-        // the GPU: compute pipelines writing storage images into specific
-        // cube-map mip levels, plus a real mip chain to sample. Backends
-        // that lack these (the Vulkan backend's mip generation and storage
-        // images are still stubs) return false and the IBL builder falls
-        // back to the CPU convolution. Defaults to false; the OpenGL
-        // backend overrides it.
-        virtual bool supports_compute_prefilter() const
+        // What this device can do and how much of it, valid after
+        // @ref init. See @ref device_features / @ref device_limits.
+        const device_features& features() const noexcept
         {
-            return false;
+            return m_features;
         }
+
+        const device_limits& limits() const noexcept
+        {
+            return m_limits;
+        }
+
+        // The uses (@ref texture_usage bits) a texture of @p format
+        // supports on this device with optimal tiling: which formats
+        // may be attached, sampled, written as storage images or
+        // copied. Valid after @ref init.
+        virtual texture_usage format_support(texture_format format) const = 0;
 
         // -- Resource creation --------------------------------------------
 
@@ -99,6 +185,11 @@ namespace rendering_engine::gpu
         virtual pipeline create_compute_pipeline(const compute_pipeline_descriptor& descriptor) = 0;
         virtual bind_group create_bind_group(const bind_group_descriptor& descriptor) = 0;
 
+        // A set of timestamp queries (see @ref query_set_descriptor).
+        // Returns an invalid handle, with the reason logged, on a
+        // device without @c device_features::timestamp_queries.
+        virtual query_set create_query_set(const query_set_descriptor& descriptor) = 0;
+
         // -- Resource destruction -----------------------------------------
 
         virtual void destroy(buffer handle) = 0;
@@ -108,6 +199,20 @@ namespace rendering_engine::gpu
         virtual void destroy(bind_group_layout handle) = 0;
         virtual void destroy(pipeline handle) = 0;
         virtual void destroy(bind_group handle) = 0;
+        virtual void destroy(query_set handle) = 0;
+
+        // -- Debug names --------------------------------------------------
+
+        // Label a resource for graphics debuggers and the driver's
+        // debug output (@c glObjectLabel; @c vkSetDebugUtilsObjectNameEXT
+        // when @c VK_EXT_debug_utils is enabled). No-ops by default and
+        // on a device without @c device_features::debug_labels; a
+        // backend overrides the ones it can label.
+        virtual void set_debug_name(buffer handle, const char* name);
+        virtual void set_debug_name(texture handle, const char* name);
+        virtual void set_debug_name(sampler handle, const char* name);
+        virtual void set_debug_name(pipeline handle, const char* name);
+        virtual void set_debug_name(render_target handle, const char* name);
 
         // -- Resource updates ---------------------------------------------
 
@@ -125,17 +230,30 @@ namespace rendering_engine::gpu
         virtual void write_texture(texture texture_handle, const void* data, size_t size) = 0;
 
         // Upload @p size bytes of tightly packed texels into @p region
-        // of a 2D texture — one mip level, at an (x, y) offset, of the
-        // given extent — for sub-rect updates (atlas glyphs, streamed
-        // tiles) and hand-authored mip levels. @p data is laid out like
+        // of a 2D or 2D-array texture — one mip level and one layer,
+        // at an (x, y) offset, of the given extent — for sub-rect
+        // updates (atlas glyphs, streamed tiles), hand-authored mip
+        // levels and array layers. @p data is laid out like
         // @ref write_texture over @c region.width by @c region.height
         // texels. Returns false and uploads nothing when the region
-        // does not fit the level, @p size is too small, or the backend
-        // does not implement region writes: the base implementation
-        // logs a warning and returns false, and the Vulkan backend
-        // inherits it for now.
+        // does not fit the level / layer or @p size is too small.
+        virtual bool write_texture_region(texture texture_handle,
+                                          const texture_write_region& region,
+                                          const void* data,
+                                          size_t size) = 0;
+
+        // Synchronous readback of @p region of @p texture_handle into
+        // @p out as tightly packed texels of the texture's format
+        // (@ref texture_region_bytes gives the size). Waits for every
+        // submitted command that wrote the texture to complete, so it
+        // is for tests, screenshots and tooling, not the frame loop:
+        // a per-frame readback goes through
+        // @c command_encoder::copy_texture_to_buffer into a host-visible
+        // buffer instead. Returns false, with the reason logged, when
+        // the region does not fit, @p size is too small, or the texture
+        // was not created with @c texture_usage_copy_src.
         virtual bool
-        write_texture_region(texture texture_handle, const texture_write_region& region, const void* data, size_t size);
+        read_texture(texture texture_handle, const texture_copy_region& region, void* out, size_t size) = 0;
 
         // Upload pixel data for a 3D texture. @p data lays out the
         // full volume in slice-major order: each z slice is a 2D
@@ -182,30 +300,48 @@ namespace rendering_engine::gpu
             return false;
         }
 
-        // Allocate an off-screen render target. The device owns the
-        // colour texture (and the optional depth texture) so the
-        // attachments are released together with the target. The
-        // colour texture is exposed via @ref render_target_color_texture
-        // so the next pass in the chain can sample it; the depth
-        // attachment is internal.
+        // Allocate an off-screen render target: zero or more colour
+        // attachments and an optional depth attachment, as
+        // @ref render_target_descriptor lays out. Every attachment the
+        // descriptor does not import is allocated by the device as a
+        // sampled, single-mip texture of the target's shape and
+        // released together with the target; an imported texture is
+        // attached at the level / layer named and left to its owner.
+        // The attachments are exposed via @ref render_target_color_texture
+        // and @ref render_target_depth_texture so the next pass in the
+        // chain can sample them. Returns an invalid handle, with the
+        // reason logged, when @ref validate_render_target_descriptor
+        // rejects the descriptor or an imported texture does not fit.
         virtual render_target create_render_target(const render_target_descriptor& descriptor) = 0;
 
         // Release a previously created off-screen render target and
         // its owned attachments. No-op for the swapchain handle.
         virtual void destroy(render_target handle) = 0;
 
-        // Texture handle wrapping the colour attachment of @p handle,
-        // or an invalid handle for the swapchain. Used by post-process
-        // passes to bind the previous pass's output as a sampled input.
-        virtual texture render_target_color_texture(render_target handle) = 0;
+        // Texture handle of colour attachment @p index of @p handle
+        // (the texture the attachment was allocated as, or the imported
+        // one), or an invalid handle for the swapchain or an index past
+        // the target's colour attachments. Used by post-process passes
+        // to bind the previous pass's output as a sampled input.
+        virtual texture render_target_color_texture(render_target handle, uint32_t index = 0) = 0;
 
-        // Texture handle wrapping the depth attachment of @p handle, or
-        // an invalid handle for the swapchain or a target created
-        // without depth. The depth texture is allocated as a sampled
-        // texture so a later pass can read it — the shadow pass renders
-        // scene depth into a @c depth32_float target here and the lit
+        // Texture handle of the depth attachment of @p handle, or an
+        // invalid handle for the swapchain or a target created without
+        // depth. The depth texture is allocated as a sampled texture so
+        // a later pass can read it — the shadow passes render scene
+        // depth into depth-only @c depth32_float targets and the lit
         // materials sample it.
         virtual texture render_target_depth_texture(render_target handle) = 0;
+
+        // -- Queries ------------------------------------------------------
+
+        // Read @p count timestamps of @p set from @p first into
+        // @p out_ticks (in @c device_limits::timestamp_period_ns units)
+        // without waiting. Returns false, leaving @p out_ticks alone,
+        // when any of them has not completed yet — a caller keeps the
+        // previous frame's values and retries next frame — or when the
+        // device has no timestamp support.
+        virtual bool resolve_queries(query_set set, uint32_t first, uint32_t count, uint64_t* out_ticks) = 0;
 
         // -- Frame boundary -----------------------------------------------
 
@@ -239,13 +375,19 @@ namespace rendering_engine::gpu
         // Allocate a new command encoder. Each encoder records one
         // or more render passes; submission is implicit on the
         // OpenGL backend (drawing happens immediately as it's
-        // recorded), but a future Vulkan backend would defer
-        // execution until @ref submit.
+        // recorded), while the Vulkan backend records into a command
+        // buffer and defers execution until @ref submit.
         virtual std::unique_ptr<command_encoder> create_command_encoder() = 0;
 
         // Submit the encoder's recorded work for execution. After
         // this call the encoder is consumed.
         virtual void submit(std::unique_ptr<command_encoder> encoder) = 0;
+
+    protected:
+        // Filled by the backend in @c init; see @ref features /
+        // @ref limits.
+        device_features m_features{};
+        device_limits m_limits{};
     };
 
     // Construct a concrete device for the requested backend. The

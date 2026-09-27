@@ -64,7 +64,6 @@ set(ALPHAENGINE_SHADER_SOURCES
     passes/ibl_brdf_lut.comp.glsl
     passes/ibl_irradiance.comp.glsl
     passes/ibl_prefilter.comp.glsl
-    passes/shadow.frag.glsl
     passes/shadow.vert.glsl
     passes/shadow_instanced.vert.glsl
     passes/skybox.frag.glsl

@@ -26,28 +26,23 @@
  *        interface — defines the out-of-line virtual destructor so the
  *        vtable and typeinfo are emitted in this single translation
  *        unit instead of every TU that includes @c device.hpp, plus
- *        the default bodies of the optional virtuals.
+ *        the default bodies of the optional virtuals (the debug-name
+ *        hooks a backend without labels leaves alone).
  */
 
 #include <rendering_engine/gpu/device.hpp>
-
-#include <core/log.hpp>
 
 namespace rendering_engine::gpu
 {
     device::~device() = default;
 
-    bool device::write_texture_region(texture /*texture_handle*/,
-                                      const texture_write_region& region,
-                                      const void* /*data*/,
-                                      size_t /*size*/)
-    {
-        LOG_WRN("write_texture_region: not implemented by this backend (level %u, %ux%u at %u,%u dropped)",
-                region.mip_level,
-                region.width,
-                region.height,
-                region.x,
-                region.y);
-        return false;
-    }
+    void device::set_debug_name(buffer /*handle*/, const char* /*name*/) {}
+
+    void device::set_debug_name(texture /*handle*/, const char* /*name*/) {}
+
+    void device::set_debug_name(sampler /*handle*/, const char* /*name*/) {}
+
+    void device::set_debug_name(pipeline /*handle*/, const char* /*name*/) {}
+
+    void device::set_debug_name(render_target /*handle*/, const char* /*name*/) {}
 } // namespace rendering_engine::gpu

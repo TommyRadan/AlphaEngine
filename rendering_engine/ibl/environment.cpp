@@ -327,7 +327,7 @@ namespace rendering_engine
         upload_source(face_size, faces);
 
         auto& gpu = *runtime::current_engine().gpu;
-        if (gpu.supports_compute_prefilter())
+        if (gpu.features().compute_prefilter)
         {
             build_derived_gpu(face_size);
         }
@@ -521,7 +521,7 @@ namespace rendering_engine
             td.width = size;
             td.height = size;
             td.mipmaps = mipmapped;
-            td.storage = true;
+            td.usage |= gpu::texture_usage_storage;
             td.min_filter = gpu::filter_mode::linear;
             td.mag_filter = gpu::filter_mode::linear;
             td.mipmap_filter = mipmapped ? gpu::mipmap_mode::linear : gpu::mipmap_mode::none;

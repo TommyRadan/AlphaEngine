@@ -25,8 +25,9 @@
  * @brief Backend-agnostic enums for the @ref rendering_engine::gpu device.
  *
  * Values are abstract names — backends translate them to their own native
- * constants (the OpenGL backend lives in @c gpu/backend/opengl/gl_translate.hpp).
- * No header in this directory ever names a backend-specific type.
+ * constants (@c gpu/backend/opengl/gl_translate.hpp and
+ * @c gpu/backend/vulkan/vk_translate.hpp). No header in this directory
+ * ever names a backend-specific type.
  */
 
 #pragma once
@@ -223,12 +224,130 @@ namespace rendering_engine::gpu
                                                          shader_stages_geometry | shader_stages_tessellation_control |
                                                          shader_stages_tessellation_evaluation;
 
+    // Texture shape. @c d2_array is a stack of @c array_layers 2D
+    // images sampled through @c sampler2DArray; @c cube is six faces
+    // (fixed at six layers). Both are layered, so a render target
+    // attaches one layer / face at a time (see @c attachment_desc).
     enum class texture_dimension
     {
         d2,
         d3,
         cube,
+        d2_array,
     };
+
+    // Bitmask of what a texture may be used for. Explicit-binding
+    // backends (Vulkan) bake it into the image's usage flags, so a
+    // texture bound as a render-target attachment, a storage image or
+    // a copy source must have asked for it up front; the OpenGL
+    // backend allows every use unconditionally and only validates.
+    // Combine with @c |. @c texture_usage_default is what an uploaded,
+    // sampled asset needs: sampling plus the copies that fill it and
+    // derive its mip chain.
+    using texture_usage = uint32_t;
+    constexpr texture_usage texture_usage_sampled = 1u << 0;
+    constexpr texture_usage texture_usage_render_attachment = 1u << 1;
+    constexpr texture_usage texture_usage_storage = 1u << 2;
+    constexpr texture_usage texture_usage_copy_src = 1u << 3;
+    constexpr texture_usage texture_usage_copy_dst = 1u << 4;
+    constexpr texture_usage texture_usage_default =
+        texture_usage_sampled | texture_usage_copy_src | texture_usage_copy_dst;
+
+    // Native size of one texel of @p format in bytes: the block the
+    // copy commands (@c copy_texture_to_buffer, @c copy_buffer_to_texture)
+    // and @c device::read_texture move, and what a tightly packed buffer
+    // region of the format measures. It is the storage layout, so
+    // @c rgba16_float is eight bytes (four halves) and the packed depth
+    // formats are four; the upload paths (@c write_texture and friends)
+    // document their own client layouts per backend.
+    constexpr uint32_t texel_size_bytes(texture_format format)
+    {
+        switch (format)
+        {
+        case texture_format::rgba8_unorm:
+        case texture_format::rgba8_srgb:
+            return 4;
+        case texture_format::rgb8_unorm:
+            return 3;
+        case texture_format::r8_unorm:
+            return 1;
+        case texture_format::rgba16_float:
+            return 8;
+        case texture_format::rgba32_float:
+            return 16;
+        case texture_format::depth24:
+        case texture_format::depth32_float:
+        case texture_format::depth24_stencil8:
+            return 4;
+        }
+        return 4;
+    }
+
+    // True for the depth and depth-stencil formats: what a target's
+    // depth attachment may be, never a colour attachment.
+    constexpr bool is_depth_texture_format(texture_format format)
+    {
+        return format == texture_format::depth24 || format == texture_format::depth32_float ||
+               format == texture_format::depth24_stencil8;
+    }
+
+    // True for the formats that carry a stencil plane.
+    constexpr bool has_stencil_plane(texture_format format)
+    {
+        return format == texture_format::depth24_stencil8;
+    }
+
+    // Stencil-buffer update applied by a stencil test outcome
+    // (@c stencil_face_state). Names follow the GL / Vulkan pair.
+    enum class stencil_op
+    {
+        keep,
+        zero,
+        replace,
+        increment_clamp,
+        decrement_clamp,
+        invert,
+        increment_wrap,
+        decrement_wrap,
+    };
+
+    // Bitmask of the colour channels a pipeline writes into a colour
+    // attachment (@c blend_state::write_mask). Combine with @c |.
+    using color_write_mask = uint32_t;
+    constexpr color_write_mask color_write_red = 1u << 0;
+    constexpr color_write_mask color_write_green = 1u << 1;
+    constexpr color_write_mask color_write_blue = 1u << 2;
+    constexpr color_write_mask color_write_alpha = 1u << 3;
+    constexpr color_write_mask color_write_all =
+        color_write_red | color_write_green | color_write_blue | color_write_alpha;
+
+    // The colour returned by a lookup that lands outside a texture
+    // addressed with @c address_mode::clamp_border. Vulkan only
+    // guarantees these three (a custom border needs an extension), so
+    // the abstraction stops there.
+    enum class border_color
+    {
+        transparent_black,
+        opaque_black,
+        opaque_white,
+    };
+
+    // Bitmask of multisample counts, one bit per count: bit @c n set
+    // means @c n samples per pixel are supported (1, 2, 4, 8, 16, ...).
+    // Mirrors @c VkSampleCountFlags; @c device_limits reports one per
+    // attachment class.
+    using sample_count_mask = uint32_t;
+
+    // True when @p mask allows @p count samples per pixel. A count that
+    // is not a power of two is never supported.
+    constexpr bool sample_count_supported(sample_count_mask mask, uint32_t count)
+    {
+        if (count == 0 || (count & (count - 1)) != 0)
+        {
+            return false;
+        }
+        return (mask & count) != 0;
+    }
 
     // Shader-side access mode for a storage image binding. Maps to
     // GL @c access in @c glBindImageTexture and to the SPIR-V
@@ -268,8 +387,10 @@ namespace rendering_engine::gpu
     };
 
     // Buffer usage hint passed at create time. Matches the GL static /
-    // dynamic / stream draw split for a clean translation; on Vulkan
-    // / D3D12 backends this would fold into staging/visibility flags.
+    // dynamic / stream draw split for a clean translation; the Vulkan
+    // backend places @c static_data in device-local memory (filled
+    // through its staging ring) and keeps the other two host-visible
+    // and persistently mapped.
     enum class buffer_usage_hint
     {
         static_data,
@@ -312,7 +433,7 @@ namespace rendering_engine::gpu
 
     // Memory-access categories used by @c command_encoder::barrier.
     // The OpenGL backend folds @c dst_access into a bitmask of
-    // @c GL_*_BARRIER_BIT flags; a future Vulkan backend uses both
+    // @c GL_*_BARRIER_BIT flags; the Vulkan backend uses both
     // @c src_access and @c dst_access verbatim. Combine with @c |.
     using access_flag = uint32_t;
     constexpr access_flag access_none = 0u;

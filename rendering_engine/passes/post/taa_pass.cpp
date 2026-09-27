@@ -157,7 +157,7 @@ namespace rendering_engine
         for (auto& half : m_targets)
         {
             gpu::render_target_descriptor descriptor{};
-            descriptor.color_format = gpu::texture_format::rgba8_unorm;
+            descriptor.color = {{gpu::texture_format::rgba8_unorm}};
             descriptor.width = width;
             descriptor.height = height;
             descriptor.with_depth = false;
@@ -380,8 +380,8 @@ namespace rendering_engine
         // next pass (FXAA) samples and the next frame reads as history.
         gpu::render_pass_descriptor descriptor{};
         descriptor.target = write.target;
-        descriptor.color.load = gpu::load_op::clear;
-        descriptor.color.clear_color = {0.0f, 0.0f, 0.0f, 1.0f};
+        descriptor.color[0].load = gpu::load_op::clear;
+        descriptor.color[0].clear_color = {0.0f, 0.0f, 0.0f, 1.0f};
         descriptor.use_depth = false;
 
         auto pass_encoder = encoder.begin_render_pass(descriptor);

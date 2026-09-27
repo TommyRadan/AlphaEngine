@@ -38,22 +38,24 @@ namespace rendering_engine
 {
     struct renderable;
 
-    // Six faces of the omni shadow, in the order the lit shader selects by the
-    // major axis of (fragment - light): +X, -X, +Y, -Y, +Z, -Z.
+    // Six faces of the omni shadow cube, in cube-map face order: +X, -X,
+    // +Y, -Y, +Z, -Z (the order of @c gpu::cube_face).
     constexpr int point_shadow_face_count = 6;
 
     /**
      * @brief Omni (point-light) shadow-map pass.
      *
      * Runs ahead of the @ref scene_pass and renders the scene's depth from the
-     * first shadow-casting @ref point_light into six perspective depth maps —
-     * one per ±X/±Y/±Z direction (a cube map emulated with six 2D targets, so
-     * no cube render-target support is required from the device). The
-     * @ref scene_pass exposes the six depth textures plus the six light-space
-     * view-projections and the light position to the lit materials through its
-     * per-frame bind group; the lit fragment shader picks the face by the major
-     * axis of the fragment-to-light vector and samples it to occlude the
-     * light's contribution.
+     * first shadow-casting @ref point_light into one depth cube map: six
+     * depth-only face targets over the one cube texture, each a 90-degree
+     * perspective along ±X/±Y/±Z with the up vector the cube-map face
+     * convention demands, so a @c samplerCube lookup along
+     * (fragment - light) lands on the face and texel that saw the
+     * fragment. The @ref scene_pass exposes the cube plus the six face
+     * view-projections, the light position and the faces' near / far
+     * planes to the lit materials through its per-frame bind group; the
+     * lit fragment shader reconstructs the receiver's face depth from the
+     * planes and compares it against the sampled depth.
      *
      * Like @ref shadow_pass it reuses the scene-renderable registry and each
      * renderable's existing per-draw model-matrix bind group (or, for an
@@ -63,7 +65,7 @@ namespace rendering_engine
      * @ref point_light::range (a fixed default when the range is 0, "no
      * cutoff"), so the depth precision is spent on the volume the light can
      * actually reach. When no point light has @c cast_shadow set the pass
-     * still clears the maps and reports @ref has_shadow false so the lit
+     * still clears the faces and reports @ref has_shadow false so the lit
      * shader falls back to unshadowed lighting.
      */
     struct point_shadow_pass : pass
@@ -86,15 +88,22 @@ namespace rendering_engine
             io.write("point_shadow");
         }
 
-        // Depth texture for face @p face (0..5). Stable for the pass's lifetime
-        // so the scene pass can bake the handles into its per-frame bind group.
-        gpu::texture shadow_map(int face) const;
+        // The depth cube map every face renders into. Stable for the pass's
+        // lifetime so the scene pass can bake the handle into its per-frame
+        // bind group.
+        gpu::texture shadow_map() const;
 
         // Light-space view-projection for face @p face, refreshed every record.
         const core::math::mat4& light_view_projection(int face) const;
 
         // World-space position of the active caster, refreshed every record.
         const core::math::vec3& light_position() const;
+
+        // Near / far planes of the six face frustums, refreshed every record
+        // (the far plane follows the caster's range); the lit shader
+        // reconstructs a face's stored depth from them.
+        float shadow_near() const;
+        float shadow_far() const;
 
         // Whether a shadow-casting point light was found this frame.
         bool has_shadow() const;
@@ -129,11 +138,13 @@ namespace rendering_engine
         // registry — the same one the scene and directional shadow passes walk.
         std::vector<renderable*>* m_registry;
 
+        // The depth cube and the six depth-only targets attached to its
+        // faces. The cube is owned here (the targets import it), so it is
+        // released after them.
+        gpu::texture m_depth_texture{};
         std::array<gpu::render_target, point_shadow_face_count> m_targets{};
-        std::array<gpu::texture, point_shadow_face_count> m_depth_textures{};
 
         gpu::shader_module m_vertex_shader{};
-        gpu::shader_module m_fragment_shader{};
         gpu::pipeline m_pipeline{};
 
         // The instanced twin of @ref m_pipeline for instanced casters.
@@ -151,6 +162,9 @@ namespace rendering_engine
 
         std::array<core::math::mat4, point_shadow_face_count> m_light_view_projections{};
         core::math::vec3 m_light_position{0.0f, 0.0f, 0.0f};
+        // The active caster's face far plane; only meaningful while
+        // m_has_shadow is set.
+        float m_light_far{0.0f};
         bool m_has_shadow{false};
         int m_shadow_point_index{-1};
         uint32_t m_culled{0};

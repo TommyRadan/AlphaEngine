@@ -1,4 +1,6 @@
 target_sources(AlphaEngine PRIVATE
+    gpu_profiler.cpp
+    gpu_profiler.hpp
     render_stats.hpp
     rendering_engine.cpp
     rendering_engine.hpp

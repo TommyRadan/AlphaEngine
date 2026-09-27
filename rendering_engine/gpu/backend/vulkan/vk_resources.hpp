@@ -28,6 +28,7 @@
 
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <vector>
 
@@ -37,6 +38,7 @@
 #include <rendering_engine/gpu/bind_group.hpp>
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/gpu/pipeline.hpp>
+#include <rendering_engine/gpu/render_target.hpp>
 #include <rendering_engine/gpu/shader.hpp>
 #include <rendering_engine/gpu/texture.hpp>
 #include <rendering_engine/gpu/types.hpp>
@@ -67,6 +69,9 @@ namespace rendering_engine::gpu::backend::vulkan
         // Null for swapchain wrappers (@c external), which the device
         // does not allocate.
         VmaAllocation allocation{VK_NULL_HANDLE};
+        // The whole-chain sampling view: every level and layer, the
+        // depth aspect only for a depth-stencil format (a sampled view
+        // names one aspect).
         VkImageView view{VK_NULL_HANDLE};
 
         // Single-mip image views used when the texture is bound as a
@@ -76,6 +81,13 @@ namespace rendering_engine::gpu::backend::vulkan
         // these are distinct from @c view (the whole-chain sampling
         // view). Released alongside the texture.
         std::vector<VkImageView> storage_views;
+
+        // Single-level, single-layer 2D views a framebuffer attaches
+        // the texture through, indexed @c layer * mip_levels + mip and
+        // built lazily by @c vk_device::attachment_image_view. Every
+        // aspect of the format, since an attachment writes them all.
+        // Released alongside the texture.
+        std::vector<VkImageView> attachment_views;
 
         // Built-in sampler set from the texture descriptor — mirrors
         // the GL backend's "sampler is part of the texture" model so
@@ -96,11 +108,21 @@ namespace rendering_engine::gpu::backend::vulkan
         uint32_t height{0};
         uint32_t depth{1};
         uint32_t mip_levels{1};
+        // Six for a cube, the descriptor's count for an array, 1
+        // otherwise.
         uint32_t array_layers{1};
+        // Samples per texel; above 1 the image is a multisampled
+        // attachment with a single level and no uploads.
+        uint32_t samples{1};
+        texture_usage usage{texture_usage_default};
         bool mipmaps{false};
+        // The format supports the linear blit generate_mipmaps derives
+        // the chain with.
+        bool blit_capable{false};
         bool storage{false};
         bool is_depth{false};
         bool is_cube{false};
+        bool is_array{false};
         bool is_3d{false};
 
         // True for swapchain image wrappers; the device does not own
@@ -184,18 +206,44 @@ namespace rendering_engine::gpu::backend::vulkan
         std::vector<binding_value> entries;
     };
 
+    // One attachment of an off-screen target: the texture it renders
+    // into (allocated by the device and released with the target when
+    // @c owned, otherwise imported and left to its owner) and the
+    // level / layer it is attached at.
+    struct vk_attachment
+    {
+        texture tex{};
+        bool owned{false};
+        uint32_t mip_level{0};
+        uint32_t layer{0};
+    };
+
+    // What distinguishes one VkRenderPass of a target from another:
+    // the load / store op of every attachment and whether the depth
+    // attachment takes part at all. Two passes over the same target
+    // with equal keys share the render pass and its framebuffers.
+    struct vk_render_pass_key
+    {
+        std::array<VkAttachmentLoadOp, max_color_attachments> color_load{};
+        std::array<VkAttachmentStoreOp, max_color_attachments> color_store{};
+        VkAttachmentLoadOp depth_load{VK_ATTACHMENT_LOAD_OP_DONT_CARE};
+        VkAttachmentStoreOp depth_store{VK_ATTACHMENT_STORE_OP_STORE};
+        bool use_depth{false};
+
+        bool operator==(const vk_render_pass_key&) const = default;
+    };
+
     struct vk_render_target
     {
-        // Render-pass variants keyed by (color_load, depth_load,
-        // use_depth). The same target is used by passes that
-        // disagree on load-op (the swapchain hosts tonemap with
-        // LOAD_OP_CLEAR followed by ui with LOAD_OP_LOAD); each
-        // unique tuple gets its own VkRenderPass and its own set
-        // of framebuffers, and none are destroyed on a load-op
-        // switch. Variants with different use_depth are not
-        // render-pass compatible (different attachment counts), so
-        // the framebuffers live on the variant rather than being
-        // shared across variants.
+        // Render-pass variants keyed by their @ref vk_render_pass_key.
+        // The same target is used by passes that disagree on load-op
+        // (the swapchain hosts tonemap with LOAD_OP_CLEAR followed by
+        // ui with LOAD_OP_LOAD); each unique key gets its own
+        // VkRenderPass and its own set of framebuffers, and none are
+        // destroyed on a load-op switch. Variants with different
+        // use_depth are not render-pass compatible (different
+        // attachment counts), so the framebuffers live on the variant
+        // rather than being shared across variants.
         //
         // Variants are only ever retired wholesale — when the
         // swapchain is rebuilt (its framebuffers point at the old
@@ -207,13 +255,14 @@ namespace rendering_engine::gpu::backend::vulkan
         // recycled handle value can never resurrect a stale entry.
         struct variant
         {
-            VkAttachmentLoadOp color_load{VK_ATTACHMENT_LOAD_OP_DONT_CARE};
-            VkAttachmentLoadOp depth_load{VK_ATTACHMENT_LOAD_OP_DONT_CARE};
-            bool use_depth{false};
+            vk_render_pass_key key{};
             VkRenderPass render_pass{VK_NULL_HANDLE};
             // Device-wide, monotonically increasing; assigned when
             // the render pass is created and never reused.
             uint64_t render_pass_generation{0};
+            // Colour attachments the pass writes: what a pipeline
+            // built against it needs a blend state for.
+            uint32_t color_count{0};
             // Per-swapchain-image for swapchain targets; one entry
             // for off-screen targets.
             std::vector<VkFramebuffer> framebuffers;
@@ -222,13 +271,26 @@ namespace rendering_engine::gpu::backend::vulkan
 
         uint32_t width{0};
         uint32_t height{0};
+        uint32_t samples{1};
         bool has_depth{true};
+        // The depth attachment's format carries a stencil plane (or
+        // the swapchain depth does), so it clears and stores with it.
+        bool has_stencil{false};
 
-        // Color attachment exposed for next-pass sampling. Invalid
-        // for swapchain targets.
-        texture color_attachment{};
-        texture depth_attachment{};
+        // Colour attachments in location order, empty for the
+        // swapchain (whose one colour plane is the acquired image) and
+        // for a depth-only target. Exposed for next-pass sampling
+        // through @c render_target_color_texture.
+        std::vector<vk_attachment> color;
+        vk_attachment depth;
 
         bool is_swapchain{false};
+    };
+
+    // A pool of timestamp queries.
+    struct vk_query_set
+    {
+        VkQueryPool pool{VK_NULL_HANDLE};
+        uint32_t count{0};
     };
 } // namespace rendering_engine::gpu::backend::vulkan

@@ -33,13 +33,15 @@
  *   storage_buffer  -> VK_DESCRIPTOR_TYPE_STORAGE_BUFFER
  *   storage_texture -> VK_DESCRIPTOR_TYPE_STORAGE_IMAGE
  *   texture         -> VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER
- *                      (sampler taken from the texture's built-in
+ *                      (sampler taken from the standalone sampler
+ *                       entry at the same binding when the bind group
+ *                       has one, else from the texture's built-in
  *                       VkSampler — matches the GL backend, which
- *                       bakes sampler state into the texture as well)
- *   sampler         -> ignored at the descriptor-set level for the
- *                      same reason; explicit sampler resources stand
- *                      in the API for future explicit-binding
- *                      backends.
+ *                       bakes sampler state into the texture and lets
+ *                       a sampler object on the same unit override it)
+ *   sampler         -> no descriptor binding of its own: folded into
+ *                      the combined image sampler of the texture at
+ *                      the same binding number.
  */
 
 #include <rendering_engine/gpu/backend/vulkan/vk_device.hpp>
@@ -205,21 +207,59 @@ namespace rendering_engine::gpu::backend::vulkan
 
     namespace
     {
+        VkStencilOpState to_vk_stencil_face(const stencil_face_state& face, const stencil_state& stencil)
+        {
+            VkStencilOpState state{};
+            state.failOp = to_vk_stencil_op(face.fail_op);
+            state.passOp = to_vk_stencil_op(face.pass_op);
+            state.depthFailOp = to_vk_stencil_op(face.depth_fail_op);
+            state.compareOp = to_vk_compare(face.compare);
+            state.compareMask = stencil.read_mask;
+            state.writeMask = stencil.write_mask;
+            // Dynamic (VK_DYNAMIC_STATE_STENCIL_REFERENCE); the encoder
+            // supplies it after each bind.
+            state.reference = 0;
+            return state;
+        }
+
+        VkPipelineColorBlendAttachmentState to_vk_blend_attachment(const blend_state& blend)
+        {
+            VkPipelineColorBlendAttachmentState cba{};
+            cba.blendEnable = blend.enabled ? VK_TRUE : VK_FALSE;
+            cba.srcColorBlendFactor = to_vk_blend_factor(blend.src);
+            cba.dstColorBlendFactor = to_vk_blend_factor(blend.dst);
+            cba.colorBlendOp = to_vk_blend_op(blend.op);
+            cba.srcAlphaBlendFactor = to_vk_blend_factor(blend.src);
+            cba.dstAlphaBlendFactor = to_vk_blend_factor(blend.dst);
+            cba.alphaBlendOp = to_vk_blend_op(blend.op);
+            cba.colorWriteMask = to_vk_color_write_mask(blend.write_mask);
+            return cba;
+        }
+
+        bool same_blend(const blend_state& a, const blend_state& b)
+        {
+            return a.enabled == b.enabled && a.src == b.src && a.dst == b.dst && a.op == b.op &&
+                   a.write_mask == b.write_mask;
+        }
+
         // Build a graphics VkPipeline against a specific render
         // pass. The caller (vk_device::graphics_pipeline_for) holds
         // the pipeline_descriptor and pipeline layout — this function
-        // is the per-render-pass instantiation.
+        // is the per-render-pass instantiation. @p color_count and
+        // @p samples describe the pass's attachments.
         VkPipeline build_graphics_pipeline(vk_device& device,
                                            const pipeline_descriptor& descriptor,
                                            VkPipelineLayout layout,
                                            VkRenderPass render_pass,
-                                           bool y_flipped)
+                                           bool y_flipped,
+                                           uint32_t color_count,
+                                           VkSampleCountFlagBits samples)
         {
             // A stage whose feature the device did not grant cannot be
             // part of a pipeline (vkCreateGraphicsPipelines would be
             // rejected outright); the gap itself was logged once at
             // device creation.
-            const vk_device_features& features = device.features();
+            const device_features& features = device.features();
             if (descriptor.geometry_shader.valid() && !features.geometry_shader)
             {
                 LOG_ERR("vk_device: pipeline attaches a geometry shader but the device has no geometryShader "
@@ -345,31 +385,74 @@ namespace rendering_engine::gpu::backend::vulkan
                     rs.frontFace == VK_FRONT_FACE_CLOCKWISE ? VK_FRONT_FACE_COUNTER_CLOCKWISE : VK_FRONT_FACE_CLOCKWISE;
             }
             rs.lineWidth = 1.0f;
+            // Depth bias in the rasteriser: the constant is in
+            // resolvable depth steps, the slope scales the polygon's
+            // depth gradient, and the clamp needs its own feature (0
+            // means unclamped, which is what a device without it gets).
+            rs.depthBiasEnable = descriptor.depth_bias.enabled ? VK_TRUE : VK_FALSE;
+            rs.depthBiasConstantFactor = descriptor.depth_bias.constant;
+            rs.depthBiasSlopeFactor = descriptor.depth_bias.slope;
+            rs.depthBiasClamp = features.depth_bias_clamp ? descriptor.depth_bias.clamp : 0.0f;
 
+            // The multisample state must match the render pass's
+            // attachments; a pipeline declared for another count draws
+            // at the pass's count and says so once.
+            const VkSampleCountFlagBits declared = to_vk_sample_count(descriptor.sample_count);
+            if (declared != samples)
+            {
+                LOG_WRN("vk_device: pipeline declares %u samples per pixel but the render pass has %u; "
+                        "building it for the pass",
+                        descriptor.sample_count,
+                        static_cast<unsigned>(samples));
+            }
             VkPipelineMultisampleStateCreateInfo ms{};
             ms.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-            ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+            ms.rasterizationSamples = samples;
 
             VkPipelineDepthStencilStateCreateInfo ds{};
             ds.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
             ds.depthTestEnable = descriptor.depth.test_enabled ? VK_TRUE : VK_FALSE;
             ds.depthWriteEnable = descriptor.depth.write_enabled ? VK_TRUE : VK_FALSE;
             ds.depthCompareOp = to_vk_compare(descriptor.depth.compare);
+            ds.stencilTestEnable = descriptor.stencil.test_enabled ? VK_TRUE : VK_FALSE;
+            ds.front = to_vk_stencil_face(descriptor.stencil.front, descriptor.stencil);
+            ds.back = to_vk_stencil_face(descriptor.stencil.back, descriptor.stencil);
 
-            VkPipelineColorBlendAttachmentState cba{};
-            cba.blendEnable = descriptor.blend.enabled ? VK_TRUE : VK_FALSE;
-            cba.srcColorBlendFactor = to_vk_blend_factor(descriptor.blend.src);
-            cba.dstColorBlendFactor = to_vk_blend_factor(descriptor.blend.dst);
-            cba.colorBlendOp = to_vk_blend_op(descriptor.blend.op);
-            cba.srcAlphaBlendFactor = to_vk_blend_factor(descriptor.blend.src);
-            cba.dstAlphaBlendFactor = to_vk_blend_factor(descriptor.blend.dst);
-            cba.alphaBlendOp = to_vk_blend_op(descriptor.blend.op);
-            cba.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT |
-                                 VK_COLOR_COMPONENT_A_BIT;
+            // One blend state per colour attachment of the pass:
+            // attachment i takes its override when the descriptor has
+            // one, else the default. Differing entries need
+            // independentBlend; without it every attachment blends
+            // like attachment 0 (logged once).
+            std::vector<VkPipelineColorBlendAttachmentState> cbas;
+            cbas.reserve(color_count);
+            bool independent = false;
+            for (uint32_t i = 0; i < color_count; ++i)
+            {
+                const blend_state& blend =
+                    i < descriptor.attachment_blend.size() ? descriptor.attachment_blend[i] : descriptor.blend;
+                const blend_state& first =
+                    !descriptor.attachment_blend.empty() ? descriptor.attachment_blend[0] : descriptor.blend;
+                independent = independent || !same_blend(blend, first);
+                cbas.push_back(to_vk_blend_attachment(blend));
+            }
+            if (independent && !features.independent_blend)
+            {
+                static bool warned = false;
+                if (!warned)
+                {
+                    warned = true;
+                    LOG_WRN("vk_device: per-attachment blend states differ but the device has no independentBlend "
+                            "feature; every attachment blends like attachment 0");
+                }
+                for (auto& cba : cbas)
+                {
+                    cba = cbas.front();
+                }
+            }
             VkPipelineColorBlendStateCreateInfo cb{};
             cb.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-            cb.attachmentCount = 1;
-            cb.pAttachments = &cba;
+            cb.attachmentCount = static_cast<uint32_t>(cbas.size());
+            cb.pAttachments = cbas.data();
 
             // Materials author their pipelines with @c stride==0 and
             // pass the real stride per draw via @c set_vertex_buffer.
@@ -378,8 +461,11 @@ namespace rendering_engine::gpu::backend::vulkan
             // available; the encoder then supplies the runtime stride
             // through @c vkCmdBindVertexBuffers2EXT. Without this,
             // stride==0 collapses every vertex onto vertex 0 and
-            // the mesh draws as a single point.
-            std::vector<VkDynamicState> dyn_states{VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
+            // the mesh draws as a single point. The stencil reference
+            // is dynamic on every pipeline so one pipeline serves any
+            // mask value.
+            std::vector<VkDynamicState> dyn_states{
+                VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR, VK_DYNAMIC_STATE_STENCIL_REFERENCE};
             if (device.extended_dynamic_state_enabled())
             {
                 dyn_states.push_back(VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE_EXT);
@@ -441,7 +527,9 @@ namespace rendering_engine::gpu::backend::vulkan
     VkPipeline vk_device::graphics_pipeline_for(pipeline handle,
                                                 VkRenderPass render_pass,
                                                 uint64_t render_pass_generation,
-                                                bool y_flipped)
+                                                bool y_flipped,
+                                                uint32_t color_count,
+                                                VkSampleCountFlagBits samples)
     {
         auto* record = m_pipelines.lookup(handle.id);
         if (record == nullptr || record->is_compute || render_pass == VK_NULL_HANDLE)
@@ -460,7 +548,8 @@ namespace rendering_engine::gpu::backend::vulkan
                 return v.object;
             }
         }
-        VkPipeline pipe = build_graphics_pipeline(*this, record->descriptor, record->layout, render_pass, y_flipped);
+        VkPipeline pipe = build_graphics_pipeline(
+            *this, record->descriptor, record->layout, render_pass, y_flipped, color_count, samples);
         if (pipe == VK_NULL_HANDLE)
         {
             LOG_ERR("vk_device::graphics_pipeline_for: vkCreateGraphicsPipelines failed");
@@ -584,6 +673,28 @@ namespace rendering_engine::gpu::backend::vulkan
         image_infos.reserve(descriptor.entries.size());
         writes.reserve(descriptor.entries.size());
 
+        // A standalone sampler entry pairs with the texture entry at
+        // the same binding number: the texture's combined image
+        // sampler then carries that sampler (its full descriptor —
+        // comparison mode, anisotropy, LOD, border) instead of the
+        // state baked onto the texture, matching what the OpenGL
+        // backend does by binding the sampler object to the same unit.
+        const auto standalone_sampler = [&](uint32_t binding) -> VkSampler
+        {
+            for (const auto& candidate : descriptor.entries)
+            {
+                if (candidate.kind != binding_kind::sampler || candidate.binding != binding)
+                {
+                    continue;
+                }
+                if (const auto* record_sampler = m_samplers.lookup(candidate.sampler_value.id))
+                {
+                    return record_sampler->object;
+                }
+            }
+            return VK_NULL_HANDLE;
+        };
+
         for (const auto& entry : descriptor.entries)
         {
             VkWriteDescriptorSet w{};
@@ -640,7 +751,11 @@ namespace rendering_engine::gpu::backend::vulkan
                         continue;
                     }
                 }
-                VkSampler sampler = tex->default_sampler;
+                VkSampler sampler = standalone_sampler(entry.binding);
+                if (sampler == VK_NULL_HANDLE)
+                {
+                    sampler = tex->default_sampler;
+                }
                 if (sampler == VK_NULL_HANDLE)
                 {
                     // The texture's own sampler failed to create (logged
@@ -689,7 +804,8 @@ namespace rendering_engine::gpu::backend::vulkan
                 break;
             }
             case binding_kind::sampler:
-                // Folded into the texture's combined image sampler;
+                // Folded into the combined image sampler of the texture
+                // bound at the same binding (standalone_sampler above);
                 // see the comment at the top of the file.
                 break;
             }

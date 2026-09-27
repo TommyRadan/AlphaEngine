@@ -40,6 +40,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <functional>
 #include <string>
 #include <string_view>
@@ -86,6 +87,22 @@ namespace rendering_engine::render_graph
     };
 
     /**
+     * @brief Observer of the graph's execution: called around every pass
+     *        with the encoder the pass records into.
+     *
+     * The GPU profiler stamps timestamps here; anything else that wants
+     * a per-pass bracket (a CPU timer, a debugger capture) plugs in the
+     * same way. The hooks run outside the pass's own render-pass scope.
+     */
+    class pass_hooks
+    {
+    public:
+        virtual ~pass_hooks() = default;
+        virtual void before_pass(gpu::command_encoder& encoder, size_t index, std::string_view name) = 0;
+        virtual void after_pass(gpu::command_encoder& encoder, size_t index, std::string_view name) = 0;
+    };
+
+    /**
      * @brief Ordered pass graph: validate declared dependencies, then execute.
      */
     class frame_graph
@@ -124,8 +141,15 @@ namespace rendering_engine::render_graph
 
         /**
          * @brief Record every pass into @p encoder in registration order.
+         *
+         * Each pass is wrapped in a debug group carrying its name (so a
+         * graphics debugger shows the frame as a tree of passes) and, when
+         * @p hooks is given, in its before / after calls.
          */
-        void execute(gpu::command_encoder& encoder, const frame_context& ctx) const;
+        void execute(gpu::command_encoder& encoder, const frame_context& ctx, pass_hooks* hooks = nullptr) const;
+
+        /// Names of the registered passes, in execution order.
+        std::vector<std::string> pass_names() const;
 
         /// Drop all passes and imported resources.
         void clear();

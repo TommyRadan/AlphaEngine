@@ -43,6 +43,7 @@
 #include <rendering_engine/gpu/backend/vulkan/vk_resources.hpp>
 #include <rendering_engine/gpu/command_encoder.hpp>
 #include <rendering_engine/gpu/device.hpp>
+#include <rendering_engine/gpu_profiler.hpp>
 #include <rendering_engine/lighting/light.hpp>
 #include <rendering_engine/render_stats.hpp>
 #include <rendering_engine/rendering_engine.hpp>
@@ -183,6 +184,31 @@ namespace rendering_engine::debug_ui
                 ImGui::Text("min %.2f ms", static_cast<double>(min_ms));
                 ImGui::SameLine();
                 ImGui::Text("max %.2f ms", static_cast<double>(max_ms));
+
+                // GPU time per frame-graph pass from the device's
+                // timestamp queries (last resolved frame).
+                ImGui::SeparatorText("GPU");
+                const gpu_profiler& profiler = runtime::current_engine().renderer->get_gpu_profiler();
+                if (!profiler.enabled())
+                {
+                    ImGui::TextDisabled("no timestamp queries on this device");
+                }
+                else
+                {
+                    ImGui::Text("frame %.2f ms", static_cast<double>(profiler.frame_gpu_ms()));
+                    if (ImGui::BeginTable("gpu_passes", 2, ImGuiTableFlags_SizingStretchProp))
+                    {
+                        for (const gpu_pass_timing& timing : profiler.timings())
+                        {
+                            ImGui::TableNextRow();
+                            ImGui::TableSetColumnIndex(0);
+                            ImGui::TextUnformatted(timing.name.c_str());
+                            ImGui::TableSetColumnIndex(1);
+                            ImGui::Text("%.3f ms", static_cast<double>(timing.gpu_ms));
+                        }
+                        ImGui::EndTable();
+                    }
+                }
             }
             ImGui::End();
         }

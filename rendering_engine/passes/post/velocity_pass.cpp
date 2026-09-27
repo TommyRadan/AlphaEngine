@@ -190,7 +190,7 @@ namespace rendering_engine
         // Two-channel signed motion needs a float target; the engine has no
         // RG format, so rgba16f carries the vector in xy and leaves zw at 0.
         gpu::render_target_descriptor velocity_descriptor{};
-        velocity_descriptor.color_format = gpu::texture_format::rgba16_float;
+        velocity_descriptor.color = {{gpu::texture_format::rgba16_float}};
         velocity_descriptor.width = width;
         velocity_descriptor.height = height;
         velocity_descriptor.with_depth = false;
@@ -272,8 +272,8 @@ namespace rendering_engine
         {
             gpu::render_pass_descriptor descriptor{};
             descriptor.target = m_velocity_target;
-            descriptor.color.load = gpu::load_op::clear;
-            descriptor.color.clear_color = {0.0f, 0.0f, 0.0f, 0.0f};
+            descriptor.color[0].load = gpu::load_op::clear;
+            descriptor.color[0].clear_color = {0.0f, 0.0f, 0.0f, 0.0f};
             descriptor.use_depth = false;
             auto pass_encoder = encoder.begin_render_pass(descriptor);
             pass_encoder->end();
@@ -309,8 +309,8 @@ namespace rendering_engine
 
         gpu::render_pass_descriptor descriptor{};
         descriptor.target = m_velocity_target;
-        descriptor.color.load = gpu::load_op::clear;
-        descriptor.color.clear_color = {0.0f, 0.0f, 0.0f, 0.0f};
+        descriptor.color[0].load = gpu::load_op::clear;
+        descriptor.color[0].clear_color = {0.0f, 0.0f, 0.0f, 0.0f};
         descriptor.use_depth = false;
 
         auto pass_encoder = encoder.begin_render_pass(descriptor);

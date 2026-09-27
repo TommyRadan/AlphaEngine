@@ -221,7 +221,7 @@ namespace rendering_engine
         descriptor.target = ctx.scene_color_target;
         // Load the scene pass's colour and depth: the sky composites behind
         // the geometry it already drew rather than wiping it.
-        descriptor.color.load = gpu::load_op::load;
+        descriptor.color[0].load = gpu::load_op::load;
         descriptor.use_depth = true;
         descriptor.depth.load = gpu::load_op::load;
 

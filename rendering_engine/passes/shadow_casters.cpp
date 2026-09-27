@@ -43,11 +43,11 @@ namespace
 
 namespace rendering_engine
 {
-    instanced_shadow_pipeline create_instanced_shadow_pipeline(gpu::shader_module fragment_shader,
-                                                               gpu::bind_group_layout light_layout,
+    instanced_shadow_pipeline create_instanced_shadow_pipeline(gpu::bind_group_layout light_layout,
                                                                const gpu::depth_state& depth,
                                                                const gpu::blend_state& blend,
-                                                               const gpu::rasterizer_state& rasterizer)
+                                                               const gpu::rasterizer_state& rasterizer,
+                                                               const gpu::depth_bias_state& depth_bias)
     {
         auto& gpu = *runtime::current_engine().gpu;
         instanced_shadow_pipeline instanced{};
@@ -80,12 +80,12 @@ namespace rendering_engine
 
         gpu::pipeline_descriptor pipeline_descriptor{};
         pipeline_descriptor.vertex_shader = instanced.vertex_shader;
-        pipeline_descriptor.fragment_shader = fragment_shader;
         pipeline_descriptor.vertex_buffers.push_back(geometry_layout);
         pipeline_descriptor.vertex_buffers.push_back(instance_layout);
         pipeline_descriptor.depth = depth;
         pipeline_descriptor.blend = blend;
         pipeline_descriptor.rasterizer = rasterizer;
+        pipeline_descriptor.depth_bias = depth_bias;
         // Only the light group: the model matrices come from the vertex
         // stream, so there is no per-draw set.
         pipeline_descriptor.bind_group_layouts.push_back(light_layout);

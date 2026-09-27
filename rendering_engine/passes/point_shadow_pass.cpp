@@ -63,13 +63,22 @@ namespace
         return far_plane > light_near ? far_plane : default_light_far;
     }
 
+    // Rasteriser depth bias of the depth-only pipeline (see shadow_pass
+    // for the rationale): one depth step plus 1.5 times the slope.
+    constexpr float shadow_depth_bias_constant = 1.0f;
+    constexpr float shadow_depth_bias_slope = 1.5f;
+
     constexpr uint32_t light_frame_binding = 0;
     constexpr uint32_t draw_model_binding = 1;
 
-    // Look direction and up for each of the six faces, in the selection order
-    // +X, -X, +Y, -Y, +Z, -Z. The ups only need to keep look_at well-defined;
-    // the lit shader reconstructs the same matrix per face, so any consistent
-    // choice works.
+    // Look direction and up for each of the six faces, in cube-map face
+    // order +X, -X, +Y, -Y, +Z, -Z. The ups are the ones the cube-map face
+    // convention prescribes: a face rendered through look_at(light, dir,
+    // up) then lands with row 0 / column 0 where a samplerCube lookup
+    // expects them (for the +X face, +Y at the first row and +Z at the
+    // first column), so the hardware face selection and the rendered
+    // image agree. Both backends write off-screen row 0 for NDC y = -1,
+    // so one basis serves both.
     struct face_basis
     {
         math::vec3 dir;
@@ -77,12 +86,12 @@ namespace
     };
 
     constexpr std::array<face_basis, 6> face_bases = {{
-        {{1.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f}},
-        {{-1.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f}},
+        {{1.0f, 0.0f, 0.0f}, {0.0f, -1.0f, 0.0f}},
+        {{-1.0f, 0.0f, 0.0f}, {0.0f, -1.0f, 0.0f}},
         {{0.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}},
-        {{0.0f, -1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}},
-        {{0.0f, 0.0f, 1.0f}, {0.0f, 1.0f, 0.0f}},
-        {{0.0f, 0.0f, -1.0f}, {0.0f, 1.0f, 0.0f}},
+        {{0.0f, -1.0f, 0.0f}, {0.0f, 0.0f, -1.0f}},
+        {{0.0f, 0.0f, 1.0f}, {0.0f, -1.0f, 0.0f}},
+        {{0.0f, 0.0f, -1.0f}, {0.0f, -1.0f, 0.0f}},
     }};
 } // namespace
 
@@ -92,27 +101,41 @@ namespace rendering_engine
     {
         auto& gpu = *runtime::current_engine().gpu;
 
+        // One depth cube map, sampled by the lit materials as a
+        // samplerCube, and six depth-only targets each attached to one of
+        // its faces. Nearest, clamped sampling: the lit shader does its
+        // own PCF over raw depth.
+        gpu::texture_descriptor cube_descriptor{};
+        cube_descriptor.dimension = gpu::texture_dimension::cube;
+        cube_descriptor.format = gpu::texture_format::depth32_float;
+        cube_descriptor.width = shadow_map_size;
+        cube_descriptor.height = shadow_map_size;
+        cube_descriptor.usage = gpu::texture_usage_default | gpu::texture_usage_render_attachment;
+        cube_descriptor.min_filter = gpu::filter_mode::nearest;
+        cube_descriptor.mag_filter = gpu::filter_mode::nearest;
+        cube_descriptor.mipmap_filter = gpu::mipmap_mode::none;
+        cube_descriptor.address_u = gpu::address_mode::clamp_edge;
+        cube_descriptor.address_v = gpu::address_mode::clamp_edge;
+        cube_descriptor.address_w = gpu::address_mode::clamp_edge;
+        m_depth_texture = gpu.create_texture(cube_descriptor);
+
         for (int face = 0; face < point_shadow_face_count; ++face)
         {
             gpu::render_target_descriptor target_descriptor{};
-            target_descriptor.color_format = gpu::texture_format::r8_unorm;
             target_descriptor.width = shadow_map_size;
             target_descriptor.height = shadow_map_size;
             target_descriptor.with_depth = true;
-            target_descriptor.depth_format = gpu::texture_format::depth32_float;
+            target_descriptor.depth.texture = m_depth_texture;
+            target_descriptor.depth.layer = static_cast<uint32_t>(face);
             m_targets[face] = gpu.create_render_target(target_descriptor);
-            m_depth_textures[face] = gpu.render_target_depth_texture(m_targets[face]);
         }
 
+        // Vertex stage only: the faces have no colour attachment, and
+        // the rasteriser writes the depth the lit materials sample.
         gpu::shader_module_descriptor vs_descriptor{};
         vs_descriptor.stage = gpu::shader_stage::vertex;
         vs_descriptor.spirv = gpu::compile_library_shader("passes/shadow.vert.glsl", gpu::shader_stage::vertex);
         m_vertex_shader = gpu.create_shader_module(vs_descriptor);
-
-        gpu::shader_module_descriptor fs_descriptor{};
-        fs_descriptor.stage = gpu::shader_stage::fragment;
-        fs_descriptor.spirv = gpu::compile_library_shader("passes/shadow.frag.glsl", gpu::shader_stage::fragment);
-        m_fragment_shader = gpu.create_shader_module(fs_descriptor);
 
         gpu::bind_group_layout_descriptor light_layout{};
         light_layout.entries.push_back({light_frame_binding, gpu::binding_kind::uniform_buffer});
@@ -163,20 +186,25 @@ namespace rendering_engine
         rasterizer.front = gpu::front_face::counter_clockwise;
         rasterizer.polygon = gpu::polygon_mode::fill;
 
+        gpu::depth_bias_state depth_bias{};
+        depth_bias.enabled = true;
+        depth_bias.constant = shadow_depth_bias_constant;
+        depth_bias.slope = shadow_depth_bias_slope;
+
         gpu::pipeline_descriptor pipeline_descriptor{};
         pipeline_descriptor.vertex_shader = m_vertex_shader;
-        pipeline_descriptor.fragment_shader = m_fragment_shader;
         pipeline_descriptor.vertex_buffers.push_back(vertex_layout);
         pipeline_descriptor.depth = depth;
         pipeline_descriptor.blend = blend;
         pipeline_descriptor.rasterizer = rasterizer;
+        pipeline_descriptor.depth_bias = depth_bias;
         pipeline_descriptor.bind_group_layouts.push_back(m_light_layout);
         pipeline_descriptor.bind_group_layouts.push_back(m_draw_layout);
         m_pipeline = gpu.create_pipeline(pipeline_descriptor);
 
         // Instanced casters rasterize with the same state (back-face culling
         // included) through the pipeline that reads their transform stream.
-        m_instanced = create_instanced_shadow_pipeline(m_fragment_shader, m_light_layout, depth, blend, rasterizer);
+        m_instanced = create_instanced_shadow_pipeline(m_light_layout, depth, blend, rasterizer, depth_bias);
     }
 
     point_shadow_pass::~point_shadow_pass()
@@ -214,30 +242,31 @@ namespace rendering_engine
             gpu.destroy(m_light_layout);
             m_light_layout = {};
         }
-        if (m_fragment_shader.valid())
-        {
-            gpu.destroy(m_fragment_shader);
-            m_fragment_shader = {};
-        }
         if (m_vertex_shader.valid())
         {
             gpu.destroy(m_vertex_shader);
             m_vertex_shader = {};
         }
+        // The face targets import the cube, so they go first and the
+        // cube last.
         for (int face = 0; face < point_shadow_face_count; ++face)
         {
             if (m_targets[face].valid())
             {
                 gpu.destroy(m_targets[face]);
                 m_targets[face] = {};
-                m_depth_textures[face] = {};
             }
+        }
+        if (m_depth_texture.valid())
+        {
+            gpu.destroy(m_depth_texture);
+            m_depth_texture = {};
         }
     }
 
-    gpu::texture point_shadow_pass::shadow_map(int face) const
+    gpu::texture point_shadow_pass::shadow_map() const
     {
-        return m_depth_textures[face];
+        return m_depth_texture;
     }
 
     const core::math::mat4& point_shadow_pass::light_view_projection(int face) const
@@ -248,6 +277,16 @@ namespace rendering_engine
     const core::math::vec3& point_shadow_pass::light_position() const
     {
         return m_light_position;
+    }
+
+    float point_shadow_pass::shadow_near() const
+    {
+        return light_near;
+    }
+
+    float point_shadow_pass::shadow_far() const
+    {
+        return m_light_far;
     }
 
     bool point_shadow_pass::has_shadow() const
@@ -314,7 +353,8 @@ namespace rendering_engine
         if (m_has_shadow)
         {
             m_light_position = caster->position;
-            projection = math::perspective(face_fov_y, 1.0f, light_near, face_far_plane(*caster));
+            m_light_far = face_far_plane(*caster);
+            projection = math::perspective(face_fov_y, 1.0f, light_near, m_light_far);
         }
 
         // Walk the registry once per frame, not once per face: every caster
@@ -357,10 +397,9 @@ namespace rendering_engine
                 gpu.write_buffer(m_light_ubos[face], m_light_view_projections[face].data(), sizeof(math::mat4), 0);
             }
 
+            // Depth-only face target: only the depth ops matter.
             gpu::render_pass_descriptor descriptor{};
             descriptor.target = m_targets[face];
-            descriptor.color.load = gpu::load_op::clear;
-            descriptor.color.clear_color = {1.0f, 1.0f, 1.0f, 1.0f};
             descriptor.use_depth = true;
             descriptor.depth.load = gpu::load_op::clear;
             descriptor.depth.clear_depth = 1.0f;

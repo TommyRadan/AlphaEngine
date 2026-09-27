@@ -53,6 +53,30 @@ namespace
         void barrier(gpu::pipeline_stage, gpu::pipeline_stage, gpu::access_flag, gpu::access_flag) override
         {
         }
+
+        void copy_buffer_to_texture(gpu::buffer, size_t, gpu::texture, const gpu::texture_copy_region&) override
+        {
+        }
+
+        void copy_texture_to_buffer(gpu::texture, const gpu::texture_copy_region&, gpu::buffer, size_t) override
+        {
+        }
+
+        void push_debug_group(const char*) override
+        {
+        }
+
+        void pop_debug_group() override
+        {
+        }
+
+        void reset_queries(gpu::query_set, uint32_t, uint32_t) override
+        {
+        }
+
+        void write_timestamp(gpu::query_set, uint32_t) override
+        {
+        }
     };
 
     pass_io_builder io_of(std::initializer_list<const char*> reads, std::initializer_list<const char*> writes)

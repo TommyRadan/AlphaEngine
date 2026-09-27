@@ -256,8 +256,8 @@ namespace rendering_engine
         descriptor.target = ctx.swapchain_target;
         // The fullscreen triangle covers every pixel; clearing is strictly
         // redundant but cheap and keeps the swapchain in a known state.
-        descriptor.color.load = gpu::load_op::clear;
-        descriptor.color.clear_color = {0.0f, 0.0f, 0.0f, 1.0f};
+        descriptor.color[0].load = gpu::load_op::clear;
+        descriptor.color[0].clear_color = {0.0f, 0.0f, 0.0f, 1.0f};
         descriptor.use_depth = false;
 
         auto pass_encoder = encoder.begin_render_pass(descriptor);

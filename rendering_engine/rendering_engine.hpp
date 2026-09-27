@@ -35,6 +35,7 @@
 #include <core/subscription.hpp>
 #include <rendering_engine/fog.hpp>
 #include <rendering_engine/gpu/handle.hpp>
+#include <rendering_engine/gpu_profiler.hpp>
 #include <rendering_engine/render_graph/frame_graph.hpp>
 #include <rendering_engine/render_stats.hpp>
 
@@ -298,6 +299,16 @@ namespace rendering_engine
         const render_stats& get_render_stats() const;
 
         /**
+         * @brief The per-pass GPU timer: last frame's GPU time of every
+         *        frame-graph pass, from the device's timestamp queries.
+         *
+         * Disabled (empty timings, @c enabled() false) on a device
+         * without timestamp support. The debug overlay's profiler panel
+         * reads it.
+         */
+        const gpu_profiler& get_gpu_profiler() const;
+
+        /**
          * @brief Sets (or clears) the scene's image-based-lighting
          *        environment plus background.
          *
@@ -380,6 +391,11 @@ namespace rendering_engine
         // This frame's draw statistics, filled by the scene pass (which
         // holds a pointer to it) and surfaced via @ref get_render_stats.
         render_stats m_render_stats{};
+
+        // Per-pass GPU timer over the frame graph, brought up after the
+        // graph is compiled in @ref init and released before the device
+        // in @ref quit. Surfaced via @ref get_gpu_profiler.
+        gpu_profiler m_gpu_profiler;
 
         // The window_resized listener that keeps the swapchain extent and,
         // through @ref on_resize, the off-screen targets and passes in

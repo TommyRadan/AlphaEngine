@@ -111,8 +111,7 @@ TEST(shader_library, generated_bindings_mirror_the_header)
     expect_define("MATERIAL_IRRADIANCE_MAP", shader_bindings::material_irradiance_map);
     expect_define("MATERIAL_BRDF_LUT", shader_bindings::material_brdf_lut);
     expect_define("POINT_SHADOW", shader_bindings::point_shadow);
-    expect_define("POINT_SHADOW_MAP_0", shader_bindings::point_shadow_map_0);
-    expect_define("POINT_SHADOW_MAP_5", shader_bindings::point_shadow_map_5);
+    expect_define("POINT_SHADOW_MAP", shader_bindings::point_shadow_map);
     EXPECT_NE(bindings.find("#ifndef AE_BINDINGS_GLSL"), npos);
 }
 

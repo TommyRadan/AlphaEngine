@@ -44,7 +44,7 @@ namespace rendering_engine
         // The UI pass already composited on top of the tonemapped
         // backbuffer; debug overlays paint on top of that without
         // re-clearing, and depth is disabled so they always win.
-        descriptor.color.load = gpu::load_op::load;
+        descriptor.color[0].load = gpu::load_op::load;
         descriptor.use_depth = false;
 
         auto pass_encoder = encoder.begin_render_pass(descriptor);

@@ -50,6 +50,20 @@ namespace rendering_engine::gpu::backend::vulkan
     VkAttachmentLoadOp to_vk_load_op(load_op op);
     VkAttachmentStoreOp to_vk_store_op(store_op op);
     VkFormat to_vk_format(texture_format format);
+    VkStencilOp to_vk_stencil_op(stencil_op op);
+    VkBorderColor to_vk_border_color(border_color color);
+    VkColorComponentFlags to_vk_color_write_mask(color_write_mask mask);
+    // @p count must be a power of two up to 64; anything else maps to
+    // one sample.
+    VkSampleCountFlagBits to_vk_sample_count(uint32_t count);
+    // The image usage bits for @p usage on a colour or depth image.
+    // Uploads and mip generation need the transfer bits, so the copy
+    // flags always translate; the attachment bit follows the format.
+    VkImageUsageFlags to_vk_image_usage(texture_usage usage, bool depth);
+    // Engine usage bits a format with the given optimal-tiling
+    // features supports (the inverse of the above, for
+    // device::format_support).
+    texture_usage to_texture_usage(VkFormatFeatureFlags features, bool depth);
 
     bool is_depth_format(texture_format format);
     VkImageAspectFlags aspect_for_format(texture_format format);

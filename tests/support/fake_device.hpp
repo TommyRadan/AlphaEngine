@@ -67,6 +67,13 @@ namespace test_support
         void init() override {}
         void quit() override {}
 
+        // -- Capabilities ---------------------------------------------------
+        rendering_engine::gpu::texture_usage format_support(rendering_engine::gpu::texture_format) const override
+        {
+            return rendering_engine::gpu::texture_usage_default | rendering_engine::gpu::texture_usage_render_attachment |
+                   rendering_engine::gpu::texture_usage_storage;
+        }
+
         // -- Resource creation ---------------------------------------------
         rendering_engine::gpu::buffer create_buffer(const rendering_engine::gpu::buffer_descriptor& descriptor) override
         {
@@ -132,6 +139,11 @@ namespace test_support
             return rendering_engine::gpu::bind_group{++m_next_id};
         }
 
+        rendering_engine::gpu::query_set create_query_set(const rendering_engine::gpu::query_set_descriptor&) override
+        {
+            return rendering_engine::gpu::query_set{++m_next_id};
+        }
+
         // -- Resource destruction ------------------------------------------
         void destroy(rendering_engine::gpu::buffer handle) override
         {
@@ -167,10 +179,25 @@ namespace test_support
         {
             ++destroyed_bind_groups;
         }
+        void destroy(rendering_engine::gpu::query_set) override {}
 
         // -- Resource updates ----------------------------------------------
         void write_buffer(rendering_engine::gpu::buffer, const void*, std::size_t, std::size_t) override {}
         void write_texture(rendering_engine::gpu::texture, const void*, std::size_t) override {}
+        bool write_texture_region(rendering_engine::gpu::texture,
+                                  const rendering_engine::gpu::texture_write_region&,
+                                  const void*,
+                                  std::size_t) override
+        {
+            return true;
+        }
+        bool read_texture(rendering_engine::gpu::texture,
+                          const rendering_engine::gpu::texture_copy_region&,
+                          void*,
+                          std::size_t) override
+        {
+            return false;
+        }
         void write_texture_3d(rendering_engine::gpu::texture, const void*, std::size_t) override {}
         void write_cube_face(rendering_engine::gpu::texture, rendering_engine::gpu::cube_face, const void*,
                              std::size_t) override
@@ -190,13 +217,18 @@ namespace test_support
             return rendering_engine::gpu::render_target{++m_next_id};
         }
         void destroy(rendering_engine::gpu::render_target) override {}
-        rendering_engine::gpu::texture render_target_color_texture(rendering_engine::gpu::render_target) override
+        rendering_engine::gpu::texture render_target_color_texture(rendering_engine::gpu::render_target,
+                                                                   std::uint32_t = 0) override
         {
             return rendering_engine::gpu::texture{};
         }
         rendering_engine::gpu::texture render_target_depth_texture(rendering_engine::gpu::render_target) override
         {
             return rendering_engine::gpu::texture{};
+        }
+        bool resolve_queries(rendering_engine::gpu::query_set, std::uint32_t, std::uint32_t, std::uint64_t*) override
+        {
+            return false;
         }
 
         // -- Command recording ---------------------------------------------

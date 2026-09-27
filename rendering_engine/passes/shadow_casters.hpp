@@ -58,15 +58,16 @@ namespace rendering_engine
         gpu::pipeline pipeline{};
     };
 
-    // Builds the instanced pipeline over @p fragment_shader (the shared
-    // depth-only stage), @p light_layout at slot 0 and the given depth /
-    // blend / rasterizer state, which the caller passes unchanged from its
-    // single-draw pipeline so both rasterize identically.
-    instanced_shadow_pipeline create_instanced_shadow_pipeline(gpu::shader_module fragment_shader,
-                                                               gpu::bind_group_layout light_layout,
+    // Builds the instanced pipeline (vertex stage only: the depth-only
+    // target has no colour attachment) over @p light_layout at slot 0 and
+    // the given depth / blend / rasterizer / depth-bias state, which the
+    // caller passes unchanged from its single-draw pipeline so both
+    // rasterize identically.
+    instanced_shadow_pipeline create_instanced_shadow_pipeline(gpu::bind_group_layout light_layout,
                                                                const gpu::depth_state& depth,
                                                                const gpu::blend_state& blend,
-                                                               const gpu::rasterizer_state& rasterizer);
+                                                               const gpu::rasterizer_state& rasterizer,
+                                                               const gpu::depth_bias_state& depth_bias);
 
     // Releases the pipeline and its vertex shader; no-op for invalid handles.
     void destroy_instanced_shadow_pipeline(instanced_shadow_pipeline& instanced);

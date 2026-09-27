@@ -359,11 +359,13 @@ namespace rendering_engine::gpu::backend::vulkan
         }
 
         create_instance();
+        load_debug_utils_functions();
         create_debug_messenger();
         create_surface();
         pick_physical_device();
         resolve_depth_formats();
         create_logical_device();
+        query_capabilities();
         create_allocator();
         create_command_pools();
         if (!create_staging_ring())
@@ -400,7 +402,10 @@ namespace rendering_engine::gpu::backend::vulkan
         swap.is_swapchain = true;
         swap.width = m_swapchain_extent.width;
         swap.height = m_swapchain_extent.height;
+        swap.samples = 1;
         swap.has_depth = true;
+        swap.has_stencil =
+            (aspect_for_vk_format(vk_format_for(m_swapchain_depth_format)) & VK_IMAGE_ASPECT_STENCIL_BIT) != 0u;
         m_swapchain_target.id = m_render_targets.insert(swap);
 
         create_default_textures();
@@ -544,6 +549,14 @@ namespace rendering_engine::gpu::backend::vulkan
                     }
                 }
                 t.storage_views.clear();
+                for (VkImageView attachment_view : t.attachment_views)
+                {
+                    if (attachment_view != VK_NULL_HANDLE)
+                    {
+                        vkDestroyImageView(m_device, attachment_view, nullptr);
+                    }
+                }
+                t.attachment_views.clear();
                 if (!t.external && t.image != VK_NULL_HANDLE)
                 {
                     vmaDestroyImage(m_allocator, t.image, t.allocation);
@@ -585,6 +598,15 @@ namespace rendering_engine::gpu::backend::vulkan
                 }
                 rt.variants.clear();
             });
+        m_query_sets.for_each(
+            [&](vk_query_set& q)
+            {
+                if (q.pool != VK_NULL_HANDLE)
+                {
+                    vkDestroyQueryPool(m_device, q.pool, nullptr);
+                    q.pool = VK_NULL_HANDLE;
+                }
+            });
 
         m_pipelines.clear();
         m_shader_modules.clear();
@@ -594,6 +616,7 @@ namespace rendering_engine::gpu::backend::vulkan
         m_textures.clear();
         m_buffers.clear();
         m_render_targets.clear();
+        m_query_sets.clear();
 
         destroy_sync_objects();
         destroy_swapchain();
@@ -647,6 +670,12 @@ namespace rendering_engine::gpu::backend::vulkan
         m_device_lost_thrown = false;
         m_has_portability_subset = false;
         m_features = {};
+        m_limits = {};
+        m_debug_utils_enabled = false;
+        m_cmd_begin_debug_label = nullptr;
+        m_cmd_end_debug_label = nullptr;
+        m_set_debug_object_name = nullptr;
+        m_timestamp_valid_bits = 0;
         m_depth_formats.fill(VK_FORMAT_UNDEFINED);
         m_initialised = false;
         LOG_INF("Quit gpu::backend::vulkan::vk_device");
@@ -746,20 +775,24 @@ namespace rendering_engine::gpu::backend::vulkan
             flags |= k_enumerate_portability_flag;
         }
         std::vector<const char*> layers;
+        // VK_EXT_debug_utils carries the validation layer's messages
+        // and, independently of validation, the command labels and
+        // object names a graphics debugger shows. It is requested
+        // whenever the instance exposes it, confirmed first so a
+        // missing extension never fails vkCreateInstance.
+        m_debug_utils_enabled = instance_extension_available(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 #ifdef _DEBUG
         if (layer_available(k_validation_layer))
         {
-            // The debug-utils extension is what routes the layer's
-            // messages into the log. The loader provides it on every
-            // SDK install, but it is confirmed (from the instance and
-            // from the layer itself) before it is requested so a
-            // missing extension degrades to an unvalidated run instead
-            // of a failed vkCreateInstance.
-            if (instance_extension_available(VK_EXT_DEBUG_UTILS_EXTENSION_NAME) ||
+            // The layer itself may be what provides the extension.
+            if (!m_debug_utils_enabled &&
                 instance_extension_available(VK_EXT_DEBUG_UTILS_EXTENSION_NAME, k_validation_layer))
             {
+                m_debug_utils_enabled = true;
+            }
+            if (m_debug_utils_enabled)
+            {
                 layers.push_back(k_validation_layer);
-                extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
                 m_validation_enabled = true;
             }
             else
@@ -773,6 +806,10 @@ namespace rendering_engine::gpu::backend::vulkan
             LOG_WRN("Vulkan validation layer not available; debug-build run will not be validated");
         }
 #endif
+        if (m_debug_utils_enabled)
+        {
+            extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+        }
 
         VkInstanceCreateInfo info{};
         info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -789,14 +826,59 @@ namespace rendering_engine::gpu::backend::vulkan
             throw std::runtime_error{"vkCreateInstance failed"};
         }
         m_api_version = api_version;
-        LOG_INF("Vulkan instance: loader %u.%u.%u, requested api %u.%u, portability enumeration %s, validation %s",
+        LOG_INF("Vulkan instance: loader %u.%u.%u, requested api %u.%u, portability enumeration %s, validation %s, "
+                "debug utils %s",
                 VK_VERSION_MAJOR(instance_version),
                 VK_VERSION_MINOR(instance_version),
                 VK_VERSION_PATCH(instance_version),
                 VK_VERSION_MAJOR(api_version),
                 VK_VERSION_MINOR(api_version),
                 portability_enumeration ? "on" : "off",
-                m_validation_enabled ? "on" : "off");
+                m_validation_enabled ? "on" : "off",
+                m_debug_utils_enabled ? "on" : "off");
+    }
+
+    void vk_device::load_debug_utils_functions()
+    {
+        m_cmd_begin_debug_label = nullptr;
+        m_cmd_end_debug_label = nullptr;
+        m_set_debug_object_name = nullptr;
+        if (!m_debug_utils_enabled || m_instance == VK_NULL_HANDLE)
+        {
+            return;
+        }
+        m_cmd_begin_debug_label = reinterpret_cast<PFN_vkCmdBeginDebugUtilsLabelEXT>(
+            vkGetInstanceProcAddr(m_instance, "vkCmdBeginDebugUtilsLabelEXT"));
+        m_cmd_end_debug_label = reinterpret_cast<PFN_vkCmdEndDebugUtilsLabelEXT>(
+            vkGetInstanceProcAddr(m_instance, "vkCmdEndDebugUtilsLabelEXT"));
+        m_set_debug_object_name = reinterpret_cast<PFN_vkSetDebugUtilsObjectNameEXT>(
+            vkGetInstanceProcAddr(m_instance, "vkSetDebugUtilsObjectNameEXT"));
+        // Labels and names go together: a loader that resolves only
+        // part of the extension gets neither, so the feature flag is
+        // an honest answer.
+        if (m_cmd_begin_debug_label == nullptr || m_cmd_end_debug_label == nullptr ||
+            m_set_debug_object_name == nullptr)
+        {
+            LOG_WRN("VK_EXT_debug_utils is enabled but its label entry points did not resolve; "
+                    "debug groups and object names are off");
+            m_cmd_begin_debug_label = nullptr;
+            m_cmd_end_debug_label = nullptr;
+            m_set_debug_object_name = nullptr;
+        }
+    }
+
+    void vk_device::name_object(VkObjectType type, uint64_t object_handle, const char* name)
+    {
+        if (m_set_debug_object_name == nullptr || m_device == VK_NULL_HANDLE || object_handle == 0 || name == nullptr)
+        {
+            return;
+        }
+        VkDebugUtilsObjectNameInfoEXT info{};
+        info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
+        info.objectType = type;
+        info.objectHandle = object_handle;
+        info.pObjectName = name;
+        m_set_debug_object_name(m_device, &info);
     }
 
     void vk_device::create_debug_messenger()
@@ -877,6 +959,7 @@ namespace rendering_engine::gpu::backend::vulkan
         bool best_discrete = false;
         uint32_t best_graphics = 0;
         uint32_t best_present = 0;
+        uint32_t best_timestamp_bits = 0;
 
         for (auto gpu : gpus)
         {
@@ -971,6 +1054,7 @@ namespace rendering_engine::gpu::backend::vulkan
                 best_discrete = discrete;
                 best_graphics = *graphics_family;
                 best_present = *present_family;
+                best_timestamp_bits = qfs[*graphics_family].timestampValidBits;
                 m_depth_clip_control_enabled = has_depth_clip_control;
                 m_extended_dynamic_state_enabled = has_extended_dynamic_state;
                 m_has_portability_subset = has_portability_subset;
@@ -986,6 +1070,7 @@ namespace rendering_engine::gpu::backend::vulkan
         m_physical_device = best;
         m_graphics_queue_family = best_graphics;
         m_present_queue_family = best_present;
+        m_timestamp_valid_bits = best_timestamp_bits;
 
         VkPhysicalDeviceProperties props{};
         vkGetPhysicalDeviceProperties(m_physical_device, &props);
@@ -1100,6 +1185,14 @@ namespace rendering_engine::gpu::backend::vulkan
                 features.samplerAnisotropy,
                 m_features.sampler_anisotropy,
                 "samplerAnisotropy (anisotropic filtering is unavailable)");
+        request(supported.depthBiasClamp,
+                features.depthBiasClamp,
+                m_features.depth_bias_clamp,
+                "depthBiasClamp (depth bias is applied unclamped)");
+        request(supported.independentBlend,
+                features.independentBlend,
+                m_features.independent_blend,
+                "independentBlend (every colour attachment of a pipeline blends alike)");
 
         std::vector<const char*> device_extensions{VK_KHR_SWAPCHAIN_EXTENSION_NAME};
         if (m_depth_clip_control_enabled)
@@ -1170,7 +1263,7 @@ namespace rendering_engine::gpu::backend::vulkan
 
         LOG_INF("Vulkan logical device created (depth_clip_control: %s, extended_dynamic_state: %s, "
                 "portability_subset: %s; features: fillModeNonSolid %s, geometryShader %s, tessellationShader %s, "
-                "multiDrawIndirect %s, samplerAnisotropy %s)",
+                "multiDrawIndirect %s, samplerAnisotropy %s, depthBiasClamp %s, independentBlend %s)",
                 m_depth_clip_control_enabled ? "on" : "off",
                 m_extended_dynamic_state_enabled ? "on" : "off",
                 m_features.portability_subset ? "on" : "off",
@@ -1178,7 +1271,72 @@ namespace rendering_engine::gpu::backend::vulkan
                 m_features.geometry_shader ? "on" : "off",
                 m_features.tessellation_shader ? "on" : "off",
                 m_features.multi_draw_indirect ? "on" : "off",
-                m_features.sampler_anisotropy ? "on" : "off");
+                m_features.sampler_anisotropy ? "on" : "off",
+                m_features.depth_bias_clamp ? "on" : "off",
+                m_features.independent_blend ? "on" : "off");
+    }
+
+    void vk_device::query_capabilities()
+    {
+        VkPhysicalDeviceProperties props{};
+        vkGetPhysicalDeviceProperties(m_physical_device, &props);
+        const VkPhysicalDeviceLimits& limits = props.limits;
+
+        m_limits = {};
+        m_limits.max_texture_size_2d = limits.maxImageDimension2D;
+        m_limits.max_texture_size_3d = limits.maxImageDimension3D;
+        m_limits.max_texture_size_cube = limits.maxImageDimensionCube;
+        m_limits.max_array_layers = limits.maxImageArrayLayers;
+        m_limits.max_color_attachments = limits.maxColorAttachments;
+        m_limits.uniform_buffer_offset_alignment = static_cast<uint32_t>(limits.minUniformBufferOffsetAlignment);
+        m_limits.storage_buffer_offset_alignment = static_cast<uint32_t>(limits.minStorageBufferOffsetAlignment);
+        // VkSampleCountFlags is bit-per-count, the engine's mask too.
+        m_limits.color_sample_counts = static_cast<sample_count_mask>(limits.framebufferColorSampleCounts);
+        m_limits.depth_sample_counts = static_cast<sample_count_mask>(limits.framebufferDepthSampleCounts);
+        m_limits.max_anisotropy = m_features.sampler_anisotropy ? limits.maxSamplerAnisotropy : 1.0f;
+        m_limits.timestamp_period_ns = limits.timestampPeriod > 0.0f ? limits.timestampPeriod : 1.0f;
+        for (size_t axis = 0; axis < 3; ++axis)
+        {
+            m_limits.max_compute_workgroup_count[axis] = limits.maxComputeWorkGroupCount[axis];
+        }
+        m_limits.max_compute_workgroup_invocations = limits.maxComputeWorkGroupInvocations;
+
+        // The grants recorded by create_logical_device stay; the rest
+        // is what every Vulkan device has, plus the two extension-
+        // backed ones.
+        m_features.compute = true;
+        m_features.indirect_draw = true;
+        m_features.timestamp_queries = m_timestamp_valid_bits > 0 && limits.timestampPeriod > 0.0f;
+        m_features.debug_labels = m_debug_utils_enabled && m_set_debug_object_name != nullptr;
+        // Compute pipelines, storage-image bind groups and the layout
+        // transitions the IBL convolution needs are implemented, so
+        // the GPU prefilter path is taken just like OpenGL.
+        m_features.compute_prefilter = true;
+
+        LOG_INF("Vulkan limits: texture %u / 3d %u / cube %u, %u array layers, %u colour attachments, "
+                "anisotropy %.0f, msaa colour 0x%x depth 0x%x, timestamps %s (%.2f ns/tick), debug labels %s",
+                m_limits.max_texture_size_2d,
+                m_limits.max_texture_size_3d,
+                m_limits.max_texture_size_cube,
+                m_limits.max_array_layers,
+                m_limits.max_color_attachments,
+                static_cast<double>(m_limits.max_anisotropy),
+                m_limits.color_sample_counts,
+                m_limits.depth_sample_counts,
+                m_features.timestamp_queries ? "on" : "off",
+                static_cast<double>(m_limits.timestamp_period_ns),
+                m_features.debug_labels ? "on" : "off");
+    }
+
+    texture_usage vk_device::format_support(texture_format format) const
+    {
+        if (m_physical_device == VK_NULL_HANDLE)
+        {
+            return 0;
+        }
+        VkFormatProperties props{};
+        vkGetPhysicalDeviceFormatProperties(m_physical_device, vk_format_for(format), &props);
+        return to_texture_usage(props.optimalTilingFeatures, is_depth_format(format));
     }
 
     void vk_device::create_allocator()
@@ -1881,45 +2039,159 @@ namespace rendering_engine::gpu::backend::vulkan
 
     render_target vk_device::create_render_target(const render_target_descriptor& descriptor)
     {
-        texture_descriptor color_descriptor{};
-        color_descriptor.dimension = texture_dimension::d2;
-        color_descriptor.format = descriptor.color_format;
-        color_descriptor.width = descriptor.width;
-        color_descriptor.height = descriptor.height;
-        color_descriptor.mipmaps = false;
-        color_descriptor.min_filter = filter_mode::linear;
-        color_descriptor.mag_filter = filter_mode::linear;
-        color_descriptor.mipmap_filter = mipmap_mode::none;
-        color_descriptor.address_u = address_mode::clamp_edge;
-        color_descriptor.address_v = address_mode::clamp_edge;
-        color_descriptor.address_w = address_mode::clamp_edge;
-        const texture color = create_texture(color_descriptor);
-
-        texture depth{};
-        if (descriptor.with_depth)
+        if (const char* problem = validate_render_target_descriptor(descriptor); problem != nullptr)
         {
-            texture_descriptor depth_descriptor{};
-            depth_descriptor.dimension = texture_dimension::d2;
-            depth_descriptor.format = descriptor.depth_format;
-            depth_descriptor.width = descriptor.width;
-            depth_descriptor.height = descriptor.height;
-            depth_descriptor.mipmaps = false;
-            depth_descriptor.min_filter = filter_mode::nearest;
-            depth_descriptor.mag_filter = filter_mode::nearest;
-            depth_descriptor.mipmap_filter = mipmap_mode::none;
-            depth_descriptor.address_u = address_mode::clamp_edge;
-            depth_descriptor.address_v = address_mode::clamp_edge;
-            depth_descriptor.address_w = address_mode::clamp_edge;
-            depth = create_texture(depth_descriptor);
+            LOG_ERR("create_render_target: %s", problem);
+            return {};
+        }
+        if (descriptor.color.size() > m_limits.max_color_attachments)
+        {
+            LOG_ERR("create_render_target: %zu colour attachments, the device allows %u",
+                    descriptor.color.size(),
+                    m_limits.max_color_attachments);
+            return {};
+        }
+        const sample_count_mask sample_counts =
+            descriptor.color.empty()
+                ? m_limits.depth_sample_counts
+                : (m_limits.color_sample_counts & (descriptor.with_depth ? m_limits.depth_sample_counts : ~0u));
+        if (!sample_count_supported(sample_counts, descriptor.sample_count))
+        {
+            LOG_ERR("create_render_target: %u samples per pixel are not supported for these attachments",
+                    descriptor.sample_count);
+            return {};
         }
 
         vk_render_target record{};
         record.is_swapchain = false;
         record.width = descriptor.width;
         record.height = descriptor.height;
+        record.samples = descriptor.sample_count;
         record.has_depth = descriptor.with_depth;
-        record.color_attachment = color;
-        record.depth_attachment = depth;
+
+        // Textures allocated so far, released if a later step fails so
+        // nothing half-built is handed out.
+        std::vector<texture> allocated;
+        const auto release_allocated = [&]
+        {
+            for (const texture t : allocated)
+            {
+                destroy(t);
+            }
+        };
+
+        // Resolve one attachment: check an imported texture against the
+        // target, or allocate a fresh single-mip texture of the target's
+        // shape (colour attachments sample linearly, depth attachments
+        // nearest, both clamped so a fullscreen pass never wraps at the
+        // seam). The render pass and framebuffers are built lazily by
+        // acquire_render_pass, per load-op combination.
+        const auto resolve = [&](const attachment_desc& desc, bool depth, vk_attachment& out) -> bool
+        {
+            if (desc.texture.valid())
+            {
+                const vk_texture* tex = m_textures.lookup(desc.texture.id);
+                if (tex == nullptr || tex->image == VK_NULL_HANDLE)
+                {
+                    LOG_ERR("create_render_target: imported attachment is not a live texture");
+                    return false;
+                }
+                if ((tex->usage & texture_usage_render_attachment) == 0u)
+                {
+                    LOG_ERR("create_render_target: imported texture was created without "
+                            "texture_usage_render_attachment");
+                    return false;
+                }
+                if (tex->is_depth != depth)
+                {
+                    LOG_ERR("create_render_target: imported texture format does not fit a %s attachment",
+                            depth ? "depth" : "colour");
+                    return false;
+                }
+                if (desc.mip_level >= tex->mip_levels || desc.layer >= tex->array_layers)
+                {
+                    LOG_ERR("create_render_target: level %u / layer %u is outside the imported texture (%u levels, "
+                            "%u layers)",
+                            desc.mip_level,
+                            desc.layer,
+                            tex->mip_levels,
+                            tex->array_layers);
+                    return false;
+                }
+                if (tex->samples != descriptor.sample_count)
+                {
+                    LOG_ERR("create_render_target: imported texture has %u samples, the target %u",
+                            tex->samples,
+                            descriptor.sample_count);
+                    return false;
+                }
+                const uint32_t level_width = std::max(1u, tex->width >> desc.mip_level);
+                const uint32_t level_height = std::max(1u, tex->height >> desc.mip_level);
+                if (level_width != descriptor.width || level_height != descriptor.height)
+                {
+                    LOG_ERR("create_render_target: imported level measures %ux%u, the target %ux%u",
+                            level_width,
+                            level_height,
+                            descriptor.width,
+                            descriptor.height);
+                    return false;
+                }
+                out.tex = desc.texture;
+                out.owned = false;
+                out.mip_level = desc.mip_level;
+                out.layer = desc.layer;
+                return true;
+            }
+
+            texture_descriptor td{};
+            td.dimension = descriptor.dimension;
+            td.format = desc.format;
+            td.width = descriptor.width;
+            td.height = descriptor.height;
+            td.array_layers = descriptor.array_layers;
+            td.sample_count = descriptor.sample_count;
+            td.mipmaps = false;
+            td.usage = texture_usage_default | texture_usage_render_attachment;
+            td.min_filter = depth ? filter_mode::nearest : filter_mode::linear;
+            td.mag_filter = td.min_filter;
+            td.mipmap_filter = mipmap_mode::none;
+            td.address_u = address_mode::clamp_edge;
+            td.address_v = address_mode::clamp_edge;
+            td.address_w = address_mode::clamp_edge;
+            const texture t = create_texture(td);
+            if (!t.valid())
+            {
+                return false;
+            }
+            allocated.push_back(t);
+            out.tex = t;
+            out.owned = true;
+            out.mip_level = 0;
+            out.layer = desc.layer;
+            return true;
+        };
+
+        record.color.resize(descriptor.color.size());
+        for (size_t i = 0; i < descriptor.color.size(); ++i)
+        {
+            if (!resolve(descriptor.color[i], false, record.color[i]))
+            {
+                release_allocated();
+                return {};
+            }
+        }
+        if (descriptor.with_depth)
+        {
+            if (!resolve(descriptor.depth, true, record.depth))
+            {
+                release_allocated();
+                return {};
+            }
+            if (const vk_texture* depth_tex = m_textures.lookup(record.depth.tex.id))
+            {
+                record.has_stencil = (depth_tex->aspect & VK_IMAGE_ASPECT_STENCIL_BIT) != 0u;
+            }
+        }
 
         render_target h{};
         h.id = m_render_targets.insert(record);
@@ -1939,25 +2211,33 @@ namespace rendering_engine::gpu::backend::vulkan
             // command buffer, and pipelines were built against those
             // passes; retire them together through the deferred queue.
             retire_render_pass_variants(*record, /*device_idle=*/false);
-            if (record->color_attachment.valid())
+            // Only the attachments the target allocated go with it; an
+            // imported texture stays with its owner.
+            for (vk_attachment& attachment : record->color)
             {
-                destroy(record->color_attachment);
-                record->color_attachment = {};
+                if (attachment.owned && attachment.tex.valid())
+                {
+                    destroy(attachment.tex);
+                }
+                attachment = {};
             }
-            if (record->depth_attachment.valid())
+            if (record->depth.owned && record->depth.tex.valid())
             {
-                destroy(record->depth_attachment);
-                record->depth_attachment = {};
+                destroy(record->depth.tex);
             }
+            record->depth = {};
             m_render_targets.remove(handle.id);
         }
     }
 
-    texture vk_device::render_target_color_texture(render_target handle)
+    texture vk_device::render_target_color_texture(render_target handle, uint32_t index)
     {
         if (auto* record = m_render_targets.lookup(handle.id))
         {
-            return record->color_attachment;
+            if (index < record->color.size())
+            {
+                return record->color[index].tex;
+            }
         }
         return {};
     }
@@ -1966,9 +2246,151 @@ namespace rendering_engine::gpu::backend::vulkan
     {
         if (auto* record = m_render_targets.lookup(handle.id))
         {
-            return record->depth_attachment;
+            return record->depth.tex;
         }
         return {};
+    }
+
+    // -- Query sets ----------------------------------------------------
+
+    query_set vk_device::create_query_set(const query_set_descriptor& descriptor)
+    {
+        if (!m_features.timestamp_queries)
+        {
+            LOG_WRN("create_query_set: the graphics queue writes no timestamps; no query set created");
+            return {};
+        }
+        if (descriptor.count == 0)
+        {
+            LOG_ERR("create_query_set: a query set needs at least one query");
+            return {};
+        }
+        VkQueryPoolCreateInfo info{};
+        info.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
+        info.queryType = VK_QUERY_TYPE_TIMESTAMP;
+        info.queryCount = descriptor.count;
+        vk_query_set record{};
+        record.count = descriptor.count;
+        if (!vk_check(vkCreateQueryPool(m_device, &info, nullptr, &record.pool), "vkCreateQueryPool"))
+        {
+            return {};
+        }
+        query_set h{};
+        h.id = m_query_sets.insert(record);
+        return h;
+    }
+
+    void vk_device::destroy(query_set handle)
+    {
+        auto* record = m_query_sets.lookup(handle.id);
+        if (record == nullptr)
+        {
+            return;
+        }
+        // The frame's command buffer may still write or reset the
+        // pool; it goes with the rest at the next fence wait.
+        const VkDevice dev = m_device;
+        const VkQueryPool pool = record->pool;
+        if (pool != VK_NULL_HANDLE)
+        {
+            enqueue_destroy([dev, pool] { vkDestroyQueryPool(dev, pool, nullptr); });
+        }
+        record->pool = VK_NULL_HANDLE;
+        m_query_sets.remove(handle.id);
+    }
+
+    bool vk_device::resolve_queries(query_set set, uint32_t first, uint32_t count, uint64_t* out_ticks)
+    {
+        auto* record = m_query_sets.lookup(set.id);
+        if (record == nullptr || record->pool == VK_NULL_HANDLE || out_ticks == nullptr || count == 0)
+        {
+            return false;
+        }
+        if (first > record->count || count > record->count - first)
+        {
+            LOG_WRN("resolve_queries: %u queries from %u exceed the %u-query set", count, first, record->count);
+            return false;
+        }
+        if (m_device_lost)
+        {
+            return false;
+        }
+        // No wait: VK_NOT_READY means a query has not completed (or was
+        // reset and never written) and the caller keeps its previous
+        // values.
+        const VkResult r = vkGetQueryPoolResults(m_device,
+                                                 record->pool,
+                                                 first,
+                                                 count,
+                                                 static_cast<size_t>(count) * sizeof(uint64_t),
+                                                 out_ticks,
+                                                 sizeof(uint64_t),
+                                                 VK_QUERY_RESULT_64_BIT);
+        if (r == VK_NOT_READY)
+        {
+            return false;
+        }
+        return check_queue_result(r, "vkGetQueryPoolResults");
+    }
+
+    // -- Debug names ---------------------------------------------------
+
+    void vk_device::set_debug_name(buffer handle, const char* name)
+    {
+        if (const auto* record = m_buffers.lookup(handle.id))
+        {
+            name_object(VK_OBJECT_TYPE_BUFFER, reinterpret_cast<uint64_t>(record->object), name);
+        }
+    }
+
+    void vk_device::set_debug_name(texture handle, const char* name)
+    {
+        if (const auto* record = m_textures.lookup(handle.id))
+        {
+            name_object(VK_OBJECT_TYPE_IMAGE, reinterpret_cast<uint64_t>(record->image), name);
+            name_object(VK_OBJECT_TYPE_IMAGE_VIEW, reinterpret_cast<uint64_t>(record->view), name);
+        }
+    }
+
+    void vk_device::set_debug_name(sampler handle, const char* name)
+    {
+        if (const auto* record = m_samplers.lookup(handle.id))
+        {
+            name_object(VK_OBJECT_TYPE_SAMPLER, reinterpret_cast<uint64_t>(record->object), name);
+        }
+    }
+
+    void vk_device::set_debug_name(pipeline handle, const char* name)
+    {
+        // The VkPipeline objects are built lazily per render pass, so
+        // the layout — shared by every variant — carries the name.
+        if (const auto* record = m_pipelines.lookup(handle.id))
+        {
+            name_object(VK_OBJECT_TYPE_PIPELINE_LAYOUT, reinterpret_cast<uint64_t>(record->layout), name);
+            name_object(VK_OBJECT_TYPE_PIPELINE, reinterpret_cast<uint64_t>(record->compute_object), name);
+        }
+    }
+
+    void vk_device::set_debug_name(render_target handle, const char* name)
+    {
+        // A target is its attachments to a debugger: name the images the
+        // target itself allocated (an imported texture keeps its own).
+        const auto* record = m_render_targets.lookup(handle.id);
+        if (record == nullptr || record->is_swapchain)
+        {
+            return;
+        }
+        for (const vk_attachment& attachment : record->color)
+        {
+            if (attachment.owned)
+            {
+                set_debug_name(attachment.tex, name);
+            }
+        }
+        if (record->depth.owned)
+        {
+            set_debug_name(record->depth.tex, name);
+        }
     }
 
     void vk_device::note_render_pass_opened(bool is_swapchain, bool use_depth)
@@ -2878,91 +3300,129 @@ namespace rendering_engine::gpu::backend::vulkan
                                                 VkAttachmentLoadOp depth_load,
                                                 bool use_depth)
     {
+        vk_render_pass_key key{};
+        key.color_load.fill(color_load);
+        key.color_store.fill(VK_ATTACHMENT_STORE_OP_STORE);
+        key.depth_load = depth_load;
+        key.depth_store = VK_ATTACHMENT_STORE_OP_STORE;
+        key.use_depth = use_depth;
+        return acquire_render_pass(target, key);
+    }
+
+    VkRenderPass vk_device::acquire_render_pass(vk_render_target& target, const vk_render_pass_key& requested)
+    {
+        // The window backbuffer counts as one colour attachment. Key
+        // entries past the attachment count are irrelevant, so they
+        // are normalised away: two callers that agree on the used
+        // attachments share the variant whatever they left in the rest.
+        const uint32_t color_count = target.is_swapchain ? 1u : static_cast<uint32_t>(target.color.size());
+        const bool variant_uses_depth = requested.use_depth && target.has_depth;
+        vk_render_pass_key key = requested;
+        key.use_depth = variant_uses_depth;
+        for (uint32_t i = color_count; i < max_color_attachments; ++i)
+        {
+            key.color_load[i] = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+            key.color_store[i] = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        }
+        if (!variant_uses_depth)
+        {
+            key.depth_load = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+            key.depth_store = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        }
+
         // Reuse a matching variant if one already exists.
         for (const auto& v : target.variants)
         {
-            if (v.color_load == color_load && v.depth_load == depth_load && v.use_depth == use_depth &&
-                v.render_pass != VK_NULL_HANDLE)
+            if (v.key == key && v.render_pass != VK_NULL_HANDLE)
             {
                 return v.render_pass;
             }
         }
 
-        const bool variant_uses_depth = use_depth && target.has_depth;
+        const VkSampleCountFlagBits samples = to_vk_sample_count(target.samples);
 
-        std::array<VkAttachmentDescription, 2> attachments{};
-        std::array<VkAttachmentReference, 2> refs{};
-        uint32_t attachment_count = 1;
+        std::array<VkAttachmentDescription, max_color_attachments + 1> attachments{};
+        std::array<VkAttachmentReference, max_color_attachments> color_refs{};
+        VkAttachmentReference depth_ref{};
+        uint32_t attachment_count = 0;
 
-        attachments[0] = {};
-        if (target.is_swapchain)
+        for (uint32_t i = 0; i < color_count; ++i)
         {
-            attachments[0].format = m_surface_format.format;
-        }
-        else if (auto* color_tex = m_textures.lookup(target.color_attachment.id))
-        {
-            attachments[0].format = color_tex->vk_format;
-        }
-        else
-        {
-            attachments[0].format = VK_FORMAT_R8G8B8A8_UNORM;
-        }
-        attachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
-        attachments[0].loadOp = color_load;
-        attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-        attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        attachments[0].initialLayout =
-            color_load == VK_ATTACHMENT_LOAD_OP_LOAD
-                ? (target.is_swapchain ? VK_IMAGE_LAYOUT_PRESENT_SRC_KHR : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-                : VK_IMAGE_LAYOUT_UNDEFINED;
-        attachments[0].finalLayout =
-            target.is_swapchain ? VK_IMAGE_LAYOUT_PRESENT_SRC_KHR : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        refs[0].attachment = 0;
-        refs[0].layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-        if (variant_uses_depth)
-        {
-            attachment_count = 2;
-            attachments[1] = {};
+            VkAttachmentDescription& attachment = attachments[attachment_count];
+            attachment = {};
             if (target.is_swapchain)
             {
-                attachments[1].format = vk_format_for(m_swapchain_depth_format);
+                attachment.format = m_surface_format.format;
             }
-            else if (auto* depth_tex = m_textures.lookup(target.depth_attachment.id))
+            else if (auto* color_tex = m_textures.lookup(target.color[i].tex.id))
             {
-                attachments[1].format = depth_tex->vk_format;
+                attachment.format = color_tex->vk_format;
             }
             else
             {
-                attachments[1].format = VK_FORMAT_D32_SFLOAT;
+                attachment.format = VK_FORMAT_R8G8B8A8_UNORM;
+            }
+            attachment.samples = samples;
+            attachment.loadOp = key.color_load[i];
+            attachment.storeOp = key.color_store[i];
+            attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+            attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+            attachment.initialLayout =
+                key.color_load[i] == VK_ATTACHMENT_LOAD_OP_LOAD
+                    ? (target.is_swapchain ? VK_IMAGE_LAYOUT_PRESENT_SRC_KHR : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+                    : VK_IMAGE_LAYOUT_UNDEFINED;
+            attachment.finalLayout =
+                target.is_swapchain ? VK_IMAGE_LAYOUT_PRESENT_SRC_KHR : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            color_refs[i].attachment = attachment_count;
+            color_refs[i].layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            ++attachment_count;
+        }
+
+        if (variant_uses_depth)
+        {
+            VkAttachmentDescription& attachment = attachments[attachment_count];
+            attachment = {};
+            if (target.is_swapchain)
+            {
+                attachment.format = vk_format_for(m_swapchain_depth_format);
+            }
+            else if (auto* depth_tex = m_textures.lookup(target.depth.tex.id))
+            {
+                attachment.format = depth_tex->vk_format;
+            }
+            else
+            {
+                attachment.format = VK_FORMAT_D32_SFLOAT;
             }
             // Off-screen depth is sampled by later post passes (the velocity
-            // pass reads sceneDepth), so it leaves the pass in the
-            // shader-read layout the combined-image-sampler descriptor
-            // expects, mirroring the off-screen colour attachment above. A
-            // LOAD therefore resumes from that same layout. The swapchain
-            // depth is never sampled, so it stays in the attachment layout.
+            // pass reads sceneDepth, the lit materials the shadow maps), so
+            // it leaves the pass in the shader-read layout the
+            // combined-image-sampler descriptor expects, mirroring the
+            // off-screen colour attachment above. A LOAD therefore resumes
+            // from that same layout. The swapchain depth is never sampled,
+            // so it stays in the attachment layout. A stencil plane, when
+            // the format has one, loads and stores with depth.
             const VkImageLayout depth_rest_layout = target.is_swapchain
                                                         ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
                                                         : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-            attachments[1].samples = VK_SAMPLE_COUNT_1_BIT;
-            attachments[1].loadOp = depth_load;
-            attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-            attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-            attachments[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-            attachments[1].initialLayout =
-                depth_load == VK_ATTACHMENT_LOAD_OP_LOAD ? depth_rest_layout : VK_IMAGE_LAYOUT_UNDEFINED;
-            attachments[1].finalLayout = depth_rest_layout;
-            refs[1].attachment = 1;
-            refs[1].layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+            attachment.samples = samples;
+            attachment.loadOp = key.depth_load;
+            attachment.storeOp = key.depth_store;
+            attachment.stencilLoadOp = target.has_stencil ? key.depth_load : VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+            attachment.stencilStoreOp = target.has_stencil ? key.depth_store : VK_ATTACHMENT_STORE_OP_DONT_CARE;
+            attachment.initialLayout =
+                key.depth_load == VK_ATTACHMENT_LOAD_OP_LOAD ? depth_rest_layout : VK_IMAGE_LAYOUT_UNDEFINED;
+            attachment.finalLayout = depth_rest_layout;
+            depth_ref.attachment = attachment_count;
+            depth_ref.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+            ++attachment_count;
         }
 
         VkSubpassDescription subpass{};
         subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-        subpass.colorAttachmentCount = 1;
-        subpass.pColorAttachments = &refs[0];
-        subpass.pDepthStencilAttachment = variant_uses_depth ? &refs[1] : nullptr;
+        subpass.colorAttachmentCount = color_count;
+        subpass.pColorAttachments = color_refs.data();
+        subpass.pDepthStencilAttachment = variant_uses_depth ? &depth_ref : nullptr;
 
         // Two subpass dependencies. The EXTERNAL → 0 incoming dep
         // synchronises color/depth writes from a previous render
@@ -3010,18 +3470,18 @@ namespace rendering_engine::gpu::backend::vulkan
         const VkResult rp_result = vkCreateRenderPass(m_device, &rpi, nullptr, &new_render_pass);
         if (rp_result != VK_SUCCESS)
         {
-            LOG_ERR("vkCreateRenderPass failed: %s (color_load=%i depth_load=%i use_depth=%i)",
+            LOG_ERR("vkCreateRenderPass failed: %s (colour attachments=%u color_load[0]=%i depth_load=%i use_depth=%i)",
                     vk_result_to_string(rp_result),
-                    static_cast<int>(color_load),
-                    static_cast<int>(depth_load),
-                    static_cast<int>(use_depth));
+                    color_count,
+                    static_cast<int>(key.color_load[0]),
+                    static_cast<int>(key.depth_load),
+                    static_cast<int>(variant_uses_depth));
             return VK_NULL_HANDLE;
         }
         vk_render_target::variant new_variant{};
-        new_variant.color_load = color_load;
-        new_variant.depth_load = depth_load;
-        new_variant.use_depth = use_depth;
+        new_variant.key = key;
         new_variant.render_pass = new_render_pass;
+        new_variant.color_count = color_count;
         // The generation is what the pipeline cache keys on; it is
         // never reused, unlike the handle value the driver hands out.
         new_variant.render_pass_generation = m_next_render_pass_generation++;
@@ -3058,33 +3518,53 @@ namespace rendering_engine::gpu::backend::vulkan
         }
         else
         {
+            // Every attachment renders through a single-level,
+            // single-layer view of its texture: the mip and the layer /
+            // cube face the target attached.
             v.framebuffers.resize(1, VK_NULL_HANDLE);
-            std::array<VkImageView, 2> views{};
-            uint32_t view_count = 1;
-            if (auto* color_tex = m_textures.lookup(target.color_attachment.id))
+            std::array<VkImageView, max_color_attachments + 1> views{};
+            uint32_t view_count = 0;
+            bool views_ok = true;
+            const auto add_view = [&](const vk_attachment& attachment)
             {
-                views[0] = color_tex->view;
+                VkImageView view = VK_NULL_HANDLE;
+                if (auto* tex = m_textures.lookup(attachment.tex.id))
+                {
+                    view = attachment_image_view(*tex, attachment.mip_level, attachment.layer);
+                }
+                if (view == VK_NULL_HANDLE)
+                {
+                    views_ok = false;
+                }
+                views[view_count++] = view;
+            };
+            for (uint32_t i = 0; i < color_count; ++i)
+            {
+                add_view(target.color[i]);
             }
             if (variant_uses_depth)
             {
-                if (auto* depth_tex = m_textures.lookup(target.depth_attachment.id))
-                {
-                    views[1] = depth_tex->view;
-                    view_count = 2;
-                }
+                add_view(target.depth);
             }
-            VkFramebufferCreateInfo fbi{};
-            fbi.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-            fbi.renderPass = new_render_pass;
-            fbi.attachmentCount = view_count;
-            fbi.pAttachments = views.data();
-            fbi.width = target.width;
-            fbi.height = target.height;
-            fbi.layers = 1;
-            const VkResult fb_result = vkCreateFramebuffer(m_device, &fbi, nullptr, &v.framebuffers[0]);
-            if (fb_result != VK_SUCCESS)
+            if (!views_ok)
             {
-                LOG_ERR("vkCreateFramebuffer (offscreen) failed: %s", vk_result_to_string(fb_result));
+                LOG_ERR("acquire_render_pass: an attachment of the off-screen target has no image view");
+            }
+            else
+            {
+                VkFramebufferCreateInfo fbi{};
+                fbi.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+                fbi.renderPass = new_render_pass;
+                fbi.attachmentCount = view_count;
+                fbi.pAttachments = views.data();
+                fbi.width = target.width;
+                fbi.height = target.height;
+                fbi.layers = 1;
+                const VkResult fb_result = vkCreateFramebuffer(m_device, &fbi, nullptr, &v.framebuffers[0]);
+                if (fb_result != VK_SUCCESS)
+                {
+                    LOG_ERR("vkCreateFramebuffer (offscreen) failed: %s", vk_result_to_string(fb_result));
+                }
             }
         }
 
@@ -3125,6 +3605,18 @@ namespace rendering_engine::gpu::backend::vulkan
     {
         return m_bind_group_layouts.lookup(h.id);
     }
+    vk_query_set* vk_device::lookup_query_set(query_set h)
+    {
+        return m_query_sets.lookup(h.id);
+    }
+    PFN_vkCmdBeginDebugUtilsLabelEXT vk_device::cmd_begin_debug_label() const noexcept
+    {
+        return m_cmd_begin_debug_label;
+    }
+    PFN_vkCmdEndDebugUtilsLabelEXT vk_device::cmd_end_debug_label() const noexcept
+    {
+        return m_cmd_end_debug_label;
+    }
     VkInstance vk_device::instance() const noexcept
     {
         return m_instance;
@@ -3148,10 +3640,6 @@ namespace rendering_engine::gpu::backend::vulkan
     VmaAllocator vk_device::allocator() const noexcept
     {
         return m_allocator;
-    }
-    const vk_device_features& vk_device::features() const noexcept
-    {
-        return m_features;
     }
     bool vk_device::device_lost() const noexcept
     {
