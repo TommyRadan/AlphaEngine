@@ -81,6 +81,12 @@ namespace rendering_engine
         ubo_descriptor.initial_data = rcp_frame.data();
         m_rcp_frame_ubo = gpu.create_buffer(ubo_descriptor);
 
+        // Remember the size the real step above was baked from so a later
+        // frame_context::post.fxaa.enabled toggle back on (see record()) can
+        // rebake it without waiting for a resize.
+        m_pending_width = width;
+        m_pending_height = height;
+
         gpu::bind_group_layout_descriptor input_layout{};
         input_layout.entries.push_back({0, gpu::binding_kind::texture});
         input_layout.entries.push_back({1, gpu::binding_kind::uniform_buffer});
@@ -244,12 +250,25 @@ namespace rendering_engine
         const gpu::texture input = ctx.taa_resolve_texture.valid() ? ctx.taa_resolve_texture : ctx.ldr_color_texture;
         const gpu::bind_group input_bind_group = bind_group_for(input);
 
-        // Apply the edge step a resize reported, now that begin_frame has
-        // waited for the frame that may still have been reading the UBO.
-        if (m_rcp_frame_dirty)
+        // Apply a resize's edge step and/or a fxaa.enabled flip, now that
+        // begin_frame has waited for the frame that may still have been
+        // reading the UBO. Disabled bakes a zero step (see write_rcp_frame),
+        // collapsing every tap onto the centre texel so this pass — which
+        // always stays in the chain because it is what writes the
+        // swapchain — degrades to a straight copy instead of skipping the
+        // draw.
+        if (m_rcp_frame_dirty || ctx.post.fxaa.enabled != m_applied_enabled)
         {
-            write_rcp_frame(m_pending_width, m_pending_height);
+            if (ctx.post.fxaa.enabled)
+            {
+                write_rcp_frame(m_pending_width, m_pending_height);
+            }
+            else
+            {
+                write_rcp_frame(0, 0);
+            }
             m_rcp_frame_dirty = false;
+            m_applied_enabled = ctx.post.fxaa.enabled;
         }
 
         gpu::render_pass_descriptor descriptor{};

@@ -45,22 +45,10 @@ namespace
     // floor resolution for their tail levels.
     constexpr uint32_t bloom_mip_count = 5;
 
-    // Bright-pass cutoff in HDR luminance. The scene target is rgba16f
-    // and lights routinely push lit surfaces past 1.0, so a threshold of
-    // 1.0 blooms only genuinely over-bright pixels and leaves the diffuse
-    // midtones untouched.
-    constexpr float bloom_threshold = 1.0f;
-
-    // Soft-knee width as a fraction of the threshold. Gives the bright
-    // pass a quadratic roll-in around the cutoff instead of a hard step,
-    // so a surface drifting through the threshold fades in rather than
-    // popping.
-    constexpr float bloom_soft_knee = 0.5f;
-
-    // Overall glow strength. Distributed across the mips by the
-    // per-level weights below; the levels' weights sum to this value so
-    // it reads as the total energy the bloom adds back into the scene.
-    constexpr float bloom_strength = 0.6f;
+    // The compiled-in threshold, knee and strength defaults now live on
+    // bloom_settings (rendering_engine/post_settings.hpp), which
+    // bloom_pass::m_settings is seeded from; see that struct's doc comment
+    // for what each one does.
 
     // Tiny epsilon guarding the divisions in the bright-pass knee and the
     // luminance normalise.
@@ -171,11 +159,13 @@ namespace rendering_engine
         m_composite_pipeline = make_pipeline(m_composite_shader, additive_blend);
 
         // -- Threshold params -----------------------------------------
-        // Size-independent, so baked once here; the bright-pass bind group
-        // that pairs it with the scene colour is built by record() when
-        // the frame context hands the handle over.
-        const float knee = bloom_threshold * bloom_soft_knee;
-        m_threshold_ubo = create_params_ubo({bloom_threshold, knee, 2.0f * knee, 1.0f / (4.0f * knee + bloom_epsilon)});
+        // Size-independent, so baked once here from m_settings' compiled-in
+        // defaults (record() rewrites it in place on a runtime change); the
+        // bright-pass bind group that pairs it with the scene colour is
+        // built by record() when the frame context hands the handle over.
+        const float knee = m_settings.threshold * m_settings.knee;
+        m_threshold_ubo =
+            create_params_ubo({m_settings.threshold, knee, 2.0f * knee, 1.0f / (4.0f * knee + bloom_epsilon)});
 
         // -- Bright pass target + blur pyramid ------------------------
         create_pyramid(width, height);
@@ -238,8 +228,10 @@ namespace rendering_engine
 
         // -- Blur pyramid ---------------------------------------------
         // Per-level weights fall off linearly toward the coarser mips and
-        // are normalised so they sum to bloom_strength: the wide, blurry
-        // low-frequency levels contribute less than the tight bright core.
+        // are normalised so they sum to m_settings.strength (whatever was
+        // last applied, or its compiled-in default the first time this
+        // runs): the wide, blurry low-frequency levels contribute less
+        // than the tight bright core.
         float weight_total = 0.0f;
         for (uint32_t i = 0; i < bloom_mip_count; ++i)
         {
@@ -272,7 +264,7 @@ namespace rendering_engine
             level.blur_vertical_ubo = create_params_ubo({0.0f, 1.0f / static_cast<float>(level.height), 0.0f, 0.0f});
             level.blur_vertical_bind_group = create_bind_group(level.horizontal_texture, level.blur_vertical_ubo);
 
-            const float weight = bloom_strength * static_cast<float>(bloom_mip_count - i) / weight_total;
+            const float weight = m_settings.strength * static_cast<float>(bloom_mip_count - i) / weight_total;
             level.weight_ubo = create_params_ubo({weight, 0.0f, 0.0f, 0.0f});
             level.composite_bind_group = create_bind_group(level.vertical_texture, level.weight_ubo);
 
@@ -345,6 +337,31 @@ namespace rendering_engine
         }
         m_threshold_bind_group = create_bind_group(scene_color, m_threshold_ubo);
         m_bound_scene_color = scene_color;
+    }
+
+    void bloom_pass::write_threshold_ubo(float threshold, float knee)
+    {
+        auto& gpu = *runtime::current_engine().gpu;
+        const float knee_width = threshold * knee;
+        const std::array<float, 4> bytes = {
+            threshold, knee_width, 2.0f * knee_width, 1.0f / (4.0f * knee_width + bloom_epsilon)};
+        gpu.write_buffer(m_threshold_ubo, bytes.data(), params_ubo_size, 0);
+    }
+
+    void bloom_pass::write_weights(float strength)
+    {
+        auto& gpu = *runtime::current_engine().gpu;
+        float weight_total = 0.0f;
+        for (uint32_t i = 0; i < bloom_mip_count; ++i)
+        {
+            weight_total += static_cast<float>(bloom_mip_count - i);
+        }
+        for (uint32_t i = 0; i < bloom_mip_count; ++i)
+        {
+            const float weight = strength * static_cast<float>(bloom_mip_count - i) / weight_total;
+            const std::array<float, 4> bytes = {weight, 0.0f, 0.0f, 0.0f};
+            gpu.write_buffer(m_levels[i].weight_ubo, bytes.data(), params_ubo_size, 0);
+        }
     }
 
     void bloom_pass::resize(uint32_t width, uint32_t height)
@@ -431,9 +448,28 @@ namespace rendering_engine
 
     void bloom_pass::record(gpu::command_encoder& encoder, const frame_context& ctx)
     {
-        if (!m_enabled)
+        // bloom_settings::enabled early-outs entirely rather than removing
+        // this pass from the frame graph: the HDR scene colour it would
+        // have brightened just flows through untouched to tonemap, exactly
+        // like the degenerate-backbuffer case below.
+        if (!m_enabled || !ctx.post.bloom.enabled)
         {
             return;
+        }
+
+        // Rewrite only the UBO(s) a changed field affects; a caller that
+        // never touches frame_context::post leaves every comparison here
+        // false forever.
+        if (ctx.post.bloom.threshold != m_settings.threshold || ctx.post.bloom.knee != m_settings.knee)
+        {
+            write_threshold_ubo(ctx.post.bloom.threshold, ctx.post.bloom.knee);
+            m_settings.threshold = ctx.post.bloom.threshold;
+            m_settings.knee = ctx.post.bloom.knee;
+        }
+        if (ctx.post.bloom.strength != m_settings.strength)
+        {
+            write_weights(ctx.post.bloom.strength);
+            m_settings.strength = ctx.post.bloom.strength;
         }
 
         // Bind this frame's HDR scene colour for the bright pass. The

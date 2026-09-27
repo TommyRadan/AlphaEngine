@@ -27,6 +27,7 @@
 
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/passes/pass.hpp>
+#include <rendering_engine/post_settings.hpp>
 #include <rendering_engine/render_graph/frame_graph.hpp>
 
 namespace rendering_engine
@@ -57,11 +58,17 @@ namespace rendering_engine
      * shared fullscreen-triangle pattern (depth off, no culling, no
      * vertex buffers beyond the @ref fullscreen_triangle_vertices).
      *
-     * Thresholds, blur offsets and composite weights are static — they
-     * depend only on the target dimensions — so they are baked into
-     * per-stage UBOs when the pyramid is built (at construction and again
-     * by @ref resize), mirroring the way @ref tonemap_pass captures its
-     * exposure. Live tuning is out of scope.
+     * The threshold / knee and the per-level composite weights are baked
+     * into per-stage UBOs when the pyramid is built (at construction and
+     * again by @ref resize, from whichever @ref bloom_settings were last
+     * applied) and are live-tunable: @ref record compares
+     * @ref frame_context::post's @c bloom fields against what it last
+     * uploaded and rewrites only the UBO(s) a changed field affects. The
+     * blur offsets stay static — they depend only on the target
+     * dimensions, mirroring the way @ref fxaa_pass bakes its edge step.
+     * @ref bloom_settings::enabled early-outs @ref record entirely,
+     * leaving the HDR scene colour it would have brightened untouched,
+     * rather than removing the pass from the frame graph.
      */
     struct bloom_pass : pass
     {
@@ -171,6 +178,23 @@ namespace rendering_engine
         // Rebuild the threshold bind group against @p scene_color and the
         // threshold UBO, remembering the handle in @ref m_bound_scene_color.
         void rebuild_threshold_bind_group(gpu::texture scene_color);
+
+        // The bloom_settings currently baked into m_threshold_ubo and every
+        // level's weight_ubo. Starts at the struct's own defaults, which
+        // match what this pass used to hard-code, so a caller that never
+        // touches frame_context::post sees the exact old behaviour.
+        // create_pyramid bakes the initial UBOs from this (so a resize
+        // rebuilds at whatever was last applied, not the compiled-in
+        // defaults) and record() updates it as it rewrites a UBO.
+        bloom_settings m_settings{};
+
+        // Rewrites m_threshold_ubo from {threshold, knee}; called from
+        // record() whenever either differs from m_settings.
+        void write_threshold_ubo(float threshold, float knee);
+
+        // Rewrites every level's weight_ubo from strength; called from
+        // record() whenever it differs from m_settings.
+        void write_weights(float strength);
 
         // False when the backbuffer dimensions are degenerate (no
         // settings, zero-sized window); record() then no-ops so the scene

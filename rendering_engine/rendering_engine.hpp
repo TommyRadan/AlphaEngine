@@ -36,6 +36,7 @@
 #include <rendering_engine/fog.hpp>
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/gpu_profiler.hpp>
+#include <rendering_engine/post_settings.hpp>
 #include <rendering_engine/render_graph/frame_graph.hpp>
 #include <rendering_engine/render_stats.hpp>
 
@@ -290,6 +291,30 @@ namespace rendering_engine
         tonemap_pass& tonemap();
 
         /**
+         * @brief Sets the runtime-tunable post-processing chain parameters.
+         *
+         * Stored and copied into @ref frame_context::post every
+         * @ref render so @ref bloom_pass, @ref taa_pass and @ref fxaa_pass
+         * can read the fields they own and rewrite their own UBO only when
+         * a value actually changed. @c exposure and @c tonemap_op are the
+         * exception: they are forwarded immediately to
+         * @ref tonemap_pass::set_exposure / @ref tonemap_pass::set_operator
+         * (already live-tunable the same way), so a caller reading
+         * @ref tonemap right after this call sees the new values without
+         * waiting for a frame. @c taa.enabled is read-only in practice:
+         * whether @ref taa_pass exists is decided once in @ref init from
+         * @c core::settings::graphics.temporal_aa and the drawable size, so
+         * whatever this is called with is overwritten with the pass's real
+         * presence before it is stored — @ref get_post_settings always
+         * reports the truth. See @ref post_settings for why scene-wide fog
+         * (@ref set_fog) is not part of this struct.
+         */
+        void set_post_settings(const post_settings& settings);
+
+        /** @brief The runtime-tunable post-processing chain parameters currently in effect. */
+        const post_settings& get_post_settings() const;
+
+        /**
          * @brief This frame's scene / draw statistics (renderable count,
          *        draw calls, instances, triangles, vertices).
          *
@@ -411,6 +436,14 @@ namespace rendering_engine
         // into the frame context each @ref render so the scene pass can
         // upload it. Defaults to @ref fog_mode::none (disabled).
         fog_settings m_fog{};
+
+        // Runtime-tunable post-processing chain parameters, set via
+        // @ref set_post_settings and copied into
+        // @ref frame_context::post each @ref render so bloom, TAA and
+        // FXAA can read the fields they own. Defaults match what each
+        // pass already baked in before this existed, so a context that
+        // never calls @ref set_post_settings renders identically.
+        post_settings m_post_settings{};
 
         // Built-in materials, constructed after the passes in
         // @ref init so they can read the passes' per-frame bind-group

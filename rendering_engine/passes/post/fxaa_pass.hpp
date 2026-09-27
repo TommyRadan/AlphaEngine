@@ -61,7 +61,12 @@ namespace rendering_engine
      * backbuffer dimensions, mirroring the way @ref tonemap_pass
      * captures its exposure, and rewritten by @ref resize. A degenerate
      * backbuffer bakes a zero step, which collapses every tap onto the
-     * centre texel so the pass becomes a straight copy.
+     * centre texel so the pass becomes a straight copy — the same trick
+     * @ref frame_context::post's @c fxaa.enabled uses at runtime: this
+     * pass always stays in the chain (it is what writes the swapchain),
+     * so disabling it rewrites the UBO with a zero step rather than
+     * skipping the draw, and @ref record only pays for that rewrite when
+     * the flag actually changed.
      *
      * The image it samples is not a constructor input: each frame it
      * takes @ref frame_context::taa_resolve_texture when that is valid
@@ -127,11 +132,21 @@ namespace rendering_engine
         // read the buffer.
         void write_rcp_frame(uint32_t width, uint32_t height);
 
-        // The drawable size resize() last reported, and whether the UBO
-        // still has to be rewritten with it.
+        // The drawable size to bake the real edge step from: set at
+        // construction and updated by resize(), regardless of whether
+        // frame_context::post.fxaa.enabled is currently baked. Whether the
+        // UBO still has to be rewritten with it.
         uint32_t m_pending_width{0};
         uint32_t m_pending_height{0};
         bool m_rcp_frame_dirty{false};
+
+        // Whether the UBO currently holds the real edge step (true) or the
+        // zero step that disables the effect (false). record() compares
+        // frame_context::post.fxaa.enabled against this and only rewrites
+        // the UBO on a mismatch (or when resize() set m_rcp_frame_dirty),
+        // baking m_pending_width / m_pending_height when enabling and a
+        // zero step when disabling.
+        bool m_applied_enabled{true};
 
         gpu::shader_module m_vertex_shader{};
         gpu::shader_module m_fragment_shader{};

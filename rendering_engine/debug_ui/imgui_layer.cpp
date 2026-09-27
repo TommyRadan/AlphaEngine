@@ -45,6 +45,7 @@
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/gpu_profiler.hpp>
 #include <rendering_engine/lighting/light.hpp>
+#include <rendering_engine/post_settings.hpp>
 #include <rendering_engine/render_stats.hpp>
 #include <rendering_engine/rendering_engine.hpp>
 #include <rendering_engine/window.hpp>
@@ -87,6 +88,7 @@ namespace rendering_engine::debug_ui
         bool g_show_demo = false;
         bool g_show_helpers = true;
         bool g_show_scene = true;
+        bool g_show_post = true;
 
         // Rolling frame-time history (milliseconds) for the profiler
         // graph, used as a ring buffer.
@@ -132,6 +134,7 @@ namespace rendering_engine::debug_ui
                     ImGui::MenuItem("Profiler", nullptr, &g_show_profiler);
                     ImGui::MenuItem("Scene", nullptr, &g_show_scene);
                     ImGui::MenuItem("Settings", nullptr, &g_show_settings);
+                    ImGui::MenuItem("Post", nullptr, &g_show_post);
                     ImGui::MenuItem("Helpers", nullptr, &g_show_helpers);
                     ImGui::MenuItem("ImGui demo", nullptr, &g_show_demo);
                     ImGui::EndPopup();
@@ -314,6 +317,66 @@ namespace rendering_engine::debug_ui
             ImGui::End();
         }
 
+        // Runtime tuning for the post-processing chain: tonemap
+        // exposure/operator, bloom, temporal AA feedback and FXAA. Every
+        // edit is written back through context::set_post_settings, the
+        // same path any other caller would use, so it takes effect on the
+        // next recorded frame (tonemap immediately, since its setters
+        // rewrite their UBO on the spot). TAA's own enabled checkbox is
+        // shown disabled: the pass is only ever brought up once, at init,
+        // from graphics.temporal_aa (see post_settings::taa's doc comment).
+        void draw_post_window()
+        {
+            if (!g_show_post)
+            {
+                return;
+            }
+
+            auto& renderer = *runtime::current_engine().renderer;
+            rendering_engine::post_settings settings = renderer.get_post_settings();
+            bool changed = false;
+
+            ImGui::SetNextWindowSize(ImVec2{300.0f, 0.0f}, ImGuiCond_FirstUseEver);
+            if (ImGui::Begin("Post", &g_show_post))
+            {
+                ImGui::SeparatorText("Tonemap");
+                changed |= ImGui::SliderFloat("Exposure", &settings.exposure, 0.0f, 8.0f);
+                static constexpr std::array<const char*, 3> operator_names = {"None", "Reinhard", "ACES"};
+                int op = static_cast<int>(settings.tonemap_op);
+                if (ImGui::Combo("Operator", &op, operator_names.data(), static_cast<int>(operator_names.size())))
+                {
+                    settings.tonemap_op = static_cast<rendering_engine::tonemap_operator>(op);
+                    changed = true;
+                }
+
+                ImGui::SeparatorText("Bloom");
+                changed |= ImGui::Checkbox("Enabled##bloom", &settings.bloom.enabled);
+                changed |= ImGui::SliderFloat("Threshold", &settings.bloom.threshold, 0.0f, 4.0f);
+                changed |= ImGui::SliderFloat("Knee", &settings.bloom.knee, 0.0f, 1.0f);
+                changed |= ImGui::SliderFloat("Strength", &settings.bloom.strength, 0.0f, 2.0f);
+
+                ImGui::SeparatorText("Temporal AA");
+                bool taa_enabled = settings.taa.enabled;
+                ImGui::BeginDisabled(true);
+                ImGui::Checkbox("Enabled##taa", &taa_enabled);
+                ImGui::EndDisabled();
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Fixed at startup by graphics.temporal_aa");
+                }
+                changed |= ImGui::SliderFloat("Feedback", &settings.taa.feedback, 0.0f, 0.99f);
+
+                ImGui::SeparatorText("FXAA");
+                changed |= ImGui::Checkbox("Enabled##fxaa", &settings.fxaa.enabled);
+            }
+            ImGui::End();
+
+            if (changed)
+            {
+                renderer.set_post_settings(settings);
+            }
+        }
+
         // Lists every live debug gizmo with
         // a checkbox bound to its visibility, plus master show / hide
         // shortcuts. The helper registry is shared with the renderer, so
@@ -379,6 +442,7 @@ namespace rendering_engine::debug_ui
             draw_profiler_window();
             draw_scene_window();
             draw_settings_window();
+            draw_post_window();
             draw_helpers_window();
             if (g_show_demo)
             {
