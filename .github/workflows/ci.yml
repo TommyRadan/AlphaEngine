@@ -79,6 +79,32 @@ jobs:
           echo "Checking $(echo "${files}" | wc -l) files"
           echo "${files}" | xargs clang-format --style=file --dry-run -Werror
 
+      - name: Check SPDX licence lines
+        run: |
+          set -euo pipefail
+          # Every first-party source, shader, build file, script and workflow
+          # must start with the SPDX identifier line (line 2 after a shebang).
+          # Directory pathspecs recurse; vendor/ is deliberately not listed.
+          files=$(git ls-files -- core runtime rendering_engine external shaders cmake scripts CMakeLists.txt .github/workflows \
+            | grep -E '(\.(cpp|hpp|h|c|glsl|cmake|ps1|yml)|CMakeLists\.txt)$')
+          echo "Checking $(echo "${files}" | wc -l) files"
+          failed=0
+          for file in ${files}; do
+            line_to_check=1
+            if head -1 "$file" | grep -q '^#!'; then
+              line_to_check=2
+            fi
+            if ! sed -n "${line_to_check}p" "$file" | grep -q 'SPDX-License-Identifier: MIT'; then
+              echo "Missing SPDX header: $file"
+              failed=1
+            fi
+          done
+          if [ $failed -ne 0 ]; then
+            echo "SPDX licence check failed"
+            exit 1
+          fi
+          echo "SPDX licence check passed"
+
   # ---------------------------------------------------------------------------
   # clang-tidy: static analysis. Runs on Linux where clang-tidy + libc++ come
   # from the distro with working include paths. Every dependency is fetched
