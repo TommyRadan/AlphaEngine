@@ -67,6 +67,7 @@
 #include <runtime/components/light_component.hpp>
 #include <runtime/components/mesh_component.hpp>
 #include <runtime/engine.hpp>
+#include <runtime/scene_assets.hpp>
 #include <runtime/scene_manager.hpp>
 
 #include <cmath>
@@ -119,6 +120,17 @@ namespace
                                                           std::move(indices));
     }
 
+    // The one sphere every body draws, built once and shared through the
+    // asset cache; the key encodes the tessellation. A saved scene names the
+    // bodies' mesh by this key, and the resolver the bootstrap registers
+    // rebuilds it when a load finds it gone from the cache.
+    constexpr const char* sphere_key = "scene_graph_demo:sphere:18x36";
+
+    std::shared_ptr<rendering_engine::mesh_asset> shared_sphere()
+    {
+        return runtime::current_engine().assets->get_or_create_mesh(sphere_key, [] { return make_sphere(18, 36); });
+    }
+
     // The system's root: owns what every body shares — one sphere upload,
     // fetched from the asset cache, and the materials. The bodies are its
     // descendants, so the scene frees them first.
@@ -151,6 +163,12 @@ namespace
     // just these.
     struct orbit_pivot final : runtime::behavior
     {
+        // Saved with the scene: the rate and how far along the orbit it is.
+        static void reflect(runtime::type_builder<orbit_pivot>& type)
+        {
+            type.field("rate", &orbit_pivot::m_rate).field("time", &orbit_pivot::m_time);
+        }
+
         explicit orbit_pivot(float rate) : m_rate{rate} {}
 
         void on_update(float delta_time) override
@@ -228,16 +246,24 @@ namespace
     };
 } // namespace
 
+REFLECT_TYPES()
+{
+    registry.register_behavior<solar_system>("solar_system",
+                                             [] { return std::make_unique<solar_system>(shared_sphere()); });
+    registry.register_behavior<orbit_pivot>("orbit_pivot", [] { return std::make_unique<orbit_pivot>(0.0f); });
+}
+
 GAME_MODULE()
 {
+    runtime::register_mesh_resolver(sphere_key, [](const std::string&) { return shared_sphere(); });
+
     runtime::context& demo = runtime::current_engine().scenes->load("scene_graph_demo", runtime::load_mode::additive);
 
     // Build the sphere once and share it across every body via the asset
     // cache; the key encodes the tessellation so a second request returns this
     // upload. The asset is indexed, so each mesh_component's model draws it
     // indexed.
-    auto sphere = runtime::current_engine().assets->get_or_create_mesh("scene_graph_demo:sphere:18x36",
-                                                                       [] { return make_sphere(18, 36); });
+    auto sphere = shared_sphere();
 
     runtime::node& root = demo.create_node("solar_system");
     solar_system* system = runtime::add_behavior<solar_system>(root, std::move(sphere));

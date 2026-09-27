@@ -41,6 +41,17 @@ runtime::mesh_component::mesh_component(rendering_engine::material* material,
     m_model->set_mesh(std::move(mesh));
 }
 
+runtime::mesh_component::mesh_component(std::shared_ptr<rendering_engine::material> material,
+                                        std::shared_ptr<rendering_engine::mesh_asset> mesh)
+    : m_owned_material{std::move(material)}, m_material{m_owned_material.get()}, m_mesh{std::move(mesh)}
+{
+    if (m_material != nullptr)
+    {
+        m_model = std::make_unique<rendering_engine::model>(m_material);
+        m_model->set_mesh(m_mesh);
+    }
+}
+
 runtime::mesh_component runtime::mesh_component::clone() const
 {
     if (!m_model)
@@ -52,7 +63,9 @@ runtime::mesh_component runtime::mesh_component::clone() const
         LOG_WRN("runtime::mesh_component::clone: a privately uploaded mesh cannot be copied; the clone draws nothing");
         return mesh_component{};
     }
-    return mesh_component{m_material, m_mesh};
+    mesh_component copy{m_material, m_mesh};
+    copy.m_owned_material = m_owned_material;
+    return copy;
 }
 
 void runtime::mesh_component::on_attach(node& owner)

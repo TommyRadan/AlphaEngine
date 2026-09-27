@@ -83,6 +83,20 @@ namespace runtime
         mesh_component(rendering_engine::material* material, std::shared_ptr<rendering_engine::mesh_asset> mesh);
 
         /**
+         * @brief Builds a model drawing a cached @p mesh with @p material, and
+         *        shares ownership of @p material, so it lives as long as this
+         *        component (or a clone of it) draws with it.
+         *
+         * The form a loaded scene uses (runtime/scene_serializer.hpp): its
+         * materials belong to the components that draw with them rather than
+         * to the code that built the scene. With a null @p material no model
+         * is built, since it would have nothing to draw with, but @p mesh is
+         * still kept (see @ref mesh).
+         */
+        mesh_component(std::shared_ptr<rendering_engine::material> material,
+                       std::shared_ptr<rendering_engine::mesh_asset> mesh);
+
+        /**
          * @brief Wires the model into the scene — parents it under @p owner and
          *        registers it with the scene renderer.
          *
@@ -125,10 +139,33 @@ namespace runtime
             return m_model.get();
         }
 
+        /** @brief The material the model draws with, or @c nullptr. */
+        rendering_engine::material* material() const noexcept
+        {
+            return m_material;
+        }
+
+        /**
+         * @brief The cached mesh the model draws, or @c nullptr for an empty
+         *        component or one built from a private upload.
+         */
+        const std::shared_ptr<rendering_engine::mesh_asset>& mesh() const noexcept
+        {
+            return m_mesh;
+        }
+
+        /** @brief The material this component shares ownership of, or @c nullptr when it was handed a plain pointer. */
+        const std::shared_ptr<rendering_engine::material>& owned_material() const noexcept
+        {
+            return m_owned_material;
+        }
+
     private:
         void register_model();
         void unregister_model();
 
+        // Declared before the model so it outlives it.
+        std::shared_ptr<rendering_engine::material> m_owned_material;
         std::unique_ptr<rendering_engine::model> m_model;
         // What the model was built from, kept for clone(): the material and,
         // for the cached-mesh constructor, the shared asset.

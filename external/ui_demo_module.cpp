@@ -157,6 +157,11 @@ namespace
     };
 } // namespace
 
+REFLECT_TYPES()
+{
+    registry.register_behavior<ui_quit_button>("ui_quit_button");
+}
+
 GAME_MODULE()
 {
     runtime::node& button = scene.create_node("ui_quit_button");

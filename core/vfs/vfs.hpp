@@ -33,6 +33,7 @@
 #include <optional>
 #include <shared_mutex>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace core
@@ -75,6 +76,27 @@ namespace core
 
         /** @brief The last modification time of @p relative, or @c std::nullopt when unknown. */
         virtual std::optional<std::filesystem::file_time_type> last_write_time(const std::string& relative) const = 0;
+
+        /** @brief Whether @ref write can store files in this mount. A mount is read-only unless it says otherwise. */
+        virtual bool writable() const
+        {
+            return false;
+        }
+
+        /**
+         * @brief Writes @p size bytes from @p data to @p relative, creating the
+         *        file (and the directories leading to it) or replacing it.
+         * @return false with @p error set when the file cannot be written; the
+         *         default refuses, for a read-only mount.
+         */
+        virtual bool write(const std::string& relative, const void* data, std::size_t size, std::string& error)
+        {
+            (void)relative;
+            (void)data;
+            (void)size;
+            error = "the mount is read-only";
+            return false;
+        }
     };
 
     /**
@@ -137,6 +159,37 @@ namespace core
         bool read_text_file(const std::filesystem::path& path, std::string& out, std::string* error = nullptr) const;
 
         /**
+         * @brief Writes @p size bytes from @p data to the file @p path names,
+         *        creating it (and any missing parent directory) or replacing it.
+         *
+         * An absolute path writes that native file. A relative path is written
+         * where a later read finds it: into the highest-priority mount that
+         * already holds the file, when that mount is writable, otherwise into
+         * the highest-priority writable mount; with no writable mount it is
+         * written relative to the working directory, the reads' fallback.
+         * @param error When non-null, receives a one-line reason on failure.
+         * @return false when the file could not be written.
+         */
+        bool
+        write_file(const std::filesystem::path& path, const void* data, std::size_t size, std::string* error = nullptr);
+
+        /** @brief @ref write_file of @p text. */
+        bool write_text_file(const std::filesystem::path& path, std::string_view text, std::string* error = nullptr);
+
+        /**
+         * @brief The mount-relative path that reaches the native file
+         *        @p native — the inverse of @ref resolve — or @c std::nullopt
+         *        when no mount with native files holds it, or a
+         *        higher-priority mount would shadow it under that path.
+         *
+         * Lets a caller holding a native path or a @ref canonical_key (an
+         * asset-cache key, say) store it portably, as the path the VFS
+         * resolves on another machine. Case-folded where @ref canonical_key
+         * folds.
+         */
+        std::optional<std::string> virtual_path(const std::filesystem::path& native) const;
+
+        /**
          * @brief The native path @p path resolves to: itself when absolute,
          *        the file in the first mount that holds it otherwise, or
          *        @p path unchanged when no mount does (or the holding mount
@@ -164,6 +217,10 @@ namespace core
         // The normalised mount-relative spelling of a relative @p path, or
         // std::nullopt when it would escape the mount.
         static std::optional<std::string> mount_relative(const std::filesystem::path& path);
+
+        // canonical_key without the mount lookup: weakly canonical, generic
+        // separators, case-folded where paths ignore case.
+        static std::string canonical_form(const std::filesystem::path& native);
 
         mutable std::shared_mutex m_mutex;
         std::vector<std::unique_ptr<vfs_mount>> m_mounts; // lowest priority first

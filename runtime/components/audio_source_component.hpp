@@ -165,6 +165,12 @@ namespace runtime
         /** @brief Changes the distance-attenuation curve, live if a voice is currently playing. */
         void set_attenuation(float min_distance, float max_distance, float rolloff);
 
+        /** @brief Every setting at once, as the component was built with it and changed since. */
+        const config& configuration() const noexcept
+        {
+            return m_config;
+        }
+
     private:
         config m_config;
         core::audio_voice_id m_voice;

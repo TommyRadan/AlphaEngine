@@ -32,6 +32,7 @@
 #include <cstdint>
 #include <cstring>
 #include <optional>
+#include <string>
 #include <type_traits>
 #include <vector>
 
@@ -180,5 +181,11 @@ namespace rendering_engine
         // frustum-cull them. A zero box for empty geometry (which draws
         // nothing anyway).
         core::math::aabb bounds{};
+
+        // The structural key @ref asset_cache::get_or_create_mesh cached the
+        // asset under, or empty for one made outside the cache. It names the
+        // geometry beyond this process: a scene file stores it as the
+        // mesh's reference and resolves it through the cache on load.
+        std::string key;
     };
 } // namespace rendering_engine

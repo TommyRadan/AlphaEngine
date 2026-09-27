@@ -50,6 +50,14 @@ namespace rendering_engine::util
         core::math::trs get_trs() const;
         void set_trs(const core::math::trs& pose);
 
+        // Sets the orientation to @p rotation bit for bit, skipping the
+        // normalisation @ref set_quaternion applies. For restoring a pose
+        // read back from @ref get_quaternion (a scene file), where
+        // normalising an already unit quaternion again can move its last
+        // bit and the restored transform would not match the saved one.
+        // @p rotation must already be of unit length.
+        void set_quaternion_exact(const core::math::quat& rotation);
+
         // Orients the transform so its forward (+X) axis points from the
         // current position towards @p target, with @p up as the reference for
         // its up (+Z) axis — the engine convention (core/math/math.hpp). A

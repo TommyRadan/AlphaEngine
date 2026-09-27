@@ -22,6 +22,7 @@
 
 #include <core/vfs/directory_mount.hpp>
 
+#include <system_error>
 #include <utility>
 
 #include <core/platform/platform.hpp>
@@ -58,5 +59,27 @@ namespace core
     std::optional<std::filesystem::file_time_type> directory_mount::last_write_time(const std::string& relative) const
     {
         return platform::last_write_time(native_path(relative));
+    }
+
+    bool directory_mount::writable() const
+    {
+        return true;
+    }
+
+    bool directory_mount::write(const std::string& relative, const void* data, std::size_t size, std::string& error)
+    {
+        const std::filesystem::path target = native_path(relative);
+        if (target.has_parent_path())
+        {
+            std::error_code created;
+            std::filesystem::create_directories(target.parent_path(), created);
+            if (created)
+            {
+                error = "cannot create directory " + platform::path_to_utf8(target.parent_path()) + ": " +
+                        created.message();
+                return false;
+            }
+        }
+        return platform::write_file(target, data, size, &error);
     }
 } // namespace core

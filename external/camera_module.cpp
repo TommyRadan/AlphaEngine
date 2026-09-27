@@ -269,6 +269,11 @@ namespace
     };
 } // namespace
 
+REFLECT_TYPES()
+{
+    registry.register_behavior<fly_camera>("fly_camera");
+}
+
 GAME_MODULE()
 {
     bind_controls(*runtime::current_engine().input);
