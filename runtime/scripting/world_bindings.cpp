@@ -123,8 +123,6 @@ namespace
         return *found;
     }
 
-    // --- Components ------------------------------------------------------------
-
     struct light_ref
     {
         node_ref owner;
@@ -342,8 +340,6 @@ namespace
                           [](const audio_source_ref& self, float pitch) { self.resolve().set_pitch(pitch); });
     }
 
-    // --- Nodes and scenes --------------------------------------------------------
-
     void bind_node(sol::table& types)
     {
         sol::usertype<node_ref> type = types.new_usertype<node_ref>("node", sol::no_constructor);
@@ -483,8 +479,6 @@ namespace
         };
     }
 
-    // --- input and log -----------------------------------------------------------
-
     core::input& engine_input()
     {
         return *runtime::current_engine().input;
@@ -564,8 +558,6 @@ namespace
         lua_setglobal(raw, "print");
     }
 } // namespace
-
-// --- Handles -------------------------------------------------------------------
 
 runtime::node& runtime::scripting::node_ref::resolve() const
 {

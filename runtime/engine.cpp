@@ -34,8 +34,6 @@ namespace runtime
     namespace
     {
         // Published by the engine constructor, cleared by its destructor.
-        // Accessed by every translation unit that used to reach for the
-        // old singleton::get_instance() hooks.
         engine* g_current_engine = nullptr;
 
         rendering_engine::gpu::backend_type to_backend_type(core::graphics_backend b)
@@ -76,8 +74,7 @@ namespace runtime
         }
         g_current_engine = this;
 
-        // Construction order mirrors the declaration order in the
-        // header and the old subsystem init order in main_loop.cpp.
+        // Construction order mirrors the declaration order in the header.
         // The settings arrive resolved (defaults, file, environment, command
         // line — see core::load_settings), so every subsystem below reads a
         // final value.
@@ -144,11 +141,9 @@ namespace runtime
 
     void engine::init()
     {
-        // Matches the old main_loop.cpp init sequence: events,
-        // rendering, scene graph. The window/GL context is brought up
-        // inside rendering_engine::renderer::init(); it in turn
-        // constructs the built-in passes and materials once GL is
-        // alive.
+        // The window/GL context is brought up inside
+        // rendering_engine::renderer::init(); it in turn constructs the
+        // built-in passes and materials once GL is alive.
         events->init();
         // No renderer/VFS dependency: opens (or gracefully declines) the
         // playback device up front so a module's on_engine_start can play a

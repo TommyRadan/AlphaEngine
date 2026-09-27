@@ -89,8 +89,7 @@ int main(int argc, char* argv[])
     // Construct the owning engine on the stack around the resolved
     // settings. Its constructor installs itself as
     // runtime::current_engine() for the duration of this scope, so every
-    // subsystem that used to pull its dependency out of a singleton can
-    // resolve it from the engine.
+    // subsystem can resolve its dependencies through the engine.
     runtime::engine engine{std::move(startup.values)};
 
     try

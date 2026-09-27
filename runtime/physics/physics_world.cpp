@@ -63,8 +63,6 @@ namespace runtime::physics
     {
         namespace math = core::math;
 
-        // --- Limits and tolerances -------------------------------------------
-
         constexpr JPH::uint k_max_bodies = 16384;
         constexpr JPH::uint k_max_body_pairs = 16384;
         constexpr JPH::uint k_max_contact_constraints = 8192;
@@ -89,8 +87,6 @@ namespace runtime::physics
         constexpr int k_circle_segments = 24;
         constexpr float k_contact_marker_size = 0.05f;
         constexpr float k_pi = 3.14159265358979f;
-
-        // --- Library setup ---------------------------------------------------
 
         // Worlds sharing the process-wide Jolt state (allocator hooks, type
         // factory, collision dispatch tables).
@@ -154,7 +150,6 @@ namespace runtime::physics
             JPH::Factory::sInstance = nullptr;
         }
 
-        // --- Layers ----------------------------------------------------------
         // Two object layers — static bodies and everything that moves — each
         // with its own broad-phase tree. Static bodies never test against
         // each other.
@@ -215,8 +210,6 @@ namespace runtime::physics
             bool m_include_triggers;
         };
 
-        // --- Conversions -----------------------------------------------------
-
         JPH::Vec3 to_jolt(const math::vec3& v)
         {
             return JPH::Vec3{v.x, v.y, v.z};
@@ -261,8 +254,6 @@ namespace runtime::physics
         {
             return math::vec3{std::fabs(v.x), std::fabs(v.y), std::fabs(v.z)};
         }
-
-        // --- Poses -----------------------------------------------------------
 
         // A node's world transform split into what a body can carry (position
         // and rotation) and what goes into its shape (scale).
@@ -342,8 +333,6 @@ namespace runtime::physics
             target.set_world_position(position);
             target.transform.set_quaternion(math::normalize(math::inverse(parent_pose.rotation) * rotation));
         }
-
-        // --- Shapes ----------------------------------------------------------
 
         // A collider resolved against its node: mesh-fitted where asked for
         // and scaled into body space. Only the fields its kind uses matter.
@@ -593,8 +582,6 @@ namespace runtime::physics
             return shape;
         }
 
-        // --- Bodies ----------------------------------------------------------
-
         JPH::EMotionType to_motion_type(body_type type)
         {
             switch (type)
@@ -679,8 +666,6 @@ namespace runtime::physics
             settings.type = body_type::static_body;
             return settings;
         }
-
-        // --- Contacts --------------------------------------------------------
 
         std::uint32_t raw_id(const JPH::BodyID& id)
         {
@@ -840,8 +825,6 @@ namespace runtime::physics
             math::vec3 point2{};
             math::vec3 normal{};
         };
-
-        // --- Debug geometry --------------------------------------------------
 
         void add_segment(std::vector<math::vec3>& positions,
                          std::vector<math::vec3>& colors,

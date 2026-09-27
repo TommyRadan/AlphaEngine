@@ -34,8 +34,6 @@ namespace runtime
      */
     std::string file_reference(const std::string& canonical_key);
 
-    // --- Meshes -----------------------------------------------------------
-
     /**
      * @brief The reference a scene file stores for @p mesh, or an empty
      *        string for an asset the cache never keyed.
@@ -71,8 +69,6 @@ namespace runtime
      *        holds them. Replaces a resolver registered for the same prefix.
      */
     void register_mesh_resolver(std::string prefix, mesh_resolver resolver);
-
-    // --- Materials --------------------------------------------------------
 
     /**
      * @brief Everything that makes one @ref rendering_engine::standard_material,

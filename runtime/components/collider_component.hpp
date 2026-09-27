@@ -71,8 +71,6 @@ namespace runtime
          */
         static collider_component fitted(physics::collider_shape shape);
 
-        // --- Component hooks ------------------------------------------------
-
         /** @brief Registers the shape with the physics world. */
         void on_attach(node& owner);
         /** @brief Unregisters it; the body is destroyed with the node's last physics component. */
@@ -82,8 +80,6 @@ namespace runtime
         /** @brief A component with the same settings, for @c scene::clone. Listeners are not copied. */
         collider_component clone() const;
 
-        // --- Settings -------------------------------------------------------
-
         physics::collider_settings settings() const;
         /** @brief Replaces the shape and trigger flag; applied at the next step. */
         void set_settings(const physics::collider_settings& settings);
@@ -92,8 +88,6 @@ namespace runtime
         bool is_trigger() const;
         /** @brief Turning a collider into a trigger (or back) rebuilds the body. */
         void set_trigger(bool trigger);
-
-        // --- Contact listeners ----------------------------------------------
 
         /**
          * @brief Calls @p listener for every collision this node's body is in,

@@ -310,8 +310,6 @@ bool runtime::lua_behavior::set_property(std::string_view name, const field_valu
     return true;
 }
 
-// --- Host side ----------------------------------------------------------------
-
 void runtime::script_host::state::rebind(lua_behavior& behavior,
                                          const std::vector<scripting::script_property>& previous)
 {

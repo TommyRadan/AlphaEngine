@@ -116,8 +116,6 @@ namespace runtime
          */
         animator_component clone() const;
 
-        // --- Bindings -----------------------------------------------------
-
         /**
          * @brief Makes @p target follow @p joint: while a clip animates the
          *        joint, the node's local transform is set to the joint's
@@ -134,8 +132,6 @@ namespace runtime
          *        @p mesh_node's @c mesh_component every frame.
          */
         void bind_skin(std::size_t skin, std::size_t mesh_joint, node& mesh_node);
-
-        // --- Clips and playback ---------------------------------------------
 
         const std::shared_ptr<const rendering_engine::skeleton>& skeleton() const noexcept;
         const std::vector<std::shared_ptr<const rendering_engine::animation_clip>>& clips() const noexcept;
@@ -170,8 +166,6 @@ namespace runtime
         /** @brief Whether a clip is playing: started, and not a finished @ref playback::once. */
         bool is_playing() const noexcept;
 
-        // --- State machine ------------------------------------------------
-
         /**
          * @brief Declares state @p name playing @p clip. False (and no
          *        change) when the name is taken or the clip is unknown.
@@ -200,8 +194,6 @@ namespace runtime
         /** @brief The current state's name; empty before any state is entered and after @ref stop. */
         const std::string& current_state() const noexcept;
 
-        // --- Driving ------------------------------------------------------
-
         /**
          * @brief Advances playback by one fixed step of @p delta_ms. Called
          *        from the @c core::frame subscription while attached and
@@ -216,8 +208,6 @@ namespace runtime
          *        @ref advance.
          */
         void apply(double alpha);
-
-        // --- Component hooks ------------------------------------------------
 
         /** @brief Subscribes to the fixed step and writes the first pose. */
         void on_attach(node& owner);

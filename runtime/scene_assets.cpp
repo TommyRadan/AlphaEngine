@@ -84,8 +84,6 @@ namespace runtime
             return cache.find_mesh(key);
         }
 
-        // -- The material library --------------------------------------------------
-
         struct material_entry
         {
             std::weak_ptr<rendering_engine::material> instance;

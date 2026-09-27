@@ -163,18 +163,6 @@ void runtime::scene::update()
         // One serial depth-first walk settles every world matrix, parents
         // before children, and stamps the nodes it reaches (effectively
         // active, linked under the root) with their place in the walk.
-        //
-        // An earlier version warmed those caches with a parallel_for over each
-        // depth band of the tree. It was removed without a replacement: the
-        // per-node work is a version compare and one 4x4 multiply, far cheaper
-        // than the std::function allocation, queue push and worker wake it cost
-        // to farm out, and no measurement ever showed the scene sizes this
-        // engine draws gaining from it. Its race-freedom also rested on
-        // invariants nothing enforces — that every transform's parent is the
-        // transform of a node one band up — while transform::set_parent is
-        // public and mesh_component already parents a non-node transform.
-        // Bring parallelism back here only against a measured workload, with
-        // those ownership rules made explicit first.
         const uint64_t stamp = ++g_update_stamp;
         uint32_t order = 0;
         propagate(root, stamp, order);

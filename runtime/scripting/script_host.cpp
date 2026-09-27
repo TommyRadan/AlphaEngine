@@ -201,8 +201,6 @@ namespace
     }
 } // namespace
 
-// --- Shared helpers ----------------------------------------------------------
-
 void runtime::scripting::raise(const std::string& message)
 {
     throw std::runtime_error{message};
@@ -367,8 +365,6 @@ sol::object runtime::scripting::copy_value(sol::state_view lua, const sol::objec
     }
     return value;
 }
-
-// --- script_host::state ------------------------------------------------------
 
 runtime::script_host::state::state() = default;
 
@@ -569,8 +565,6 @@ void runtime::script_host::state::poll_changes(float delta_time)
         reload(*script);
     }
 }
-
-// --- script_host -------------------------------------------------------------
 
 runtime::script_host::script_host() = default;
 

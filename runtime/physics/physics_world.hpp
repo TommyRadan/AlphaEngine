@@ -168,7 +168,6 @@ namespace runtime::physics
         /** @brief Bumped whenever the debug wireframe may have changed (every step, every body change). */
         std::uint64_t revision() const noexcept;
 
-        // --- Component bridge ----------------------------------------------
         // Called by rigidbody_component / collider_component from their
         // hooks; not meant for game code.
 
