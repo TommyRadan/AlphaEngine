@@ -3548,9 +3548,19 @@ namespace rendering_engine::gpu::backend::vulkan
         subpass.pDepthStencilAttachment = variant_uses_depth ? &depth_ref : nullptr;
 
         // Two subpass dependencies. The EXTERNAL → 0 incoming dep
-        // synchronises color/depth writes from a previous render
-        // pass against this pass's writes — needed when consecutive
-        // passes target the same swapchain image. The 0 → EXTERNAL
+        // synchronises this pass's writes, and any LOAD it performs,
+        // against a previous render pass's color/depth writes to the
+        // same attachment — needed when consecutive passes target the
+        // same off-screen or swapchain image. It covers both write
+        // stages (late fragment tests for depth, since a depth write
+        // only completes there) and both directions a LOAD can hazard
+        // against a prior write: the automatic layout transition on
+        // entry is itself a read of the old contents, and blending
+        // reads the loaded color. Without this, syncval reports
+        // READ_AFTER_WRITE against the layout transition whenever a
+        // pass loads an attachment a previous pass wrote (skybox and
+        // bloom's composite loading the HDR target, the UI and debug
+        // passes loading the swapchain image). The 0 → EXTERNAL
         // outgoing dep releases color writes from this pass for
         // FRAGMENT_SHADER reads in a subsequent pass — without it
         // tonemap's fragment shader can sample the scene HDR target
@@ -3563,11 +3573,13 @@ namespace rendering_engine::gpu::backend::vulkan
         std::array<VkSubpassDependency, 2> deps{};
         deps[0].srcSubpass = VK_SUBPASS_EXTERNAL;
         deps[0].dstSubpass = 0;
-        deps[0].srcStageMask =
-            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+        deps[0].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+                               VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+        deps[0].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
         deps[0].dstStageMask = deps[0].srcStageMask;
-        deps[0].srcAccessMask = 0;
-        deps[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        deps[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                                VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
+                                VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
         deps[1].srcSubpass = 0;
         deps[1].dstSubpass = VK_SUBPASS_EXTERNAL;
         // Release both colour and depth writes for a subsequent pass's
