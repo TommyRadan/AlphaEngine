@@ -53,9 +53,9 @@ namespace rendering_engine
      * build it runs last (after the UI pass) so debug visuals always
      * read on top of the game UI.
      *
-     * Like @ref ui_pass the matching draw items use @ref ui_material,
-     * which has no per-frame bind group, so this pass owns no
-     * per-frame state of its own.
+     * The pass owns no per-frame state of its own: the line-based
+     * gizmos read the scene pass's camera group, handed in at
+     * construction (see the constructor).
      */
     struct debug_pass : pass
     {

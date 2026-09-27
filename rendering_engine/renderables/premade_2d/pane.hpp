@@ -22,50 +22,104 @@
 
 #pragma once
 
+#include <vector>
+
+#include <core/math/vec2.hpp>
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/gpu/types.hpp>
+#include <rendering_engine/renderables/premade_2d/rect_transform.hpp>
+#include <rendering_engine/renderables/premade_2d/sprite_batch.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
 #include <rendering_engine/util/color.hpp>
 #include <rendering_engine/util/image.hpp>
-#include <rendering_engine/util/transform.hpp>
 
 namespace rendering_engine
 {
-    struct material;
+    struct ui_material;
 
+    /**
+     * @brief A rectangle of UI: a flat colour, an image, or an image tinted
+     *        by a colour, placed by a @ref rect_transform in the drawable.
+     *
+     * A single quad on its own @ref sprite_batch, so one draw. The quad is
+     * rebuilt on the CPU when a setter changes it and its pixel position is
+     * resolved in the vertex shader, so moving, recolouring and resizing
+     * the window all just work. It starts pinned to the drawable's
+     * top-left corner, pivot top-left, @p size pixels large, drawing
+     * opaque white.
+     *
+     * Register it with @c context::register_ui_renderable and unregister
+     * it before destroying it.
+     */
     struct pane : public renderable
     {
-        pane(material* mat, const core::math::vec2& size);
+        pane(ui_material* mat, const core::math::vec2& size);
         ~pane() override;
 
-        void set_color(const rendering_engine::util::color& color);
+        pane(const pane&) = delete;
+        pane& operator=(const pane&) = delete;
 
-        // Upload @p image as the pane's texture. @p space selects the
-        // RGBA8 format (@ref gpu::rgba8_format). The default is @c linear
-        // — i.e. no decode — because the UI pass composites straight onto
-        // the LDR swapchain with no encode step, so an image (or a glyph
-        // coverage bitmap) must reach the framebuffer with the bytes it
-        // was authored with. Pass @c srgb for a pane drawn into the HDR
-        // scene, where the tonemap pass re-encodes the output.
+        /** @brief The colour the texture is multiplied by (the whole fill when there is none). */
+        void set_color(const rendering_engine::util::color& color);
+        const rendering_engine::util::color& get_color() const;
+
+        // Upload @p image as the pane's own texture, replacing any
+        // earlier one. @p space selects the RGBA8 format
+        // (@ref gpu::rgba8_format). The default is @c linear — i.e. no
+        // decode — because the UI pass composites straight onto the LDR
+        // swapchain with no encode step, so an image must reach the
+        // framebuffer with the bytes it was authored with.
         void set_image(const rendering_engine::util::image& image, gpu::color_space space = gpu::color_space::linear);
 
-        rendering_engine::util::transform transform;
+        // Draw @p uv_min .. @p uv_max of a texture the caller owns (a
+        // texture asset, a font atlas) instead; it must outlive its use
+        // here. An invalid handle goes back to the flat colour. Releases
+        // a texture an earlier @ref set_image uploaded.
+        void set_texture(gpu::texture texture,
+                         const core::math::vec2& uv_min = core::math::vec2{0.0f, 0.0f},
+                         const core::math::vec2& uv_max = core::math::vec2{1.0f, 1.0f});
 
+        /** @brief The pane's placement; see @ref rect_transform. */
+        const rect_transform& get_rect() const;
+        void set_rect(const rect_transform& rect);
+
+        // Field-wise setters over @ref set_rect. @ref set_anchor pins
+        // both anchors to @p anchor; use @ref set_rect with
+        // @ref rect_transform::stretched for a pane that stretches.
+        void set_position(const core::math::vec2& position);
+        void set_size(const core::math::vec2& size);
+        void set_anchor(const core::math::vec2& anchor);
+        void set_pivot(const core::math::vec2& pivot);
+        void set_rotation(float radians);
+
+        /**
+         * @brief Hit test against the live drawable: whether @p point, in
+         *        UI pixels (a mouse position goes through
+         *        @ref window_to_pixels first), lies on the pane.
+         */
+        bool contains(const core::math::vec2& point) const;
+
+        /** @brief Nothing to upload up front: the quad is streamed at collect time. */
         void upload() final;
         void collect_draw_items(std::vector<draw_item>& out) final;
 
+        bool casts_shadow() const override
+        {
+            return false;
+        }
+
     private:
-        material* m_material{nullptr};
-        gpu::buffer m_vertex_buffer{};
-        gpu::buffer m_index_buffer{};
-        gpu::buffer m_draw_ubo{};
+        void release_owned_texture();
+
+        sprite_batch m_batch;
+        rect_transform m_rect;
+        rendering_engine::util::color m_color{255, 255, 255, 255};
         gpu::texture m_texture{};
-        gpu::bind_group m_draw_bind_group{};
-
-        unsigned int m_vertex_count{0};
-        uint32_t m_vertex_stride{0};
-
-        core::math::vec2 m_size;
-        rendering_engine::util::color m_color{0, 0, 0, 0};
+        core::math::vec2 m_uv_min{0.0f, 0.0f};
+        core::math::vec2 m_uv_max{1.0f, 1.0f};
+        // Whether m_texture came from set_image and is freed here.
+        bool m_owns_texture{false};
+        // Whether the batch's quad is out of date.
+        bool m_dirty{true};
     };
 } // namespace rendering_engine

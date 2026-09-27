@@ -22,36 +22,51 @@
 
 /**
  * @file font_asset.hpp
- * @brief A rasterizable font owned through a reference-counted asset handle.
+ * @brief A font's glyph atlas and metrics owned through a reference-counted asset handle.
  */
 
 #pragma once
 
 #include <string>
 
+#include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/util/font.hpp>
 
 namespace rendering_engine
 {
     /**
-     * @brief A @c util::font loaded from a TTF file at a fixed pixel size.
+     * @brief A @c util::font loaded from a TTF file at a fixed pixel size,
+     *        with its glyph atlas uploaded to the GPU.
      *
      * Produced by @ref asset_cache::load_font and handed out as a
      * @c std::shared_ptr, keyed on @c (path, size) so two callers asking for
-     * the same face at the same size share one parsed font and its glyph cache.
-     * Unlike the texture and mesh assets it owns no GPU resource — the wrapped
-     * @ref util::font holds only CPU-side glyph bitmaps — so the default
-     * destructor suffices.
+     * the same face at the same size share one atlas. The constructor packs
+     * the face (see @ref util::font) and uploads the atlas once as an
+     * @c rgba8_unorm texture — linear, so the coverage reaches the LDR
+     * swapchain the UI composites onto with the bytes it was rasterized as —
+     * sampled bilinearly without mipmaps (a mip level would blend packed
+     * neighbours together) and clamped at the edges. The destructor releases
+     * it, so the atlas lives exactly as long as the last handle; text
+     * renderables hold one for as long as they draw.
      *
-     * Non-copyable: @ref util::font owns unique glyph allocations.
+     * Throws @c std::runtime_error, as @ref util::font does, when the file
+     * cannot be loaded. Non-copyable and non-movable: the GPU handle has a
+     * single owner and is freed exactly once.
      */
     struct font_asset
     {
-        font_asset(const std::string& filename, float size) : font{filename, size} {}
+        font_asset(const std::string& filename, float size);
+        ~font_asset();
 
         font_asset(const font_asset&) = delete;
         font_asset& operator=(const font_asset&) = delete;
+        font_asset(font_asset&&) = delete;
+        font_asset& operator=(font_asset&&) = delete;
 
+        /** @brief The glyph metrics, kerning, vertical metrics and the CPU copy of the atlas. */
         util::font font;
+
+        /** @brief @ref util::font::atlas on the GPU; the uv rects in the glyph metrics address it. */
+        gpu::texture atlas{};
     };
 } // namespace rendering_engine

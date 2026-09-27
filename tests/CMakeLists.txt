@@ -87,6 +87,7 @@ set(ALPHAENGINE_TEST_SOURCES_UNDER_TEST
     # util/image and util/font back the texture/font loaders the cache compiles.
     ${CMAKE_SOURCE_DIR}/rendering_engine/assets/asset_cache.cpp
     ${CMAKE_SOURCE_DIR}/rendering_engine/assets/asset_device.cpp
+    ${CMAKE_SOURCE_DIR}/rendering_engine/assets/font_asset.cpp
     ${CMAKE_SOURCE_DIR}/rendering_engine/assets/mesh_asset.cpp
     ${CMAKE_SOURCE_DIR}/rendering_engine/assets/texture_asset.cpp
     ${CMAKE_SOURCE_DIR}/rendering_engine/gpu/device.cpp

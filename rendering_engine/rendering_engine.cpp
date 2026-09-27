@@ -184,7 +184,10 @@ void rendering_engine::context::init()
     // the swapchain. It declares whichever of the two it will actually
     // read so the frame graph checks the real wiring.
     auto fxaa = std::make_unique<fxaa_pass>(width, height, taa_enabled);
-    auto ui = std::make_unique<ui_pass>(&m_ui_renderables);
+    // The UI pass owns the pixel-space projection the ui template reads at
+    // slot 0; it follows the drawable through pass::resize.
+    auto ui = std::make_unique<ui_pass>(&m_ui_renderables, width, height);
+    const gpu::bind_group_layout ui_frame_layout = ui->frame_bind_group_layout();
 #if _DEBUG
     // The debug pass binds the scene pass's per-frame camera group at
     // slot 0 so the line-based debug gizmos project with the same camera.
@@ -198,7 +201,7 @@ void rendering_engine::context::init()
     // layouts, the pipeline-variant cache) against the per-frame layouts
     // exposed by the passes, and the built-in instance of each. The 3D
     // templates reserve slot 0 for the scene_pass's per-frame group; the
-    // ui template has no per-frame group. Each instance keeps its
+    // ui template reserves it for the ui_pass's. Each instance keeps its
     // template alive; the standard template is also held here so
     // create_standard_material hands every extra instance the same one.
     gpu::device& device = *eng.gpu;
@@ -217,7 +220,7 @@ void rendering_engine::context::init()
     m_debug_line_material = std::make_unique<line_material>(line_template, /*depth_tested=*/false);
     // Analytic infinite-grid material; shares the scene per-frame layout.
     m_grid_material = std::make_unique<grid_material>(grid_material::create_template(device, scene_frame_layout));
-    m_ui_material = std::make_unique<ui_material>(ui_material::create_template(device));
+    m_ui_material = std::make_unique<ui_material>(ui_material::create_template(device, ui_frame_layout));
     LOG_INF("Rendering Engine: basic_material, instanced_material, phong_material, standard_material, points_material, "
             "line_material and ui_material constructed");
 
@@ -530,10 +533,11 @@ void rendering_engine::context::on_resize(uint32_t pixel_width, uint32_t pixel_h
     }
 
     // Let every pass follow: the bloom pyramid, the velocity target, the
-    // TAA history / resolve (+ texel step, history reset) and the FXAA
-    // edge step. Fixed-size passes (shadow maps, UI, debug) keep the
-    // default no-op, and the scene pass needs nothing: the jitter it
-    // applies is computed by render() from the size recorded above.
+    // TAA history / resolve (+ texel step, history reset), the FXAA edge
+    // step and the UI's pixel-space projection. Fixed-size passes (shadow
+    // maps, debug) keep the default no-op, and the scene pass needs
+    // nothing: the jitter it applies is computed by render() from the
+    // size recorded above.
     for (auto& p : m_passes)
     {
         p->resize(pixel_width, pixel_height);
