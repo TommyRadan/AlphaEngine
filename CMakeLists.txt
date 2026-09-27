@@ -117,7 +117,7 @@ target_link_libraries(AlphaEngine shader_registry)
 target_compile_definitions(AlphaEngine PRIVATE
     $<$<CONFIG:Debug>:ALPHAENGINE_SHADER_SOURCE_DIR="${CMAKE_SOURCE_DIR}/shaders">)
 
-# Threads — the core worker pool (core/jobs) uses std::thread. MSVC links its
+# Threads — the core worker pool (core/job_pool) uses std::thread. MSVC links its
 # threading support implicitly; on Linux this pulls in pthread.
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)

@@ -52,7 +52,7 @@ namespace rendering_engine
      * Arbitration: the highest @ref camera::get_priority among the attached,
      * enabled cameras wins; a priority tie goes to a camera tagged
      * @ref camera::is_main over one that is not, and between equals to the
-     * most recently attached. @ref context::render evaluates this once per
+     * most recently attached. @ref renderer::render evaluates this once per
      * frame into @c frame_context::active_camera, so destroying or disabling
      * the winner promotes the runner-up on the next frame with no
      * bookkeeping by the owner.
@@ -73,7 +73,7 @@ namespace rendering_engine
      *        attached camera's @ref camera::set_aspect_ratio; a camera
      *        attached later receives it on attach.
      *
-     * The renderer calls this at init and from @ref context::on_resize, so an
+     * The renderer calls this at init and from @ref renderer::on_resize, so an
      * attached camera's projection always matches the drawable. A value of
      * zero or less clears it (nothing is forwarded, later attaches leave the
      * camera's aspect alone).

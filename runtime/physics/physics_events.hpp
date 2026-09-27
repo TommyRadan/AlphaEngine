@@ -30,7 +30,7 @@
  * and friends). Everything is delivered on the main thread, after the fixed
  * step that produced it and outside the scene update, so a listener may
  * queue structural changes — destroy a node, re-parent one, drop a component
- * — through the scene's deferred commands (@c context::destroy_node,
+ * — through the scene's deferred commands (@c scene::destroy_node,
  * @c defer_reparent, @c defer_remove_component).
  */
 

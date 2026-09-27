@@ -105,8 +105,8 @@ namespace core
          * When on, @ref rendering_engine::depth_prepass lays the opaque queue's depth into the scene target
          * front-to-back through each material's vertex stage alone, and the scene pass then loads that depth and
          * shades every pre-passed surface with depth writes off and a less-or-equal test, so each covered pixel
-         * is shaded once. Off by default. Seeds @c rendering_engine::context at init; toggled at runtime with
-         * @c context::set_depth_prepass.
+         * is shaded once. Off by default. Seeds @c rendering_engine::renderer at init; toggled at runtime with
+         * @c renderer::set_depth_prepass.
          */
         bool depth_prepass{false};
 
@@ -205,7 +205,7 @@ namespace core
      * @brief Startup values of the post-processing chain, read once during rendering-engine init.
      *
      * Seeds @c rendering_engine::post_settings, which the renderer (and the debug overlay's Post panel) then tunes
-     * live through @c rendering_engine::context::set_post_settings; nothing is written back here. The defaults match
+     * live through @c rendering_engine::renderer::set_post_settings; nothing is written back here. The defaults match
      * @c rendering_engine::post_settings' own, so an absent `post` section renders exactly as before. Whether the
      * temporal-AA pass exists at all stays @ref graphics_settings::temporal_aa; only its feedback weight lives here.
      */

@@ -57,7 +57,7 @@ namespace core
 }
 namespace core
 {
-    struct jobs;
+    struct job_pool;
 }
 namespace core
 {
@@ -75,7 +75,7 @@ namespace rendering_engine
         struct device;
     }
     struct asset_cache;
-    struct context;
+    struct renderer;
 } // namespace rendering_engine
 namespace runtime
 {
@@ -150,7 +150,7 @@ namespace runtime
         // engine's own lifetime, in the order they are declared here.
         std::unique_ptr<core::settings> settings;
         std::unique_ptr<core::time> time;
-        std::unique_ptr<core::jobs> jobs;
+        std::unique_ptr<core::job_pool> jobs;
         std::unique_ptr<core::event_bus> events;
         // No rendering dependency (its own SDL audio device, opened
         // independently of the window/GL context), so it lives here as a
@@ -160,7 +160,7 @@ namespace runtime
         std::unique_ptr<rendering_engine::window> window;
         std::unique_ptr<rendering_engine::gpu::device> gpu;
         std::unique_ptr<rendering_engine::asset_cache> assets;
-        std::unique_ptr<rendering_engine::context> renderer;
+        std::unique_ptr<rendering_engine::renderer> renderer;
         // Rigid-body simulation, stepped once per fixed update. Outlives the
         // scenes so their physics components unregister against it.
         std::unique_ptr<runtime::physics::world> physics;

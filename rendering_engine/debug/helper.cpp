@@ -24,7 +24,7 @@
 
 #include <algorithm>
 
-#include <rendering_engine/rendering_engine.hpp>
+#include <rendering_engine/renderer.hpp>
 #include <runtime/engine.hpp>
 
 namespace rendering_engine::debug

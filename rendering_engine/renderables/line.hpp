@@ -62,7 +62,7 @@ namespace rendering_engine
     {
         // The material is non-owning; it is typically a
         // @ref line_material (its pipeline must bake line topology)
-        // created by @ref rendering_engine::context and shared by every
+        // created by @ref rendering_engine::renderer and shared by every
         // line that draws under it.
         explicit line(material* mat);
         ~line() override;

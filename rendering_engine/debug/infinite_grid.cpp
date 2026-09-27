@@ -31,7 +31,7 @@
 #include <rendering_engine/materials/grid_material.hpp>
 #include <rendering_engine/renderables/draw_item.hpp>
 #include <rendering_engine/renderables/per_draw_ring.hpp>
-#include <rendering_engine/rendering_engine.hpp>
+#include <rendering_engine/renderer.hpp>
 #include <runtime/engine.hpp>
 
 namespace rendering_engine::debug

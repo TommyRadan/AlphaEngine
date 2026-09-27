@@ -52,7 +52,7 @@ namespace rendering_engine::debug
         // @p fade_distance is the world-space radius past which the grid
         // has fully faded. It is baked into the grid template's shader, so
         // the grid builds its own material on a template for that distance
-        // through @ref context::create_grid_material (the shaders are
+        // through @ref renderer::create_grid_material (the shaders are
         // served from the SPIR-V cache after the first compile).
         explicit infinite_grid(float fade_distance = 100.0f);
         ~infinite_grid() override;

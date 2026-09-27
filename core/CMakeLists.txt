@@ -5,8 +5,8 @@ target_sources(AlphaEngine PRIVATE
     hash.hpp
     input.cpp
     input.hpp
-    jobs.cpp
-    jobs.hpp
+    job_pool.cpp
+    job_pool.hpp
     log.cpp
     log.hpp
     pool.hpp

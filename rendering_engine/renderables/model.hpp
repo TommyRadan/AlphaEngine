@@ -43,7 +43,7 @@ namespace rendering_engine
     struct model : public renderable
     {
         // The material is non-owning; it is created once by
-        // @ref rendering_engine::context (e.g. @c basic_material) and
+        // @ref rendering_engine::renderer (e.g. @c basic_material) and
         // shared by every renderable that draws under it.
         explicit model(material* mat);
         ~model() override;

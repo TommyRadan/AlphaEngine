@@ -1,4 +1,4 @@
-// Unit tests for core::jobs: parallel_for coverage, dispatch + wait_idle
+// Unit tests for core::job_pool: parallel_for coverage, dispatch + wait_idle
 // completion, correctness on workloads that fan out across worker threads,
 // the exception boundary around every job, and the priority split between
 // frame-critical batches and background work.
@@ -18,11 +18,11 @@
 #include <thread>
 #include <vector>
 
-#include <core/jobs.hpp>
+#include <core/job_pool.hpp>
 
 TEST(jobs, parallel_for_visits_every_index_exactly_once)
 {
-    core::jobs pool;
+    core::job_pool pool;
     const std::size_t n = 1000;
     std::vector<int> counts(n, 0);
     std::vector<std::atomic<int>> hits(n);
@@ -41,7 +41,7 @@ TEST(jobs, parallel_for_visits_every_index_exactly_once)
 
 TEST(jobs, parallel_for_zero_count_does_nothing)
 {
-    core::jobs pool;
+    core::job_pool pool;
     std::atomic<int> calls{0};
     pool.parallel_for(0, [&](std::size_t) { calls.fetch_add(1); });
     EXPECT_EQ(calls.load(), 0);
@@ -49,7 +49,7 @@ TEST(jobs, parallel_for_zero_count_does_nothing)
 
 TEST(jobs, parallel_for_computes_a_correct_parallel_sum)
 {
-    core::jobs pool;
+    core::job_pool pool;
     const std::size_t n = 10000;
     std::vector<long long> values(n);
     std::iota(values.begin(), values.end(), 1LL); // 1..n
@@ -64,7 +64,7 @@ TEST(jobs, parallel_for_computes_a_correct_parallel_sum)
 
 TEST(jobs, parallel_for_honours_a_grain_larger_than_count)
 {
-    core::jobs pool;
+    core::job_pool pool;
     std::atomic<int> sum{0};
     pool.parallel_for(
         5, [&](std::size_t i) { sum.fetch_add(static_cast<int>(i), std::memory_order_relaxed); }, 1024);
@@ -73,7 +73,7 @@ TEST(jobs, parallel_for_honours_a_grain_larger_than_count)
 
 TEST(jobs, dispatch_then_wait_idle_runs_all_jobs)
 {
-    core::jobs pool;
+    core::job_pool pool;
     std::atomic<int> done{0};
     const int job_count = 64;
     for (int i = 0; i < job_count; ++i)
@@ -86,20 +86,20 @@ TEST(jobs, dispatch_then_wait_idle_runs_all_jobs)
 
 TEST(jobs, wait_idle_with_no_jobs_is_a_noop)
 {
-    core::jobs pool;
+    core::job_pool pool;
     EXPECT_NO_THROW(pool.wait_idle());
 }
 
 TEST(jobs, worker_count_is_reported)
 {
-    core::jobs pool;
+    core::job_pool pool;
     // Never exceeds the hardware concurrency; may be zero on a single-core host.
     EXPECT_GE(pool.worker_count(), 0u);
 }
 
 TEST(jobs, a_throwing_job_does_not_wedge_wait_idle)
 {
-    core::jobs pool;
+    core::job_pool pool;
     std::atomic<int> ran{0};
     pool.dispatch([] { throw std::runtime_error{"job failure"}; });
     pool.dispatch([&] { ran.fetch_add(1, std::memory_order_relaxed); });
@@ -111,7 +111,7 @@ TEST(jobs, a_throwing_job_does_not_wedge_wait_idle)
 
 TEST(jobs, a_throwing_job_does_not_escape_the_pool)
 {
-    core::jobs pool;
+    core::job_pool pool;
     // Covers the inline path too: with no workers dispatch runs the job on the
     // caller, and the exception must still be logged rather than propagated.
     EXPECT_NO_THROW(pool.dispatch([] { throw std::runtime_error{"job failure"}; }));
@@ -120,7 +120,7 @@ TEST(jobs, a_throwing_job_does_not_escape_the_pool)
 
 TEST(jobs, a_throwing_parallel_for_body_still_completes_the_batch)
 {
-    core::jobs pool;
+    core::job_pool pool;
     const std::size_t n = 256;
     std::vector<std::atomic<int>> hits(n);
     for (auto& h : hits)
@@ -152,17 +152,17 @@ TEST(jobs, a_throwing_parallel_for_body_still_completes_the_batch)
 
 TEST(jobs, dispatch_accepts_an_explicit_priority)
 {
-    core::jobs pool;
+    core::job_pool pool;
     std::atomic<int> done{0};
-    pool.dispatch([&] { done.fetch_add(1, std::memory_order_relaxed); }, core::jobs::priority::high);
-    pool.dispatch([&] { done.fetch_add(1, std::memory_order_relaxed); }, core::jobs::priority::low);
+    pool.dispatch([&] { done.fetch_add(1, std::memory_order_relaxed); }, core::job_pool::priority::high);
+    pool.dispatch([&] { done.fetch_add(1, std::memory_order_relaxed); }, core::job_pool::priority::low);
     pool.wait_idle();
     EXPECT_EQ(done.load(), 2);
 }
 
 TEST(jobs, low_priority_dispatch_does_not_block_a_parallel_for)
 {
-    core::jobs pool;
+    core::job_pool pool;
     if (pool.worker_count() == 0)
     {
         GTEST_SKIP() << "no workers: dispatch runs inline, so a blocking job would block the test itself";
@@ -222,7 +222,7 @@ TEST(jobs, destructor_drains_dispatched_jobs)
     std::atomic<int> done{0};
     const int job_count = 64;
     {
-        core::jobs pool;
+        core::job_pool pool;
         for (int i = 0; i < job_count; ++i)
         {
             pool.dispatch([&] { done.fetch_add(1, std::memory_order_relaxed); });

@@ -30,7 +30,7 @@
 #include <system_error>
 #include <utility>
 
-#include <core/jobs.hpp>
+#include <core/job_pool.hpp>
 #include <core/log.hpp>
 #include <core/platform/directory_watcher.hpp>
 #include <core/platform/platform.hpp>
@@ -299,7 +299,7 @@ namespace rendering_engine
         m_meshes.clear();
     }
 
-    void asset_cache::set_jobs(core::jobs* jobs)
+    void asset_cache::set_jobs(core::job_pool* jobs)
     {
         m_jobs = jobs;
     }

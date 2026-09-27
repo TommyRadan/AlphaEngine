@@ -17,13 +17,12 @@
 #include <rendering_engine/lighting/light.hpp>
 #include <rendering_engine/lighting/point_light.hpp>
 #include <runtime/components/light_component.hpp>
-#include <runtime/scene_graph.hpp>
+#include <runtime/scene.hpp>
 
 using core::math::vec3;
 using rendering_engine::light;
 using rendering_engine::point_light;
 using rendering_engine::registered_lights;
-using runtime::context;
 using runtime::light_component;
 using runtime::node;
 
@@ -66,7 +65,7 @@ TEST(light, a_disabled_light_is_gone_from_the_registry_once_destroyed)
 
 TEST(light_component, disabling_the_node_unregisters_the_light_and_enabling_restores_it)
 {
-    context scene;
+    runtime::scene scene;
     node n;
     scene.root.add(n);
     auto owned = std::make_unique<point_light>();
@@ -85,7 +84,7 @@ TEST(light_component, disabling_the_node_unregisters_the_light_and_enabling_rest
 
 TEST(light_component, a_disabled_ancestor_disables_the_light)
 {
-    context scene;
+    runtime::scene scene;
     node parent;
     node child;
     scene.root.add(parent);
@@ -102,7 +101,7 @@ TEST(light_component, a_disabled_ancestor_disables_the_light)
 
 TEST(light_component, a_light_added_to_a_disabled_node_starts_disabled)
 {
-    context scene;
+    runtime::scene scene;
     node n;
     scene.root.add(n);
     n.set_active(false);
@@ -114,7 +113,7 @@ TEST(light_component, a_light_added_to_a_disabled_node_starts_disabled)
 
 TEST(light_component, update_moves_a_point_light_to_the_node_world_position)
 {
-    context scene;
+    runtime::scene scene;
     node parent;
     node n;
     scene.root.add(parent);
@@ -133,7 +132,7 @@ TEST(light_component, update_moves_a_point_light_to_the_node_world_position)
 
 TEST(light_component, update_aims_a_directional_light_along_the_node_world_forward)
 {
-    context scene;
+    runtime::scene scene;
     node n;
     scene.root.add(n);
     auto owned = std::make_unique<rendering_engine::directional_light>();
@@ -162,7 +161,7 @@ TEST(light_component, update_aims_a_directional_light_along_the_node_world_forwa
 
 TEST(light_component, a_zero_scale_node_keeps_the_last_direction_instead_of_nan)
 {
-    context scene;
+    runtime::scene scene;
     node n;
     scene.root.add(n);
     auto owned = std::make_unique<rendering_engine::directional_light>();
@@ -183,7 +182,7 @@ TEST(light_component, a_zero_scale_node_keeps_the_last_direction_instead_of_nan)
 
 TEST(light_component, removing_the_component_unregisters_the_light)
 {
-    context scene;
+    runtime::scene scene;
     node n;
     scene.root.add(n);
     auto owned = std::make_unique<point_light>();

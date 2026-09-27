@@ -126,7 +126,7 @@ namespace
     }
 
     // The node in @p scene whose camera_component carries @p camera, or null.
-    runtime::node* find_camera_node(runtime::context& scene, const rendering_engine::camera* camera)
+    runtime::node* find_camera_node(runtime::scene& scene, const rendering_engine::camera* camera)
     {
         runtime::node* found = nullptr;
         scene.each<runtime::camera_component>(
@@ -229,7 +229,7 @@ GAME_MODULE()
     // The model goes into a scene of its own, which the engine unloads on
     // shutdown: the spawned nodes first, then the showcase holding the model
     // whose materials they drew with, all before the renderer tears down.
-    runtime::context& demo = runtime::current_engine().scenes->load("gltf_demo", runtime::load_mode::additive);
+    runtime::scene& demo = runtime::current_engine().scenes->load("gltf_demo", runtime::load_mode::additive);
     runtime::node& root = demo.create_node("gltf_demo");
     gltf_showcase* showcase = runtime::add_behavior<gltf_showcase>(root, std::move(model));
     if (showcase == nullptr)

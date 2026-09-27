@@ -100,8 +100,8 @@ namespace rendering_engine::gpu
      * Constructing one installs it as the reload
      * @ref create_library_shader_module registers modules with; at most
      * one is installed at a time, and destroying it uninstalls it. The
-     * renderer owns one for its device between @c context::init and
-     * @c context::quit and calls @ref poll once per frame, before the
+     * renderer owns one for its device between @c renderer::init and
+     * @c renderer::quit and calls @ref poll once per frame, before the
      * frame opens. Main-thread only.
      */
     struct shader_hot_reload

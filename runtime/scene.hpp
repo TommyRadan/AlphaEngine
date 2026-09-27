@@ -21,7 +21,7 @@
  */
 
 /**
- * @file scene_graph.hpp
+ * @file scene.hpp
  * @brief Scene graph subsystem entry point.
  */
 
@@ -80,7 +80,7 @@ namespace runtime
      * are applied at the end of the next @ref update as well, or immediately
      * by @ref apply_deferred.
      */
-    struct context
+    struct scene
     {
         /**
          * @brief RAII marker for a traversal in progress.
@@ -94,14 +94,14 @@ namespace runtime
          */
         struct traversal_scope
         {
-            explicit traversal_scope(context* scene) noexcept;
+            explicit traversal_scope(scene* scene) noexcept;
             ~traversal_scope();
 
             traversal_scope(const traversal_scope&) = delete;
             traversal_scope& operator=(const traversal_scope&) = delete;
 
         private:
-            context* m_scene;
+            scene* m_scene;
         };
 
     private:
@@ -118,13 +118,13 @@ namespace runtime
         std::vector<node*> m_doomed;
 
     public:
-        context();
-        ~context();
+        scene();
+        ~scene();
 
-        context(const context&) = delete;
-        context& operator=(const context&) = delete;
-        context(context&&) = delete;
-        context& operator=(context&&) = delete;
+        scene(const scene&) = delete;
+        scene& operator=(const scene&) = delete;
+        scene(scene&&) = delete;
+        scene& operator=(scene&&) = delete;
 
         /** @brief Initializes the scene graph subsystem. */
         void init();
@@ -417,7 +417,7 @@ namespace runtime
 
     /**
      * @brief Range over every node carrying all of @c C and @c Rest in a
-     *        scene; see @ref context::view.
+     *        scene; see @ref scene::view.
      *
      * Not copyable or movable (it holds the traversal marker); use it in
      * place, as a range-for subject or through @ref each.
@@ -522,23 +522,23 @@ namespace runtime
         }
 
     private:
-        friend struct context;
+        friend struct scene;
 
-        explicit component_view(context& scene) : m_scope{&scene}, m_pool{scene.components.find_pool<C>()} {}
+        explicit component_view(scene& scene) : m_scope{&scene}, m_pool{scene.components.find_pool<C>()} {}
 
-        context::traversal_scope m_scope;
+        scene::traversal_scope m_scope;
         component_store::typed_pool<C>* m_pool;
     };
 
     template<typename C, typename Fn>
-    void context::each(Fn&& fn)
+    void scene::each(Fn&& fn)
     {
         traversal_scope traversal{this};
         components.each<C>(std::forward<Fn>(fn));
     }
 
     template<typename C, typename... Rest>
-    component_view<C, Rest...> context::view()
+    component_view<C, Rest...> scene::view()
     {
         return component_view<C, Rest...>{*this};
     }

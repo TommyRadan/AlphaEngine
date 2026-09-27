@@ -29,7 +29,7 @@
 #include <core/log.hpp>
 #include <core/time.hpp>
 #include <runtime/engine.hpp>
-#include <runtime/scene_graph.hpp>
+#include <runtime/scene.hpp>
 
 runtime::behavior_component::behavior_component(std::unique_ptr<behavior> logic) noexcept : m_behavior{std::move(logic)}
 {
@@ -79,7 +79,7 @@ void runtime::behavior_component::fixed_step(behavior& logic, float delta_time)
     // does around on_update: the node APIs then refuse (debug) or defer
     // (release) structural changes, so the behaviour cannot, for one, free
     // itself while its hook is still running.
-    context::traversal_scope traversal{logic.m_owner->scene()};
+    scene::traversal_scope traversal{logic.m_owner->scene()};
     if (begin_update(logic))
     {
         logic.on_fixed_update(delta_time);

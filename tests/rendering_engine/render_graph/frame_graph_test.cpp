@@ -99,7 +99,7 @@ namespace
         return [&log, name = std::move(name)](gpu::command_encoder&, const frame_context&) { log.push_back(name); };
     }
 
-    // The engine's built-in pass list as rendering_engine::context::init
+    // The engine's built-in pass list as rendering_engine::renderer::init
     // registers it (debug build), with each pass's declare_io transcribed.
     // With temporal AA on the velocity and TAA passes are present, the TAA
     // history is imported, and FXAA reads the TAA resolve; with it off

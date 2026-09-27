@@ -86,7 +86,7 @@ namespace runtime
         void on_active_changed(node& owner, bool active);
         /**
          * @brief A component with the same settings and current velocities,
-         *        for @c context::clone. Listeners are not copied.
+         *        for @c scene::clone. Listeners are not copied.
          */
         rigidbody_component clone() const;
 

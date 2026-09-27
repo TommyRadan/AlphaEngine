@@ -71,7 +71,7 @@
  * same document.
  *
  * All file I/O goes through the VFS (@c core::default_vfs). Loading and
- * instantiating build nodes with @c context::create_node and attach
+ * instantiating build nodes with @c scene::create_node and attach
  * components, so they must not run while the target scene is being updated.
  * Main-thread-only.
  */
@@ -88,7 +88,7 @@
 
 namespace runtime
 {
-    struct context;
+    struct scene;
     struct node;
     struct scene_manager;
     struct scene_io;
@@ -152,16 +152,16 @@ namespace runtime
     prefab_document save_subtree(node& root);
 
     /** @brief Saves every node under @p scene's root (the root itself is implicit). */
-    scene_document save_scene(context& scene);
+    scene_document save_scene(scene& scene);
 
     /** @brief @ref save_scene into the file @p path (through the VFS); false, with an error logged, on failure. */
-    bool save_scene(context& scene, const std::filesystem::path& path);
+    bool save_scene(scene& scene, const std::filesystem::path& path);
 
     /**
      * @brief Builds @p document's nodes and components under @p parent and
      *        returns the nodes created at the top level.
      *
-     * Each node is created with @c context::create_node in @p parent's
+     * Each node is created with @c scene::create_node in @p parent's
      * scene, posed, given its components — built by their registered
      * factories, their fields applied before they attach — and then its
      * active flag, so a disabled node's components start hidden. Problems
@@ -183,7 +183,7 @@ namespace runtime
      * first, so loading a file again replaces it. Not callable while the
      * scenes are updating.
      */
-    context* load_scene(scene_manager& scenes, const std::filesystem::path& path, bool additive = false);
+    scene* load_scene(scene_manager& scenes, const std::filesystem::path& path, bool additive = false);
 
     /**
      * @brief Keeps @p resource alive until the @ref instantiate (or

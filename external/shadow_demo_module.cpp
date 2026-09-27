@@ -29,7 +29,7 @@
 #include <rendering_engine/renderables/premade_3d/box.hpp>
 #include <rendering_engine/renderables/premade_3d/plane.hpp>
 #include <rendering_engine/renderables/premade_3d/sphere.hpp>
-#include <rendering_engine/rendering_engine.hpp>
+#include <rendering_engine/renderer.hpp>
 #include <rendering_engine/util/color.hpp>
 #include <runtime/components/light_component.hpp>
 #include <runtime/components/renderable_component.hpp>
@@ -158,7 +158,7 @@ namespace
     // Uploads @p shape and hangs it on a new child of @p parent at @p position.
     template<typename Shape>
     runtime::node&
-    spawn_prop(runtime::context& scene, runtime::node& parent, const math::vec3& position, std::unique_ptr<Shape> shape)
+    spawn_prop(runtime::scene& scene, runtime::node& parent, const math::vec3& position, std::unique_ptr<Shape> shape)
     {
         shape->upload();
         runtime::node& prop = scene.create_node({}, &parent);

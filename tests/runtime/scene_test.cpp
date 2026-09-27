@@ -1,4 +1,4 @@
-// Unit tests for runtime::context: the per-frame traversal (effective-active
+// Unit tests for runtime::scene: the per-frame traversal (effective-active
 // gating), the deferred command queue (destroy / remove_component / reparent /
 // set_active from inside a component hook), on_destroy dispatch when a store
 // dies with components in it, ancestor-cycle rejection in node::add, and
@@ -13,10 +13,9 @@
 
 #include <runtime/component.hpp>
 #include <runtime/node.hpp>
-#include <runtime/scene_graph.hpp>
+#include <runtime/scene.hpp>
 
 using runtime::component_store;
-using runtime::context;
 using runtime::node;
 
 namespace
@@ -77,7 +76,7 @@ namespace
 
 TEST(scene_graph, root_is_scoped_to_the_scene_store_and_knows_its_scene)
 {
-    context scene;
+    runtime::scene scene;
     EXPECT_EQ(scene.root.store(), &scene.components);
     EXPECT_EQ(scene.components.scene(), &scene);
     EXPECT_EQ(scene.root.scene(), &scene);
@@ -96,7 +95,7 @@ TEST(scene_graph, root_is_scoped_to_the_scene_store_and_knows_its_scene)
 
 TEST(scene_graph, update_dispatches_on_update_only_to_effectively_active_nodes)
 {
-    context scene;
+    runtime::scene scene;
     hook_log parent_log;
     hook_log child_log;
     node parent;
@@ -124,7 +123,7 @@ TEST(scene_graph, update_dispatches_on_update_only_to_effectively_active_nodes)
 
 TEST(scene_graph, a_node_removed_from_a_disabled_parent_is_active_again_as_a_root)
 {
-    context scene;
+    runtime::scene scene;
     hook_log log;
     node parent;
     node child;
@@ -147,7 +146,7 @@ TEST(scene_graph, a_node_removed_from_a_disabled_parent_is_active_again_as_a_roo
 
 TEST(scene_graph, children_orphaned_by_a_dying_disabled_parent_are_active_again)
 {
-    context scene;
+    runtime::scene scene;
     hook_log log;
     node child;
     {
@@ -165,7 +164,7 @@ TEST(scene_graph, children_orphaned_by_a_dying_disabled_parent_are_active_again)
 
 TEST(scene_graph, is_traversing_is_true_only_inside_the_walk)
 {
-    context scene;
+    runtime::scene scene;
     hook_log log;
     node n;
     scene.root.add(n);
@@ -184,7 +183,7 @@ TEST(scene_graph, is_traversing_is_true_only_inside_the_walk)
 
 TEST(scene_graph, defer_destroy_from_on_update_detaches_frees_components_and_releases)
 {
-    context scene;
+    runtime::scene scene;
     hook_log log;
     auto owned = std::make_unique<node>();
     node* raw = owned.get();
@@ -223,7 +222,7 @@ TEST(scene_graph, defer_destroy_from_on_update_detaches_frees_components_and_rel
 
 TEST(scene_graph, defer_destroy_frees_the_components_of_the_whole_subtree)
 {
-    context scene;
+    runtime::scene scene;
     hook_log log;
     node parent;
     node child;
@@ -255,7 +254,7 @@ TEST(scene_graph, defer_destroy_frees_the_components_of_the_whole_subtree)
 
 TEST(scene_graph, defer_destroy_ignores_a_node_already_pending)
 {
-    context scene;
+    runtime::scene scene;
     node n;
     scene.root.add(n);
     int released = 0;
@@ -268,7 +267,7 @@ TEST(scene_graph, defer_destroy_ignores_a_node_already_pending)
 
 TEST(scene_graph, defer_set_active_applies_after_the_traversal)
 {
-    context scene;
+    runtime::scene scene;
     hook_log log;
     node n;
     scene.root.add(n);
@@ -293,7 +292,7 @@ TEST(scene_graph, defer_set_active_applies_after_the_traversal)
 
 TEST(scene_graph, defer_reparent_moves_or_detaches_after_the_traversal)
 {
-    context scene;
+    runtime::scene scene;
     hook_log log;
     node a;
     node b;
@@ -319,7 +318,7 @@ TEST(scene_graph, defer_reparent_moves_or_detaches_after_the_traversal)
 
 TEST(scene_graph, defer_remove_component_frees_the_component_after_the_traversal)
 {
-    context scene;
+    runtime::scene scene;
     hook_log log;
     node n;
     scene.root.add(n);
@@ -340,7 +339,7 @@ TEST(scene_graph, defer_remove_component_frees_the_component_after_the_traversal
 
 TEST(scene_graph, commands_run_in_queue_order_and_may_queue_more)
 {
-    context scene;
+    runtime::scene scene;
     std::vector<int> order;
     scene.defer(
         [&]
@@ -358,7 +357,7 @@ TEST(scene_graph, commands_run_in_queue_order_and_may_queue_more)
 
 TEST(scene_graph, commands_queued_outside_a_traversal_run_at_the_next_update)
 {
-    context scene;
+    runtime::scene scene;
     bool ran = false;
     scene.defer([&] { ran = true; });
     EXPECT_FALSE(ran);
@@ -386,7 +385,7 @@ TEST(scene_graph, a_scene_dying_with_nodes_attached_frees_and_unscopes_them)
     node survivor;
     node grandchild;
     {
-        context scene;
+        runtime::scene scene;
         scene.root.add(survivor);
         survivor.add(grandchild);
         survivor.add_component<recording_component>(recorder(log));
@@ -449,8 +448,8 @@ TEST(scene_graph, add_rejects_an_ancestor_cycle)
 TEST(scene_graph, reparenting_across_scenes_migrates_the_components)
 {
     hook_log log;
-    auto scene_a = std::make_unique<context>();
-    context scene_b;
+    auto scene_a = std::make_unique<runtime::scene>();
+    runtime::scene scene_b;
     node n;
     scene_a->root.add(n);
     n.add_component<recording_component>(recorder(log, 7));
@@ -480,8 +479,8 @@ TEST(scene_graph, reparenting_across_scenes_migrates_the_components)
 TEST(scene_graph, reparenting_across_scenes_migrates_the_whole_subtree)
 {
     hook_log log;
-    context scene_a;
-    context scene_b;
+    runtime::scene scene_a;
+    runtime::scene scene_b;
     node parent;
     node child;
     scene_a.root.add(parent);
@@ -498,7 +497,7 @@ TEST(scene_graph, reparenting_across_scenes_migrates_the_whole_subtree)
 TEST(scene_graph, a_parent_without_a_store_leaves_the_child_store_alone)
 {
     hook_log log;
-    context scene;
+    runtime::scene scene;
     node group; // never scoped
     node n;
     scene.root.add(n);
@@ -521,7 +520,7 @@ TEST(scene_graph_death, immediate_mutation_from_a_hook_asserts_in_debug_builds)
 {
     auto mutate_during_update = []
     {
-        context scene;
+        runtime::scene scene;
         hook_log log;
         node n;
         scene.root.add(n);

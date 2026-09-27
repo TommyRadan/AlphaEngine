@@ -35,7 +35,7 @@
 
 namespace runtime
 {
-    struct context;
+    struct scene;
 
     /** @brief How @ref scene_manager::load treats the scenes already loaded. */
     enum class load_mode
@@ -57,7 +57,7 @@ namespace runtime
      *   is never unloaded, so a @ref load_mode::single load leaves it alone:
      *   it is the place for what lives across levels.
      * - @ref load makes a named scene. A freshly loaded scene is empty and the
-     *   caller populates it (through @c context::create_node, or from a scene
+     *   caller populates it (through @c scene::create_node, or from a scene
      *   file with @c runtime::load_scene, runtime/scene_serializer.hpp);
      *   loading a name that is already loaded returns that scene.
      * - @ref unload quits and destroys a scene: its nodes are freed and their
@@ -114,7 +114,7 @@ namespace runtime
          * it), and @p name matching the persistent scene's name returns the
          * persistent scene.
          */
-        context& load(core::string_id name, load_mode mode = load_mode::single);
+        scene& load(core::string_id name, load_mode mode = load_mode::single);
 
         /**
          * @brief Unloads the scene named @p name. Returns false (with a
@@ -124,22 +124,22 @@ namespace runtime
         bool unload(core::string_id name);
 
         /** @brief Unloads @p scene; see @ref unload(core::string_id). */
-        bool unload(context& scene);
+        bool unload(scene& scene);
 
         /** @brief The loaded scene named @p name, or @c nullptr. */
-        context* find(core::string_id name) noexcept;
+        scene* find(core::string_id name) noexcept;
 
         /** @brief The name @p scene was loaded under, or the empty id if it is not loaded here. */
-        core::string_id name_of(const context& scene) const noexcept;
+        core::string_id name_of(const scene& scene) const noexcept;
 
         /** @brief The scene that is never unloaded. */
-        context& persistent_scene() noexcept;
+        scene& persistent_scene() noexcept;
 
         /** @brief The scene new content goes to by default. Never null. */
-        context& active_scene() noexcept;
+        scene& active_scene() noexcept;
 
         /** @brief Makes @p scene, which must be loaded here, the active scene. */
-        void set_active_scene(context& scene);
+        void set_active_scene(scene& scene);
 
         /**
          * @brief Adds @p scene to, or takes it out of, the active set by
@@ -147,10 +147,10 @@ namespace runtime
          *
          * Applied at the end of the scene's update when it is mid-traversal.
          */
-        void set_enabled(context& scene, bool enabled);
+        void set_enabled(scene& scene, bool enabled);
 
         /** @brief True while @p scene is in the active set (its root is enabled). */
-        bool is_enabled(const context& scene) const noexcept;
+        bool is_enabled(const scene& scene) const noexcept;
 
         /** @brief Number of loaded scenes, the persistent one included. */
         std::size_t scene_count() const noexcept;
@@ -162,7 +162,7 @@ namespace runtime
          * For enumerating every loaded scene, e.g. the debug overlay's
          * hierarchy panel; @p index must be less than @ref scene_count.
          */
-        context& scene_at(std::size_t index) noexcept;
+        scene& scene_at(std::size_t index) noexcept;
 
         /** @brief The name the scene at @p index was loaded under ("persistent" for index 0). */
         core::string_id name_at(std::size_t index) const noexcept;
@@ -171,12 +171,12 @@ namespace runtime
         struct entry
         {
             core::string_id name;
-            std::unique_ptr<context> scene;
+            std::unique_ptr<runtime::scene> scene;
             bool unload_pending{false};
         };
 
-        entry* find_entry(const context& scene) noexcept;
-        const entry* find_entry(const context& scene) const noexcept;
+        entry* find_entry(const scene& scene) noexcept;
+        const entry* find_entry(const scene& scene) const noexcept;
 
         // True while an unload now would pull a scene out from under a walk.
         bool busy() const noexcept;
@@ -189,7 +189,7 @@ namespace runtime
 
         // [0] is the persistent scene; the rest in load order.
         std::vector<entry> m_scenes;
-        context* m_active{nullptr};
+        scene* m_active{nullptr};
         bool m_updating{false};
     };
 } // namespace runtime

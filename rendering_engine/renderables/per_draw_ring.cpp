@@ -30,7 +30,7 @@
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/renderables/draw_item.hpp>
-#include <rendering_engine/rendering_engine.hpp>
+#include <rendering_engine/renderer.hpp>
 #include <rendering_engine/util/transform.hpp>
 #include <runtime/engine.hpp>
 

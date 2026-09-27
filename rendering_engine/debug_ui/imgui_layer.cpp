@@ -67,14 +67,14 @@
 #include <rendering_engine/post_settings.hpp>
 #include <rendering_engine/render_stats.hpp>
 #include <rendering_engine/renderables/model.hpp>
-#include <rendering_engine/rendering_engine.hpp>
+#include <rendering_engine/renderer.hpp>
 #include <rendering_engine/window.hpp>
 #include <runtime/components/camera_component.hpp>
 #include <runtime/components/light_component.hpp>
 #include <runtime/components/mesh_component.hpp>
 #include <runtime/engine.hpp>
 #include <runtime/node.hpp>
-#include <runtime/scene_graph.hpp>
+#include <runtime/scene.hpp>
 #include <runtime/scene_manager.hpp>
 #include <SDL3/SDL.h>
 
@@ -314,7 +314,7 @@ namespace rendering_engine::debug_ui
         }
 
         // One texture the viewer can show, paired with the label it lists
-        // it under. Built fresh every frame from the context's read-only
+        // it under. Built fresh every frame from the renderer's read-only
         // accessors, so a target that comes and goes (temporal AA off, no
         // environment set) appears and disappears with it.
         struct render_target_slot
@@ -620,7 +620,7 @@ namespace rendering_engine::debug_ui
             {
                 for (std::size_t i = 0; i < scenes.scene_count(); ++i)
                 {
-                    runtime::context& scene = scenes.scene_at(i);
+                    runtime::scene& scene = scenes.scene_at(i);
                     const char* name = scenes.name_at(i).c_str();
                     ImGui::PushID(static_cast<int>(i));
                     const bool open =
@@ -1390,7 +1390,7 @@ namespace rendering_engine::debug_ui
         // Runtime tuning for the post-processing chain: tonemap
         // exposure/operator, auto exposure, colour grading, volumetric fog,
         // motion blur, bloom, temporal AA feedback and FXAA. Every edit is
-        // written back through context::set_post_settings, the same path
+        // written back through renderer::set_post_settings, the same path
         // any other caller would use, so it takes effect on the next
         // recorded frame (tonemap immediately, since its setters rewrite
         // their UBO on the spot). TAA's own enabled checkbox is shown

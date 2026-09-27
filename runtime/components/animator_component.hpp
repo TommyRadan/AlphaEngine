@@ -120,13 +120,13 @@ namespace runtime
 
         /**
          * @brief A new animator over the same skeleton and clips, with the
-         *        same state machine and playback, for @c context::clone.
+         *        same state machine and playback, for @c scene::clone.
          *
          * The skeleton and clips are shared (both are immutable data), and
          * the state machine (states, transitions) and current playback
          * (layers and the current state) are copied, so the clone samples
          * the same pose the source does the moment it is made. Node and skin
-         * bindings are never copied: @c context::clone has no way to tell a
+         * bindings are never copied: @c scene::clone has no way to tell a
          * binding into the cloned subtree (which could be remapped to the
          * copy) from one to a node outside it (which could not), so a
          * binding of either kind is dropped, with a warning, and the clone

@@ -93,7 +93,7 @@ namespace runtime
 
         /**
          * @brief A component carrying @ref behavior::clone of this one's
-         *        behaviour, for @c context::clone.
+         *        behaviour, for @c scene::clone.
          *
          * Empty — so the store leaves the component off the copy — when the
          * behaviour's type does not implement @ref behavior::clone, with a

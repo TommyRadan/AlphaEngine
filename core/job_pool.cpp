@@ -20,7 +20,7 @@
  * SOFTWARE.
  */
 
-#include <core/jobs.hpp>
+#include <core/job_pool.hpp>
 
 #include <exception>
 #include <utility>
@@ -43,11 +43,11 @@ namespace
         }
         catch (const std::exception& e)
         {
-            LOG_ERR("jobs: job threw an exception: %s", e.what());
+            LOG_ERR("job_pool: job threw an exception: %s", e.what());
         }
         catch (...)
         {
-            LOG_ERR("jobs: job threw a non-standard exception");
+            LOG_ERR("job_pool: job threw a non-standard exception");
         }
     }
 
@@ -62,7 +62,7 @@ namespace
     };
 } // namespace
 
-core::jobs::jobs()
+core::job_pool::job_pool()
 {
     // Leave one hardware thread for the main thread, which participates in
     // every wait. hardware_concurrency() can report 0 (unknown); treat that —
@@ -76,10 +76,10 @@ core::jobs::jobs()
         m_workers.emplace_back([this] { worker_main(); });
     }
 
-    LOG_INF("jobs: worker pool started with %u worker thread(s)", count);
+    LOG_INF("job_pool: worker pool started with %u worker thread(s)", count);
 }
 
-core::jobs::~jobs()
+core::job_pool::~job_pool()
 {
     // Drain first: a job still queued or running here may reference engine
     // state that is torn down right after this pool, and joining a worker
@@ -100,12 +100,12 @@ core::jobs::~jobs()
     }
 }
 
-unsigned int core::jobs::worker_count() const noexcept
+unsigned int core::job_pool::worker_count() const noexcept
 {
     return static_cast<unsigned int>(m_workers.size());
 }
 
-void core::jobs::enqueue(job_fn body, priority level)
+void core::job_pool::enqueue(job_fn body, priority level)
 {
     {
         std::lock_guard<std::mutex> lock(m_mutex);
@@ -115,7 +115,7 @@ void core::jobs::enqueue(job_fn body, priority level)
     m_wake.notify_one();
 }
 
-bool core::jobs::try_pop_locked(priority floor, job_fn& out)
+bool core::job_pool::try_pop_locked(priority floor, job_fn& out)
 {
     std::deque<job_fn>* queue = nullptr;
     if (!m_high.empty())
@@ -135,7 +135,7 @@ bool core::jobs::try_pop_locked(priority floor, job_fn& out)
     return true;
 }
 
-void core::jobs::execute(job_fn& body)
+void core::job_pool::execute(job_fn& body)
 {
     invoke_logged(body);
     // The decrement carries the release so wait_idle's acquire load sees every
@@ -147,7 +147,7 @@ void core::jobs::execute(job_fn& body)
     }
 }
 
-bool core::jobs::run_one_pending(priority floor)
+bool core::job_pool::run_one_pending(priority floor)
 {
     job_fn body;
     {
@@ -161,7 +161,7 @@ bool core::jobs::run_one_pending(priority floor)
     return true;
 }
 
-void core::jobs::worker_main()
+void core::job_pool::worker_main()
 {
     for (;;)
     {
@@ -179,7 +179,7 @@ void core::jobs::worker_main()
     }
 }
 
-void core::jobs::parallel_for(std::size_t count, const std::function<void(std::size_t)>& body, std::size_t grain)
+void core::job_pool::parallel_for(std::size_t count, const std::function<void(std::size_t)>& body, std::size_t grain)
 {
     if (count == 0)
     {
@@ -247,7 +247,7 @@ void core::jobs::parallel_for(std::size_t count, const std::function<void(std::s
     state.done.wait(lock, [&state] { return state.remaining == 0; });
 }
 
-void core::jobs::dispatch(job_fn body, priority level)
+void core::job_pool::dispatch(job_fn body, priority level)
 {
     // With no workers the job would never be drained, so run it inline.
     if (m_workers.empty())
@@ -258,7 +258,7 @@ void core::jobs::dispatch(job_fn body, priority level)
     enqueue(std::move(body), level);
 }
 
-void core::jobs::wait_idle()
+void core::job_pool::wait_idle()
 {
     // Pitch in first, at either priority, then sleep until the workers retire
     // the last job.

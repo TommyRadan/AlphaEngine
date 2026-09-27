@@ -109,7 +109,7 @@ namespace rendering_engine
      * material was destroyed, say) is released, so layouts that come and
      * go do not pile up descriptor sets.
      *
-     * Owned by @ref context (created in @c init after the device, released
+     * Owned by @ref renderer (created in @c init after the device, released
      * in @c quit before it) and reached by the renderables through
      * @ref per_draw_binding. Main-thread only.
      */
@@ -130,7 +130,7 @@ namespace rendering_engine
 
         // Open a frame: release last frame's spill buffers (growing the
         // main buffer if it spilled), move to the next region and rewind.
-        // Called by @c context::render right after @c device::begin_frame,
+        // Called by @c renderer::render right after @c device::begin_frame,
         // before any pass collects.
         void begin_frame();
 

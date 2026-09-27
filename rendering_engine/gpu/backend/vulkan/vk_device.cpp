@@ -1921,7 +1921,7 @@ namespace rendering_engine::gpu::backend::vulkan
             return;
         }
         // The renderer's window_resized listener is the one caller
-        // (plus context::init, once, with the drawable's pixel size). A
+        // (plus renderer::init, once, with the drawable's pixel size). A
         // hint that matches the live swapchain is a no-op — which is
         // how a resize the acquire or present already recovered from
         // avoids a second rebuild. Anything else — a different size,

@@ -25,7 +25,7 @@
 #include <core/math/math.hpp>
 #include <rendering_engine/materials/standard_material.hpp>
 #include <rendering_engine/renderables/premade_3d/box.hpp>
-#include <rendering_engine/rendering_engine.hpp>
+#include <rendering_engine/renderer.hpp>
 #include <rendering_engine/util/color.hpp>
 #include <runtime/components/collider_component.hpp>
 #include <runtime/components/renderable_component.hpp>

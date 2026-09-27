@@ -21,7 +21,7 @@
  */
 
 /**
- * @file rendering_engine.hpp
+ * @file renderer.hpp
  * @brief Top-level entry point for the rendering subsystem.
  */
 
@@ -89,14 +89,14 @@ namespace rendering_engine
      * @ref quit tears them down in reverse order. All methods must be
      * called from the main thread that owns the GL context.
      */
-    struct context
+    struct renderer
     {
-        context();
-        // Defined out-of-line in rendering_engine.cpp so the
+        renderer();
+        // Defined out-of-line in renderer.cpp so the
         // std::vector<std::unique_ptr<pass>> destructor is only
         // instantiated where @ref pass is a complete type. The
         // header keeps @c pass forward-declared.
-        ~context();
+        ~renderer();
 
         /**
          * @brief Initializes the window, GL context and built-in passes / materials.
@@ -120,7 +120,7 @@ namespace rendering_engine
          * (@ref active_camera: the highest-priority attached, enabled
          * camera) evaluated once here, so a camera destroyed or
          * disabled since the last frame is replaced by the runner-up
-         * without any owner bookkeeping. The context is the only
+         * without any owner bookkeeping. The renderer is the only
          * place that advances the frame index, the jitter sequence
          * and the previous-frame matrix, and it drops the latter
          * across a no-camera frame or a change of arbitrated camera.
@@ -159,7 +159,7 @@ namespace rendering_engine
          * it to every attached camera's @ref camera::set_aspect_ratio and
          * to cameras attached later, so the projection matches the new
          * drawable. Passes that sample a texture owned by
-         * the context or another pass rebind on the next frame through
+         * the renderer or another pass rebind on the next frame through
          * the handle comparison they make in @c record, and the
          * temporal-AA jitter is derived from the recorded size on every
          * @ref render, so it needs no notification. Shadow maps are
@@ -235,7 +235,7 @@ namespace rendering_engine
          * different pipeline variant. If a scene environment is set (see
          * @ref set_environment) it is applied to the new material so it
          * picks up image-based ambient immediately. The returned material
-         * must not outlive the rendering context.
+         * must not outlive the renderer.
          */
         std::unique_ptr<standard_material> create_standard_material();
 
@@ -289,7 +289,7 @@ namespace rendering_engine
          * template of its own (@ref grid_material::create_template),
          * which it keeps alive; repeat compiles of a distance are served
          * from the SPIR-V cache. Valid between @ref init and @ref quit;
-         * the returned material must not outlive the rendering context.
+         * the returned material must not outlive the renderer.
          */
         std::unique_ptr<grid_material> create_grid_material(float fade_distance);
 

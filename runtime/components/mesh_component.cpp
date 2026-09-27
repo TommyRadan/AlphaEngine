@@ -24,7 +24,7 @@
 
 #include <core/log.hpp>
 #include <rendering_engine/mesh/mesh.hpp>
-#include <rendering_engine/rendering_engine.hpp>
+#include <rendering_engine/renderer.hpp>
 #include <runtime/engine.hpp>
 #include <runtime/node.hpp>
 

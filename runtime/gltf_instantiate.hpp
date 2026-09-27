@@ -74,7 +74,7 @@ namespace runtime
      * change that. The animator is disabled along with that root node.
      *
      * The nodes are owned by @p parent's scene (made with
-     * @c context::create_node), and the returned vector names the spawned
+     * @c scene::create_node), and the returned vector names the spawned
      * root nodes. The mesh and animator components draw with @p model's
      * materials and skeleton, so the nodes must be gone before @p model is
      * destroyed: @c destroy_node the roots (a subtree goes with its root, and

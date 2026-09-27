@@ -28,7 +28,7 @@
 #include <rendering_engine/materials/instanced_material.hpp>
 #include <rendering_engine/mesh/vertex.hpp>
 #include <rendering_engine/renderables/instanced_mesh.hpp>
-#include <rendering_engine/rendering_engine.hpp>
+#include <rendering_engine/renderer.hpp>
 #include <rendering_engine/util/color.hpp>
 #include <runtime/components/renderable_component.hpp>
 #include <runtime/engine.hpp>

@@ -20,7 +20,7 @@
  * SOFTWARE.
  */
 
-#include <rendering_engine/rendering_engine.hpp>
+#include <rendering_engine/renderer.hpp>
 
 #include <core/event_engine.hpp>
 #include <core/log.hpp>
@@ -137,10 +137,10 @@ namespace
     }
 } // namespace
 
-rendering_engine::context::context() = default;
-rendering_engine::context::~context() = default;
+rendering_engine::renderer::renderer() = default;
+rendering_engine::renderer::~renderer() = default;
 
-void rendering_engine::context::init()
+void rendering_engine::renderer::init()
 {
     LOG_INF("Init Rendering Engine");
 
@@ -463,7 +463,7 @@ void rendering_engine::context::init()
 #endif
 }
 
-void rendering_engine::context::quit()
+void rendering_engine::renderer::quit()
 {
     auto& eng = runtime::current_engine();
 
@@ -547,7 +547,7 @@ void rendering_engine::context::quit()
     LOG_INF("Quit Rendering Engine");
 }
 
-void rendering_engine::context::render()
+void rendering_engine::renderer::render()
 {
     auto& eng = runtime::current_engine();
     auto& gpu = *eng.gpu;
@@ -706,12 +706,12 @@ void rendering_engine::context::render()
     m_in_frame = false;
 }
 
-void rendering_engine::context::on_resize(uint32_t pixel_width, uint32_t pixel_height)
+void rendering_engine::renderer::on_resize(uint32_t pixel_width, uint32_t pixel_height)
 {
     // The listener that calls this runs from the window's event pump,
     // never from inside render(): the targets released below may still be
     // bound to the frame being recorded otherwise.
-    assert(!m_in_frame && "context::on_resize must not run while a frame is being recorded");
+    assert(!m_in_frame && "renderer::on_resize must not run while a frame is being recorded");
 
     // A zero dimension is a minimised window; the main loop skips whole
     // frames until it is restored (and the restore reports the real size),
@@ -729,7 +729,7 @@ void rendering_engine::context::on_resize(uint32_t pixel_width, uint32_t pixel_h
     auto& eng = runtime::current_engine();
     auto& gpu = *eng.gpu;
 
-    // Recreate the context-owned targets: new ones first, so every
+    // Recreate the renderer-owned targets: new ones first, so every
     // consumer that compares the handle it bound against the one
     // frame_context publishes (tonemap, bloom, the velocity pass's depth,
     // the TAA resolve's LDR input) sees a different handle next frame;
@@ -770,7 +770,7 @@ void rendering_engine::context::on_resize(uint32_t pixel_width, uint32_t pixel_h
     LOG_INF("Rendering Engine: render targets resized to %ux%u", pixel_width, pixel_height);
 }
 
-void rendering_engine::context::create_color_targets(uint32_t width, uint32_t height)
+void rendering_engine::renderer::create_color_targets(uint32_t width, uint32_t height)
 {
     auto& gpu = *runtime::current_engine().gpu;
 
@@ -803,7 +803,7 @@ void rendering_engine::context::create_color_targets(uint32_t width, uint32_t he
     m_target_height = height;
 }
 
-void rendering_engine::context::release_color_targets()
+void rendering_engine::renderer::release_color_targets()
 {
     auto& gpu = *runtime::current_engine().gpu;
 
@@ -823,7 +823,7 @@ void rendering_engine::context::release_color_targets()
     m_target_height = 0;
 }
 
-void rendering_engine::context::register_scene_renderable(renderable* r)
+void rendering_engine::renderer::register_scene_renderable(renderable* r)
 {
     if (r != nullptr)
     {
@@ -831,13 +831,13 @@ void rendering_engine::context::register_scene_renderable(renderable* r)
     }
 }
 
-void rendering_engine::context::unregister_scene_renderable(renderable* r)
+void rendering_engine::renderer::unregister_scene_renderable(renderable* r)
 {
     m_scene_renderables.erase(std::remove(m_scene_renderables.begin(), m_scene_renderables.end(), r),
                               m_scene_renderables.end());
 }
 
-void rendering_engine::context::register_ui_renderable(renderable* r)
+void rendering_engine::renderer::register_ui_renderable(renderable* r)
 {
     if (r != nullptr)
     {
@@ -845,12 +845,12 @@ void rendering_engine::context::register_ui_renderable(renderable* r)
     }
 }
 
-void rendering_engine::context::unregister_ui_renderable(renderable* r)
+void rendering_engine::renderer::unregister_ui_renderable(renderable* r)
 {
     m_ui_renderables.erase(std::remove(m_ui_renderables.begin(), m_ui_renderables.end(), r), m_ui_renderables.end());
 }
 
-void rendering_engine::context::register_debug_renderable(renderable* r)
+void rendering_engine::renderer::register_debug_renderable(renderable* r)
 {
     if (r != nullptr)
     {
@@ -858,84 +858,84 @@ void rendering_engine::context::register_debug_renderable(renderable* r)
     }
 }
 
-void rendering_engine::context::unregister_debug_renderable(renderable* r)
+void rendering_engine::renderer::unregister_debug_renderable(renderable* r)
 {
     m_debug_renderables.erase(std::remove(m_debug_renderables.begin(), m_debug_renderables.end(), r),
                               m_debug_renderables.end());
 }
 
-rendering_engine::basic_material& rendering_engine::context::get_basic_material()
+rendering_engine::basic_material& rendering_engine::renderer::get_basic_material()
 {
     return *m_basic_material;
 }
 
-rendering_engine::instanced_material& rendering_engine::context::get_instanced_material()
+rendering_engine::instanced_material& rendering_engine::renderer::get_instanced_material()
 {
     return *m_instanced_material;
 }
 
-rendering_engine::phong_material& rendering_engine::context::get_phong_material()
+rendering_engine::phong_material& rendering_engine::renderer::get_phong_material()
 {
     return *m_phong_material;
 }
 
-rendering_engine::standard_material& rendering_engine::context::get_standard_material()
+rendering_engine::standard_material& rendering_engine::renderer::get_standard_material()
 {
     return *m_standard_material;
 }
 
-rendering_engine::points_material& rendering_engine::context::get_points_material()
+rendering_engine::points_material& rendering_engine::renderer::get_points_material()
 {
     return *m_points_material;
 }
 
-rendering_engine::line_material& rendering_engine::context::get_line_material()
+rendering_engine::line_material& rendering_engine::renderer::get_line_material()
 {
     return *m_line_material;
 }
 
-rendering_engine::line_material& rendering_engine::context::get_debug_line_material()
+rendering_engine::line_material& rendering_engine::renderer::get_debug_line_material()
 {
     return *m_debug_line_material;
 }
 
-rendering_engine::grid_material& rendering_engine::context::get_grid_material()
+rendering_engine::grid_material& rendering_engine::renderer::get_grid_material()
 {
     return *m_grid_material;
 }
 
-std::unique_ptr<rendering_engine::grid_material> rendering_engine::context::create_grid_material(float fade_distance)
+std::unique_ptr<rendering_engine::grid_material> rendering_engine::renderer::create_grid_material(float fade_distance)
 {
     // The fade distance is a define baked into the template's shaders, so
     // the new instance gets a template of its own, built on the device and
     // against the scene per-frame layout the built-in grid template uses.
-    assert(m_grid_material != nullptr && "context::create_grid_material is only valid between init and quit");
+    assert(m_grid_material != nullptr && "renderer::create_grid_material is only valid between init and quit");
     const material_template& builtin = m_grid_material->get_template();
     return std::make_unique<grid_material>(
         grid_material::create_template(builtin.device(), builtin.descriptor().frame_layout, fade_distance));
 }
 
-rendering_engine::ui_material& rendering_engine::context::get_ui_material()
+rendering_engine::ui_material& rendering_engine::renderer::get_ui_material()
 {
     return *m_ui_material;
 }
 
-rendering_engine::per_draw_ring& rendering_engine::context::get_per_draw_ring()
+rendering_engine::per_draw_ring& rendering_engine::renderer::get_per_draw_ring()
 {
     return *m_per_draw_ring;
 }
 
-rendering_engine::tonemap_pass& rendering_engine::context::tonemap()
+rendering_engine::tonemap_pass& rendering_engine::renderer::tonemap()
 {
-    assert(m_tonemap != nullptr && "context::tonemap is only valid between init and quit");
+    assert(m_tonemap != nullptr && "renderer::tonemap is only valid between init and quit");
     return *m_tonemap;
 }
 
-void rendering_engine::context::set_post_settings(const post_settings& settings)
+void rendering_engine::renderer::set_post_settings(const post_settings& settings)
 {
     m_post_settings = settings;
 
-    // Temporal AA's presence is fixed at init (see context::init): a
+    // Temporal AA's presence is fixed at init (see renderer::init): a
     // caller cannot flip it from here, so the stored value always mirrors
     // reality rather than whatever was requested.
     m_post_settings.taa.enabled = (m_taa != nullptr);
@@ -943,7 +943,7 @@ void rendering_engine::context::set_post_settings(const post_settings& settings)
     // The tonemap pass already exposes live-tunable exposure / operator
     // setters that rewrite its UBO immediately and only on change; forward
     // to them now rather than waiting for the pass to read frame_context
-    // on the next record(), so a caller reading context::tonemap() right
+    // on the next record(), so a caller reading renderer::tonemap() right
     // after this call sees the new values.
     if (m_tonemap != nullptr)
     {
@@ -952,17 +952,17 @@ void rendering_engine::context::set_post_settings(const post_settings& settings)
     }
 }
 
-const rendering_engine::post_settings& rendering_engine::context::get_post_settings() const
+const rendering_engine::post_settings& rendering_engine::renderer::get_post_settings() const
 {
     return m_post_settings;
 }
 
-bool rendering_engine::context::grading_lut_loaded() const
+bool rendering_engine::renderer::grading_lut_loaded() const
 {
     return m_grading_lut != nullptr && m_grading_lut_path == m_post_settings.grading.lut;
 }
 
-void rendering_engine::context::update_grading_lut()
+void rendering_engine::renderer::update_grading_lut()
 {
     const std::string& path = m_post_settings.grading.lut;
     if (path == m_grading_lut_path)
@@ -1018,7 +1018,7 @@ void rendering_engine::context::update_grading_lut()
             static_cast<unsigned int>(size));
 }
 
-void rendering_engine::context::set_depth_prepass(bool enabled)
+void rendering_engine::renderer::set_depth_prepass(bool enabled)
 {
     if (enabled != m_depth_prepass_enabled)
     {
@@ -1027,62 +1027,62 @@ void rendering_engine::context::set_depth_prepass(bool enabled)
     m_depth_prepass_enabled = enabled;
 }
 
-bool rendering_engine::context::depth_prepass_enabled() const
+bool rendering_engine::renderer::depth_prepass_enabled() const
 {
     return m_depth_prepass_enabled;
 }
 
-const rendering_engine::render_stats& rendering_engine::context::get_render_stats() const
+const rendering_engine::render_stats& rendering_engine::renderer::get_render_stats() const
 {
     return m_render_stats;
 }
 
-const rendering_engine::gpu_profiler& rendering_engine::context::get_gpu_profiler() const
+const rendering_engine::gpu_profiler& rendering_engine::renderer::get_gpu_profiler() const
 {
     return m_gpu_profiler;
 }
 
-rendering_engine::gpu::texture rendering_engine::context::scene_color_texture() const
+rendering_engine::gpu::texture rendering_engine::renderer::scene_color_texture() const
 {
     return m_scene_color_texture;
 }
 
-rendering_engine::gpu::texture rendering_engine::context::scene_depth_texture() const
+rendering_engine::gpu::texture rendering_engine::renderer::scene_depth_texture() const
 {
     return runtime::current_engine().gpu->render_target_depth_texture(m_scene_color_target);
 }
 
-rendering_engine::gpu::texture rendering_engine::context::ldr_color_texture() const
+rendering_engine::gpu::texture rendering_engine::renderer::ldr_color_texture() const
 {
     return m_ldr_color_texture;
 }
 
-rendering_engine::gpu::texture rendering_engine::context::velocity_texture() const
+rendering_engine::gpu::texture rendering_engine::renderer::velocity_texture() const
 {
     return m_velocity != nullptr ? m_velocity->velocity_texture() : gpu::texture{};
 }
 
-rendering_engine::gpu::texture rendering_engine::context::taa_resolve_texture() const
+rendering_engine::gpu::texture rendering_engine::renderer::taa_resolve_texture() const
 {
     return m_taa != nullptr ? m_taa->output_texture() : gpu::texture{};
 }
 
-rendering_engine::gpu::texture rendering_engine::context::directional_shadow_map() const
+rendering_engine::gpu::texture rendering_engine::renderer::directional_shadow_map() const
 {
     return m_shadow != nullptr ? m_shadow->shadow_map() : gpu::texture{};
 }
 
-rendering_engine::gpu::texture rendering_engine::context::spot_shadow_map() const
+rendering_engine::gpu::texture rendering_engine::renderer::spot_shadow_map() const
 {
     return m_spot_shadow != nullptr ? m_spot_shadow->shadow_map() : gpu::texture{};
 }
 
-rendering_engine::gpu::texture rendering_engine::context::environment_brdf_lut() const
+rendering_engine::gpu::texture rendering_engine::renderer::environment_brdf_lut() const
 {
     return m_environment != nullptr ? m_environment->brdf_lut() : gpu::texture{};
 }
 
-std::unique_ptr<rendering_engine::standard_material> rendering_engine::context::create_standard_material()
+std::unique_ptr<rendering_engine::standard_material> rendering_engine::renderer::create_standard_material()
 {
     auto material = std::make_unique<standard_material>(m_standard_template);
     if (m_environment != nullptr)
@@ -1093,12 +1093,12 @@ std::unique_ptr<rendering_engine::standard_material> rendering_engine::context::
 }
 
 const std::shared_ptr<rendering_engine::material_template>&
-rendering_engine::context::get_standard_material_template() const
+rendering_engine::renderer::get_standard_material_template() const
 {
     return m_standard_template;
 }
 
-void rendering_engine::context::set_environment(const environment* env)
+void rendering_engine::renderer::set_environment(const environment* env)
 {
     m_environment = env;
 
@@ -1133,7 +1133,7 @@ void rendering_engine::context::set_environment(const environment* env)
     }
 }
 
-void rendering_engine::context::set_fog(const fog_settings& fog)
+void rendering_engine::renderer::set_fog(const fog_settings& fog)
 {
     m_fog = fog;
 }

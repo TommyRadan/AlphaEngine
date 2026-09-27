@@ -39,7 +39,7 @@ namespace rendering_engine
      * The temporal partner to @ref fxaa_pass: where FXAA smooths a single
      * frame spatially, TAA accumulates many sub-pixel-jittered frames into
      * one stable, supersampled image. The scene pass jitters the
-     * projection matrix by the Halton(2,3) offset the context publishes in
+     * projection matrix by the Halton(2,3) offset the renderer publishes in
      * @ref frame_context::jitter each frame (gated on the same
      * @c temporal_aa setting), so every frame samples the scene at a
      * slightly different sub-pixel position; blending those frames over

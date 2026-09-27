@@ -60,7 +60,7 @@ extern "C"
 
 namespace runtime
 {
-    struct context;
+    struct scene;
     struct node;
 
     namespace scripting
@@ -102,7 +102,7 @@ namespace runtime
             std::shared_ptr<node* const> root;
 
             /** @brief The scene; @ref raise when it has been unloaded. */
-            context& resolve() const;
+            scene& resolve() const;
         };
 
         /** @brief One entry of a script's @c properties table. */

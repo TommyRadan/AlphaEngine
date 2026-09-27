@@ -101,7 +101,7 @@ namespace runtime
         void on_active_changed(node& owner, bool active);
 
         /**
-         * @brief A new component with the same @ref config, for @c context::clone.
+         * @brief A new component with the same @ref config, for @c scene::clone.
          *
          * The clone starts with nothing playing (its own @c on_attach applies
          * @ref config::play_on_attach again) rather than sharing this

@@ -74,7 +74,7 @@ namespace runtime
         void on_active_changed(node& owner, bool active);
 
         /**
-         * @brief A new, unattached listener component, for @c context::clone.
+         * @brief A new, unattached listener component, for @c scene::clone.
          *
          * The copy attaches like any new listener when its cloned node is
          * added to the tree (so, as the most recently attached, it wins a

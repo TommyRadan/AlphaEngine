@@ -30,7 +30,7 @@
 #include <core/audio/audio.hpp>
 #include <core/event_engine.hpp>
 #include <core/input.hpp>
-#include <core/jobs.hpp>
+#include <core/job_pool.hpp>
 #include <core/log.hpp>
 #include <core/platform/platform.hpp>
 #include <core/settings.hpp>
@@ -41,7 +41,7 @@
 #include <rendering_engine/assets/gltf_material_factory.hpp>
 #include <rendering_engine/debug_ui/imgui_layer.hpp>
 #include <rendering_engine/gpu/device.hpp>
-#include <rendering_engine/rendering_engine.hpp>
+#include <rendering_engine/renderer.hpp>
 #include <rendering_engine/window.hpp>
 #include <runtime/game_module.hpp>
 #include <runtime/physics/physics_world.hpp>
@@ -105,7 +105,7 @@ namespace runtime
         // The worker pool has no dependencies and is brought up early so any
         // subsystem can hand it work during init or per frame. Its threads
         // idle until the first job is dispatched.
-        jobs = std::make_unique<core::jobs>();
+        jobs = std::make_unique<core::job_pool>();
         events = std::make_unique<core::event_bus>();
         audio = std::make_unique<core::audio>();
         // Maps physical input to actions and axes from the same raw events the window will emit once it starts
@@ -124,7 +124,7 @@ namespace runtime
         // The built-in materials inside @c renderer are deferred
         // until init() because they compile GL shader programs and
         // need the GL context to be live first.
-        renderer = std::make_unique<rendering_engine::context>();
+        renderer = std::make_unique<rendering_engine::renderer>();
         physics = std::make_unique<runtime::physics::world>();
         scripts = std::make_unique<runtime::script_host>();
         scenes = std::make_unique<runtime::scene_manager>();
@@ -165,7 +165,7 @@ namespace runtime
     {
         // Matches the old main_loop.cpp init sequence: events,
         // rendering, scene graph. The window/GL context is brought up
-        // inside rendering_engine::context::init(); it in turn
+        // inside rendering_engine::renderer::init(); it in turn
         // constructs the built-in passes and materials once GL is
         // alive.
         events->init();

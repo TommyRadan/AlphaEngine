@@ -267,7 +267,7 @@ namespace rendering_engine
 
         // No camera, or no scene depth to reconstruct positions from: clear
         // the motion to zero so the TAA resolve falls back to same-pixel
-        // history. The context drops the previous view-projection across
+        // history. The renderer drops the previous view-projection across
         // such a frame, so the next camera frame starts fresh (zero motion)
         // rather than reprojecting across the gap.
         if (ctx.active_camera == nullptr || !ctx.scene_depth_texture.valid())

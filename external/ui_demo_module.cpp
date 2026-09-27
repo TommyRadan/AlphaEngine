@@ -29,7 +29,7 @@
 #include <rendering_engine/assets/asset_cache.hpp>
 #include <rendering_engine/renderables/premade_2d/label.hpp>
 #include <rendering_engine/renderables/premade_2d/pane.hpp>
-#include <rendering_engine/rendering_engine.hpp>
+#include <rendering_engine/renderer.hpp>
 #include <runtime/engine.hpp>
 
 #include <cstdlib>

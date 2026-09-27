@@ -28,7 +28,7 @@ set(ALPHAENGINE_TEST_SOURCES_UNDER_TEST
     ${CMAKE_SOURCE_DIR}/core/math/vec3.cpp
     ${CMAKE_SOURCE_DIR}/core/math/vec4.cpp
     ${CMAKE_SOURCE_DIR}/core/event_engine.cpp
-    ${CMAKE_SOURCE_DIR}/core/jobs.cpp
+    ${CMAKE_SOURCE_DIR}/core/job_pool.cpp
     ${CMAKE_SOURCE_DIR}/core/log.cpp
     # platform — the OS services core/log, core/time and core/settings go
     # through (clock, paths, file I/O, native log capture). platform_sdl.cpp
@@ -52,11 +52,11 @@ set(ALPHAENGINE_TEST_SOURCES_UNDER_TEST
     ${CMAKE_SOURCE_DIR}/core/subscription.cpp
     ${CMAKE_SOURCE_DIR}/core/time.cpp
     ${CMAKE_SOURCE_DIR}/core/version.cpp
-    # runtime::node + runtime::context — scene-graph hierarchy, traversal and
+    # runtime::node + runtime::scene — scene-graph hierarchy, traversal and
     # the deferred command queue (depend only on math + the component store;
     # no renderer or device).
     ${CMAKE_SOURCE_DIR}/runtime/node.cpp
-    ${CMAKE_SOURCE_DIR}/runtime/scene_graph.cpp
+    ${CMAKE_SOURCE_DIR}/runtime/scene.cpp
     ${CMAKE_SOURCE_DIR}/rendering_engine/util/transform.cpp
     # light_component over the light registry — a plain vector of
     # back-pointers, no device — so a disabled node's light can be checked to
@@ -165,13 +165,13 @@ set(ALPHAENGINE_TEST_SOURCES
     core/math/conventions_test.cpp
     core/pool_test.cpp
     core/event_bus_test.cpp
-    core/jobs_test.cpp
+    core/job_pool_test.cpp
     core/log_test.cpp
     core/hash_test.cpp
     core/settings_test.cpp
     core/time_test.cpp
     runtime/node_test.cpp
-    runtime/scene_graph_test.cpp
+    runtime/scene_test.cpp
     runtime/light_component_test.cpp
     runtime/camera_component_test.cpp
     rendering_engine/assets/asset_cache_test.cpp
@@ -218,7 +218,7 @@ target_include_directories(AlphaEngineTests PRIVATE
 )
 
 # glm backs core/math + transforms, SDL3 backs core/platform (and the shader
-# cache's SDL_GetPrefPath), Threads backs core/jobs,
+# cache's SDL_GetPrefPath), Threads backs core/job_pool,
 # nlohmann_json backs core/settings_parse. The asset layer links no gpu
 # backend — the fake device stands in. shader_registry is the embedded
 # shaders/ tree the shader-library tests read, and glslang is the front end

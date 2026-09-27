@@ -40,7 +40,7 @@
 #include <rendering_engine/assets/cache_key.hpp>
 #include <rendering_engine/assets/gltf_importer.hpp>
 #include <rendering_engine/materials/standard_material.hpp>
-#include <rendering_engine/rendering_engine.hpp>
+#include <rendering_engine/renderer.hpp>
 #include <rendering_engine/util/color.hpp>
 #include <rendering_engine/util/image.hpp>
 #include <runtime/engine.hpp>

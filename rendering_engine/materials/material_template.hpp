@@ -27,7 +27,7 @@
  *
  * A @ref material_template is built once per material type (the
  * renderer makes one standard, one phong, ... template in
- * @c context::init) and shared by every @ref material instance of that
+ * @c renderer::init) and shared by every @ref material instance of that
  * type. It owns no per-instance state: an instance carries its own
  * parameter block, textures and per-material bind group and points at
  * the template for everything else.

@@ -29,7 +29,7 @@
 #include <rendering_engine/materials/phong_material.hpp>
 #include <rendering_engine/renderables/premade_3d/plane.hpp>
 #include <rendering_engine/renderables/premade_3d/sphere.hpp>
-#include <rendering_engine/rendering_engine.hpp>
+#include <rendering_engine/renderer.hpp>
 #include <rendering_engine/util/color.hpp>
 #include <runtime/components/light_component.hpp>
 #include <runtime/components/renderable_component.hpp>
@@ -64,7 +64,7 @@ namespace
     // and a point light's position on the node's, so the node is what places
     // it.
     runtime::node&
-    spawn_light(runtime::context& scene, runtime::node& parent, std::unique_ptr<rendering_engine::light> light)
+    spawn_light(runtime::scene& scene, runtime::node& parent, std::unique_ptr<rendering_engine::light> light)
     {
         runtime::node& holder = scene.create_node({}, &parent);
         holder.add_component(runtime::light_component{std::move(light)});

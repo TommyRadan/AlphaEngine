@@ -86,7 +86,7 @@ namespace rendering_engine
     {
         // Templates are released before the device tears its pools
         // down (the renderer drops its materials, and with them the
-        // templates they share, in context::quit), so the device is
+        // templates they share, in renderer::quit), so the device is
         // live here.
         for (auto& [key, pipeline] : m_pipelines)
         {

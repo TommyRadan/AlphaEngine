@@ -34,7 +34,7 @@
 #include <runtime/components/mesh_component.hpp>
 #include <runtime/engine.hpp>
 #include <runtime/node.hpp>
-#include <runtime/scene_graph.hpp>
+#include <runtime/scene.hpp>
 
 namespace runtime
 {
@@ -77,14 +77,16 @@ namespace runtime
         struct spawn_context
         {
             const rendering_engine::gltf_model& model;
-            context& scene;
+            runtime::scene& scene;
             std::vector<node*>& roots;
             std::vector<bool> visited;
             std::vector<node*> spawned;
             std::vector<bool> is_root;
             std::vector<std::vector<node*>> skinned_meshes;
 
-            spawn_context(const rendering_engine::gltf_model& in_model, context& in_scene, std::vector<node*>& in_roots)
+            spawn_context(const rendering_engine::gltf_model& in_model,
+                          runtime::scene& in_scene,
+                          std::vector<node*>& in_roots)
                 : model{in_model}, scene{in_scene}, roots{in_roots}, visited(in_model.nodes.size(), false),
                   spawned(in_model.nodes.size(), nullptr), is_root(in_model.nodes.size(), false),
                   skinned_meshes(in_model.nodes.size())
@@ -220,7 +222,7 @@ namespace runtime
     std::vector<node*> instantiate_gltf(const rendering_engine::gltf_model& model, node& parent)
     {
         std::vector<node*> roots;
-        context* scene = parent.scene();
+        runtime::scene* scene = parent.scene();
         if (scene == nullptr)
         {
             LOG_ERR("gltf: the parent node belongs to no scene; nothing instantiated");

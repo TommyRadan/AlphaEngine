@@ -150,7 +150,7 @@ namespace rendering_engine
             core::math::aabb bounds{};
         };
 
-        // Non-owning back-pointer to the engine context's scene-renderable
+        // Non-owning back-pointer to the renderer's scene-renderable
         // registry — the same one the scene and directional shadow passes walk.
         std::vector<renderable*>* m_registry;
 

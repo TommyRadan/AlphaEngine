@@ -50,7 +50,7 @@
 
 namespace core
 {
-    struct jobs;
+    struct job_pool;
 
     namespace platform
     {
@@ -93,7 +93,7 @@ namespace rendering_engine
      * its uploads through the same @c shared_ptr / @c weak_ptr machinery.
      *
      * Textures can also be loaded asynchronously (@ref load_texture_async):
-     * the file is read and decoded on the @c core::jobs worker pool and the
+     * the file is read and decoded on the @c core::job_pool worker pool and the
      * handle returned at once carries the cache's placeholder texture until
      * @ref pump, called once per frame from the main thread, performs the
      * device upload. A decode failure is logged and leaves the placeholder in
@@ -155,7 +155,7 @@ namespace rendering_engine
          *        none installed (or @c nullptr) the decode runs inline on
          *        the caller and still completes through @ref pump.
          */
-        void set_jobs(core::jobs* jobs);
+        void set_jobs(core::job_pool* jobs);
 
         /**
          * @brief Returns the texture decoded from @p path, loading it on a miss.
@@ -435,7 +435,7 @@ namespace rendering_engine
         std::unordered_map<std::string, std::weak_ptr<mesh_asset>> m_meshes;
 
         // Asynchronous loading.
-        core::jobs* m_jobs{nullptr};
+        core::job_pool* m_jobs{nullptr};
         std::shared_ptr<texture_asset> m_placeholder;
         mutable std::mutex m_pending_mutex;
         std::condition_variable m_pending_changed;

@@ -109,7 +109,7 @@
  *   commands are.
  * - a scene (@c node:scene()) — @c root, @c create_node([name[, parent]]),
  *   @c destroy_node(node) (at the end of the update, like
- *   @c context::destroy_node), @c find(name), @c valid().
+ *   @c scene::destroy_node), @c find(name), @c valid().
  * - components — a light: @c kind, @c color, @c intensity,
  *   @c cast_shadow, @c range, @c inner_angle, @c outer_angle (where the
  *   kind has them); a camera: @c priority, @c main, and for a perspective
