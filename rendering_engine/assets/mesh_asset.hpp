@@ -37,8 +37,8 @@
 #include <vector>
 
 #include <core/math/aabb.hpp>
+#include <rendering_engine/assets/vertex.hpp>
 #include <rendering_engine/gpu/handle.hpp>
-#include <rendering_engine/mesh/vertex.hpp>
 
 namespace rendering_engine
 {

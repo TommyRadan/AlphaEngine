@@ -27,8 +27,8 @@
 #include <cstdint>
 
 #include <rendering_engine/assets/asset_cache.hpp>
+#include <rendering_engine/assets/color.hpp>
 #include <rendering_engine/renderer.hpp>
-#include <rendering_engine/util/color.hpp>
 #include <runtime/engine.hpp>
 
 namespace rendering_engine
@@ -43,14 +43,14 @@ namespace rendering_engine
             return static_cast<uint8_t>(std::lround(std::clamp(value, 0.0f, 1.0f) * 255.0f));
         }
 
-        util::color to_color(const core::math::vec4& factor)
+        color to_color(const core::math::vec4& factor)
         {
-            return util::color{quantize(factor.x), quantize(factor.y), quantize(factor.z), quantize(factor.w)};
+            return color{quantize(factor.x), quantize(factor.y), quantize(factor.z), quantize(factor.w)};
         }
 
-        util::color to_color(const core::math::vec3& factor)
+        color to_color(const core::math::vec3& factor)
         {
-            return util::color{quantize(factor.x), quantize(factor.y), quantize(factor.z), 255};
+            return color{quantize(factor.x), quantize(factor.y), quantize(factor.z), 255};
         }
     } // namespace
 

@@ -37,10 +37,10 @@
 #include <core/vfs/vfs.hpp>
 #include <rendering_engine/assets/asset_device.hpp>
 #include <rendering_engine/assets/cache_key.hpp>
+#include <rendering_engine/assets/color.hpp>
 #include <rendering_engine/assets/gltf_importer.hpp>
+#include <rendering_engine/assets/image.hpp>
 #include <rendering_engine/gpu/device.hpp>
-#include <rendering_engine/util/color.hpp>
-#include <rendering_engine/util/image.hpp>
 
 namespace rendering_engine
 {
@@ -133,7 +133,7 @@ namespace rendering_engine
         // RGBA8 format for @p space. Shared by every loader so an image
         // file, an in-memory image and an asynchronous load all produce
         // identical textures.
-        uploaded_texture upload_image(const util::image& image, gpu::color_space space)
+        uploaded_texture upload_image(const image& image, gpu::color_space space)
         {
             auto& gpu = asset_device();
             gpu::texture_descriptor descriptor{};
@@ -151,7 +151,7 @@ namespace rendering_engine
 
             const gpu::texture texture = gpu.create_texture(descriptor);
             const size_t pixel_bytes =
-                static_cast<size_t>(image.get_width()) * static_cast<size_t>(image.get_height()) * sizeof(util::color);
+                static_cast<size_t>(image.get_width()) * static_cast<size_t>(image.get_height()) * sizeof(color);
             gpu.write_texture(texture, image.get_pixels(), pixel_bytes);
             gpu.generate_mipmaps(texture);
             return uploaded_texture{texture, descriptor.format, image.get_width(), image.get_height()};
@@ -355,7 +355,7 @@ namespace rendering_engine
             // 1x1 mid grey: samples as 0.5 in every channel whatever the
             // colour space of the asset standing in on it, which keeps a
             // still-loading albedo or data map from flashing black or white.
-            const util::image pixel{1, 1, util::color{128, 128, 128, 255}};
+            const image pixel{1, 1, color{128, 128, 128, 255}};
             m_placeholder = make_asset(upload_image(pixel, gpu::color_space::linear));
         }
         return m_placeholder;
@@ -734,7 +734,7 @@ namespace rendering_engine
     }
 
     std::shared_ptr<texture_asset>
-    asset_cache::load_texture_from_image(const std::string& key, const util::image& image, gpu::color_space space)
+    asset_cache::load_texture_from_image(const std::string& key, const image& image, gpu::color_space space)
     {
         const std::string full_key = texture_key(key, space);
         {
@@ -751,9 +751,8 @@ namespace rendering_engine
         return asset;
     }
 
-    std::shared_ptr<texture_asset> asset_cache::adopt_texture_image(const std::filesystem::path& path,
-                                                                    const util::image& image,
-                                                                    gpu::color_space space)
+    std::shared_ptr<texture_asset>
+    asset_cache::adopt_texture_image(const std::filesystem::path& path, const image& image, gpu::color_space space)
     {
         const std::string key = texture_key(path_key(path), space);
         {

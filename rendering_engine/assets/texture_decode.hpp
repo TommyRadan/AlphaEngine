@@ -34,8 +34,8 @@
 #include <string>
 #include <vector>
 
+#include <rendering_engine/assets/image.hpp>
 #include <rendering_engine/gpu/types.hpp>
-#include <rendering_engine/util/image.hpp>
 
 namespace rendering_engine
 {
@@ -80,7 +80,7 @@ namespace rendering_engine
      */
     struct decoded_texture
     {
-        util::image image;
+        rendering_engine::image image;
 
         // The pre-built levels (base level first, each tightly packed texels
         // or blocks of @ref format); empty for an @ref image.
@@ -103,7 +103,7 @@ namespace rendering_engine
      * @brief Decodes the texture file @p path, read through the VFS.
      *
      * A @c .ktx2 file goes through @ref decode_ktx2; anything else through
-     * @ref util::image (stb_image) as RGBA8. Safe to call from any thread:
+     * @ref image (stb_image) as RGBA8. Safe to call from any thread:
      * asynchronous loads run it on the worker pool. Throws
      * @c std::runtime_error (after logging) when the file cannot be read or
      * decoded.

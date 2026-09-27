@@ -27,9 +27,9 @@
 #include <unordered_map>
 
 #include <core/math/vec2.hpp>
-#include <rendering_engine/util/image.hpp>
+#include <rendering_engine/assets/image.hpp>
 
-namespace rendering_engine::util
+namespace rendering_engine
 {
     /**
      * @brief Where one glyph sits in its font's atlas and how it moves the pen.
@@ -114,4 +114,4 @@ namespace rendering_engine::util
         float m_descent{0.0f};
         float m_line_height{0.0f};
     };
-} // namespace rendering_engine::util
+} // namespace rendering_engine

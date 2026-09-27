@@ -20,7 +20,7 @@
  * SOFTWARE.
  */
 
-#include <rendering_engine/ibl/environment.hpp>
+#include <rendering_engine/lighting/environment_probe.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -267,25 +267,25 @@ namespace
 
 namespace rendering_engine
 {
-    environment::environment(uint32_t face_size, const std::array<std::vector<float>, 6>& faces)
+    environment_probe::environment_probe(uint32_t face_size, const std::array<std::vector<float>, 6>& faces)
     {
         build(face_size, faces);
     }
 
-    environment::environment(const std::array<util::image, 6>& faces)
+    environment_probe::environment_probe(const std::array<image, 6>& faces)
     {
         const uint32_t size = faces[0].get_width();
         std::array<std::vector<float>, 6> linear_faces{};
         for (size_t f = 0; f < 6; ++f)
         {
-            const util::image& image = faces[f];
+            const image& image = faces[f];
             std::vector<float>& dst = linear_faces[f];
             dst.resize(static_cast<size_t>(size) * size * 4);
             for (uint32_t y = 0; y < size; ++y)
             {
                 for (uint32_t x = 0; x < size; ++x)
                 {
-                    const util::color texel = image.get_pixel(x, y);
+                    const color texel = image.get_pixel(x, y);
                     float* out = &dst[(static_cast<size_t>(y) * size + x) * 4];
                     out[0] = srgb_to_linear(texel.r);
                     out[1] = srgb_to_linear(texel.g);
@@ -297,7 +297,7 @@ namespace rendering_engine
         build(size, linear_faces);
     }
 
-    environment::~environment()
+    environment_probe::~environment_probe()
     {
         auto& gpu = *runtime::current_engine().gpu;
         if (m_brdf_lut.valid())
@@ -322,7 +322,7 @@ namespace rendering_engine
         }
     }
 
-    void environment::build(uint32_t face_size, const std::array<std::vector<float>, 6>& faces)
+    void environment_probe::build(uint32_t face_size, const std::array<std::vector<float>, 6>& faces)
     {
         upload_source(face_size, faces);
 
@@ -337,7 +337,7 @@ namespace rendering_engine
         }
     }
 
-    void environment::upload_source(uint32_t face_size, const std::array<std::vector<float>, 6>& faces)
+    void environment_probe::upload_source(uint32_t face_size, const std::array<std::vector<float>, 6>& faces)
     {
         auto& gpu = *runtime::current_engine().gpu;
 
@@ -367,7 +367,7 @@ namespace rendering_engine
         gpu.generate_mipmaps(m_skybox);
     }
 
-    void environment::build_derived_cpu(uint32_t face_size, const std::array<std::vector<float>, 6>& faces)
+    void environment_probe::build_derived_cpu(uint32_t face_size, const std::array<std::vector<float>, 6>& faces)
     {
         auto& gpu = *runtime::current_engine().gpu;
 
@@ -480,7 +480,7 @@ namespace rendering_engine
                 brdf_size);
     }
 
-    void environment::build_derived_gpu(uint32_t face_size)
+    void environment_probe::build_derived_gpu(uint32_t face_size)
     {
         auto& gpu = *runtime::current_engine().gpu;
 

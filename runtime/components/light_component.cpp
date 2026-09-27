@@ -111,7 +111,7 @@ void runtime::light_component::on_update(node& owner)
     case rendering_engine::light_type::directional:
     {
         // Travel along the node's world forward: +X in the engine convention
-        // (core/math/math.hpp), matching util::transform::get_forward. Column
+        // (core/math/math.hpp), matching core::transform::get_forward. Column
         // 0 is the node's world +X axis; its length is the node's x scale, so
         // a zero-scale node yields no direction and the light keeps its last
         // one instead of taking a NaN into the lights UBO.

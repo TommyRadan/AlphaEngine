@@ -32,7 +32,7 @@
 #include <core/log.hpp>
 #include <core/platform/platform.hpp>
 #include <core/vfs/vfs.hpp>
-#include <rendering_engine/util/font.hpp>
+#include <rendering_engine/assets/font.hpp>
 
 #include <cstddef>
 #include <cstring>
@@ -67,7 +67,7 @@ namespace
     }
 } // namespace
 
-rendering_engine::util::font::font(const std::string& filename, float font_size)
+rendering_engine::font::font(const std::string& filename, float font_size)
 {
     // Negated, so a NaN size is rejected too.
     if (!(font_size > 0.0f))
@@ -249,39 +249,39 @@ rendering_engine::util::font::font(const std::string& filename, float font_size)
             m_kerning.size());
 }
 
-const rendering_engine::util::glyph_metrics* rendering_engine::util::font::glyph(char32_t codepoint) const
+const rendering_engine::glyph_metrics* rendering_engine::font::glyph(char32_t codepoint) const
 {
     const auto it = m_glyphs.find(codepoint);
     return it == m_glyphs.end() ? nullptr : &it->second;
 }
 
-float rendering_engine::util::font::kerning(char32_t left, char32_t right) const
+float rendering_engine::font::kerning(char32_t left, char32_t right) const
 {
     const auto it = m_kerning.find(kerning_key(left, right));
     return it == m_kerning.end() ? 0.0f : it->second;
 }
 
-float rendering_engine::util::font::size() const
+float rendering_engine::font::size() const
 {
     return m_size;
 }
 
-float rendering_engine::util::font::ascent() const
+float rendering_engine::font::ascent() const
 {
     return m_ascent;
 }
 
-float rendering_engine::util::font::descent() const
+float rendering_engine::font::descent() const
 {
     return m_descent;
 }
 
-float rendering_engine::util::font::line_height() const
+float rendering_engine::font::line_height() const
 {
     return m_line_height;
 }
 
-const rendering_engine::util::image& rendering_engine::util::font::atlas() const
+const rendering_engine::image& rendering_engine::font::atlas() const
 {
     return m_atlas;
 }

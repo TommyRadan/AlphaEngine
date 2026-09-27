@@ -23,6 +23,7 @@ set(ALPHAENGINE_TEST_SOURCES_UNDER_TEST
     ${CMAKE_SOURCE_DIR}/core/math/math.cpp
     ${CMAKE_SOURCE_DIR}/core/math/quat.cpp
     ${CMAKE_SOURCE_DIR}/core/math/sphere.cpp
+    ${CMAKE_SOURCE_DIR}/core/math/transform.cpp
     ${CMAKE_SOURCE_DIR}/core/math/trs.cpp
     ${CMAKE_SOURCE_DIR}/core/math/vec2.cpp
     ${CMAKE_SOURCE_DIR}/core/math/vec3.cpp
@@ -38,7 +39,7 @@ set(ALPHAENGINE_TEST_SOURCES_UNDER_TEST
     ${CMAKE_SOURCE_DIR}/core/platform/dynamic_library.cpp
     ${CMAKE_SOURCE_DIR}/core/platform/platform.cpp
     ${CMAKE_SOURCE_DIR}/core/platform/platform_sdl.cpp
-    # vfs — the mount table util/image, util/font, the asset cache and the
+    # vfs — the mount table assets/image, assets/font, the asset cache and the
     # glTF importer read through; with nothing mounted every path is native,
     # which is what the temp-file fixtures rely on.
     ${CMAKE_SOURCE_DIR}/core/vfs/directory_mount.cpp
@@ -57,7 +58,6 @@ set(ALPHAENGINE_TEST_SOURCES_UNDER_TEST
     # no renderer or device).
     ${CMAKE_SOURCE_DIR}/runtime/node.cpp
     ${CMAKE_SOURCE_DIR}/runtime/scene.cpp
-    ${CMAKE_SOURCE_DIR}/rendering_engine/util/transform.cpp
     # light_component over the light registry — a plain vector of
     # back-pointers, no device — so a disabled node's light can be checked to
     # leave registered_lights().
@@ -78,13 +78,14 @@ set(ALPHAENGINE_TEST_SOURCES_UNDER_TEST
     ${CMAKE_SOURCE_DIR}/rendering_engine/camera/orthographic_camera.cpp
     ${CMAKE_SOURCE_DIR}/rendering_engine/camera/perspective_camera.cpp
     ${CMAKE_SOURCE_DIR}/runtime/components/camera_component.cpp
-    # mesh/tangent — pure geometry over core/math (the gpu header it includes
-    # is types only, no device).
-    ${CMAKE_SOURCE_DIR}/rendering_engine/mesh/tangent.cpp
+    # assets/tangent — pure geometry over core/math (the gpu header it
+    # includes is types only, no device).
+    ${CMAKE_SOURCE_DIR}/rendering_engine/assets/tangent.cpp
     # asset_cache and the asset handles. These resolve their gpu device through
     # asset_device(), so the tests install a fake device and link none of the
     # gpu backends. device.cpp supplies the abstract device's out-of-line dtor;
-    # util/image and util/font back the texture/font loaders the cache compiles.
+    # assets/image and assets/font back the texture/font loaders the cache
+    # compiles.
     ${CMAKE_SOURCE_DIR}/rendering_engine/assets/asset_cache.cpp
     ${CMAKE_SOURCE_DIR}/rendering_engine/assets/asset_device.cpp
     ${CMAKE_SOURCE_DIR}/rendering_engine/assets/font_asset.cpp
@@ -94,8 +95,8 @@ set(ALPHAENGINE_TEST_SOURCES_UNDER_TEST
     # or libktx for .ktx2), linked against ktx_read below.
     ${CMAKE_SOURCE_DIR}/rendering_engine/assets/texture_decode.cpp
     ${CMAKE_SOURCE_DIR}/rendering_engine/gpu/device.cpp
-    ${CMAKE_SOURCE_DIR}/rendering_engine/util/image.cpp
-    ${CMAKE_SOURCE_DIR}/rendering_engine/util/font.cpp
+    ${CMAKE_SOURCE_DIR}/rendering_engine/assets/image.cpp
+    ${CMAKE_SOURCE_DIR}/rendering_engine/assets/font.cpp
     # gltf_importer — parses through the vendored cgltf header and builds
     # meshes / textures through the asset cache above; materials go through
     # the gltf_material_factory interface, so the tests pass a recorder and
@@ -105,8 +106,6 @@ set(ALPHAENGINE_TEST_SOURCES_UNDER_TEST
     # animations (math only).
     ${CMAKE_SOURCE_DIR}/rendering_engine/animation/animation_clip.cpp
     ${CMAKE_SOURCE_DIR}/rendering_engine/animation/skeleton.cpp
-    # mesh — the CPU-side vertex store behind model::upload_mesh (math only).
-    ${CMAKE_SOURCE_DIR}/rendering_engine/mesh/mesh.cpp
     # sdl_input — the SDL keycode / button / axis -> engine enum translation
     # the window layer uses. Pure functions over SDL's header constants; no
     # video subsystem is initialised.
@@ -135,8 +134,8 @@ set(ALPHAENGINE_TEST_SOURCES_UNDER_TEST
     # standard, line and ui facades. They take their gpu::device from the
     # template (never the engine global), so the tests build them over the
     # fake device and compile the real standard shaders through glslang to
-    # prove N instances share one pipeline. environment's texture getters
-    # are inline, so standard_material links without the IBL builder.
+    # prove N instances share one pipeline. environment_probe's texture
+    # getters are inline, so standard_material links without the IBL builder.
     ${CMAKE_SOURCE_DIR}/rendering_engine/materials/material.cpp
     ${CMAKE_SOURCE_DIR}/rendering_engine/materials/material_template.cpp
     ${CMAKE_SOURCE_DIR}/rendering_engine/materials/pipeline_variant.cpp
@@ -163,6 +162,7 @@ set(ALPHAENGINE_TEST_SOURCES
     core/math/quat_test.cpp
     core/math/bounds_test.cpp
     core/math/conventions_test.cpp
+    core/math/transform_test.cpp
     core/pool_test.cpp
     core/event_bus_test.cpp
     core/job_pool_test.cpp
@@ -176,17 +176,17 @@ set(ALPHAENGINE_TEST_SOURCES
     runtime/camera_component_test.cpp
     rendering_engine/assets/asset_cache_test.cpp
     rendering_engine/assets/gltf_importer_test.cpp
+    rendering_engine/assets/font_test.cpp
+    rendering_engine/assets/image_test.cpp
+    rendering_engine/assets/tangent_test.cpp
+    rendering_engine/assets/vertex_format_test.cpp
     rendering_engine/camera/aspect_ratio_test.cpp
     rendering_engine/camera/camera_test.cpp
-    rendering_engine/util/transform_test.cpp
     rendering_engine/gpu/handle_pool_test.cpp
     rendering_engine/gpu/shader_compiler_test.cpp
     rendering_engine/gpu/shader_library_test.cpp
     rendering_engine/materials/material_template_test.cpp
     rendering_engine/materials/pipeline_variant_test.cpp
-    rendering_engine/mesh/mesh_test.cpp
-    rendering_engine/mesh/tangent_test.cpp
-    rendering_engine/mesh/vertex_format_test.cpp
     rendering_engine/sdl_input_test.cpp
     rendering_engine/debug/grid_lines_test.cpp
     rendering_engine/passes/projection_jitter_test.cpp
@@ -195,8 +195,6 @@ set(ALPHAENGINE_TEST_SOURCES
     rendering_engine/renderables/per_draw_ubo_test.cpp
     rendering_engine/gpu/vk_format_fallback_test.cpp
     rendering_engine/gpu/vk_staging_ring_test.cpp
-    rendering_engine/util/font_test.cpp
-    rendering_engine/util/image_test.cpp
 )
 
 add_executable(AlphaEngineTests
@@ -205,7 +203,7 @@ add_executable(AlphaEngineTests
 )
 
 # tests/ for the support/ helpers (fake_device); vendor/stb for the
-# header-only stb backends util/image and util/font compile against;
+# header-only stb backends assets/image and assets/font compile against;
 # vendor/cgltf for the glTF parser behind gltf_importer; the Vulkan SDK
 # headers (found by the root find_package(Vulkan)) for vk_negotiate, which
 # uses the VkFormat constants and nothing from the loader. The repo root is

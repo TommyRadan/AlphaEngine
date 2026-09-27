@@ -38,11 +38,11 @@
 #include <core/vfs/vfs.hpp>
 #include <rendering_engine/assets/asset_cache.hpp>
 #include <rendering_engine/assets/cache_key.hpp>
+#include <rendering_engine/assets/color.hpp>
 #include <rendering_engine/assets/gltf_importer.hpp>
+#include <rendering_engine/assets/image.hpp>
 #include <rendering_engine/materials/standard_material.hpp>
 #include <rendering_engine/renderer.hpp>
-#include <rendering_engine/util/color.hpp>
-#include <rendering_engine/util/image.hpp>
 #include <runtime/engine.hpp>
 #include <runtime/scene_serializer.hpp>
 
@@ -203,9 +203,9 @@ namespace runtime
             return static_cast<uint8_t>(std::lround(std::clamp(value, 0.0f, 1.0f) * 255.0f));
         }
 
-        rendering_engine::util::color to_color(const core::math::vec4& value)
+        rendering_engine::color to_color(const core::math::vec4& value)
         {
-            return rendering_engine::util::color{
+            return rendering_engine::color{
                 to_channel(value.x), to_channel(value.y), to_channel(value.z), to_channel(value.w)};
         }
 
@@ -220,7 +220,7 @@ namespace runtime
             }
             try
             {
-                const rendering_engine::util::image image{path};
+                const rendering_engine::image image{path};
                 bind(image);
             }
             catch (const std::exception& error)
@@ -234,7 +234,7 @@ namespace runtime
 
         std::unique_ptr<rendering_engine::standard_material> build(const standard_material_description& description)
         {
-            using rendering_engine::util::image;
+            using rendering_engine::image;
             std::unique_ptr<rendering_engine::standard_material> made =
                 current_engine().renderer->create_standard_material();
             rendering_engine::standard_material& target = *made;

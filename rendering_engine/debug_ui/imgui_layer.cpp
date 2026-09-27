@@ -640,7 +640,7 @@ namespace rendering_engine::debug_ui
             ImGui::End();
         }
 
-        void draw_transform_section(rendering_engine::util::transform& transform)
+        void draw_transform_section(core::transform& transform)
         {
             core::math::vec3 position = transform.get_position();
             if (ImGui::DragFloat3("Position", position.data(), 0.05f))
@@ -1026,7 +1026,7 @@ namespace rendering_engine::debug_ui
 
         // Splits a world (or local) matrix back into position, orientation
         // and scale, so a gizmo edit — which only ever produces a matrix —
-        // can be written back onto a util::transform. Mirrors
+        // can be written back onto a core::transform. Mirrors
         // runtime::physics::physics_world.cpp's own decompose(): a mirrored
         // (negative-determinant) result folds its reflection into the X
         // scale so the remaining basis is a proper rotation

@@ -120,7 +120,7 @@ namespace rendering_engine
         }
     }
 
-    void line_material::set_color(const util::color& color)
+    void line_material::set_color(const color& color)
     {
         m_color = color;
         upload_params();

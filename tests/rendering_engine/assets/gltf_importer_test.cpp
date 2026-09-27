@@ -25,8 +25,8 @@
 #include <rendering_engine/assets/asset_device.hpp>
 #include <rendering_engine/assets/gltf_importer.hpp>
 #include <rendering_engine/gpu/types.hpp>
-#include <rendering_engine/mesh/vertex.hpp>
-#include <rendering_engine/util/image.hpp>
+#include <rendering_engine/assets/vertex.hpp>
+#include <rendering_engine/assets/image.hpp>
 
 #include "support/fake_device.hpp"
 
@@ -194,11 +194,11 @@ namespace
         math::vec3 emissive_factor;
         float emissive_strength;
         rendering_engine::gpu::color_space base_color_space;
-        std::optional<rendering_engine::util::image> base_color_map;
-        std::optional<rendering_engine::util::image> normal_map;
-        std::optional<rendering_engine::util::image> metallic_roughness_map;
-        std::optional<rendering_engine::util::image> occlusion_map;
-        std::optional<rendering_engine::util::image> emissive_map;
+        std::optional<rendering_engine::image> base_color_map;
+        std::optional<rendering_engine::image> normal_map;
+        std::optional<rendering_engine::image> metallic_roughness_map;
+        std::optional<rendering_engine::image> occlusion_map;
+        std::optional<rendering_engine::image> emissive_map;
         // Whether the occlusion texture named the very image the packed
         // metallic-roughness map did (the factory then reads its R).
         bool occlusion_shares_metallic_roughness{false};
@@ -223,7 +223,7 @@ namespace
             record.emissive_factor = description.emissive_factor;
             record.emissive_strength = description.emissive_strength;
             record.base_color_space = description.base_color_space;
-            const auto copy = [](const rendering_engine::util::image* image)
+            const auto copy = [](const rendering_engine::image* image)
             { return image != nullptr ? std::optional{*image} : std::nullopt; };
             record.base_color_map = copy(description.base_color_map);
             record.normal_map = copy(description.normal_map);

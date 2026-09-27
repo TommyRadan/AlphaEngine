@@ -125,7 +125,7 @@ namespace rendering_engine
         }
     }
 
-    void instanced_material::set_color(const util::color& color)
+    void instanced_material::set_color(const color& color)
     {
         m_color = color;
         upload_params();

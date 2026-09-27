@@ -31,8 +31,8 @@
 #include <memory>
 #include <utility>
 
+#include <core/math/transform.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
-#include <rendering_engine/util/transform.hpp>
 
 namespace runtime
 {
@@ -70,7 +70,7 @@ namespace runtime
         explicit renderable_component(std::unique_ptr<R> renderable)
         {
             if constexpr (requires(R& r) {
-                              { &r.transform } -> std::convertible_to<rendering_engine::util::transform*>;
+                              { &r.transform } -> std::convertible_to<core::transform*>;
                           })
             {
                 if (renderable)
@@ -110,7 +110,7 @@ namespace runtime
         std::unique_ptr<rendering_engine::renderable> m_renderable;
         // The renderable's own transform, when it has one; points into the
         // heap object, so it stays valid as the component moves.
-        rendering_engine::util::transform* m_transform{nullptr};
+        core::transform* m_transform{nullptr};
         bool m_registered{false};
     };
 } // namespace runtime

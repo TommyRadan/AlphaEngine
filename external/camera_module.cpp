@@ -148,7 +148,7 @@ namespace
         {
             core::input& input = *runtime::current_engine().input;
 
-            rendering_engine::util::transform& pose = owner().transform;
+            core::transform& pose = owner().transform;
             const core::math::vec3 position = pose.get_position();
             const core::math::vec3 forward = pose.get_forward();
 
@@ -216,7 +216,7 @@ namespace
                 return;
             }
 
-            rendering_engine::util::transform& pose = owner().transform;
+            core::transform& pose = owner().transform;
             const core::math::vec3 forward = pose.get_forward();
 
             const core::math::vec3 right = safe_normalize(core::math::cross(forward, up_vector));

@@ -21,8 +21,9 @@
  */
 
 /**
- * @file environment.hpp
- * @brief Image-based-lighting source set built from a cube-map skybox.
+ * @file environment_probe.hpp
+ * @brief The reflection-probe payload: the image-based-lighting set built
+ *        from a cube-map skybox.
  */
 
 #pragma once
@@ -31,16 +32,17 @@
 #include <cstdint>
 #include <vector>
 
+#include <rendering_engine/assets/image.hpp>
 #include <rendering_engine/gpu/handle.hpp>
-#include <rendering_engine/util/image.hpp>
 
 namespace rendering_engine
 {
     // The pre-integrated image-based-lighting set derived from a single
-    // cube-map background, fed into a standard material as its
+    // cube-map background — the payload of the scene's environment
+    // (reflection) probe — fed into a standard material as its
     // environment.
     //
-    // Constructing an @ref environment uploads the source cube map (HDR,
+    // Constructing an @ref environment_probe uploads the source cube map (HDR,
     // with a mip chain) and derives:
     //  - the @ref skybox cube, which the @ref skybox_pass samples as the
     //    background;
@@ -56,27 +58,27 @@ namespace rendering_engine
     // falls back to the source cube's box-filtered mip chain.
     //
     // All three are owned by the object and released in the destructor, so
-    // an @ref environment must outlive every pass and material that binds
+    // an @ref environment_probe must outlive every pass and material that binds
     // its textures. Build it once (the convolutions are not cheap) and keep
     // it alive for the scene's lifetime.
-    struct environment
+    struct environment_probe
     {
         // Build from six HDR cube faces in @c gpu::cube_face order
         // (+X, -X, +Y, -Y, +Z, -Z). Each face is @p face_size *
         // @p face_size RGBA texels laid out row-major, four floats per
         // texel; the alpha channel is ignored. Linear (scene-referred)
         // radiance is expected — no sRGB decode is applied.
-        environment(uint32_t face_size, const std::array<std::vector<float>, 6>& faces);
+        environment_probe(uint32_t face_size, const std::array<std::vector<float>, 6>& faces);
 
         // Build from six LDR face images in the same order. Each image's
         // sRGB texels are decoded to linear radiance before convolution,
         // so ordinary 8-bit skybox PNGs drop straight in.
-        explicit environment(const std::array<util::image, 6>& faces);
+        explicit environment_probe(const std::array<image, 6>& faces);
 
-        ~environment();
+        ~environment_probe();
 
-        environment(const environment&) = delete;
-        environment& operator=(const environment&) = delete;
+        environment_probe(const environment_probe&) = delete;
+        environment_probe& operator=(const environment_probe&) = delete;
 
         // The source skybox cube map: HDR rgba16f with a full mip chain,
         // sampled by the skybox pass for the background.

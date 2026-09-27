@@ -25,10 +25,10 @@
 #include <cstdint>
 #include <memory>
 
+#include <rendering_engine/assets/color.hpp>
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/materials/material.hpp>
 #include <rendering_engine/materials/material_template.hpp>
-#include <rendering_engine/util/color.hpp>
 
 namespace rendering_engine
 {
@@ -70,13 +70,13 @@ namespace rendering_engine
 
         // Flat tint multiplied onto every instance's own colour (white
         // leaves the per-instance colours unchanged).
-        void set_color(const util::color& color);
+        void set_color(const color& color);
 
     private:
         // Push the tint into the per-material UBO.
         void upload_params();
 
-        util::color m_color{255, 255, 255, 255};
+        color m_color{255, 255, 255, 255};
         gpu::buffer m_material_ubo{};
     };
 } // namespace rendering_engine

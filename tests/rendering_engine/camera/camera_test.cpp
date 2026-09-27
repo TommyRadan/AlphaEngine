@@ -16,7 +16,7 @@
 #include <rendering_engine/camera/camera_registry.hpp>
 #include <rendering_engine/camera/orthographic_camera.hpp>
 #include <rendering_engine/camera/perspective_camera.hpp>
-#include <rendering_engine/util/transform.hpp>
+#include <core/math/transform.hpp>
 
 using core::math::mat4;
 using core::math::vec3;
@@ -203,7 +203,7 @@ TEST(camera, look_at_straight_down_keeps_a_finite_view_with_a_horizontal_up)
 
 TEST(camera, a_parented_transform_views_from_its_world_pose)
 {
-    rendering_engine::util::transform rig;
+    core::transform rig;
     rig.set_position(vec3{10.0f, 0.0f, 0.0f});
     rig.set_rotation(vec3{0.0f, 0.0f, k_half_pi});
 
@@ -224,7 +224,7 @@ TEST(camera, a_parented_transform_views_from_its_world_pose)
 
 TEST(camera, look_at_under_a_rotated_parent_faces_the_world_target)
 {
-    rendering_engine::util::transform rig;
+    core::transform rig;
     rig.set_rotation(vec3{0.0f, 0.0f, k_half_pi});
 
     orthographic_camera cam;

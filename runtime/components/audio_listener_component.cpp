@@ -35,7 +35,7 @@ namespace
 
     // World-space right axis of a node's world matrix: the engine's right is
     // -Y given +X forward and +Z up (core::math::world_right; see also
-    // util::transform::get_right(), which applies the same convention to the
+    // core::transform::get_right(), which applies the same convention to the
     // local/parent frame), so this negates the world matrix's +Y column
     // rather than reading get_right(), which is only correct in the parent's
     // frame — a nested, rotated parent would otherwise skew the pan axis.

@@ -27,10 +27,10 @@
 #include <vector>
 
 #include <core/math/math.hpp>
+#include <rendering_engine/assets/color.hpp>
+#include <rendering_engine/assets/vertex.hpp>
 #include <rendering_engine/gpu/handle.hpp>
-#include <rendering_engine/mesh/vertex.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
-#include <rendering_engine/util/color.hpp>
 
 namespace rendering_engine
 {
@@ -109,7 +109,7 @@ namespace rendering_engine
 
         // Per-instance tint, multiplied by the material's flat colour.
         // Defaults to opaque white. @p index must be < the capacity.
-        void set_instance_color(uint32_t index, const util::color& color);
+        void set_instance_color(uint32_t index, const color& color);
 
     private:
         // Per-instance record mirrored on the CPU and uploaded into the

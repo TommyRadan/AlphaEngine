@@ -22,9 +22,9 @@
 #include <rendering_engine/materials/pipeline_variant.hpp>
 #include <rendering_engine/materials/standard_material.hpp>
 #include <rendering_engine/materials/ui_material.hpp>
-#include <rendering_engine/mesh/vertex.hpp>
-#include <rendering_engine/util/color.hpp>
-#include <rendering_engine/util/image.hpp>
+#include <rendering_engine/assets/vertex.hpp>
+#include <rendering_engine/assets/color.hpp>
+#include <rendering_engine/assets/image.hpp>
 
 #include "support/fake_device.hpp"
 
@@ -78,9 +78,9 @@ namespace
         test_support::fake_device device;
     };
 
-    rendering_engine::util::image tiny_image()
+    rendering_engine::image tiny_image()
     {
-        return rendering_engine::util::image{2, 2, rendering_engine::util::color{255, 255, 255, 255}};
+        return rendering_engine::image{2, 2, rendering_engine::color{255, 255, 255, 255}};
     }
 } // namespace
 
@@ -232,7 +232,7 @@ TEST_F(material_template_test, binding_a_map_compiles_a_keyword_variant_and_clea
     const uint64_t plain = a.pipeline().id;
     EXPECT_EQ(a.keywords(), keyword_bit(material_keyword::has_tangents));
 
-    const rendering_engine::util::image image = tiny_image();
+    const rendering_engine::image image = tiny_image();
     a.set_albedo_map(image);
     EXPECT_NE(a.keywords() & keyword_bit(material_keyword::use_albedo_map), 0u);
     EXPECT_EQ(device.created_shader_modules, 4u) << "a new keyword set is a new SPIR-V pair";
@@ -254,7 +254,7 @@ TEST_F(material_template_test, orm_map_supersedes_the_metallic_and_roughness_map
 {
     const std::shared_ptr<material_template> tmpl = standard_template();
     standard_material a{tmpl};
-    const rendering_engine::util::image image = tiny_image();
+    const rendering_engine::image image = tiny_image();
 
     a.set_metalness_map(image);
     a.set_roughness_map(image);
@@ -289,7 +289,7 @@ TEST_F(material_template_test, normal_map_needs_tangents_and_tangents_change_the
     EXPECT_EQ(a.min_vertex_stride(), 48u);
     EXPECT_TRUE(has_attribute(device.pipeline_descriptors.back(), 3));
 
-    const rendering_engine::util::image image = tiny_image();
+    const rendering_engine::image image = tiny_image();
     a.set_normal_map(image);
     EXPECT_NE(a.keywords() & keyword_bit(material_keyword::use_normal_map), 0u);
 

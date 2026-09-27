@@ -42,11 +42,11 @@
 #include <vector>
 
 #include <rendering_engine/assets/font_asset.hpp>
+#include <rendering_engine/assets/image.hpp>
 #include <rendering_engine/assets/mesh_asset.hpp>
 #include <rendering_engine/assets/texture_asset.hpp>
 #include <rendering_engine/assets/texture_decode.hpp>
 #include <rendering_engine/gpu/types.hpp>
-#include <rendering_engine/util/image.hpp>
 
 namespace core
 {
@@ -161,7 +161,7 @@ namespace rendering_engine
          * @brief Returns the texture decoded from @p path, loading it on a miss.
          *
          * On a cache miss the image is read through the VFS and decoded (via
-         * @ref util::image), a 2D RGBA8 texture with a full mip chain is
+         * @ref image), a 2D RGBA8 texture with a full mip chain is
          * uploaded, and the result is cached. A @c .ktx2 file is decoded by
          * @ref decode_ktx2 instead and uploaded with the levels it carries,
          * in the block-compressed format it holds or was transcoded to (the
@@ -176,7 +176,7 @@ namespace rendering_engine
          * part of the cache key — like a font's size — so the same file
          * requested in both spaces is two assets, never one mis-decoded one.
          * Throws @c std::runtime_error if the file cannot be decoded
-         * (propagated from @ref util::image or @ref decode_ktx2) or the
+         * (propagated from @ref image or @ref decode_ktx2) or the
          * device refuses the upload. A request for a key whose
          * asynchronous load is still in flight returns that asset, still
          * resolving.
@@ -299,7 +299,7 @@ namespace rendering_engine
          * @ref load_texture.
          */
         std::shared_ptr<texture_asset> load_texture_from_image(const std::string& key,
-                                                               const util::image& image,
+                                                               const image& image,
                                                                gpu::color_space space = gpu::color_space::srgb);
 
         /**
@@ -315,7 +315,7 @@ namespace rendering_engine
          * the model's image files on a worker.
          */
         std::shared_ptr<texture_asset> adopt_texture_image(const std::filesystem::path& path,
-                                                           const util::image& image,
+                                                           const image& image,
                                                            gpu::color_space space = gpu::color_space::srgb);
 
         /**

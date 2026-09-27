@@ -27,11 +27,11 @@
 #include <vector>
 
 #include <core/log.hpp>
+#include <core/math/transform.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/renderables/draw_item.hpp>
 #include <rendering_engine/renderer.hpp>
-#include <rendering_engine/util/transform.hpp>
 #include <runtime/engine.hpp>
 
 namespace
@@ -257,7 +257,7 @@ namespace rendering_engine
         return {group, static_cast<uint32_t>(offset)};
     }
 
-    bool per_draw_binding::refresh(const util::transform& transform)
+    bool per_draw_binding::refresh(const core::transform& transform)
     {
         const uint64_t version = transform.get_world_version();
         if (version == m_world_version)
@@ -270,7 +270,7 @@ namespace rendering_engine
         return true;
     }
 
-    bool per_draw_binding::bind(const util::transform& transform, gpu::bind_group_layout layout, draw_item& item)
+    bool per_draw_binding::bind(const core::transform& transform, gpu::bind_group_layout layout, draw_item& item)
     {
         per_draw_ring& ring = runtime::current_engine().renderer->get_per_draw_ring();
 

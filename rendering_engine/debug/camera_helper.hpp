@@ -23,8 +23,8 @@
 #pragma once
 
 #include <core/math/math.hpp>
+#include <rendering_engine/assets/color.hpp>
 #include <rendering_engine/debug/line_helper.hpp>
-#include <rendering_engine/util/color.hpp>
 
 namespace rendering_engine
 {
@@ -44,14 +44,14 @@ namespace rendering_engine::debug
     // the screen); this is meant for a secondary / inactive camera.
     struct camera_helper : public line_helper
     {
-        explicit camera_helper(const camera* cam, util::color color = util::color{200, 200, 80, 255});
+        explicit camera_helper(const camera* cam, color color = rendering_engine::color{200, 200, 80, 255});
 
     protected:
         void refresh() override;
 
     private:
         const camera* m_camera;
-        util::color m_color;
+        color m_color;
 
         // Last view-projection the geometry was built from, so refresh()
         // only rebuilds when the camera moves.

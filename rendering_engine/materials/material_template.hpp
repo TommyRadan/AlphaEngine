@@ -57,13 +57,13 @@
 #include <unordered_map>
 #include <vector>
 
+#include <rendering_engine/assets/vertex.hpp>
 #include <rendering_engine/gpu/bind_group.hpp>
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/gpu/pipeline.hpp>
 #include <rendering_engine/gpu/shader.hpp>
 #include <rendering_engine/gpu/shader_compiler.hpp>
 #include <rendering_engine/materials/pipeline_variant.hpp>
-#include <rendering_engine/mesh/vertex.hpp>
 
 namespace rendering_engine
 {

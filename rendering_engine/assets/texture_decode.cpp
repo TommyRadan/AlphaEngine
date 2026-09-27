@@ -37,8 +37,8 @@
 #include <core/log.hpp>
 #include <core/platform/platform.hpp>
 #include <core/vfs/vfs.hpp>
+#include <rendering_engine/assets/color.hpp>
 #include <rendering_engine/gpu/device.hpp>
-#include <rendering_engine/util/color.hpp>
 
 namespace rendering_engine
 {
@@ -263,7 +263,7 @@ namespace rendering_engine
         if (!is_ktx2_path(path))
         {
             decoded_texture decoded;
-            decoded.image = util::image{label};
+            decoded.image = image{label};
             decoded.width = decoded.image.get_width();
             decoded.height = decoded.image.get_height();
             decoded.format = gpu::rgba8_format(space);
@@ -387,9 +387,9 @@ namespace rendering_engine
         if (!gpu::is_compressed_texture_format(decoded.format) && decoded.levels.size() == 1)
         {
             const std::size_t texels = static_cast<std::size_t>(decoded.width) * decoded.height;
-            auto pixels = std::make_unique<util::color[]>(texels);
-            std::memcpy(pixels.get(), decoded.levels.front().data(), texels * sizeof(util::color));
-            decoded.image = util::image{decoded.width, decoded.height, pixels.release()};
+            auto pixels = std::make_unique<color[]>(texels);
+            std::memcpy(pixels.get(), decoded.levels.front().data(), texels * sizeof(color));
+            decoded.image = image{decoded.width, decoded.height, pixels.release()};
             decoded.levels.clear();
         }
 

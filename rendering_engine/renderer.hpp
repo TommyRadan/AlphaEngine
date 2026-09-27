@@ -55,7 +55,7 @@ namespace rendering_engine
     struct texture_asset;
     struct shadow_pass;
     struct spot_shadow_pass;
-    struct environment;
+    struct environment_probe;
     struct material_template;
     struct basic_material;
     struct instanced_material;
@@ -458,10 +458,10 @@ namespace rendering_engine
          * one made by @ref create_standard_material, whenever it was
          * created — so their surfaces pick up image-based ambient. Pass
          * @c nullptr to drop the skybox and revert the materials to flat
-         * ambient. The @ref environment is non-owning and must outlive
+         * ambient. The @ref environment_probe is non-owning and must outlive
          * the scene (or be cleared first).
          */
-        void set_environment(const environment* env);
+        void set_environment(const environment_probe* env);
 
         /**
          * @brief Sets the scene-wide atmospheric fog.
@@ -576,7 +576,7 @@ namespace rendering_engine
 
         // The active scene environment, or null. Stored so newly created
         // materials inherit the image-based lighting. Non-owning.
-        const environment* m_environment{nullptr};
+        const environment_probe* m_environment{nullptr};
 
         // Scene-wide atmospheric fog, set via @ref set_fog and copied
         // into the frame context each @ref render so the scene pass can

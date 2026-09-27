@@ -125,13 +125,13 @@ const std::string& rendering_engine::label::get_text() const
     return m_text;
 }
 
-void rendering_engine::label::set_color(const rendering_engine::util::color& color)
+void rendering_engine::label::set_color(const rendering_engine::color& color)
 {
     m_color = color;
     m_dirty = true;
 }
 
-const rendering_engine::util::color& rendering_engine::label::get_color() const
+const rendering_engine::color& rendering_engine::label::get_color() const
 {
     return m_color;
 }
@@ -191,7 +191,7 @@ void rendering_engine::label::layout()
         return;
     }
 
-    const util::font& font = m_font->font;
+    const font& font = m_font->font;
     float widest = 0.0f;
     float pen = 0.0f;
     std::size_t line = 0;
@@ -212,7 +212,7 @@ void rendering_engine::label::layout()
             continue;
         }
 
-        const util::glyph_metrics* glyph = font.glyph(codepoint);
+        const glyph_metrics* glyph = font.glyph(codepoint);
         if (glyph == nullptr)
         {
             if (!m_warned_missing_glyph)

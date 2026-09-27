@@ -25,13 +25,13 @@
 #include <vector>
 
 #include <core/math/vec2.hpp>
+#include <rendering_engine/assets/color.hpp>
+#include <rendering_engine/assets/image.hpp>
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/gpu/types.hpp>
 #include <rendering_engine/renderables/premade_2d/rect_transform.hpp>
 #include <rendering_engine/renderables/premade_2d/sprite_batch.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
-#include <rendering_engine/util/color.hpp>
-#include <rendering_engine/util/image.hpp>
 
 namespace rendering_engine
 {
@@ -60,8 +60,8 @@ namespace rendering_engine
         pane& operator=(const pane&) = delete;
 
         /** @brief The colour the texture is multiplied by (the whole fill when there is none). */
-        void set_color(const rendering_engine::util::color& color);
-        const rendering_engine::util::color& get_color() const;
+        void set_color(const rendering_engine::color& color);
+        const rendering_engine::color& get_color() const;
 
         // Upload @p image as the pane's own texture, replacing any
         // earlier one. @p space selects the RGBA8 format
@@ -69,7 +69,7 @@ namespace rendering_engine
         // decode — because the UI pass composites straight onto the LDR
         // swapchain with no encode step, so an image must reach the
         // framebuffer with the bytes it was authored with.
-        void set_image(const rendering_engine::util::image& image, gpu::color_space space = gpu::color_space::linear);
+        void set_image(const rendering_engine::image& image, gpu::color_space space = gpu::color_space::linear);
 
         // Draw @p uv_min .. @p uv_max of a texture the caller owns (a
         // texture asset, a font atlas) instead; it must outlive its use
@@ -113,7 +113,7 @@ namespace rendering_engine
 
         sprite_batch m_batch;
         rect_transform m_rect;
-        rendering_engine::util::color m_color{255, 255, 255, 255};
+        rendering_engine::color m_color{255, 255, 255, 255};
         gpu::texture m_texture{};
         core::math::vec2 m_uv_min{0.0f, 0.0f};
         core::math::vec2 m_uv_max{1.0f, 1.0f};

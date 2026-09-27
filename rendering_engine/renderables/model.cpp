@@ -22,13 +22,16 @@
 
 #include <rendering_engine/renderables/model.hpp>
 
+#include <cstdint>
+#include <optional>
+
 #include <core/log.hpp>
 #include <core/math/math.hpp>
 #include <rendering_engine/assets/mesh_asset.hpp>
+#include <rendering_engine/assets/vertex.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/materials/material.hpp>
-#include <rendering_engine/mesh/vertex.hpp>
 #include <rendering_engine/renderables/mesh_bounds.hpp>
 #include <rendering_engine/renderables/per_draw_ring.hpp>
 #include <rendering_engine/renderables/vertex_format_check.hpp>
@@ -54,6 +57,11 @@ rendering_engine::model::~model()
         gpu.destroy(m_draw_ubo);
         m_draw_ubo = {};
     }
+    if (m_index_buffer.valid())
+    {
+        gpu.destroy(m_index_buffer);
+        m_index_buffer = {};
+    }
     if (m_vertex_buffer.valid())
     {
         gpu.destroy(m_vertex_buffer);
@@ -61,11 +69,11 @@ rendering_engine::model::~model()
     }
 }
 
-void rendering_engine::model::upload_mesh(const rendering_engine::mesh& mesh)
+void rendering_engine::model::upload_mesh(const mesh_data& mesh)
 {
-    m_vertex_count = mesh.vertex_count();
-    m_vertex_stride = sizeof(vertex_position_uv_normal);
-    m_vertex_format = vertex_format::position_uv_normal;
+    m_vertex_count = mesh.vertex_stride != 0 ? mesh.vertex_bytes.size() / mesh.vertex_stride : 0;
+    m_vertex_stride = mesh.vertex_stride;
+    m_vertex_format = mesh.format;
     m_has_local_bounds = false;
 
     if (m_vertex_count == 0)
@@ -75,9 +83,9 @@ void rendering_engine::model::upload_mesh(const rendering_engine::mesh& mesh)
     }
 
     // Box the vertices once at upload so world_bounds is a matrix
-    // transform per frame, not a pass over the vertex array.
-    if (const auto bounds = compute_position_bounds(
-            mesh.vertices(), m_vertex_count * sizeof(vertex_position_uv_normal), m_vertex_stride);
+    // transform per frame, not a pass over the vertex array. A box the
+    // builder supplied wins, as it does in the asset cache.
+    if (const std::optional<core::math::aabb> bounds = mesh.bounds.has_value() ? mesh.bounds : mesh.compute_bounds();
         bounds.has_value())
     {
         m_local_bounds = *bounds;
@@ -87,11 +95,22 @@ void rendering_engine::model::upload_mesh(const rendering_engine::mesh& mesh)
     auto& gpu = *runtime::current_engine().gpu;
 
     gpu::buffer_descriptor vertex_descriptor{};
-    vertex_descriptor.size = m_vertex_count * sizeof(vertex_position_uv_normal);
+    vertex_descriptor.size = m_vertex_count * m_vertex_stride;
     vertex_descriptor.usage = gpu::buffer_usage_vertex;
     vertex_descriptor.hint = gpu::buffer_usage_hint::static_data;
-    vertex_descriptor.initial_data = mesh.vertices();
+    vertex_descriptor.initial_data = mesh.vertex_bytes.data();
     m_vertex_buffer = gpu.create_buffer(vertex_descriptor);
+
+    if (!mesh.indices.empty())
+    {
+        gpu::buffer_descriptor index_descriptor{};
+        index_descriptor.size = mesh.indices.size() * sizeof(uint32_t);
+        index_descriptor.usage = gpu::buffer_usage_index;
+        index_descriptor.hint = gpu::buffer_usage_hint::static_data;
+        index_descriptor.initial_data = mesh.indices.data();
+        m_index_buffer = gpu.create_buffer(index_descriptor);
+        m_index_count = static_cast<uint32_t>(mesh.indices.size());
+    }
 }
 
 void rendering_engine::model::set_mesh(std::shared_ptr<mesh_asset> mesh)
@@ -199,12 +218,18 @@ void rendering_engine::model::collect_draw_items(std::vector<draw_item>& out)
     item.vertex_buffer = vertex_buffer;
     item.vertex_count = vertex_count;
     item.vertex_stride = m_vertex_stride;
-    // A cached asset that carries indices is drawn indexed; the private
-    // upload_mesh path is always a plain vertex array.
+    // Geometry that carries indices — a cached asset's, or the private
+    // upload's when its mesh_data had any — is drawn indexed.
     if (m_mesh && m_mesh->index_buffer.valid())
     {
         item.index_buffer = m_mesh->index_buffer;
         item.index_count = m_mesh->index_count;
+        item.index_format = gpu::index_format::uint32;
+    }
+    else if (!m_mesh && m_index_buffer.valid())
+    {
+        item.index_buffer = m_index_buffer;
+        item.index_count = m_index_count;
         item.index_format = gpu::index_format::uint32;
     }
     out.push_back(item);

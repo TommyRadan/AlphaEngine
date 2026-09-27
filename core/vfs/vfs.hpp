@@ -103,9 +103,9 @@ namespace core
      * @brief The engine's virtual filesystem: an ordered set of mount points
      *        that a relative asset path is looked up in.
      *
-     * Every asset loader (`util::image`, `util::font`, the asset cache and
-     * the glTF importer) reads its files through here, so where the assets
-     * come from is decided once — the engine mounts the asset root
+     * Every asset loader (`rendering_engine::image`, `rendering_engine::font`,
+     * the asset cache and the glTF importer) reads its files through here, so
+     * where the assets come from is decided once — the engine mounts the asset root
      * (`core::platform::asset_root()`, or `settings.assets.root`) at start-up,
      * a test mounts a scratch directory — and the loaders stay oblivious.
      *

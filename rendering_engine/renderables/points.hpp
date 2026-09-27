@@ -25,11 +25,11 @@
 #include <vector>
 
 #include <core/math/math.hpp>
+#include <core/math/transform.hpp>
+#include <rendering_engine/assets/vertex.hpp>
 #include <rendering_engine/gpu/handle.hpp>
-#include <rendering_engine/mesh/vertex.hpp>
 #include <rendering_engine/renderables/per_draw_ring.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
-#include <rendering_engine/util/transform.hpp>
 
 namespace rendering_engine
 {
@@ -50,7 +50,7 @@ namespace rendering_engine
         explicit points(material* mat);
         ~points() override;
 
-        rendering_engine::util::transform transform;
+        core::transform transform;
 
         // Set the cloud positions; every point defaults to white and is
         // tinted by the material colour. Replaces any previous data.

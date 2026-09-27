@@ -24,10 +24,10 @@
 
 #include <memory>
 
+#include <core/math/transform.hpp>
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/renderables/per_draw_ring.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
-#include <rendering_engine/util/transform.hpp>
 
 namespace rendering_engine
 {
@@ -49,7 +49,7 @@ namespace rendering_engine
         explicit cubed_sphere(material* mat, unsigned int subdivisions = 32);
         ~cubed_sphere() override;
 
-        rendering_engine::util::transform transform;
+        core::transform transform;
 
         void upload() final;
         void collect_draw_items(std::vector<draw_item>& out) final;

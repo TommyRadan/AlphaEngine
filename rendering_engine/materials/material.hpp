@@ -26,12 +26,12 @@
 #include <cstdint>
 #include <memory>
 
+#include <rendering_engine/assets/image.hpp>
+#include <rendering_engine/assets/vertex.hpp>
 #include <rendering_engine/gpu/bind_group.hpp>
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/gpu/types.hpp>
 #include <rendering_engine/materials/pipeline_variant.hpp>
-#include <rendering_engine/mesh/vertex.hpp>
-#include <rendering_engine/util/image.hpp>
 
 namespace rendering_engine
 {
@@ -193,7 +193,7 @@ namespace rendering_engine
         // Upload an RGBA8 image to a fresh mipmapped, linearly filtered
         // 2D texture in the RGBA8 format for @p space, addressed with
         // @p address on every axis. Shared by every set_*_map.
-        gpu::texture upload_map(const util::image& image,
+        gpu::texture upload_map(const image& image,
                                 gpu::color_space space,
                                 gpu::address_mode address = gpu::address_mode::repeat) const;
 

@@ -25,10 +25,10 @@
 #include <array>
 #include <utility>
 
+#include <rendering_engine/assets/vertex.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/gpu/shader_bindings.hpp>
-#include <rendering_engine/mesh/vertex.hpp>
 #include <rendering_engine/renderables/per_draw_ubo.hpp>
 
 namespace
@@ -102,13 +102,13 @@ namespace rendering_engine
         }
     }
 
-    void basic_material::set_color(const util::color& color)
+    void basic_material::set_color(const color& color)
     {
         m_color = color;
         upload_params();
     }
 
-    void basic_material::set_albedo(const util::image& image, gpu::color_space space)
+    void basic_material::set_albedo(const image& image, gpu::color_space space)
     {
         release_map(m_albedo);
         m_albedo = upload_map(image, space);

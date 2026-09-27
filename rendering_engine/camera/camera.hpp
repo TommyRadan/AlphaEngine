@@ -25,8 +25,8 @@
 #include <cstdint>
 
 #include <core/math/math.hpp>
+#include <core/math/transform.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
-#include <rendering_engine/util/transform.hpp>
 
 namespace rendering_engine
 {
@@ -37,7 +37,7 @@ namespace rendering_engine
      * Orientation is the quaternion of @ref transform, in the engine's
      * world convention (core/math/math.hpp): the camera looks along its
      * transform's +X with +Z up, so a fresh camera faces +X. @ref look_at
-     * sets it; the transform's own setters, @ref util::transform::get_forward
+     * sets it; the transform's own setters, @ref core::transform::get_forward
      * and its world matrix all agree with it, and a camera transform parented
      * under a node composes like any other. The view matrix is derived from
      * the transform's world matrix on every call — there is no view cache to
@@ -61,7 +61,7 @@ namespace rendering_engine
         camera(const camera&) = delete;
         camera& operator=(const camera&) = delete;
 
-        rendering_engine::util::transform transform;
+        core::transform transform;
 
         /**
          * @brief Orients the camera so it faces @p target in world space, with

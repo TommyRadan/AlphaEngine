@@ -25,10 +25,10 @@
 #include <array>
 #include <utility>
 
+#include <rendering_engine/assets/vertex.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/gpu/shader_bindings.hpp>
-#include <rendering_engine/mesh/vertex.hpp>
 #include <rendering_engine/renderables/per_draw_ubo.hpp>
 
 namespace
@@ -105,13 +105,13 @@ namespace rendering_engine
         }
     }
 
-    void phong_material::set_diffuse(const util::color& color)
+    void phong_material::set_diffuse(const color& color)
     {
         m_diffuse = color;
         upload_params();
     }
 
-    void phong_material::set_specular(const util::color& color)
+    void phong_material::set_specular(const color& color)
     {
         m_specular = color;
         upload_params();
@@ -123,7 +123,7 @@ namespace rendering_engine
         upload_params();
     }
 
-    void phong_material::set_diffuse_map(const util::image& image, gpu::color_space space)
+    void phong_material::set_diffuse_map(const image& image, gpu::color_space space)
     {
         release_map(m_diffuse_map);
         m_diffuse_map = upload_map(image, space);

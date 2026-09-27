@@ -22,12 +22,12 @@
 
 #include <rendering_engine/renderables/mesh_bounds.hpp>
 
+#include <core/math/transform.hpp>
 #include <rendering_engine/assets/mesh_asset.hpp>
-#include <rendering_engine/util/transform.hpp>
 
 namespace rendering_engine
 {
-    bool mesh_world_bounds(const mesh_asset* mesh, const util::transform& world, core::math::aabb& out)
+    bool mesh_world_bounds(const mesh_asset* mesh, const core::transform& world, core::math::aabb& out)
     {
         if (mesh == nullptr)
         {
@@ -37,7 +37,7 @@ namespace rendering_engine
         return true;
     }
 
-    bool mesh_local_bounds(const mesh_asset* mesh, const util::transform& local, core::math::aabb& out)
+    bool mesh_local_bounds(const mesh_asset* mesh, const core::transform& local, core::math::aabb& out)
     {
         if (mesh == nullptr)
         {

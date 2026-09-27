@@ -48,15 +48,16 @@
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/renderables/per_draw_ubo.hpp>
 
+namespace core
+{
+    struct transform;
+}
+
 namespace rendering_engine
 {
     namespace gpu
     {
         struct device;
-    }
-    namespace util
-    {
-        struct transform;
     }
     struct draw_item;
 
@@ -244,7 +245,7 @@ namespace rendering_engine
     public:
         // Rebuild the cached block from @p transform if its world matrix
         // changed since the last call. Returns true when it did.
-        bool refresh(const util::transform& transform);
+        bool refresh(const core::transform& transform);
 
         // Refresh, then point @p item at the block and set its mirror
         // flag: on a device with push constants at the cached block the
@@ -252,7 +253,7 @@ namespace rendering_engine
         // frame's copy of it, the shared group for @p layout plus the
         // dynamic offset. False when no slot could be had; the caller
         // skips the draw.
-        bool bind(const util::transform& transform, gpu::bind_group_layout layout, draw_item& item);
+        bool bind(const core::transform& transform, gpu::bind_group_layout layout, draw_item& item);
 
         // The cached block and its mirror flag, as of the last refresh.
         // The block keeps its address for the binding's lifetime.

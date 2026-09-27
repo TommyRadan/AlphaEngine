@@ -1,4 +1,4 @@
-// Unit tests for rendering_engine::util::image and util::color: the packed
+// Unit tests for rendering_engine::image and rendering_engine::color: the packed
 // RGBA8 texel layout every GPU upload site relies on, and the value semantics
 // of the pixel buffer — deep copies, copy-and-swap assignment (larger over
 // smaller, over an empty image, self-assignment) and moves that leave the
@@ -13,13 +13,13 @@
 #include <stdexcept>
 #include <utility>
 
-#include <rendering_engine/util/color.hpp>
-#include <rendering_engine/util/image.hpp>
+#include <rendering_engine/assets/color.hpp>
+#include <rendering_engine/assets/image.hpp>
 
 namespace
 {
-    using rendering_engine::util::color;
-    using rendering_engine::util::image;
+    using rendering_engine::color;
+    using rendering_engine::image;
 
     bool same_color(const color& lhs, const color& rhs)
     {

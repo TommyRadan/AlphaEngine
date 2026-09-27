@@ -1,4 +1,4 @@
-// Unit tests for util::transform's orientation API in the engine convention
+// Unit tests for core::transform's orientation API in the engine convention
 // (+X forward, +Z up): the identity basis, look_at with the default and an
 // explicit up, the straight-up / straight-down fallback, the coincident
 // target, and that the basis vectors agree with the transform matrix.
@@ -8,12 +8,12 @@
 #include <cmath>
 
 #include <core/math/math.hpp>
-#include <rendering_engine/util/transform.hpp>
+#include <core/math/transform.hpp>
 
 using core::math::mat4;
 using core::math::vec3;
 using core::math::vec4;
-using rendering_engine::util::transform;
+using core::transform;
 
 namespace
 {

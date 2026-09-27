@@ -25,14 +25,14 @@
 #include <cstddef>
 
 #include <rendering_engine/assets/asset_device.hpp>
+#include <rendering_engine/assets/color.hpp>
 #include <rendering_engine/gpu/device.hpp>
-#include <rendering_engine/util/color.hpp>
 
 namespace rendering_engine
 {
     font_asset::font_asset(const std::string& filename, float size) : font{filename, size}
     {
-        const util::image& pixels = font.atlas();
+        const image& pixels = font.atlas();
 
         gpu::texture_descriptor descriptor{};
         descriptor.dimension = gpu::texture_dimension::d2;
@@ -49,7 +49,7 @@ namespace rendering_engine
         auto& gpu = asset_device();
         atlas = gpu.create_texture(descriptor);
         const std::size_t pixel_bytes = static_cast<std::size_t>(pixels.get_width()) *
-                                        static_cast<std::size_t>(pixels.get_height()) * sizeof(util::color);
+                                        static_cast<std::size_t>(pixels.get_height()) * sizeof(color);
         gpu.write_texture(atlas, pixels.get_pixels(), pixel_bytes);
     }
 
