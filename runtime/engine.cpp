@@ -40,14 +40,8 @@
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/rendering_engine.hpp>
 #include <rendering_engine/window.hpp>
+#include <runtime/game_module.hpp>
 #include <runtime/scene_manager.hpp>
-
-// Engine-side view of the game-module API: declares
-// install_pending_game_modules() without the GAME_MODULE()
-// self-registration block a module translation unit gets.
-#define INTERNAL_GAMEMODULE_IMPLEMENTATION
-#include <external/api/game_module.hpp>
-#undef INTERNAL_GAMEMODULE_IMPLEMENTATION
 
 namespace runtime
 {
@@ -160,11 +154,6 @@ namespace runtime
         // alive.
         events->init();
 
-        // Game modules self-register at static-init time (before the
-        // engine existed) — wire those queued registrations onto the
-        // now-live event bus before anything broadcasts.
-        install_pending_game_modules();
-
         // Mount the asset root before anything loads a file: the configured
         // directory when one is set, else the discovered default beside the
         // executable (or in one of its parents).
@@ -188,6 +177,12 @@ namespace runtime
         // bus is initialised.
         m_quit_subscription =
             events->subscribe<core::quit_requested>([this](const core::quit_requested&) { m_quit_requested = true; });
+
+        // Every subsystem is up: install the game. Each game module
+        // registered its bootstrap at static-init time (before the engine
+        // existed); run them now so they spawn their nodes and behaviours
+        // into the active scene, where the scenes own and tear them down.
+        install_game_modules(scenes->active_scene());
     }
 
     void engine::quit()
@@ -239,6 +234,7 @@ namespace runtime
         // several times this frame so simulation behaviour is independent of
         // frame rate. The accumulator's clamp bounds the step count, so this
         // loop always terminates (the spiral-of-death guard lives in time).
+        // Behaviours receive their on_fixed_update from this core::frame.
         time->accumulate(time->delta_time());
         core::frame frame;
         frame.m_delta_time = static_cast<float>(time->fixed_delta_time());
@@ -256,11 +252,11 @@ namespace runtime
         events->emit<core::render_update>(render_tick);
 
         // Propagate scene-graph component updates (light/camera poses tracking
-        // their nodes) in every loaded scene after the fixed updates moved
-        // nodes and before the draw walk. Runs once per rendered frame;
-        // render_* events fire per render inside renderer->render(). The
-        // interpolation alpha for smoothing between fixed states is available
-        // via time->interpolation_alpha().
+        // their nodes, behaviours' on_update) in every loaded scene after the
+        // fixed updates moved nodes and before the draw walk. Runs once per
+        // rendered frame; render_* events fire per render inside
+        // renderer->render(). The interpolation alpha for smoothing between
+        // fixed states is available via time->interpolation_alpha().
         scenes->update();
         // A minimized window has no drawable (the Vulkan surface reports a
         // zero extent), so the frame is neither built nor presented until

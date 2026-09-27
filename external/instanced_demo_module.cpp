@@ -21,8 +21,6 @@
  */
 
 #include "api/game_module.hpp"
-#include "api/log.hpp"
-#include "api/time.hpp"
 
 #include <core/log.hpp>
 #include <core/math/math.hpp>
@@ -32,11 +30,13 @@
 #include <rendering_engine/renderables/instanced_mesh.hpp>
 #include <rendering_engine/rendering_engine.hpp>
 #include <rendering_engine/util/color.hpp>
+#include <runtime/components/renderable_component.hpp>
 #include <runtime/engine.hpp>
 
 #include <cmath>
 #include <cstdint>
 #include <memory>
+#include <utility>
 #include <vector>
 
 namespace
@@ -50,10 +50,6 @@ namespace
     constexpr float spacing = 0.6f;
     constexpr float cube_scale = 0.3f;
     constexpr float forward_offset = 8.0f;
-
-    std::unique_ptr<rendering_engine::instanced_mesh> g_cubes;
-    std::vector<core::math::vec3> g_base_positions;
-    float g_time = 0.0f;
 
     // Builds a unit cube (six single-quad faces, CCW-from-outside winding)
     // in the position+uv+normal vertex format the instanced material draws.
@@ -101,100 +97,100 @@ namespace
         build_face(ax, az, -ay);  // -Y
     }
 
-    void on_engine_start(const core::engine_start& event)
+    // Animates the lattice drawn by the renderable_component on its node:
+    // the cubes' rest positions and the clock are its state.
+    struct lattice_wave final : runtime::behavior
     {
-        (void)event;
-
-        auto& material = runtime::current_engine().renderer->get_instanced_material();
-        material.set_color(rendering_engine::util::color{255, 255, 255, 255});
-
-        // Fetch the cube geometry through the asset cache so the upload is
-        // shared and deduplicated by key rather than baked into this renderable.
-        auto cube = runtime::current_engine().assets->get_or_create_mesh(
-            "instanced_demo:unit_cube",
-            []
-            {
-                std::vector<rendering_engine::vertex_position_uv_normal> vertices;
-                std::vector<uint32_t> indices;
-                build_unit_cube(vertices, indices);
-                return rendering_engine::mesh_data::from_vertices(vertices, std::move(indices));
-            });
-
-        g_cubes = std::make_unique<rendering_engine::instanced_mesh>(&material, instance_count);
-        g_cubes->set_geometry(std::move(cube));
-
-        g_base_positions.reserve(instance_count);
-        const float centre = static_cast<float>(grid_side - 1) * 0.5f;
-        for (uint32_t i = 0; i < grid_side; ++i)
+        explicit lattice_wave(std::vector<core::math::vec3> base_positions)
+            : m_base_positions{std::move(base_positions)}
         {
-            for (uint32_t j = 0; j < grid_side; ++j)
-            {
-                for (uint32_t k = 0; k < grid_side; ++k)
-                {
-                    const uint32_t index = (i * grid_side + j) * grid_side + k;
-                    const float x = (static_cast<float>(i) - centre) * spacing + forward_offset;
-                    const float y = (static_cast<float>(j) - centre) * spacing;
-                    const float z = (static_cast<float>(k) - centre) * spacing;
-                    g_base_positions.push_back(core::math::vec3{x, y, z});
+        }
 
-                    // Tint each cube by its lattice cell for an RGB gradient.
-                    const auto r = static_cast<uint8_t>(40 + (215 * i) / (grid_side - 1));
-                    const auto g = static_cast<uint8_t>(40 + (215 * j) / (grid_side - 1));
-                    const auto b = static_cast<uint8_t>(40 + (215 * k) / (grid_side - 1));
-                    g_cubes->set_instance_color(index, rendering_engine::util::color{r, g, b, 255});
-                }
+        void on_update(float delta_time) override
+        {
+            const runtime::renderable_component* drawn = owner().get_component<runtime::renderable_component>();
+            rendering_engine::instanced_mesh* cubes =
+                drawn != nullptr ? drawn->get_as<rendering_engine::instanced_mesh>() : nullptr;
+            if (cubes == nullptr)
+            {
+                return;
+            }
+
+            m_time += delta_time / 1000.0f;
+
+            const core::math::vec3 spin_axis{0.0f, 1.0f, 0.0f};
+            const core::math::vec3 unit_scale{cube_scale, cube_scale, cube_scale};
+            for (uint32_t index = 0; index < m_base_positions.size(); ++index)
+            {
+                const core::math::vec3& base = m_base_positions[index];
+                // A travelling sine wave across the lattice plus a per-cube
+                // spin, recomputed every frame for all instances to exercise
+                // the dynamic per-instance storage-buffer upload path at scale.
+                const float phase = base.x + base.y + base.z;
+                const float bob = std::sin(m_time * 2.0f + phase) * 0.25f;
+                const core::math::vec3 position{base.x, base.y + bob, base.z};
+                const float angle = m_time + phase;
+
+                const core::math::mat4 model = core::math::translate(position) * core::math::rotate(angle, spin_axis) *
+                                               core::math::scale(unit_scale);
+                cubes->set_instance_transform(index, model);
             }
         }
 
-        runtime::current_engine().renderer->register_scene_renderable(g_cubes.get());
-        LOG_INF("instanced_demo_module: %u cubes in one instanced draw", instance_count);
-    }
-
-    void on_engine_stop(const core::engine_stop& event)
-    {
-        (void)event;
-        runtime::current_engine().renderer->unregister_scene_renderable(g_cubes.get());
-        g_cubes.reset();
-        g_base_positions.clear();
-    }
-
-    void on_render_update(const core::render_update& event)
-    {
-        (void)event;
-        if (!g_cubes)
-        {
-            return;
-        }
-
-        g_time += event.m_delta_time / 1000.0f;
-
-        const core::math::vec3 spin_axis{0.0f, 1.0f, 0.0f};
-        const core::math::vec3 unit_scale{cube_scale, cube_scale, cube_scale};
-        for (uint32_t index = 0; index < instance_count; ++index)
-        {
-            const core::math::vec3& base = g_base_positions[index];
-            // A travelling sine wave across the lattice plus a per-cube spin,
-            // recomputed every frame for all instances to exercise the
-            // dynamic per-instance storage-buffer upload path at scale.
-            const float phase = base.x + base.y + base.z;
-            const float bob = std::sin(g_time * 2.0f + phase) * 0.25f;
-            const core::math::vec3 position{base.x, base.y + bob, base.z};
-            const float angle = g_time + phase;
-
-            const core::math::mat4 model =
-                core::math::translate(position) * core::math::rotate(angle, spin_axis) * core::math::scale(unit_scale);
-            g_cubes->set_instance_transform(index, model);
-        }
-    }
+    private:
+        std::vector<core::math::vec3> m_base_positions;
+        float m_time{0.0f};
+    };
 } // namespace
 
 GAME_MODULE()
 {
-    LOG_INF("Registering external module: instanced_demo_module");
-    struct game_module_info info = {};
-    info.on_engine_start = on_engine_start;
-    info.on_engine_stop = on_engine_stop;
-    info.on_render_update = on_render_update;
-    register_game_module(info);
-    return true;
+    auto& material = runtime::current_engine().renderer->get_instanced_material();
+    material.set_color(rendering_engine::util::color{255, 255, 255, 255});
+
+    // Fetch the cube geometry through the asset cache so the upload is
+    // shared and deduplicated by key rather than baked into this renderable.
+    auto cube = runtime::current_engine().assets->get_or_create_mesh(
+        "instanced_demo:unit_cube",
+        []
+        {
+            std::vector<rendering_engine::vertex_position_uv_normal> vertices;
+            std::vector<uint32_t> indices;
+            build_unit_cube(vertices, indices);
+            return rendering_engine::mesh_data::from_vertices(vertices, std::move(indices));
+        });
+
+    auto cubes = std::make_unique<rendering_engine::instanced_mesh>(&material, instance_count);
+    cubes->set_geometry(std::move(cube));
+
+    std::vector<core::math::vec3> base_positions;
+    base_positions.reserve(instance_count);
+    const float centre = static_cast<float>(grid_side - 1) * 0.5f;
+    for (uint32_t i = 0; i < grid_side; ++i)
+    {
+        for (uint32_t j = 0; j < grid_side; ++j)
+        {
+            for (uint32_t k = 0; k < grid_side; ++k)
+            {
+                const uint32_t index = (i * grid_side + j) * grid_side + k;
+                const float x = (static_cast<float>(i) - centre) * spacing + forward_offset;
+                const float y = (static_cast<float>(j) - centre) * spacing;
+                const float z = (static_cast<float>(k) - centre) * spacing;
+                base_positions.push_back(core::math::vec3{x, y, z});
+
+                // Tint each cube by its lattice cell for an RGB gradient.
+                const auto r = static_cast<uint8_t>(40 + (215 * i) / (grid_side - 1));
+                const auto g = static_cast<uint8_t>(40 + (215 * j) / (grid_side - 1));
+                const auto b = static_cast<uint8_t>(40 + (215 * k) / (grid_side - 1));
+                cubes->set_instance_color(index, rendering_engine::util::color{r, g, b, 255});
+            }
+        }
+    }
+
+    // The instances carry world transforms, so the node only owns the
+    // lattice and its animation.
+    runtime::node& lattice = scene.create_node("instanced_lattice");
+    lattice.add_component(runtime::renderable_component{std::move(cubes)});
+    runtime::add_behavior<lattice_wave>(lattice, std::move(base_positions));
+    LOG_INF("instanced_demo_module: %u cubes in one instanced draw", instance_count);
 }

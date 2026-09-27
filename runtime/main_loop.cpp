@@ -34,14 +34,14 @@
 
 namespace
 {
-    // Tears the engine down after a failure. The engine on main's stack dies
-    // before the game modules' file-scope statics, so those statics — lights,
-    // materials, models — would otherwise unwind against freed subsystems: the
-    // engine_stop broadcast is what makes the modules release them while the
-    // renderer and scene are still alive, and quit() then brings the
-    // subsystems down in order (the scenes first, freeing every node). Every subsystem's quit() tolerates an init()
-    // that never ran or ran only partway. Errors raised here are logged and
-    // swallowed so they cannot mask the failure that brought us here.
+    // Tears the engine down after a failure. The game lives in the scenes —
+    // the game modules' nodes, components and behaviours — so quit() unwinds
+    // it while the renderer is still alive: it brings the subsystems down in
+    // order, the scenes first, freeing every node. The engine_stop broadcast
+    // goes out before that for any listener that holds engine objects of its
+    // own. Every subsystem's quit() tolerates an init() that never ran or ran
+    // only partway. Errors raised here are logged and swallowed so they
+    // cannot mask the failure that brought us here.
     void shut_down_after_failure(runtime::engine& engine, bool started)
     {
         if (started)
@@ -149,8 +149,9 @@ int main(int argc, char* argv[])
         {
             engine.window->show_message("Error", e.what());
         }
-        // engine_start went out (at least partly), so the modules hold live
-        // engine objects: tell them to let go, then take the subsystems down.
+        // engine_start went out (at least partly), so its listeners may hold
+        // live engine objects: tell them to let go, then take the subsystems
+        // down.
         shut_down_after_failure(engine, true);
         return EXIT_FAILURE;
     }

@@ -45,6 +45,7 @@
 #include <concepts>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <type_traits>
 #include <typeindex>
 #include <typeinfo>
@@ -414,10 +415,12 @@ namespace runtime
             }
 
             // Copies the component into @p target for @p owner, through the
-            // type's clone() when it has one, else its copy constructor. The
-            // copy is made before the insert, which may grow this very pool.
-            // on_attach is left to the caller, once the node has recorded the
-            // handle (the same order add_component uses).
+            // type's clone() when it has one, else its copy constructor. A
+            // clone() returning std::optional<C> may decline with an empty
+            // one (explaining why itself), which leaves the component off the
+            // copy. The copy is made before the insert, which may grow this
+            // very pool. on_attach is left to the caller, once the node has
+            // recorded the handle (the same order add_component uses).
             component_handle clone_into(component_handle handle, component_store& target, owner_record owner) override
             {
                 const C* source = data.get(make_handle<C>(handle));
@@ -431,6 +434,17 @@ namespace runtime
                 {
                     C copy = source->clone();
                     return target.insert<C>(std::move(copy), owner);
+                }
+                else if constexpr (requires(const C& c) {
+                                       { c.clone() } -> std::same_as<std::optional<C>>;
+                                   })
+                {
+                    std::optional<C> copy = source->clone();
+                    if (!copy.has_value())
+                    {
+                        return component_handle{};
+                    }
+                    return target.insert<C>(std::move(*copy), owner);
                 }
                 else if constexpr (std::is_copy_constructible_v<C>)
                 {

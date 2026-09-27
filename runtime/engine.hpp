@@ -105,7 +105,11 @@ namespace runtime
         engine(engine&&) = delete;
         engine& operator=(engine&&) = delete;
 
-        /** @brief Initializes every subsystem in dependency order. */
+        /**
+         * @brief Initializes every subsystem in dependency order, then
+         *        installs the game modules (runtime/game_module.hpp) into the
+         *        active scene.
+         */
         void init();
 
         /** @brief Tears every subsystem down in reverse order. */
