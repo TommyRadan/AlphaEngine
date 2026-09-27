@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2015-2026 Tomislav Radanovic
+
 // Helpers for passes that sample the scene depth
 // (frame_context::scene_depth_texture). The texture stores the non-linear
 // window-space depth the scene and skybox passes leave in the HDR

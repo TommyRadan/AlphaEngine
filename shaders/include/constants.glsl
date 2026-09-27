@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2015-2026 Tomislav Radanovic
+
 // Numeric constants shared by the lighting and IBL code.
 #ifndef AE_CONSTANTS_GLSL
 #define AE_CONSTANTS_GLSL

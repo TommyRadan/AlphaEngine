@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2015-2026 Tomislav Radanovic
+
 // Cook-Torrance microfacet terms for direct lighting: GGX normal
 // distribution, Schlick-GGX geometry with the direct-lighting remap,
 // Schlick Fresnel, and the combined diffuse + specular BRDF.

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2015-2026 Tomislav Radanovic
+
 // The packed lights block the scene pass uploads into set 0, binding
 // BINDING_LIGHTS. Mirrors rendering_engine::gpu_lights byte-for-byte
 // (lighting/lights_ubo.hpp); bump the array capacities there and here
