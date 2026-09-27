@@ -42,11 +42,13 @@
 #include <imgui_impl_sdl3.h>
 #include <imgui_impl_vulkan.h>
 #include <imgui_internal.h>
+#include <ImGuizmo.h>
 
 #include <core/log.hpp>
 #include <core/platform/platform.hpp>
 #include <core/settings.hpp>
 #include <core/time.hpp>
+#include <rendering_engine/camera/camera_registry.hpp>
 #include <rendering_engine/camera/orthographic_camera.hpp>
 #include <rendering_engine/camera/perspective_camera.hpp>
 #include <rendering_engine/debug/helper.hpp>
@@ -140,6 +142,16 @@ namespace rendering_engine::debug_ui
         // before the Inspector dereferences it, so a node destroyed since
         // it was selected is never read.
         runtime::node* g_selected_node = nullptr;
+
+        // Transform gizmo (#220) state, shared between the Inspector's mode
+        // toggle, the W/E/R shortcuts and the gizmo drawn over the viewport
+        // so all three agree on what is currently shown.
+        ImGuizmo::OPERATION g_gizmo_operation = ImGuizmo::TRANSLATE;
+        ImGuizmo::MODE g_gizmo_mode = ImGuizmo::WORLD;
+        bool g_gizmo_snap_enabled = false;
+        float g_gizmo_snap_translate = 1.0f;
+        float g_gizmo_snap_rotate_degrees = 15.0f;
+        float g_gizmo_snap_scale = 0.1f;
 
         void check_vk_result(VkResult result)
         {
@@ -795,6 +807,56 @@ namespace rendering_engine::debug_ui
             }
         }
 
+        // Mode toggle and optional snapping for the transform gizmo (#220)
+        // drawn over the viewport by draw_gizmo. The W/E/R shortcuts
+        // (handle_gizmo_shortcuts) change the same g_gizmo_operation, so
+        // the radio buttons here always reflect whichever one fired last.
+        void draw_gizmo_controls()
+        {
+            ImGui::SeparatorText("Gizmo");
+            if (ImGui::RadioButton("Translate (W)", g_gizmo_operation == ImGuizmo::TRANSLATE))
+            {
+                g_gizmo_operation = ImGuizmo::TRANSLATE;
+            }
+            if (ImGui::RadioButton("Rotate (E)", g_gizmo_operation == ImGuizmo::ROTATE))
+            {
+                g_gizmo_operation = ImGuizmo::ROTATE;
+            }
+            if (ImGui::RadioButton("Scale (R)", g_gizmo_operation == ImGuizmo::SCALE))
+            {
+                g_gizmo_operation = ImGuizmo::SCALE;
+            }
+
+            // ImGuizmo always manipulates SCALE in local space regardless of
+            // this setting, so the toggle is hidden while it would do nothing.
+            if (g_gizmo_operation != ImGuizmo::SCALE)
+            {
+                if (ImGui::RadioButton("Local##gizmo_space", g_gizmo_mode == ImGuizmo::LOCAL))
+                {
+                    g_gizmo_mode = ImGuizmo::LOCAL;
+                }
+                ImGui::SameLine();
+                if (ImGui::RadioButton("World##gizmo_space", g_gizmo_mode == ImGuizmo::WORLD))
+                {
+                    g_gizmo_mode = ImGuizmo::WORLD;
+                }
+            }
+
+            ImGui::Checkbox("Snap##gizmo", &g_gizmo_snap_enabled);
+            switch (g_gizmo_operation)
+            {
+            case ImGuizmo::ROTATE:
+                ImGui::DragFloat("Snap degrees##gizmo", &g_gizmo_snap_rotate_degrees, 1.0f, 0.0f, 180.0f);
+                break;
+            case ImGuizmo::SCALE:
+                ImGui::DragFloat("Snap scale##gizmo", &g_gizmo_snap_scale, 0.01f, 0.01f, 10.0f);
+                break;
+            default:
+                ImGui::DragFloat("Snap step##gizmo", &g_gizmo_snap_translate, 0.05f, 0.01f, 100.0f);
+                break;
+            }
+        }
+
         // The selected node's name, active flag and transform, plus a
         // hand-written section per built-in component it carries. Kept
         // here in debug_ui rather than on the components so release
@@ -838,6 +900,7 @@ namespace rendering_engine::debug_ui
 
                     ImGui::SeparatorText("Transform");
                     draw_transform_section(node.transform);
+                    draw_gizmo_controls();
 
                     if (runtime::camera_component* camera = node.get_component<runtime::camera_component>())
                     {
@@ -907,8 +970,10 @@ namespace rendering_engine::debug_ui
         // dock against the window edges and against each other. Built
         // once with a stable id so ImGui's own ini persistence
         // (core::platform::pref_path, set up in init) remembers whatever
-        // arrangement the user leaves it in across runs.
-        void setup_dockspace()
+        // arrangement the user leaves it in across runs. Returns the
+        // dockspace id so the caller can locate the central node — the
+        // passthrough game view the transform gizmo draws over.
+        ImGuiID setup_dockspace()
         {
             const ImGuiID dockspace_id = ImGui::GetID("AlphaEngineDockSpace");
             if (ImGui::DockBuilderGetNode(dockspace_id) == nullptr)
@@ -917,6 +982,146 @@ namespace rendering_engine::debug_ui
             }
             ImGui::DockSpaceOverViewport(
                 dockspace_id, ImGui::GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode);
+            return dockspace_id;
+        }
+
+        // -- Transform gizmo (#220) -------------------------------------------
+
+        // Splits a world (or local) matrix back into position, orientation
+        // and scale, so a gizmo edit — which only ever produces a matrix —
+        // can be written back onto a util::transform. Mirrors
+        // runtime::physics::physics_world.cpp's own decompose(): a mirrored
+        // (negative-determinant) result folds its reflection into the X
+        // scale so the remaining basis is a proper rotation
+        // core::math::quat_from_basis can convert; a collapsed axis has no
+        // orientation to recover and is left at the identity rotation.
+        core::math::trs decompose_matrix(const core::math::mat4& m)
+        {
+            core::math::trs pose;
+            pose.translation = core::math::vec3{m.m[12], m.m[13], m.m[14]};
+
+            const core::math::vec3 x_axis{m.m[0], m.m[1], m.m[2]};
+            const core::math::vec3 y_axis{m.m[4], m.m[5], m.m[6]};
+            const core::math::vec3 z_axis{m.m[8], m.m[9], m.m[10]};
+            core::math::vec3 scale{core::math::length(x_axis), core::math::length(y_axis), core::math::length(z_axis)};
+
+            constexpr float degenerate = 1.0e-8f;
+            if (scale.x < degenerate || scale.y < degenerate || scale.z < degenerate)
+            {
+                pose.scale = scale;
+                return pose;
+            }
+
+            core::math::vec3 x_unit = x_axis / scale.x;
+            const core::math::vec3 y_unit = y_axis / scale.y;
+            const core::math::vec3 z_unit = z_axis / scale.z;
+            if (core::math::dot(core::math::cross(x_unit, y_unit), z_unit) < 0.0f)
+            {
+                scale.x = -scale.x;
+                x_unit = -x_unit;
+            }
+            pose.scale = scale;
+            pose.rotation = core::math::normalize(core::math::quat_from_basis(x_unit, y_unit, z_unit));
+            return pose;
+        }
+
+        // True while no ImGui panel holds keyboard/mouse focus, i.e. focus
+        // is on the passthrough central dock node (the game view) rather
+        // than a docked tool window. Gates the W/E/R shortcuts below so
+        // typing "w" into, say, the Inspector's Name field or the
+        // Console's category filter does not retarget the gizmo.
+        bool viewport_has_focus()
+        {
+            return !ImGui::IsWindowFocused(ImGuiFocusedFlags_AnyWindow);
+        }
+
+        // W/E/R cycle the gizmo between translate / rotate / scale, matching
+        // the Inspector's radio buttons (draw_gizmo_controls). Checked every
+        // frame regardless of whether a node is selected, same as the
+        // Inspector toggle.
+        void handle_gizmo_shortcuts()
+        {
+            if (!viewport_has_focus())
+            {
+                return;
+            }
+            if (ImGui::IsKeyPressed(ImGuiKey_W))
+            {
+                g_gizmo_operation = ImGuizmo::TRANSLATE;
+            }
+            else if (ImGui::IsKeyPressed(ImGuiKey_E))
+            {
+                g_gizmo_operation = ImGuizmo::ROTATE;
+            }
+            else if (ImGui::IsKeyPressed(ImGuiKey_R))
+            {
+                g_gizmo_operation = ImGuizmo::SCALE;
+            }
+        }
+
+        // Translate / rotate / scale gizmo on the Hierarchy's current
+        // selection, drawn over @p dockspace_id's central node (the
+        // passthrough game view) in the active camera's view and
+        // projection. ImGuizmo::Manipulate always works in world space —
+        // g_gizmo_mode only orients the translate/rotate handles, and it
+        // ignores the mode entirely for scale — so the manipulated result
+        // is converted back to the node's local transform by undoing its
+        // parent's world matrix (a root node's local and world already
+        // agree). A node whose pose is driven by physics or an animator is
+        // simply overwritten again next frame, same as any other manual
+        // edit to its transform.
+        void draw_gizmo(ImGuiID dockspace_id)
+        {
+            if (g_selected_node == nullptr)
+            {
+                return;
+            }
+            const ImGuiDockNode* central = ImGui::DockBuilderGetCentralNode(dockspace_id);
+            rendering_engine::camera* cam = rendering_engine::active_camera();
+            if (central == nullptr || cam == nullptr)
+            {
+                return;
+            }
+
+            ImGuizmo::SetOrthographic(dynamic_cast<rendering_engine::orthographic_camera*>(cam) != nullptr);
+            ImGuizmo::SetDrawlist(ImGui::GetForegroundDrawList());
+            ImGuizmo::SetRect(central->Pos.x, central->Pos.y, central->Size.x, central->Size.y);
+
+            runtime::node& node = *g_selected_node;
+            core::math::mat4 world = node.world_matrix();
+            const core::math::mat4 view = cam->get_view_matrix();
+            const core::math::mat4 projection = cam->get_projection_matrix();
+
+            float snap[3] = {g_gizmo_snap_translate, g_gizmo_snap_translate, g_gizmo_snap_translate};
+            if (g_gizmo_operation == ImGuizmo::ROTATE)
+            {
+                snap[0] = snap[1] = snap[2] = g_gizmo_snap_rotate_degrees;
+            }
+            else if (g_gizmo_operation == ImGuizmo::SCALE)
+            {
+                snap[0] = snap[1] = snap[2] = g_gizmo_snap_scale;
+            }
+
+            ImGuizmo::Manipulate(view.data(),
+                                 projection.data(),
+                                 g_gizmo_operation,
+                                 g_gizmo_mode,
+                                 world.data(),
+                                 nullptr,
+                                 g_gizmo_snap_enabled ? snap : nullptr);
+
+            if (!ImGuizmo::IsUsing())
+            {
+                return;
+            }
+
+            runtime::node* parent = node.parent();
+            const core::math::mat4 local =
+                parent != nullptr ? core::math::inverse(parent->world_matrix()) * world : world;
+            const core::math::trs pose = decompose_matrix(local);
+            node.transform.set_position(pose.translation);
+            node.transform.set_quaternion(pose.rotation);
+            node.transform.set_scale(pose.scale);
         }
 
         // Small always-on overlay pinned to the top-right corner showing
@@ -1279,8 +1484,9 @@ namespace rendering_engine::debug_ui
             g_frame_times[g_frame_cursor] = static_cast<float>(time.delta_time());
             g_frame_cursor = (g_frame_cursor + 1) % k_frame_history;
 
-            setup_dockspace();
+            const ImGuiID dockspace_id = setup_dockspace();
             validate_selection();
+            handle_gizmo_shortcuts();
 
             draw_fps_overlay();
             draw_render_targets_window();
@@ -1292,6 +1498,7 @@ namespace rendering_engine::debug_ui
             draw_settings_window();
             draw_post_window();
             draw_helpers_window();
+            draw_gizmo(dockspace_id);
             if (g_show_demo)
             {
                 ImGui::ShowDemoWindow(&g_show_demo);
@@ -1534,6 +1741,7 @@ namespace rendering_engine::debug_ui
         }
         ImGui_ImplSDL3_NewFrame();
         ImGui::NewFrame();
+        ImGuizmo::BeginFrame();
 
         build_panels();
 
