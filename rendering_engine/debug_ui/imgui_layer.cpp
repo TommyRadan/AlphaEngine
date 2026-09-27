@@ -1146,13 +1146,14 @@ namespace rendering_engine::debug_ui
         }
 
         // Runtime tuning for the post-processing chain: tonemap
-        // exposure/operator, bloom, temporal AA feedback and FXAA. Every
-        // edit is written back through context::set_post_settings, the
-        // same path any other caller would use, so it takes effect on the
-        // next recorded frame (tonemap immediately, since its setters
-        // rewrite their UBO on the spot). TAA's own enabled checkbox is
-        // shown disabled: the pass is only ever brought up once, at init,
-        // from graphics.temporal_aa (see post_settings::taa's doc comment).
+        // exposure/operator, volumetric fog, bloom, temporal AA feedback
+        // and FXAA. Every edit is written back through
+        // context::set_post_settings, the same path any other caller would
+        // use, so it takes effect on the next recorded frame (tonemap
+        // immediately, since its setters rewrite their UBO on the spot).
+        // TAA's own enabled checkbox is shown disabled: the pass is only
+        // ever brought up once, at init, from graphics.temporal_aa (see
+        // post_settings::taa's doc comment).
         void draw_post_window()
         {
             if (!g_show_post)
@@ -1176,6 +1177,18 @@ namespace rendering_engine::debug_ui
                     settings.tonemap_op = static_cast<rendering_engine::tonemap_operator>(op);
                     changed = true;
                 }
+
+                ImGui::SeparatorText("Volumetric fog");
+                changed |= ImGui::Checkbox("Enabled##volumetric", &settings.volumetric.enabled);
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Raymarches the scene's height fog: needs fog_settings::height_density > 0");
+                }
+                changed |= ImGui::SliderFloat("Density scale", &settings.volumetric.density_scale, 0.0f, 4.0f);
+                changed |= ImGui::SliderFloat("Anisotropy", &settings.volumetric.anisotropy, -0.95f, 0.95f);
+                changed |= ImGui::SliderFloat("Max distance", &settings.volumetric.max_distance, 1.0f, 256.0f);
+                changed |= ImGui::SliderInt("Steps", &settings.volumetric.steps, 4, 128);
+                changed |= ImGui::SliderFloat("Intensity", &settings.volumetric.intensity, 0.0f, 8.0f);
 
                 ImGui::SeparatorText("Bloom");
                 changed |= ImGui::Checkbox("Enabled##bloom", &settings.bloom.enabled);

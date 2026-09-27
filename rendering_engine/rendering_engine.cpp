@@ -53,6 +53,7 @@
 #include <rendering_engine/passes/post/taa_pass.hpp>
 #include <rendering_engine/passes/post/tonemap_pass.hpp>
 #include <rendering_engine/passes/post/velocity_pass.hpp>
+#include <rendering_engine/passes/post/volumetric_fog_pass.hpp>
 #include <rendering_engine/passes/projection_jitter.hpp>
 #include <rendering_engine/passes/scene_pass.hpp>
 #include <rendering_engine/passes/shadow_pass.hpp>
@@ -151,6 +152,14 @@ void rendering_engine::context::init()
     // dormant until set_environment supplies a cube map.
     auto skybox = std::make_unique<skybox_pass>();
     m_skybox = skybox.get();
+    // Volumetric fog marches the height-fog medium toward the finalised
+    // scene depth and blends its lit haze and light shafts over the HDR
+    // target, ahead of bloom and tonemap so they treat it like the rest of
+    // the scene. It binds the scene pass's jittered per-frame group (the
+    // view the depth was rasterised with, the lights, the shadow maps)
+    // and draws nothing until post_settings::volumetric enables it.
+    auto volumetric_fog =
+        std::make_unique<volumetric_fog_pass>(scene_frame_layout, scene->frame_bind_group(), width, height);
     // Bloom runs between the scene and tonemap passes: it reads the HDR
     // scene colour, blurs the bright pixels and additively composites the
     // glow back into the same target, so tonemap maps the bloomed result.
@@ -249,8 +258,8 @@ void rendering_engine::context::init()
     // the HDR target, the skybox pass fills the untouched background of
     // that target with the environment cube map, the optional velocity
     // pass reconstructs per-pixel motion vectors from the finalised depth
-    // for the TAA reprojection, the bloom post pass blurs its bright pixels
-    // back
+    // for the TAA reprojection, the volumetric fog pass blends the lit
+    // medium over it, the bloom post pass blurs its bright pixels back
     // into that target, the tonemap post pass maps the result to LDR in
     // the off-screen LDR target, the optional TAA post pass accumulates the
     // jittered LDR frames into a supersampled image, the FXAA post pass
@@ -277,6 +286,7 @@ void rendering_engine::context::init()
     {
         m_passes.push_back(std::move(velocity));
     }
+    m_passes.push_back(std::move(volumetric_fog));
     m_passes.push_back(std::move(bloom));
     m_passes.push_back(std::move(post));
     if (taa)

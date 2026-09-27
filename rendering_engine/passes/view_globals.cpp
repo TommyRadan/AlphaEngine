@@ -28,6 +28,7 @@
 #include <rendering_engine/camera/camera.hpp>
 #include <rendering_engine/passes/pass.hpp>
 #include <rendering_engine/passes/projection_jitter.hpp>
+#include <rendering_engine/post_settings.hpp>
 
 namespace
 {
@@ -76,11 +77,17 @@ namespace rendering_engine
         // Fog: the mode rides in fogColor.a (the lit shaders skip the
         // distance term at 0); fogParams.w is the height-fog density (0
         // disables that term) and heightFogParams.xy its falloff and
-        // reference height.
+        // reference height. heightFogParams.z is where along the view ray
+        // the analytic height fog starts: while the volumetric fog pass
+        // marches the same medium out to its max distance, the lit shaders
+        // leave that stretch to it rather than attenuating it twice.
+        const float height_fog_start =
+            volumetric_fog_active(ctx.post.volumetric) ? ctx.post.volumetric.max_distance : 0.0f;
         globals.fog_color = core::math::vec4{ctx.fog.color, static_cast<float>(static_cast<int>(ctx.fog.mode))};
         globals.fog_params =
             core::math::vec4{ctx.fog.near_distance, ctx.fog.far_distance, ctx.fog.density, ctx.fog.height_density};
-        globals.height_fog_params = core::math::vec4{ctx.fog.height_falloff, ctx.fog.reference_height, 0.0f, 0.0f};
+        globals.height_fog_params =
+            core::math::vec4{ctx.fog.height_falloff, ctx.fog.reference_height, height_fog_start, 0.0f};
 
         return globals;
     }

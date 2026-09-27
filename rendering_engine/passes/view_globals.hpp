@@ -82,7 +82,9 @@ namespace rendering_engine
         core::math::vec4 fog_color;
         // x near, y far, z density, w height-fog density (0 disables it).
         core::math::vec4 fog_params;
-        // x height-fog falloff, y reference height; zw unused.
+        // x height-fog falloff, y reference height, z the view distance
+        // the analytic height fog starts at (the volumetric fog's max
+        // distance while it runs, else 0); w unused.
         core::math::vec4 height_fog_params;
     };
 

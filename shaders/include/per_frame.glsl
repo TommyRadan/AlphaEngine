@@ -24,8 +24,11 @@
 //                                           1 linear, 2 exp2)
 //   528   vec4 fogParams                    x near, y far, z density,
 //                                           w height density
-//   544   vec4 heightFogParams              x falloff, y reference height
-//                                           (z, w unused)
+//   544   vec4 heightFogParams              x falloff, y reference height,
+//                                           z view distance the analytic
+//                                           height fog starts at (the
+//                                           volumetric fog's max distance
+//                                           while it runs, else 0; w unused)
 #ifndef AE_PER_FRAME_GLSL
 #define AE_PER_FRAME_GLSL
 

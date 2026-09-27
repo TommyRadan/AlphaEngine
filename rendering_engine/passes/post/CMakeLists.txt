@@ -10,4 +10,6 @@ target_sources(AlphaEngine PRIVATE
     tonemap_pass.hpp
     velocity_pass.cpp
     velocity_pass.hpp
+    volumetric_fog_pass.cpp
+    volumetric_fog_pass.hpp
 )

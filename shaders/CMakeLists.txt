@@ -71,6 +71,9 @@ set(ALPHAENGINE_SHADER_SOURCES
     passes/taa_resolve.frag.glsl
     passes/tonemap.frag.glsl
     passes/velocity.frag.glsl
+    passes/volumetric_fog.frag.glsl
+    passes/volumetric_fog_composite.frag.glsl
+    passes/volumetric_fog_upsample.frag.glsl
 )
 
 set(ALPHAENGINE_SHADER_GENERATED_DIR ${CMAKE_BINARY_DIR}/generated/shaders)

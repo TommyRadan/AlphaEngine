@@ -171,7 +171,9 @@ namespace rendering_engine
         // @ref context::set_post_settings each frame. @ref bloom_pass,
         // @ref taa_pass and @ref fxaa_pass read the fields they own here in
         // @c record and rewrite their own UBO only when a value differs
-        // from what they last uploaded; @ref tonemap_pass is the exception
+        // from what they last uploaded (@ref volumetric_fog_pass rewrites
+        // its params every frame it draws, since they carry the camera
+        // and the noise frame too); @ref tonemap_pass is the exception
         // — its exposure and operator are applied immediately by
         // @ref context::set_post_settings through its own live-tunable
         // setters, so it does not need to read this back. See

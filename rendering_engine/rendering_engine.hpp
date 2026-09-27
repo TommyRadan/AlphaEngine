@@ -306,9 +306,10 @@ namespace rendering_engine
          * @brief Sets the runtime-tunable post-processing chain parameters.
          *
          * Stored and copied into @ref frame_context::post every
-         * @ref render so @ref bloom_pass, @ref taa_pass and @ref fxaa_pass
-         * can read the fields they own and rewrite their own UBO only when
-         * a value actually changed. @c exposure and @c tonemap_op are the
+         * @ref render so @ref volumetric_fog_pass, @ref bloom_pass,
+         * @ref taa_pass and @ref fxaa_pass can read the fields they own
+         * (the latter three rewriting their own UBO only when a value
+         * actually changed). @c exposure and @c tonemap_op are the
          * exception: they are forwarded immediately to
          * @ref tonemap_pass::set_exposure / @ref tonemap_pass::set_operator
          * (already live-tunable the same way), so a caller reading
