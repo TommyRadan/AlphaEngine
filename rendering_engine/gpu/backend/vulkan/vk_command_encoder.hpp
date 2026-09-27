@@ -38,9 +38,24 @@ namespace rendering_engine::gpu::backend::vulkan
 {
     struct vk_device;
 
+    // One render pass on a primary command buffer, or one secondary
+    // command buffer of a parallel pass (render_pass_descriptor::parallel).
+    // A primary begun with @c parallel opens its render pass with
+    // secondary-buffer contents: it records no draw itself (a draw-level
+    // call on it is reported once and dropped), hands out secondaries
+    // through begin_secondary — each a secondary command buffer from the
+    // recording lane's pool, begun with the pass and framebuffer as
+    // inheritance and the viewport / scissor a fresh pass sets, so any
+    // thread can record its chunk while the main thread waits on the
+    // fork — and splices them back in order with execute_secondary,
+    // which is also where their draw tallies reach the device's frame
+    // counters. A secondary's end() ends its command buffer.
     struct vk_render_pass_encoder : public render_pass_encoder
     {
         vk_render_pass_encoder(vk_device& device, VkCommandBuffer cmd, const render_pass_descriptor& descriptor);
+        // A secondary of @p primary on @p cmd, a secondary command buffer
+        // of the current frame slot; see begin_secondary.
+        vk_render_pass_encoder(vk_device& device, VkCommandBuffer cmd, const vk_render_pass_encoder& primary);
         ~vk_render_pass_encoder() override;
 
         void set_pipeline(pipeline pipeline_handle) override;
@@ -78,10 +93,12 @@ namespace rendering_engine::gpu::backend::vulkan
         // Null unless a render pass is open: a pass that failed to
         // open (no swapchain image this frame — minimised, or the
         // acquire failed) must not hand out the command buffer, or an
-        // overlay would record draws outside any render pass.
+        // overlay would record draws outside any render pass. A primary
+        // whose pass takes secondaries hands out nothing either: nothing
+        // may be recorded inline into it.
         void* native_command_buffer() const noexcept override
         {
-            return m_in_pass ? static_cast<void*>(m_cmd) : nullptr;
+            return m_in_pass && !m_secondary_contents ? static_cast<void*>(m_cmd) : nullptr;
         }
         // Null unless a render pass is open; see
         // @c render_pass_encoder::native_render_pass.
@@ -89,12 +106,30 @@ namespace rendering_engine::gpu::backend::vulkan
         {
             return m_in_pass ? static_cast<void*>(m_render_pass) : nullptr;
         }
+        std::unique_ptr<render_pass_encoder> begin_secondary(uint32_t lane) override;
+        void execute_secondary(render_pass_encoder& secondary) override;
         void end() override;
 
     private:
+        // Whether a draw-level call may be recorded on this encoder: the
+        // pass (or the secondary's buffer) is open and, for a primary,
+        // its draws are not delegated to secondaries. The first call
+        // refused for the latter reason is reported.
+        bool inline_recording();
+
+        // Counts a draw for the device's per-frame diagnostics: on a
+        // primary straight away, on a secondary into m_tally, which the
+        // primary merges when it executes the secondary (the device's
+        // counters are the main thread's).
+        void tally_draw(uint32_t vertex_count);
+        void tally_draw_indexed(uint32_t index_count);
+
         vk_device& m_device;
         VkCommandBuffer m_cmd{VK_NULL_HANDLE};
         VkRenderPass m_render_pass{VK_NULL_HANDLE};
+        // The framebuffer the pass was begun with; a secondary inherits
+        // it and a primary checks a secondary against it.
+        VkFramebuffer m_framebuffer{VK_NULL_HANDLE};
         // Generation of m_render_pass (see vk_render_target::variant);
         // part of the pipeline-cache key passed to graphics_pipeline_for.
         uint64_t m_render_pass_generation{0};
@@ -125,6 +160,30 @@ namespace rendering_engine::gpu::backend::vulkan
         // Set once push_constants has reported a push the bound
         // pipeline does not declare, so it logs once per pass.
         bool m_push_constants_reported{false};
+
+        // This encoder records a secondary command buffer of a parallel
+        // pass (the second constructor) rather than a render pass on a
+        // primary.
+        bool m_secondary{false};
+        // This primary's pass was begun with render_pass_descriptor::
+        // parallel: its draws come from secondaries and inline
+        // recording is refused (reported once, m_inline_reported).
+        bool m_secondary_contents{false};
+        bool m_inline_reported{false};
+        // A secondary's buffer has been ended, and has been executed by
+        // its primary; each may happen once.
+        bool m_ended{false};
+        bool m_executed{false};
+        // A secondary's draws, merged into the device's frame counters
+        // when the primary executes it.
+        struct draw_tally
+        {
+            uint32_t draws{0};
+            uint32_t vertices{0};
+            uint32_t draws_indexed{0};
+            uint32_t indices{0};
+        };
+        draw_tally m_tally{};
     };
 
     struct vk_compute_pass_encoder : public compute_pass_encoder

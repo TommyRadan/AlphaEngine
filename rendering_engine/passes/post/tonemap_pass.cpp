@@ -256,7 +256,7 @@ namespace rendering_engine
         m_bound_exposure = exposure;
     }
 
-    void tonemap_pass::record(gpu::command_encoder& encoder, const frame_context& ctx)
+    void tonemap_pass::prepare(const frame_context& ctx)
     {
         // Pick the variant: grading only with a table and a visible blend,
         // eye adaptation only while the auto-exposure pass publishes a
@@ -264,7 +264,7 @@ namespace rendering_engine
         // (invalid) so toggling one effect never rebinds for the other.
         const bool grading = ctx.grading_lut_texture.valid() && ctx.post.grading.intensity > 0.0f;
         const bool auto_exposure = ctx.exposure_texture.valid();
-        const size_t variant = (grading ? variant_grading : 0) | (auto_exposure ? variant_auto_exposure : 0);
+        m_variant = (grading ? variant_grading : 0) | (auto_exposure ? variant_auto_exposure : 0);
         const gpu::texture grading_lut = grading ? ctx.grading_lut_texture : gpu::texture{};
         const gpu::texture exposure = auto_exposure ? ctx.exposure_texture : gpu::texture{};
 
@@ -284,7 +284,10 @@ namespace rendering_engine
         {
             rebuild_bind_group(ctx.hdr_color_texture, grading_lut, exposure);
         }
+    }
 
+    void tonemap_pass::record(gpu::command_encoder& encoder, const frame_context& ctx)
+    {
         gpu::render_pass_descriptor descriptor{};
         // Resolve into the off-screen LDR target rather than straight to
         // the swapchain: the final post effect (FXAA) needs to sample
@@ -299,7 +302,7 @@ namespace rendering_engine
         descriptor.use_depth = false;
 
         auto pass_encoder = encoder.begin_render_pass(descriptor);
-        pass_encoder->set_pipeline(m_pipelines[variant]);
+        pass_encoder->set_pipeline(m_pipelines[m_variant]);
         pass_encoder->set_bind_group(0, m_input_bind_group);
         pass_encoder->set_vertex_buffer(0, m_vertex_buffer, 0, 0);
         pass_encoder->draw(3);

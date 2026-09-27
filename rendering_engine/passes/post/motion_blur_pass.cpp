@@ -198,7 +198,7 @@ namespace rendering_engine
         m_texture = gpu.render_target_color_texture(m_target);
     }
 
-    void motion_blur_pass::prepare(const motion_blur_settings& settings)
+    void motion_blur_pass::ensure_target(const motion_blur_settings& settings)
     {
         if (m_enabled && !m_target.valid() && motion_blur_active(settings))
         {
@@ -313,12 +313,13 @@ namespace rendering_engine
         gpu.write_buffer(m_params_ubo, params.data(), params_ubo_size, 0);
     }
 
-    void motion_blur_pass::record(gpu::command_encoder& encoder, const frame_context& ctx)
+    void motion_blur_pass::prepare(const frame_context& ctx)
     {
-        // The same test context::render published frame_context::hdr_color_*
+        // The same test renderer::render published frame_context::hdr_color_*
         // by: when it fails, the chain after this pass reads the scene
         // colour and there is nothing to do.
-        if (!draws(ctx))
+        m_draws = draws(ctx);
+        if (!m_draws)
         {
             return;
         }
@@ -335,6 +336,14 @@ namespace rendering_engine
             !m_bind_group.valid())
         {
             rebuild_bind_group(ctx.scene_color_texture, ctx.velocity_texture);
+        }
+    }
+
+    void motion_blur_pass::record(gpu::command_encoder& encoder, const frame_context& /*ctx*/)
+    {
+        if (!m_draws)
+        {
+            return;
         }
 
         gpu::render_pass_descriptor descriptor{};

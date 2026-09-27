@@ -68,6 +68,14 @@ namespace rendering_engine
         return hazard_free;
     }
 
+    void pass_list::prepare(const frame_context& ctx) const
+    {
+        for (const auto& p : m_passes)
+        {
+            p->prepare(ctx);
+        }
+    }
+
     void pass_list::record(gpu::command_encoder& encoder, const frame_context& ctx, pass_hooks* hooks) const
     {
         for (size_t i = 0; i < m_passes.size(); ++i)

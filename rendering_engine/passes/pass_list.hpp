@@ -25,13 +25,14 @@
  * @brief The renderer's ordered list of passes.
  *
  * The renderer owns one @ref pass_list and registers its passes into it in
- * render order. The list records them in that order every frame and
- * validates, once, the resources each pass declares through
- * @ref pass::declare_io: every read must be produced by an earlier pass or
- * imported as valid at frame start. It does not reorder, allocate, alias or
- * cull anything, and derives no barriers — resource ownership stays with the
- * renderer and the passes, and synchronisation with the render-pass implicit
- * transitions plus the precise barriers the gpu backend emits.
+ * render order. Every frame the list prepares them in that order, then
+ * records them in that order, and it validates, once, the resources each
+ * pass declares through @ref pass::declare_io: every read must be produced
+ * by an earlier pass or imported as valid at frame start. It does not
+ * reorder, allocate, alias or cull anything, and derives no barriers —
+ * resource ownership stays with the renderer and the passes, and
+ * synchronisation with the render-pass implicit transitions plus the
+ * precise barriers the gpu backend emits.
  */
 
 #pragma once
@@ -116,11 +117,24 @@ namespace rendering_engine
         bool validate() const;
 
         /**
-         * @brief Record every pass into @p encoder in order.
+         * @brief Run every pass's @ref pass::prepare in order.
+         *
+         * The producer-before-consumer walk of the frame's per-pass
+         * state: a pass reads what the passes before it prepared through
+         * @p ctx. Called once per frame before @ref record.
+         */
+        void prepare(const frame_context& ctx) const;
+
+        /**
+         * @brief Record every pass into @p encoder in order, after
+         *        @ref prepare.
          *
          * Each pass is wrapped in a debug group carrying its name (so a
          * graphics debugger shows the frame as a tree of passes) and, when
-         * @p hooks is given, in its before / after calls.
+         * @p hooks is given, in its before / after calls. A pass that
+         * records part of itself on worker threads (the scene pass) forks
+         * and joins inside its own @ref pass::record, so the group and the
+         * hooks bracket the whole of it.
          */
         void record(gpu::command_encoder& encoder, const frame_context& ctx, pass_hooks* hooks = nullptr) const;
 

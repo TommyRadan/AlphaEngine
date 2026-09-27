@@ -277,5 +277,15 @@ namespace rendering_engine::gpu
         // When false the pass skips depth state changes regardless
         // of the target's depth attachment (e.g. UI overlay pass).
         bool use_depth{true};
+
+        // The pass's draws come from secondary encoders recorded in
+        // parallel (@c render_pass_encoder::begin_secondary /
+        // @c execute_secondary) rather than from calls on the encoder
+        // @c begin_render_pass returns, which then only opens and closes
+        // the pass and splices the secondaries in; a draw recorded on it
+        // directly is reported and dropped. Needs
+        // @c device_features::parallel_recording; a backend without it
+        // ignores the flag and records every call inline.
+        bool parallel{false};
     };
 } // namespace rendering_engine::gpu

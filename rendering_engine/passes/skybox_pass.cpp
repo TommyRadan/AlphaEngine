@@ -183,11 +183,12 @@ namespace rendering_engine
         m_input_bind_group = gpu.create_bind_group(descriptor);
     }
 
-    void skybox_pass::record(gpu::command_encoder& encoder, const frame_context& ctx)
+    void skybox_pass::prepare(const frame_context& ctx)
     {
         // Dormant until a cube map is supplied, and a no-camera frame has
         // no view ray to reconstruct — leave the scene colour untouched.
-        if (!m_cubemap.valid() || ctx.active_camera == nullptr)
+        m_draws = m_cubemap.valid() && ctx.active_camera != nullptr;
+        if (!m_draws)
         {
             return;
         }
@@ -210,6 +211,14 @@ namespace rendering_engine
         const core::math::mat4 projection = jitter_projection(ctx.active_camera->get_projection_matrix(), ctx.jitter);
         const core::math::mat4 inv_view_proj = core::math::inverse(projection * view);
         gpu.write_buffer(m_sky_ubo, inv_view_proj.data(), sky_ubo_size, 0);
+    }
+
+    void skybox_pass::record(gpu::command_encoder& encoder, const frame_context& ctx)
+    {
+        if (!m_draws)
+        {
+            return;
+        }
 
         gpu::render_pass_descriptor descriptor{};
         descriptor.target = ctx.scene_color_target;

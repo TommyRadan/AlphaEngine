@@ -548,6 +548,13 @@ namespace rendering_engine::gpu::backend::vulkan
         {
             return VK_NULL_HANDLE;
         }
+        // The secondary encoders of a parallel render pass bind from
+        // several threads at once, and the first bind of a pipeline
+        // against a pass appends to its variant cache, so the lookup and
+        // the build are serialised here. The cache is otherwise touched
+        // (retired, rebuilt, destroyed) on the main thread alone, outside
+        // any fork.
+        const std::lock_guard<std::mutex> lock(m_pipeline_variant_mutex);
         // The generation is part of the key: a retired render pass's
         // variants are purged with it (retire_render_pass_variants),
         // and a new pass that happens to reuse the handle value carries

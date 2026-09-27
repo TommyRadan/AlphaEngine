@@ -318,12 +318,14 @@ namespace rendering_engine
 
     gpu::texture taa_pass::output_texture() const
     {
-        // The half this frame's record() writes; record() swaps the index
-        // afterwards, so the next frame's query names the other half.
+        // The half the next prepare() assigns to this frame's resolve
+        // (the renderer asks before the passes prepare); prepare() swaps
+        // the index afterwards, so the next frame's query names the
+        // other half.
         return m_targets[m_write_index].texture;
     }
 
-    void taa_pass::record(gpu::command_encoder& encoder, const frame_context& ctx)
+    void taa_pass::prepare(const frame_context& ctx)
     {
         if (!m_enabled)
         {
@@ -345,7 +347,8 @@ namespace rendering_engine
         // behind them (and resize() forgets the bound pair so the new
         // history is picked up), so compare against what the groups were
         // built with and rebuild on change — the first frame included.
-        accumulation_target& write = m_targets[m_write_index];
+        m_draw_index = m_write_index;
+        accumulation_target& write = m_targets[m_draw_index];
         if (ctx.ldr_color_texture != m_bound_current || ctx.velocity_texture != m_bound_velocity ||
             !write.resolve_bind_group.valid())
         {
@@ -365,9 +368,25 @@ namespace rendering_engine
             write_params(feedback);
         }
 
+        // This frame's half will hold a real frame of this camera once
+        // record() draws it: swap the roles so the next frame reads it as
+        // history, and switch to the steady-state feedback so subsequent
+        // frames accumulate.
+        m_write_index = 1u - m_write_index;
+        m_first_frame = false;
+    }
+
+    void taa_pass::record(gpu::command_encoder& encoder, const frame_context& /*ctx*/)
+    {
+        if (!m_enabled)
+        {
+            return;
+        }
+
         // Resolve: blend the current LDR frame with the clamped history
         // (the other half of the pair) into this frame's half, which the
         // next pass (FXAA) samples and the next frame reads as history.
+        const accumulation_target& write = m_targets[m_draw_index];
         gpu::render_pass_descriptor descriptor{};
         descriptor.target = write.target;
         descriptor.color[0].load = gpu::load_op::clear;
@@ -380,11 +399,5 @@ namespace rendering_engine
         pass_encoder->set_vertex_buffer(0, m_vertex_buffer, 0, 0);
         pass_encoder->draw(3);
         pass_encoder->end();
-
-        // This half now holds a real frame of this camera: swap the roles
-        // so the next record() reads it as history, and switch to the
-        // steady-state feedback so subsequent frames accumulate.
-        m_write_index = 1u - m_write_index;
-        m_first_frame = false;
     }
 } // namespace rendering_engine

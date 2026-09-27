@@ -235,7 +235,7 @@ namespace rendering_engine
         m_rcp_frame_dirty = true;
     }
 
-    void fxaa_pass::record(gpu::command_encoder& encoder, const frame_context& ctx)
+    void fxaa_pass::prepare(const frame_context& ctx)
     {
         // Sample the TAA resolve when temporal AA produced one this frame,
         // otherwise the raw tonemap output. The resolve alternates between
@@ -243,7 +243,7 @@ namespace rendering_engine
         // when its target is recreated (a resize), so look the group up by
         // handle and build one on a miss — the first frame included.
         const gpu::texture input = ctx.taa_resolve_texture.valid() ? ctx.taa_resolve_texture : ctx.ldr_color_texture;
-        const gpu::bind_group input_bind_group = bind_group_for(input);
+        m_input_bind_group = bind_group_for(input);
 
         // Apply a resize's edge step and/or a fxaa.enabled flip, now that
         // begin_frame has waited for the frame that may still have been
@@ -265,7 +265,10 @@ namespace rendering_engine
             m_rcp_frame_dirty = false;
             m_applied_enabled = ctx.post.fxaa.enabled;
         }
+    }
 
+    void fxaa_pass::record(gpu::command_encoder& encoder, const frame_context& ctx)
+    {
         gpu::render_pass_descriptor descriptor{};
         descriptor.target = ctx.swapchain_target;
         // The fullscreen triangle covers every pixel; clearing is strictly
@@ -276,7 +279,7 @@ namespace rendering_engine
 
         auto pass_encoder = encoder.begin_render_pass(descriptor);
         pass_encoder->set_pipeline(m_pipeline);
-        pass_encoder->set_bind_group(0, input_bind_group);
+        pass_encoder->set_bind_group(0, m_input_bind_group);
         pass_encoder->set_vertex_buffer(0, m_vertex_buffer, 0, 0);
         pass_encoder->draw(3);
         pass_encoder->end();

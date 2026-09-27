@@ -44,10 +44,17 @@ namespace rendering_engine
      * imports that attachment (the depth-only targets the shadow passes
      * use), before any colour is shaded. The draw list is the scene
      * pass's own (@ref scene_pass::prepare), reached through
-     * @ref frame_context::scene — the scene pass runs right after this
-     * one and owns the draw list, the per-frame bind group and the
-     * choice between loading and clearing the depth: layer-filtered and
-     * frustum-culled against the camera, sorted by
+     * @ref frame_context::scene — the scene pass prepares and records
+     * right after this one and owns the draw list, the per-frame bind
+     * group and the choice between loading and clearing the depth. This
+     * pass's @ref prepare decides whether it runs (the setting, a camera,
+     * a usable target) and announces a frame it runs to the scene pass
+     * (@ref scene_pass::expect_depth_prepass), whose prepare then
+     * resolves the depth-only twins; @ref record hands the scene pass
+     * the depth-only pass to begin and dispatch
+     * (@ref scene_pass::record_depth_prepass, in parallel above the draw
+     * threshold like the shading pass). The list is layer-filtered and
+     * frustum-culled against the camera and sorted by
      * @ref draw_item::sort_key, so the opaque items it draws go
      * front-to-back; the transparent queue and every surface
      * @ref material::draws_in_depth_prepass rejects (blended, not
@@ -81,6 +88,13 @@ namespace rendering_engine
         depth_prepass(const depth_prepass&) = delete;
         depth_prepass& operator=(const depth_prepass&) = delete;
 
+        // Decides whether the pass runs this frame, rebuilds the
+        // depth-only target over the frame's scene depth when that
+        // changed, and tells the scene pass to expect it.
+        void prepare(const frame_context& ctx) override;
+
+        // Records the depth-only pass through the scene pass on a frame
+        // @ref prepare decided to run; nothing otherwise.
         void record(gpu::command_encoder& encoder, const frame_context& ctx) override;
 
         const char* name() const override
@@ -95,7 +109,7 @@ namespace rendering_engine
 
         // Drops the depth-only target: it imports the scene target's
         // depth attachment, which the renderer has just recreated at the
-        // new size, so the next @ref record rebuilds it over the new one.
+        // new size, so the next @ref prepare rebuilds it over the new one.
         void resize(uint32_t width, uint32_t height) override;
 
     private:
@@ -108,5 +122,9 @@ namespace rendering_engine
         // scene-colour target.
         gpu::render_target m_target{};
         gpu::texture m_target_depth{};
+
+        // Whether this frame's @ref prepare decided the pass runs (and
+        // announced it to the scene pass), so @ref record draws.
+        bool m_active{false};
     };
 } // namespace rendering_engine

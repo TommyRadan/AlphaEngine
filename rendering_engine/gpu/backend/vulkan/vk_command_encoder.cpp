@@ -298,12 +298,14 @@ namespace rendering_engine::gpu::backend::vulkan
         }
 
         m_render_pass = render_pass;
+        m_framebuffer = framebuffer;
         m_render_pass_generation = variant->render_pass_generation;
         m_color_count = variant->color_count;
         m_samples = to_vk_sample_count(target->samples);
         m_target_width = target->width;
         m_target_height = target->height;
         m_y_flipped = target->is_swapchain;
+        m_secondary_contents = descriptor.parallel;
         device.note_render_pass_opened(target->is_swapchain, use_depth);
 
         // One clear value per attachment, in attachment order: the
@@ -333,7 +335,18 @@ namespace rendering_engine::gpu::backend::vulkan
         bi.renderArea.extent = {target->width, target->height};
         bi.clearValueCount = clear_count;
         bi.pClearValues = clears.data();
-        vkCmdBeginRenderPass(m_cmd, &bi, VK_SUBPASS_CONTENTS_INLINE);
+        // A pass that takes its draws from secondaries records nothing
+        // but vkCmdExecuteCommands until it ends — not even the dynamic
+        // state, which every secondary sets for itself.
+        vkCmdBeginRenderPass(m_cmd,
+                             &bi,
+                             m_secondary_contents ? VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS
+                                                  : VK_SUBPASS_CONTENTS_INLINE);
+        m_in_pass = true;
+        if (m_secondary_contents)
+        {
+            return;
+        }
 
         const VkViewport vp = make_viewport(0,
                                             0,
@@ -350,7 +363,64 @@ namespace rendering_engine::gpu::backend::vulkan
                                               target->height,
                                               m_y_flipped);
         vkCmdSetScissor(m_cmd, 0, 1, &scissor);
+    }
+
+    vk_render_pass_encoder::vk_render_pass_encoder(vk_device& device,
+                                                   VkCommandBuffer cmd,
+                                                   const vk_render_pass_encoder& primary)
+        : m_device{device}, m_cmd{cmd}
+    {
+        m_render_pass = primary.m_render_pass;
+        m_framebuffer = primary.m_framebuffer;
+        m_render_pass_generation = primary.m_render_pass_generation;
+        m_color_count = primary.m_color_count;
+        m_samples = primary.m_samples;
+        m_target_width = primary.m_target_width;
+        m_target_height = primary.m_target_height;
+        m_y_flipped = primary.m_y_flipped;
+        m_secondary = true;
+        if (cmd == VK_NULL_HANDLE)
+        {
+            return;
+        }
+
+        // The secondary continues the primary's render pass instance:
+        // it inherits the pass and framebuffer (so its pipelines match
+        // the pass's attachments, like a variant bound on the primary
+        // would) and is executed exactly once by the primary.
+        VkCommandBufferInheritanceInfo inheritance{};
+        inheritance.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO;
+        inheritance.renderPass = m_render_pass;
+        inheritance.subpass = 0;
+        inheritance.framebuffer = m_framebuffer;
+        VkCommandBufferBeginInfo begin{};
+        begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT | VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT;
+        begin.pInheritanceInfo = &inheritance;
+        if (!vk_check(vkBeginCommandBuffer(m_cmd, &begin), "vkBeginCommandBuffer (secondary)"))
+        {
+            m_cmd = VK_NULL_HANDLE;
+            return;
+        }
         m_in_pass = true;
+
+        // Dynamic state does not carry over from the primary: the
+        // viewport and scissor start at the target's extent, as in a
+        // freshly begun pass.
+        const VkViewport vp = make_viewport(0,
+                                            0,
+                                            static_cast<int32_t>(m_target_width),
+                                            static_cast<int32_t>(m_target_height),
+                                            m_target_height,
+                                            m_y_flipped);
+        vkCmdSetViewport(m_cmd, 0, 1, &vp);
+        const VkRect2D scissor = make_scissor(0,
+                                              0,
+                                              static_cast<int32_t>(m_target_width),
+                                              static_cast<int32_t>(m_target_height),
+                                              m_target_height,
+                                              m_y_flipped);
+        vkCmdSetScissor(m_cmd, 0, 1, &scissor);
     }
 
     vk_render_pass_encoder::~vk_render_pass_encoder()
@@ -361,9 +431,111 @@ namespace rendering_engine::gpu::backend::vulkan
         }
     }
 
-    void vk_render_pass_encoder::set_pipeline(pipeline pipeline_handle)
+    bool vk_render_pass_encoder::inline_recording()
     {
         if (!m_in_pass)
+        {
+            return false;
+        }
+        if (!m_secondary_contents)
+        {
+            return true;
+        }
+        if (!m_inline_reported)
+        {
+            m_inline_reported = true;
+            LOG_ERR("vk_render_pass_encoder: a pass begun with render_pass_descriptor::parallel takes its draws from "
+                    "secondary encoders; a draw-level call recorded on the primary is dropped");
+        }
+        return false;
+    }
+
+    void vk_render_pass_encoder::tally_draw(uint32_t vertex_count)
+    {
+        if (m_secondary)
+        {
+            ++m_tally.draws;
+            m_tally.vertices += vertex_count;
+            return;
+        }
+        m_device.note_draw(vertex_count);
+    }
+
+    void vk_render_pass_encoder::tally_draw_indexed(uint32_t index_count)
+    {
+        if (m_secondary)
+        {
+            ++m_tally.draws_indexed;
+            m_tally.indices += index_count;
+            return;
+        }
+        m_device.note_draw_indexed(index_count);
+    }
+
+    std::unique_ptr<render_pass_encoder> vk_render_pass_encoder::begin_secondary(uint32_t lane)
+    {
+        if (!m_in_pass || m_secondary)
+        {
+            LOG_ERR("vk_render_pass_encoder::begin_secondary: %s",
+                    m_secondary ? "a secondary cannot open secondaries of its own" : "the pass is not open");
+            return nullptr;
+        }
+        if (!m_secondary_contents)
+        {
+            LOG_ERR("vk_render_pass_encoder::begin_secondary: the pass was not begun with "
+                    "render_pass_descriptor::parallel");
+            return nullptr;
+        }
+        // Main thread, before the fork: the lane's pool is handed to the
+        // thread that records the secondary from here until the join.
+        VkCommandBuffer cmd = m_device.acquire_secondary_command_buffer(lane);
+        if (cmd == VK_NULL_HANDLE)
+        {
+            LOG_ERR("vk_render_pass_encoder::begin_secondary: no secondary command buffer for lane %u", lane);
+            return nullptr;
+        }
+        auto secondary = std::make_unique<vk_render_pass_encoder>(m_device, cmd, *this);
+        if (!secondary->m_in_pass)
+        {
+            // vkBeginCommandBuffer failed and was logged; the buffer goes
+            // back with the pool reset.
+            return nullptr;
+        }
+        return secondary;
+    }
+
+    void vk_render_pass_encoder::execute_secondary(render_pass_encoder& secondary)
+    {
+        if (!m_in_pass || m_secondary || !m_secondary_contents)
+        {
+            LOG_ERR("vk_render_pass_encoder::execute_secondary: not an open pass that takes secondaries");
+            return;
+        }
+        // Only this backend makes secondaries, through begin_secondary
+        // on a pass like this one.
+        auto& other = static_cast<vk_render_pass_encoder&>(secondary);
+        if (!other.m_secondary || other.m_render_pass != m_render_pass || other.m_framebuffer != m_framebuffer)
+        {
+            LOG_ERR("vk_render_pass_encoder::execute_secondary: the encoder is not a secondary of this pass");
+            return;
+        }
+        if (!other.m_ended || other.m_executed)
+        {
+            LOG_ERR("vk_render_pass_encoder::execute_secondary: the secondary %s",
+                    other.m_executed ? "was already executed" : "has not ended");
+            return;
+        }
+        vkCmdExecuteCommands(m_cmd, 1, &other.m_cmd);
+        other.m_executed = true;
+        // Its draws count toward this frame like inline ones.
+        m_device.note_draws(
+            other.m_tally.draws, other.m_tally.vertices, other.m_tally.draws_indexed, other.m_tally.indices);
+        other.m_tally = {};
+    }
+
+    void vk_render_pass_encoder::set_pipeline(pipeline pipeline_handle)
+    {
+        if (!inline_recording())
         {
             return;
         }
@@ -400,7 +572,7 @@ namespace rendering_engine::gpu::backend::vulkan
                                                    size_t offset,
                                                    uint32_t stride_override)
     {
-        if (!m_in_pass)
+        if (!inline_recording())
         {
             return;
         }
@@ -445,7 +617,7 @@ namespace rendering_engine::gpu::backend::vulkan
 
     void vk_render_pass_encoder::set_index_buffer(buffer buffer_handle, index_format format)
     {
-        if (!m_in_pass)
+        if (!inline_recording())
         {
             return;
         }
@@ -462,7 +634,7 @@ namespace rendering_engine::gpu::backend::vulkan
                                                 bind_group bind_group_handle,
                                                 std::span<const uint32_t> dynamic_offsets)
     {
-        if (!m_in_pass || m_current_pipeline_layout == VK_NULL_HANDLE)
+        if (!inline_recording() || m_current_pipeline_layout == VK_NULL_HANDLE)
         {
             return;
         }
@@ -493,7 +665,7 @@ namespace rendering_engine::gpu::backend::vulkan
 
     void vk_render_pass_encoder::push_constants(shader_stages stages, uint32_t offset, uint32_t size, const void* data)
     {
-        if (!m_in_pass || m_current_pipeline_layout == VK_NULL_HANDLE || data == nullptr)
+        if (!inline_recording() || m_current_pipeline_layout == VK_NULL_HANDLE || data == nullptr)
         {
             return;
         }
@@ -543,7 +715,7 @@ namespace rendering_engine::gpu::backend::vulkan
 
     void vk_render_pass_encoder::set_viewport(int x, int y, int width, int height)
     {
-        if (!m_in_pass)
+        if (!inline_recording())
         {
             return;
         }
@@ -555,7 +727,7 @@ namespace rendering_engine::gpu::backend::vulkan
 
     void vk_render_pass_encoder::set_scissor(int x, int y, int width, int height)
     {
-        if (!m_in_pass)
+        if (!inline_recording())
         {
             return;
         }
@@ -566,7 +738,7 @@ namespace rendering_engine::gpu::backend::vulkan
     void vk_render_pass_encoder::set_stencil_reference(uint32_t reference)
     {
         m_stencil_reference = reference;
-        if (m_in_pass)
+        if (inline_recording())
         {
             vkCmdSetStencilReference(m_cmd, VK_STENCIL_FACE_FRONT_AND_BACK, reference);
         }
@@ -577,10 +749,10 @@ namespace rendering_engine::gpu::backend::vulkan
                                       uint32_t first_vertex,
                                       uint32_t first_instance)
     {
-        if (m_in_pass)
+        if (inline_recording())
         {
             vkCmdDraw(m_cmd, vertex_count, instance_count, first_vertex, first_instance);
-            m_device.note_draw(vertex_count);
+            tally_draw(vertex_count);
         }
     }
 
@@ -590,16 +762,16 @@ namespace rendering_engine::gpu::backend::vulkan
                                               int32_t base_vertex,
                                               uint32_t first_instance)
     {
-        if (m_in_pass)
+        if (inline_recording())
         {
             vkCmdDrawIndexed(m_cmd, index_count, instance_count, first_index, base_vertex, first_instance);
-            m_device.note_draw_indexed(index_count);
+            tally_draw_indexed(index_count);
         }
     }
 
     void vk_render_pass_encoder::draw_indexed_indirect(buffer indirect_buffer, size_t offset)
     {
-        if (!m_in_pass)
+        if (!inline_recording())
         {
             return;
         }
@@ -617,7 +789,7 @@ namespace rendering_engine::gpu::backend::vulkan
                                                              uint32_t draw_count,
                                                              uint32_t stride)
     {
-        if (!m_in_pass)
+        if (!inline_recording())
         {
             return;
         }
@@ -648,8 +820,18 @@ namespace rendering_engine::gpu::backend::vulkan
         {
             return;
         }
-        vkCmdEndRenderPass(m_cmd);
         m_in_pass = false;
+        if (m_secondary)
+        {
+            // On the thread that recorded it; the primary executes it
+            // afterwards. A buffer that failed to end is never executed.
+            if (vk_check(vkEndCommandBuffer(m_cmd), "vkEndCommandBuffer (secondary)"))
+            {
+                m_ended = true;
+            }
+            return;
+        }
+        vkCmdEndRenderPass(m_cmd);
     }
 
     // -- vk_compute_pass_encoder -------------------------------------

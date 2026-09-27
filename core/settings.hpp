@@ -122,6 +122,19 @@ namespace core
          * Read once during @ref rendering_engine::gpu::device::init.
          */
         unsigned int frames_in_flight{2};
+
+        /**
+         * @brief Draw count above which the scene pass records a frame's draws in parallel, and the fewest
+         *        draws one recording chunk holds.
+         *
+         * On the Vulkan backend a scene pass (or depth pre-pass) whose sorted draw list holds more than this
+         * many draws is split into contiguous chunks of at least this many draws — at most one per recording
+         * thread, the job pool's workers plus the main thread — and every chunk is recorded into its own
+         * secondary command buffer at once; at or below it the pass records serially, so the fork-join
+         * overhead is only paid where it is amortised. 0 disables the parallel path. OpenGL always records
+         * serially. Read once during rendering-engine init.
+         */
+        unsigned int parallel_draw_threshold{512};
     };
 
     /** @brief Camera configuration. */

@@ -67,6 +67,9 @@ namespace rendering_engine::editor
         debug_pass(const debug_pass&) = delete;
         debug_pass& operator=(const debug_pass&) = delete;
 
+        // Collects and sorts this frame's debug draw items.
+        void prepare(const frame_context& ctx) override;
+
         // The debug helpers draw through the line material, whose
         // pipeline reserves slot 0 for the camera, so the pass binds the
         // scene pass's unjittered per-frame group there
@@ -75,7 +78,9 @@ namespace rendering_engine::editor
         // the camera the scene used, without the projection jitter the
         // TAA resolve would otherwise leave on them. The scene pass runs
         // first and refills the backing UBO every frame. With no scene
-        // pass nothing is bound (ImGui-only debug content).
+        // pass nothing is bound (ImGui-only debug content). The ImGui
+        // draw data is recorded inline into this pass, which is why it
+        // never takes the parallel path.
         void record(gpu::command_encoder& encoder, const frame_context& ctx) override;
 
         const char* name() const override
@@ -96,6 +101,7 @@ namespace rendering_engine::editor
         const std::vector<renderable*>* m_registry;
 
         // Reused across frames so the underlying allocation persists.
+        // Collected and sorted by prepare(), drawn by record().
         std::vector<draw_item> m_items;
     };
 } // namespace rendering_engine::editor

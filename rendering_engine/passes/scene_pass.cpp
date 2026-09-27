@@ -26,7 +26,10 @@
 #include <array>
 #include <cstring>
 #include <functional>
+#include <memory>
 
+#include <core/job_pool.hpp>
+#include <core/log.hpp>
 #include <core/math/math.hpp>
 #include <rendering_engine/camera/camera.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
@@ -97,10 +100,22 @@ namespace rendering_engine
         constexpr size_t spot_shadow_ubo_size = sizeof(core::math::mat4) + 4 * sizeof(float);
     } // namespace
 
-    scene_pass::scene_pass(const std::vector<renderable*>* registry, render_stats* stats, bool taa_jitter)
-        : m_registry(registry), m_stats(stats), m_taa_jitter(taa_jitter)
+    scene_pass::scene_pass(const std::vector<renderable*>* registry,
+                           render_stats* stats,
+                           bool taa_jitter,
+                           uint32_t parallel_draw_threshold)
+        : m_registry(registry), m_stats(stats), m_taa_jitter(taa_jitter),
+          m_parallel_draw_threshold(parallel_draw_threshold)
     {
         auto& gpu = *runtime::current_engine().gpu;
+
+        // Whether the device records secondaries at all is fixed for its
+        // lifetime; the threshold does the rest per frame.
+        m_parallel_recording = gpu.features().parallel_recording;
+        if (m_parallel_recording && m_parallel_draw_threshold != 0)
+        {
+            LOG_INF("scene_pass: draws record in parallel above %u draws (and per chunk)", m_parallel_draw_threshold);
+        }
 
         gpu::bind_group_layout_descriptor frame_layout_descriptor{};
         frame_layout_descriptor.entries.push_back({view_globals_binding, gpu::binding_kind::uniform_buffer});
@@ -351,24 +366,28 @@ namespace rendering_engine
         m_bound_spot_shadow_map = spot_shadow_map;
     }
 
+    void scene_pass::expect_depth_prepass()
+    {
+        m_depth_prepass_requested = true;
+    }
+
     void scene_pass::prepare(const frame_context& ctx)
     {
-        // Once per frame: the depth pre-pass may already have prepared
-        // this frame ahead of record(), and must see what record() draws.
-        if (m_prepared_frame == ctx.frame_index)
-        {
-            return;
-        }
-        m_prepared_frame = ctx.frame_index;
-        m_depth_prepassed = false;
+        // The depth pre-pass, which prepares right before this pass,
+        // announced whether it lays the depth down this frame; the flag
+        // is consumed here so a frame it skips clears the depth again.
+        m_depth_prepassed = m_depth_prepass_requested;
+        m_depth_prepass_requested = false;
         m_items.clear();
+        m_pipelines.clear();
+        m_depth_item_end = 0;
 
         // The per-frame groups exist from the first prepare on, camera or
         // not: the depth pre-pass, this pass and the passes that bind them
         // later in the frame (see frame_bind_group) all read them.
         update_frame_bind_groups(ctx);
 
-        // The shadow passes recorded ahead of this one this frame; their
+        // The shadow passes prepared ahead of this one this frame; their
         // fits and culling tallies feed the uploads and stats below.
         const shadow_pass* shadow = ctx.directional_shadow;
         const point_shadow_pass* point_shadow = ctx.point_shadow;
@@ -384,8 +403,8 @@ namespace rendering_engine
         {
             *m_stats = render_stats{};
             m_stats->scene_renderables = static_cast<uint32_t>(m_registry->size());
-            // The shadow passes ran ahead of this one this frame; carry their
-            // culling tallies over so the overlay reads one struct.
+            // The shadow passes prepared ahead of this one this frame; carry
+            // their culling tallies over so the overlay reads one struct.
             m_stats->shadow_culled = shadow != nullptr ? shadow->culled_count() : 0u;
             m_stats->point_shadow_culled = point_shadow != nullptr ? point_shadow->culled_count() : 0u;
             m_stats->spot_shadow_culled = spot_shadow != nullptr ? spot_shadow->culled_count() : 0u;
@@ -575,6 +594,36 @@ namespace rendering_engine
                              return std::less<const material*>{}(a.mat, b.mat);
                          });
 
+        // Resolve, in list order, the pipeline each item binds in each
+        // dispatch, so the dispatches — which may run on worker threads
+        // — only read handles: a material's variant twins are looked up
+        // or built on first use, which is main-thread work that belongs
+        // here. An item is pre-passed when the pre-pass runs this frame
+        // and its material takes part: the pre-pass draws exactly those
+        // (the list is sorted, so the opaque ones front-to-back) with the
+        // depth-only twin of the item's pipeline, and this pass shades
+        // them with the twin that tests less-or-equal against that depth
+        // without writing it. Everything else — the transparent queue,
+        // surfaces that skip the depth test or write, templates that opt
+        // out — is drawn by this pass alone with its ordinary pipeline.
+        m_pipelines.reserve(m_items.size());
+        for (std::size_t i = 0; i < m_items.size(); ++i)
+        {
+            const draw_item& item = m_items[i];
+            item_pipelines pipelines{};
+            if (m_depth_prepassed && item.mat->draws_in_depth_prepass())
+            {
+                pipelines.depth = item.mat->depth_prepass_pipeline(item.mirrored);
+                pipelines.shading = item.mat->depth_prepassed_pipeline(item.mirrored);
+                m_depth_item_end = i + 1;
+            }
+            else
+            {
+                pipelines.shading = item.mat->pipeline(item.mirrored);
+            }
+            m_pipelines.push_back(pipelines);
+        }
+
         // Tally this frame's draw statistics for the debug overlay. Each
         // item is one draw call; primitive / vertex counts scale by the
         // item's instance count and land under the topology its
@@ -598,23 +647,19 @@ namespace rendering_engine
         }
     }
 
-    void scene_pass::record_depth_prepass(gpu::render_pass_encoder& pass_encoder)
+    void scene_pass::record_depth_prepass(gpu::command_encoder& encoder, const gpu::render_pass_descriptor& descriptor)
     {
-        m_depth_prepassed = true;
-        dispatch(pass_encoder, draw_phase::depth_prepass);
+        record_phase(encoder, descriptor, draw_phase::depth_prepass);
     }
 
     void scene_pass::record(gpu::command_encoder& encoder, const frame_context& ctx)
     {
-        // A no-op when the depth pre-pass already prepared this frame.
-        prepare(ctx);
-
         // Render into the HDR scene-colour target so the post chain
         // can sample real luminance. The tonemap post pass maps the
         // result onto the swapchain before the UI composites. The depth
         // is cleared unless the depth pre-pass laid the opaque queue's
         // depth into it this frame, in which case it is loaded and the
-        // pre-passed items below test against it without writing.
+        // pre-passed items test against it without writing.
         gpu::render_pass_descriptor descriptor{};
         descriptor.target = ctx.scene_color_target;
         descriptor.color[0].load = gpu::load_op::clear;
@@ -623,65 +668,131 @@ namespace rendering_engine
         descriptor.depth.load = m_depth_prepassed ? gpu::load_op::load : gpu::load_op::clear;
         descriptor.depth.clear_depth = 1.0f;
 
-        auto pass_encoder = encoder.begin_render_pass(descriptor);
+        // No camera, no scene — but the pass is still opened so the HDR
+        // target gets cleared to black. Otherwise the tonemap would map
+        // stale or driver-uninitialised contents into the swapchain on
+        // no-camera frames. (The depth pre-pass never runs without a
+        // camera, so the depth is cleared here too.) prepare() left the
+        // list empty, so the walk draws nothing.
+        record_phase(encoder, descriptor, draw_phase::shading);
+    }
 
-        // No camera, no scene — but we still opened the pass so the
-        // HDR target gets cleared to black. Otherwise the tonemap
-        // would map stale or driver-uninitialised contents into the
-        // swapchain on no-camera frames. (The depth pre-pass never runs
-        // without a camera, so the depth is cleared here too.)
-        if (ctx.active_camera == nullptr)
+    uint32_t scene_pass::plan_chunks(size_t draw_count) const
+    {
+        if (!m_parallel_recording || m_parallel_draw_threshold == 0 || draw_count <= m_parallel_draw_threshold)
         {
+            return 1;
+        }
+        // One recording thread per chunk at most: the pool's workers plus
+        // this thread, which helps while it waits on the fork. Without
+        // workers there is nobody to hand a chunk to.
+        const core::job_pool* jobs = runtime::current_engine().jobs.get();
+        const size_t lanes = jobs != nullptr ? static_cast<size_t>(jobs->worker_count()) + 1 : 1;
+        if (lanes < 2)
+        {
+            return 1;
+        }
+        // Above the threshold at least two chunks, each of at least a
+        // threshold's worth of draws, so the fork is always amortised.
+        const size_t wanted = std::max<size_t>(draw_count / m_parallel_draw_threshold, 2);
+        return static_cast<uint32_t>(std::min(wanted, lanes));
+    }
+
+    void
+    scene_pass::record_phase(gpu::command_encoder& encoder, gpu::render_pass_descriptor descriptor, draw_phase phase)
+    {
+        // The pre-pass walks only the prefix that holds pre-passed items;
+        // the shading pass the whole list.
+        const size_t count = phase == draw_phase::depth_prepass ? m_depth_item_end : m_items.size();
+        const uint32_t chunks = plan_chunks(count);
+        if (chunks <= 1)
+        {
+            auto pass_encoder = encoder.begin_render_pass(descriptor);
+            dispatch(*pass_encoder, phase, 0, count);
             pass_encoder->end();
             return;
         }
 
-        dispatch(*pass_encoder, draw_phase::shading);
+        // Parallel: the pass takes its draws from one secondary encoder
+        // per chunk. The secondaries are opened here, on the main thread,
+        // before the fork (each takes its command buffer from the lane's
+        // own pool), recorded and ended on whichever thread runs the
+        // chunk, and executed in list order once every chunk has joined,
+        // so the draws land as the serial walk would issue them. A
+        // secondary the backend could not open is logged there and its
+        // chunk goes undrawn this frame: a pass begun for secondaries
+        // cannot take the draws inline.
+        LOG_TRC("scene_pass: %s dispatch of %zu draws in %u chunks",
+                phase == draw_phase::depth_prepass ? "depth pre-pass" : "shading",
+                count,
+                chunks);
+        descriptor.parallel = true;
+        auto pass_encoder = encoder.begin_render_pass(descriptor);
+        std::vector<std::unique_ptr<gpu::render_pass_encoder>> secondaries;
+        secondaries.reserve(chunks);
+        for (uint32_t chunk = 0; chunk < chunks; ++chunk)
+        {
+            secondaries.push_back(pass_encoder->begin_secondary(chunk));
+        }
 
+        auto& jobs = *runtime::current_engine().jobs;
+        jobs.parallel_for(
+            chunks,
+            [&](size_t chunk)
+            {
+                gpu::render_pass_encoder* secondary = secondaries[chunk].get();
+                if (secondary == nullptr)
+                {
+                    return;
+                }
+                // Contiguous, evenly cut ranges, so the chunk order is the
+                // list order and every chunk gets the same share.
+                const size_t first = count * chunk / chunks;
+                const size_t last = count * (chunk + 1) / chunks;
+                dispatch(*secondary, phase, first, last);
+                secondary->end();
+            },
+            1);
+
+        for (auto& secondary : secondaries)
+        {
+            if (secondary != nullptr)
+            {
+                pass_encoder->execute_secondary(*secondary);
+            }
+        }
         pass_encoder->end();
     }
 
-    void scene_pass::dispatch(gpu::render_pass_encoder& pass_encoder, draw_phase phase)
+    void scene_pass::dispatch(gpu::render_pass_encoder& pass_encoder, draw_phase phase, size_t first, size_t last) const
     {
         uint64_t last_pipeline_id = 0;
         const material* last_material = nullptr;
         bool first_iter = true;
-        for (const auto& item : m_items)
+        for (size_t i = first; i < last && i < m_items.size(); ++i)
         {
-            // An item is pre-passed when the pre-pass ran this frame and
-            // its material takes part: the pre-pass draws exactly those
-            // (the list is sorted, so the opaque ones front-to-back) with
-            // the depth-only twin of the item's pipeline, and this pass
-            // shades them with the twin that tests less-or-equal against
-            // that depth without writing it. Everything else — the
-            // transparent queue, surfaces that skip the depth test or
-            // write, templates that opt out — is drawn by this pass alone
-            // with its ordinary pipeline.
-            const bool prepassed = m_depth_prepassed && item.mat->draws_in_depth_prepass();
-            gpu::pipeline pipeline{};
-            if (phase == draw_phase::depth_prepass)
+            const draw_item& item = m_items[i];
+            // The pipelines prepare() resolved for the item: the pre-pass
+            // skips an item without a depth-only twin (its material opts
+            // out or it is not in the opaque queue).
+            const gpu::pipeline pipeline =
+                phase == draw_phase::depth_prepass ? m_pipelines[i].depth : m_pipelines[i].shading;
+            if (!pipeline.valid())
             {
-                if (!prepassed)
-                {
-                    continue;
-                }
-                pipeline = item.mat->depth_prepass_pipeline(item.mirrored);
-            }
-            else
-            {
-                pipeline =
-                    prepassed ? item.mat->depth_prepassed_pipeline(item.mirrored) : item.mat->pipeline(item.mirrored);
+                continue;
             }
 
             if (pipeline.id != last_pipeline_id)
             {
                 pass_encoder.set_pipeline(pipeline);
 
-                // Per-frame bind group bound once per frame after
-                // the first pipeline change; the binding sticks
-                // across subsequent set_pipeline calls within the
-                // same pass, since every template's pipelines share
-                // the per-frame layout and push-constant ranges.
+                // Per-frame bind group bound once per walk after the
+                // first pipeline change; the binding sticks across
+                // subsequent set_pipeline calls within the same encoder,
+                // since every template's pipelines share the per-frame
+                // layout and push-constant ranges. Every chunk of a
+                // parallel walk binds it again: nothing carries into a
+                // secondary.
                 if (first_iter)
                 {
                     pass_encoder.set_bind_group(0, m_frame_bind_group);

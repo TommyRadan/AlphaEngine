@@ -99,6 +99,13 @@ namespace rendering_engine
         taa_pass(const taa_pass&) = delete;
         taa_pass& operator=(const taa_pass&) = delete;
 
+        // Restarts the history on a camera change, rebinds the inputs when
+        // their handles changed, writes the feedback weight the frame
+        // needs, picks the half this frame resolves into and swaps the
+        // pair's roles for the next frame.
+        void prepare(const frame_context& ctx) override;
+
+        // Draws the resolve into the half @ref prepare picked.
         void record(gpu::command_encoder& encoder, const frame_context& ctx) override;
 
         const char* name() const override
@@ -126,10 +133,11 @@ namespace rendering_engine
         void resize(uint32_t width, uint32_t height) override;
 
         // The resolved LDR texture the next pass (FXAA) samples: the
-        // target this frame's record() writes. The engine publishes it
-        // every frame as @ref frame_context::taa_resolve_texture; it
-        // alternates between the two ping-pong targets from frame to frame
-        // and changes on @ref resize. Invalid when the pass is disabled
+        // target the coming frame's resolve writes (the renderer asks
+        // before the passes prepare). The engine publishes it every frame
+        // as @ref frame_context::taa_resolve_texture; it alternates
+        // between the two ping-pong targets from frame to frame and
+        // changes on @ref resize. Invalid when the pass is disabled
         // (degenerate backbuffer), in which case the caller should keep
         // sampling the raw tonemap output.
         gpu::texture output_texture() const;
@@ -155,12 +163,14 @@ namespace rendering_engine
         gpu::bind_group_layout m_resolve_layout{};
         gpu::pipeline m_resolve_pipeline{};
 
-        // The pair, and which half this frame's resolve writes into; the
-        // other half holds last frame's resolve, the history. Swapped at
-        // the end of every record(). Both own their colour attachment, so
+        // The pair, which half the next frame's resolve writes into (the
+        // other half then holds the history) and which half this frame's
+        // record() draws into, taken from the former by prepare(), which
+        // swaps the roles afterwards. Both own their colour attachment, so
         // destroying the target releases the texture.
         std::array<accumulation_target, 2> m_targets{};
         uint32_t m_write_index{0};
+        uint32_t m_draw_index{0};
 
         // The LDR and velocity textures the resolve bind groups were built
         // against; invalid until the first record() builds them, and reset
@@ -186,13 +196,13 @@ namespace rendering_engine
 
         // Writes {1/width, 1/height, feedback, 0} to the resolve params UBO
         // and remembers the feedback in @ref m_uploaded_feedback. Only
-        // called from record(), inside the frame bracket: the buffer is
+        // called from prepare(), inside the frame bracket: the buffer is
         // host-mapped on a deferred-execution backend and the previous
         // frame may still be reading it until begin_frame waits.
         void write_params(float feedback);
 
         // Per-texel step (1/width, 1/height) baked at construction and
-        // rewritten by resize(). Kept so record() can rewrite the resolve
+        // rewritten by resize(). Kept so prepare() can rewrite the resolve
         // params UBO — bumping only the feedback weight — without losing
         // the step in xy.
         float m_inv_width{0.0f};
@@ -200,7 +210,7 @@ namespace rendering_engine
 
         // The feedback weight the params UBO currently holds, or negative
         // when the UBO must be rewritten whatever the weight (the texel
-        // step changed: construction, resize). record() compares the
+        // step changed: construction, resize). prepare() compares the
         // weight the frame needs against it and rewrites on mismatch.
         float m_uploaded_feedback{-1.0f};
 

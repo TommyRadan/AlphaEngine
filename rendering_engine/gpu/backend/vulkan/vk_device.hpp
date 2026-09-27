@@ -42,8 +42,19 @@
  * memory a frame in flight reads. Resources are destroyed through a
  * queue gated on the queue submission that could last have referenced
  * them (see enqueue_destroy). Shaders are runtime SPIR-V via
- * @ref gpu::compile_glsl_to_spirv (already used by the GL backend);
- * there is no multi-threaded recording. Device memory comes from the
+ * @ref gpu::compile_glsl_to_spirv (already used by the GL backend).
+ * Recording is single-threaded except inside a render pass begun with
+ * render_pass_descriptor::parallel: its draws go into secondary
+ * command buffers, one per recording lane (acquire_secondary_command_
+ * buffer: a command pool per lane and frame slot, reset with the
+ * frame's primary pool), which the job pool's workers record at once
+ * while the main thread waits, and the primary then executes in order.
+ * The two device paths a worker can reach — the lazy per-render-pass
+ * VkPipeline build (graphics_pipeline_for) and the multi-buffered
+ * region sync a bind performs (ensure_host_region_current) — are
+ * serialised by a mutex each; every other lookup is a read of state
+ * the main thread leaves alone for the duration of the fork. Device
+ * memory comes from the
  * Vulkan Memory Allocator (vk_allocator.hpp): every buffer and image is
  * a sub-allocation of VMA's memory blocks rather than its own
  * vkAllocateMemory, and host-visible buffers are persistently mapped
@@ -63,6 +74,7 @@
 #include <filesystem>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <vector>
 
 #include <vulkan/vulkan.h>
@@ -473,10 +485,24 @@ namespace rendering_engine::gpu::backend::vulkan
 
         // Per-frame draw counters surfaced as a one-shot log for the
         // first few frames so a missing draw call is visible without
-        // attaching RenderDoc. Cleared in end_frame.
+        // attaching RenderDoc. Cleared in end_frame. Main thread only:
+        // a secondary encoder tallies its own draws and the primary
+        // merges them through note_draws when it executes the secondary.
         void note_render_pass_opened(bool is_swapchain, bool use_depth);
         void note_draw(uint32_t vertex_count);
         void note_draw_indexed(uint32_t index_count);
+        void note_draws(uint32_t draws, uint32_t vertices, uint32_t draws_indexed, uint32_t indices);
+
+        // A secondary command buffer for a parallel render pass's chunk,
+        // from recording lane @p lane's pool of the current frame slot
+        // (the pool and the lane itself are created on first use). Like
+        // the primary buffers, lanes hand their buffers out in order and
+        // take them all back with the pool reset at the slot's next
+        // begin_frame. Main thread only, before the fork: the lane's
+        // pool is then the recording thread's alone until the join.
+        // Returns VK_NULL_HANDLE when the device is lost or the pool or
+        // buffer could not be created (logged).
+        VkCommandBuffer acquire_secondary_command_buffer(uint32_t lane);
 
         // Destroy callbacks queued from @c destroy() overloads. Freeing
         // a buffer or descriptor set while a command buffer that
@@ -764,8 +790,31 @@ namespace rendering_engine::gpu::backend::vulkan
             VkCommandPool pool{VK_NULL_HANDLE};
             std::vector<VkCommandBuffer> buffers;
             size_t next{0};
+
+            // The secondary buffers of a parallel render pass, one pool
+            // per recording lane (see acquire_secondary_command_buffer)
+            // so the thread recording a lane's chunk never shares a pool
+            // with another; handed out and reset exactly like the
+            // primary buffers above. Lanes are appended on first use and
+            // kept until quit.
+            struct lane
+            {
+                VkCommandPool pool{VK_NULL_HANDLE};
+                std::vector<VkCommandBuffer> buffers;
+                size_t next{0};
+            };
+            std::vector<lane> lanes;
         };
         std::array<frame_command_slot, k_max_frames_in_flight> m_frame_command_slots{};
+
+        // Serialise the two device paths the secondary encoders of a
+        // parallel render pass reach from several threads at once (see
+        // the file comment): the lazy VkPipeline variant build and cache
+        // (graphics_pipeline_for) and the multi-buffered region sync a
+        // bind performs (ensure_host_region_current). Uncontended on
+        // the serial path.
+        std::mutex m_pipeline_variant_mutex;
+        std::mutex m_host_region_mutex;
         uint32_t m_frames_in_flight{1};
         uint32_t m_frame_slot{0};
         // Between begin_frame and end_frame. Decides which submission a

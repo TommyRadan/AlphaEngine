@@ -153,7 +153,8 @@ namespace rendering_engine
         // it. Re-read from the target every frame (not cached) so a
         // later resize that swaps the attachment reaches every pass;
         // consumers compare the handle against the one their bind group
-        // was built with and rebuild on change (see velocity_pass).
+        // was built with in their prepare and rebuild on change (see
+        // velocity_pass).
         // Passes that sample it declare @c io.read("scene_depth").
         //
         // Encoding: non-linear depth24, @c .r in [0, 1], holding the
@@ -252,7 +253,7 @@ namespace rendering_engine
         // Runtime-tunable post-processing chain parameters, copied from
         // @ref renderer::set_post_settings each frame. @ref bloom_pass,
         // @ref taa_pass and @ref fxaa_pass read the fields they own here in
-        // @c record and rewrite their own UBO only when a value differs
+        // @c prepare and rewrite their own UBO only when a value differs
         // from what they last uploaded (@ref volumetric_fog_pass,
         // @ref motion_blur_pass and @ref auto_exposure_pass rewrite their
         // params every frame they draw, since they carry the camera, the
@@ -266,12 +267,14 @@ namespace rendering_engine
         // The passes whose per-frame output a later pass consumes,
         // published by the renderer every frame from the pass list it owns
         // (null for a pass that is absent), so no pass holds a pointer to
-        // another. A consumer reads its producer here while it records,
-        // after the producer has: the scene pass takes the shadow maps it
+        // another. A consumer reads its producer here in its own
+        // @ref pass::prepare, after the producer's has run (the list
+        // prepares in order): the scene pass takes the shadow maps it
         // binds and the fitted matrices and culling tallies it uploads from
-        // the three shadow passes; the depth pre-pass drives the scene
-        // pass's shared draw list (@ref scene_pass::prepare,
-        // @ref scene_pass::record_depth_prepass); the volumetric fog binds
+        // the three shadow passes; the depth pre-pass announces itself to
+        // the scene pass (@ref scene_pass::expect_depth_prepass) and later
+        // records the scene pass's shared draw list
+        // (@ref scene_pass::record_depth_prepass); the volumetric fog binds
         // the scene pass's per-frame group and the debug pass its
         // unjittered overlay twin.
         scene_pass* scene{nullptr};
@@ -283,11 +286,21 @@ namespace rendering_engine
     /**
      * @brief One step in the per-frame render sequence.
      *
-     * Implementations record their draws against the encoder. The
-     * renderer walks its ordered @ref pass_list in
-     * @ref renderer::render, so adding a new pass (post-process,
-     * shadow, depth pre-pass, debug overlay) is a registration call
-     * at startup, not an edit to the engine's render loop.
+     * A frame walks the renderer's ordered @ref pass_list twice in
+     * @ref renderer::render: first every pass's @ref prepare, in order,
+     * then every pass's @ref record, in the same order. @ref prepare is
+     * where a pass computes and stores whatever the frame needs — its
+     * per-frame matrices, culled and sorted draw lists, uniform-buffer
+     * rewrites, bind-group rebuilds, the pipelines it will bind — and
+     * where it reads what earlier passes prepared (through
+     * @ref frame_context); @ref record only encodes commands from that
+     * finished state and mutates nothing, so a pass may hand chunks of its
+     * recording to worker threads (the scene pass does, see
+     * @c render_pass_descriptor::parallel) and a pass never observes
+     * another one half-way through its per-frame update. Adding a new pass
+     * (post-process, shadow, depth pre-pass, debug overlay) is a
+     * registration call at startup, not an edit to the engine's render
+     * loop.
      *
      * Names follow the industry-standard "pass" terminology even
      * though @ref gpu::render_pass_encoder shares the word; the two
@@ -299,11 +312,27 @@ namespace rendering_engine
         virtual ~pass() = default;
 
         /**
+         * @brief Builds this pass's state for the frame.
+         *
+         * Called once per frame in registration order, on the main
+         * thread, inside the device's frame bracket (host writes land in
+         * this frame's slot) and before any pass records. Everything
+         * @ref record needs is decided and stored here; a pass with no
+         * per-frame state keeps the default no-op.
+         */
+        virtual void prepare(const frame_context& ctx)
+        {
+            (void)ctx;
+        }
+
+        /**
          * @brief Records this pass's draws on @p encoder.
          *
-         * Called once per frame in registration order. Implementations
-         * open their own @ref gpu::render_pass_encoder via
-         * @c encoder.begin_render_pass and close it before returning.
+         * Called once per frame in registration order, after every
+         * pass's @ref prepare. Implementations open their own
+         * @ref gpu::render_pass_encoder via @c encoder.begin_render_pass
+         * and close it before returning, encoding only from the state
+         * @ref prepare left: no uploads, no resource builds, no counters.
          */
         virtual void record(gpu::command_encoder& encoder, const frame_context& ctx) = 0;
 
@@ -345,12 +374,12 @@ namespace rendering_engine
          * them here (creating the new target before destroying the old
          * one so consumers see a different handle); passes that bake a
          * size-dependent UBO note the new size and rewrite the buffer at
-         * their next @ref record, inside the frame bracket, since the
+         * their next @ref prepare, inside the frame bracket, since the
          * previous frame may still be reading it on a deferred-execution
          * backend until @c begin_frame waits. Passes that sample a texture
          * owned by the renderer or by another pass do not re-plumb here:
          * they compare the handle in @ref frame_context against the one
-         * their bind group was built with on every @ref record and
+         * their bind group was built with on every @ref prepare and
          * rebuild on change, so any recreation reaches them on the next
          * frame. Defaults to a no-op for passes whose resources do not
          * follow the drawable (shadow maps, debug).

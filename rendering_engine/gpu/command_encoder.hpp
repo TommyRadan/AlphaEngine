@@ -197,9 +197,49 @@ namespace rendering_engine::gpu
             return nullptr;
         }
 
+        // Parallel recording. On a pass begun with
+        // @c render_pass_descriptor::parallel, opens one secondary
+        // encoder that records draws for this pass into a command
+        // buffer of its own — inheriting the pass's render target, load
+        // ops and attachments, with the viewport and scissor reset to the
+        // target's extent like a fresh pass — allocated from recording
+        // lane @p lane. A lane is the slot of one recording thread: the
+        // secondaries of one lane are recorded by one thread at a time,
+        // and two secondaries of different lanes may be recorded
+        // concurrently, so a caller that forks its draw list into N
+        // chunks opens lanes 0..N-1 here on the thread that owns the
+        // primary, records chunk i into secondary i on any thread, calls
+        // @ref end on each where it was recorded, and then splices them
+        // back in order with @ref execute_secondary on the owning thread.
+        // Bound state (pipeline, bind groups, push constants, dynamic
+        // state) does not carry into a secondary: each one binds what it
+        // draws with. Returns null, with the reason logged, on a backend
+        // without @c device_features::parallel_recording, on a pass that
+        // was not begun with @c parallel, or when the buffer could not be
+        // allocated; the caller then has no way to record those draws
+        // into this pass.
+        virtual std::unique_ptr<render_pass_encoder> begin_secondary(uint32_t lane)
+        {
+            (void)lane;
+            return nullptr;
+        }
+
+        // Execute @p secondary, an ended encoder from @ref begin_secondary
+        // on this pass, at this point of the pass: the draws it recorded
+        // run here, in the order the calls are made. Main thread only,
+        // after every thread has finished recording. Each secondary is
+        // executed at most once; a secondary that never ended, or that
+        // came from another pass, is reported and skipped.
+        virtual void execute_secondary(render_pass_encoder& secondary)
+        {
+            (void)secondary;
+        }
+
         // Close the pass. After this call no further methods may be
         // invoked on the encoder. The next pass on the same command
-        // encoder may target a different render target.
+        // encoder may target a different render target. On a secondary
+        // encoder this ends its command buffer instead, on the thread
+        // that recorded it, leaving it for @ref execute_secondary.
         virtual void end() = 0;
     };
 

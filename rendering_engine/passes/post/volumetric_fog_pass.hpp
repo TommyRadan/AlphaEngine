@@ -98,6 +98,10 @@ namespace rendering_engine
         volumetric_fog_pass(const volumetric_fog_pass&) = delete;
         volumetric_fog_pass& operator=(const volumetric_fog_pass&) = delete;
 
+        // Decides whether the frame marches, writes the params block and
+        // rebinds the scene depth when its handle changed.
+        void prepare(const frame_context& ctx) override;
+
         void record(gpu::command_encoder& encoder, const frame_context& ctx) override;
 
         const char* name() const override
@@ -137,7 +141,7 @@ namespace rendering_engine
         // Packs this frame's params block (the volumetric settings, the
         // noise frame and the camera's inverse projection) and writes it
         // to @ref m_params_ubo. The only place that buffer is written;
-        // record() calls it once per drawn frame, before the stages that
+        // prepare() calls it once per drawn frame, before the stages that
         // read it are recorded.
         void upload_params(const frame_context& ctx);
 
@@ -185,5 +189,8 @@ namespace rendering_engine
         // False when the backbuffer dimensions are degenerate (no
         // settings, zero-sized window); record() then no-ops.
         bool m_enabled{false};
+
+        // Whether this frame's record() draws, decided by prepare().
+        bool m_draws{false};
     };
 } // namespace rendering_engine

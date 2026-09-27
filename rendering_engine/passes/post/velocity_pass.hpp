@@ -85,6 +85,11 @@ namespace rendering_engine
         velocity_pass(const velocity_pass&) = delete;
         velocity_pass& operator=(const velocity_pass&) = delete;
 
+        // Decides what the frame does (nothing, a clear to zero motion, or
+        // the reprojection draw), uploads the reprojection block and
+        // rebinds the scene depth when its handle changed.
+        void prepare(const frame_context& ctx) override;
+
         void record(gpu::command_encoder& encoder, const frame_context& ctx) override;
 
         const char* name() const override
@@ -142,5 +147,16 @@ namespace rendering_engine
         // zero-sized window); record() then no-ops and velocity_texture()
         // returns an invalid handle.
         bool m_enabled{false};
+
+        // What this frame's record() does, decided by prepare(): nothing
+        // (disabled, or no consumer this frame), clear the target to zero
+        // motion (no camera or no scene depth), or draw the reprojection.
+        enum class frame_action
+        {
+            none,
+            clear,
+            draw,
+        };
+        frame_action m_action{frame_action::none};
     };
 } // namespace rendering_engine

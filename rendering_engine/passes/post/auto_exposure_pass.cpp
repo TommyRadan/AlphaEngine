@@ -310,8 +310,10 @@ namespace rendering_engine
         gpu.write_buffer(m_params_ubo, params.data(), params_ubo_size, 0);
     }
 
-    void auto_exposure_pass::record(gpu::command_encoder& encoder, const frame_context& ctx)
+    void auto_exposure_pass::prepare(const frame_context& ctx)
     {
+        m_meters = false;
+
         // Disabled: record nothing (tonemap uses the manual exposure) and
         // forget the history, so re-enabling snaps to the scene as it is
         // then rather than easing in from whatever it last saw.
@@ -350,6 +352,19 @@ namespace rendering_engine
             m_bound_input = ctx.hdr_color_texture;
         }
 
+        // record() meters this frame, so the history it leaves is real.
+        m_meters = true;
+        m_has_history = true;
+    }
+
+    void auto_exposure_pass::record(gpu::command_encoder& encoder, const frame_context& /*ctx*/)
+    {
+        if (!m_meters)
+        {
+            return;
+        }
+        const reduction_level& first = m_levels.front();
+
         // Draws a fullscreen triangle into @p target; begin_render_pass
         // defaults the viewport to the target's own extent.
         const auto draw_stage = [&](gpu::render_target target, gpu::pipeline pipeline, gpu::bind_group group)
@@ -380,7 +395,5 @@ namespace rendering_engine
 
         // 4. Keep the result as next frame's history.
         draw_stage(m_history_target, m_store_pipeline, m_store_bind_group);
-
-        m_has_history = true;
     }
 } // namespace rendering_engine

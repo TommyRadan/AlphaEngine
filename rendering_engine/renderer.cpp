@@ -218,7 +218,12 @@ void rendering_engine::renderer::init()
     // first shadow-casting spot light; also runs before the scene pass.
     auto spot_shadow = std::make_unique<spot_shadow_pass>(&m_world.scene_renderables(), shadow_config);
     m_spot_shadow = spot_shadow.get();
-    auto scene = std::make_unique<scene_pass>(&m_world.scene_renderables(), &m_render_stats, taa_enabled);
+    // Above the parallel draw threshold the scene pass records its draws
+    // from the job pool's workers (Vulkan only); 0 keeps it serial.
+    const uint32_t parallel_draw_threshold =
+        eng.settings != nullptr ? eng.settings->graphics.parallel_draw_threshold : 0u;
+    auto scene = std::make_unique<scene_pass>(
+        &m_world.scene_renderables(), &m_render_stats, taa_enabled, parallel_draw_threshold);
     m_scene = scene.get();
     // The optional depth pre-pass runs right before the scene pass, over
     // the scene pass's own draw list and per-frame group (reached through
@@ -529,7 +534,7 @@ void rendering_engine::renderer::render()
     update_grading_lut();
     if (m_motion_blur != nullptr)
     {
-        m_motion_blur->prepare(m_post_settings.motion_blur);
+        m_motion_blur->ensure_target(m_post_settings.motion_blur);
     }
 
     // Open the device frame before anything below touches GPU-visible
@@ -632,6 +637,15 @@ void rendering_engine::renderer::render()
     ctx.grading_lut_texture = (m_grading_lut != nullptr && m_post_settings.grading.intensity > 0.0f)
                                   ? m_grading_lut->texture
                                   : gpu::texture{};
+
+    // Every pass prepares first, in list order: the per-frame uploads,
+    // the culling and sorting, the bind-group rebuilds and every
+    // cross-pass read (the shadow fits the scene pass uploads, the
+    // pre-pass's announcement to the scene pass) happen here, on this
+    // thread, before anything is recorded — so the record walk below
+    // only encodes from finished state and the scene pass may hand its
+    // chunks to the job pool's workers.
+    m_passes.prepare(ctx);
 
     // One encoder records the pass list in order — each pass in a debug
     // group and between the profiler's timestamps — then submits.

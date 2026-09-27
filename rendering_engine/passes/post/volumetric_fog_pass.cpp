@@ -421,7 +421,7 @@ namespace rendering_engine
         gpu.write_buffer(m_params_ubo, params.data(), params_ubo_size, 0);
     }
 
-    void volumetric_fog_pass::record(gpu::command_encoder& encoder, const frame_context& ctx)
+    void volumetric_fog_pass::prepare(const frame_context& ctx)
     {
         const volumetric_fog_settings& settings = ctx.post.volumetric;
 
@@ -430,8 +430,9 @@ namespace rendering_engine
         // draw nothing, leaving the scene colour exactly as the scene and
         // skybox passes wrote it. The medium is the height fog, so a zero
         // height density means empty air.
-        if (!m_enabled || !volumetric_fog_active(settings) || ctx.active_camera == nullptr || ctx.scene == nullptr ||
-            !ctx.scene_depth_texture.valid() || ctx.fog.height_density <= 0.0f)
+        m_draws = m_enabled && volumetric_fog_active(settings) && ctx.active_camera != nullptr &&
+                  ctx.scene != nullptr && ctx.scene_depth_texture.valid() && ctx.fog.height_density > 0.0f;
+        if (!m_draws)
         {
             return;
         }
@@ -443,6 +444,14 @@ namespace rendering_engine
         if (ctx.scene_depth_texture != m_bound_depth || !m_march_bind_group.valid())
         {
             rebuild_bind_groups(ctx.scene_depth_texture);
+        }
+    }
+
+    void volumetric_fog_pass::record(gpu::command_encoder& encoder, const frame_context& ctx)
+    {
+        if (!m_draws || ctx.scene == nullptr)
+        {
+            return;
         }
 
         auto draw_fullscreen = [&](gpu::render_pass_encoder& pass_encoder)

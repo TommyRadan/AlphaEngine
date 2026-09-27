@@ -125,11 +125,12 @@ namespace rendering_engine
         /**
          * @brief Renders one frame.
          *
-         * Walks the ordered pass list registered in @ref init,
-         * giving each pass the same per-frame @ref frame_context
-         * (active camera, swapchain and off-screen targets, viewport,
-         * frame index, this frame's and the previous frame's
-         * temporal-AA jitter, and the previous frame's unjittered
+         * Walks the ordered pass list registered in @ref init twice —
+         * every pass's @ref pass::prepare, then every pass's
+         * @ref pass::record — giving each pass the same per-frame
+         * @ref frame_context (active camera, swapchain and off-screen
+         * targets, viewport, frame index, this frame's and the previous
+         * frame's temporal-AA jitter, and the previous frame's unjittered
          * view-projection) so they cannot disagree mid-frame. The
          * active camera is the world's arbitration result
          * (@ref render_world::active_camera: the highest-priority attached,

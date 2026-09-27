@@ -94,6 +94,11 @@ namespace rendering_engine
         tonemap_pass(const tonemap_pass&) = delete;
         tonemap_pass& operator=(const tonemap_pass&) = delete;
 
+        // Picks the variant the frame draws with, rewrites the grading
+        // blend when it changed and rebinds the inputs whose handles
+        // changed.
+        void prepare(const frame_context& ctx) override;
+
         void record(gpu::command_encoder& encoder, const frame_context& ctx) override;
 
         const char* name() const override
@@ -132,9 +137,12 @@ namespace rendering_engine
         static constexpr size_t variant_count = 4;
 
         // Repacks the { exposure, operator, grading intensity } block and
-        // writes it to the Tonemap UBO; called by the setters and record()
+        // writes it to the Tonemap UBO; called by the setters and prepare()
         // whenever a value changes.
         void upload_uniforms();
+
+        // The pipeline variant this frame draws with, picked by prepare().
+        size_t m_variant{0};
 
         // Rebuild the input bind group against @p input_color, the Tonemap
         // UBO, @p grading_lut and @p exposure (either may be invalid when
@@ -160,7 +168,7 @@ namespace rendering_engine
         std::array<gpu::pipeline, variant_count> m_pipelines{};
 
         // The textures @ref m_input_bind_group was built against; invalid
-        // until the first record() builds the group.
+        // until the first prepare() builds the group.
         gpu::texture m_bound_input{};
         gpu::texture m_bound_grading_lut{};
         gpu::texture m_bound_exposure{};
