@@ -39,6 +39,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <span>
 
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/gpu/render_target.hpp>
@@ -74,7 +75,19 @@ namespace rendering_engine::gpu
         // Bind a pre-constructed @c bind_group to the layout slot
         // @p group. The pipeline must have been created with a
         // matching @c bind_group_layout at the same index.
-        virtual void set_bind_group(uint32_t group, bind_group bind_group_handle) = 0;
+        // @p dynamic_offsets carries one byte offset per slot of the
+        // group's layout that sets @c has_dynamic_offset, in ascending
+        // binding order (Vulkan's @c pDynamicOffsets rule), and must be
+        // empty for a layout without one; each is added to that slot's
+        // bound range, must be a multiple of
+        // @c device_limits::uniform_buffer_offset_alignment and must keep
+        // the range inside the buffer. A group whose count does not match
+        // is reported and not bound. The same group may be bound again
+        // with other offsets — that is the point: one group over one
+        // buffer serves every draw.
+        virtual void set_bind_group(uint32_t group,
+                                    bind_group bind_group_handle,
+                                    std::span<const uint32_t> dynamic_offsets = {}) = 0;
 
         // Override the pass-default viewport. Most callers can leave
         // this alone — @c command_encoder::begin_render_pass sets the
@@ -97,12 +110,28 @@ namespace rendering_engine::gpu
         virtual void set_stencil_reference(uint32_t reference) = 0;
 
         // Issue an unindexed draw of @p vertex_count vertices,
-        // starting at vertex index @p first_vertex.
-        virtual void draw(uint32_t vertex_count, uint32_t first_vertex = 0) = 0;
+        // starting at vertex index @p first_vertex, @p instance_count
+        // times. Per-instance vertex streams start at record
+        // @p first_instance (@c glDrawArraysInstancedBaseInstance;
+        // @c vkCmdDraw).
+        virtual void draw(uint32_t vertex_count,
+                          uint32_t instance_count = 1,
+                          uint32_t first_vertex = 0,
+                          uint32_t first_instance = 0) = 0;
 
         // Issue an indexed draw of @p index_count indices, starting
-        // at index @p first_index in the bound index buffer.
-        virtual void draw_indexed(uint32_t index_count, uint32_t first_index = 0) = 0;
+        // at index @p first_index in the bound index buffer,
+        // @p instance_count times. @p base_vertex is added to every
+        // index before the vertex fetch, so several meshes can share
+        // one vertex buffer; per-instance streams start at record
+        // @p first_instance
+        // (@c glDrawElementsInstancedBaseVertexBaseInstance;
+        // @c vkCmdDrawIndexed).
+        virtual void draw_indexed(uint32_t index_count,
+                                  uint32_t instance_count = 1,
+                                  uint32_t first_index = 0,
+                                  int32_t base_vertex = 0,
+                                  uint32_t first_instance = 0) = 0;
 
         // Issue an indexed draw whose parameters are sourced from
         // @p indirect_buffer at @p offset. The buffer record at that
@@ -174,7 +203,10 @@ namespace rendering_engine::gpu
         // Bind a pre-constructed @c bind_group to the layout slot
         // @p group. The pipeline must have been created with a
         // matching @c bind_group_layout at the same index.
-        virtual void set_bind_group(uint32_t group, bind_group bind_group_handle) = 0;
+        // @p dynamic_offsets as for @c render_pass_encoder::set_bind_group.
+        virtual void set_bind_group(uint32_t group,
+                                    bind_group bind_group_handle,
+                                    std::span<const uint32_t> dynamic_offsets = {}) = 0;
 
         // Dispatch @p group_count_x * @p group_count_y *
         // @p group_count_z workgroups. Workgroup size comes from

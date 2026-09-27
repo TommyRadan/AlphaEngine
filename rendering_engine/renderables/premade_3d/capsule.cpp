@@ -36,7 +36,7 @@
 #include <rendering_engine/mesh/tangent.hpp>
 #include <rendering_engine/mesh/vertex.hpp>
 #include <rendering_engine/renderables/mesh_bounds.hpp>
-#include <rendering_engine/renderables/per_draw_ubo.hpp>
+#include <rendering_engine/renderables/per_draw_ring.hpp>
 #include <rendering_engine/renderables/vertex_format_check.hpp>
 #include <runtime/engine.hpp>
 
@@ -49,17 +49,6 @@ rendering_engine::capsule::capsule(
 
 rendering_engine::capsule::~capsule()
 {
-    auto& gpu = *runtime::current_engine().gpu;
-    if (m_draw_bind_group.valid())
-    {
-        gpu.destroy(m_draw_bind_group);
-        m_draw_bind_group = {};
-    }
-    if (m_draw_ubo.valid())
-    {
-        gpu.destroy(m_draw_ubo);
-        m_draw_ubo = {};
-    }
     // m_mesh is shared geometry owned by the asset cache; it is released by its
     // shared_ptr, not destroyed here.
 }
@@ -251,29 +240,18 @@ void rendering_engine::capsule::collect_draw_items(std::vector<draw_item>& out)
         return;
     }
 
-    auto& gpu = *runtime::current_engine().gpu;
-
-    if (!m_draw_ubo.valid())
-    {
-        // The PerDraw block: model + normal matrix (see per_draw_ubo.hpp).
-        m_draw_ubo = create_per_draw_ubo(gpu);
-    }
-
-    if (!m_draw_bind_group.valid())
-    {
-        m_draw_bind_group = create_per_draw_bind_group(gpu, m_material->per_draw_layout(), m_draw_ubo);
-    }
-
-    // Upload the model + normal matrix; a mirroring transform flags the
-    // item so the pass draws it with the clockwise-front-face variant.
-    const bool mirrored = write_per_draw_ubo(gpu, m_draw_ubo, transform.get_world_matrix());
-
     draw_item item{};
     item.mat = m_material;
+    // The model + normal matrix go into this frame's slot of the
+    // per-draw ring (recomputed only when the transform moved); a
+    // mirroring transform flags the item so the pass draws it with
+    // the clockwise-front-face variant.
+    if (!m_per_draw.bind(transform, m_material->per_draw_layout(), item))
+    {
+        return;
+    }
     item.vertex_buffer = m_mesh->vertex_buffer;
     item.index_buffer = m_mesh->index_buffer;
-    item.per_draw_bind_group = m_draw_bind_group;
-    item.mirrored = mirrored;
     item.index_count = m_index_count;
     item.vertex_stride = m_vertex_stride;
     out.push_back(item);

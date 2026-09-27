@@ -34,6 +34,7 @@
 #include <rendering_engine/lighting/light.hpp>
 #include <rendering_engine/lighting/lights_ubo.hpp>
 #include <rendering_engine/lighting/spot_light.hpp>
+#include <rendering_engine/renderables/per_draw_ubo.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
 #include <runtime/engine.hpp>
 
@@ -71,7 +72,6 @@ namespace
     }
 
     constexpr uint32_t light_frame_binding = 0;
-    constexpr uint32_t draw_model_binding = 1;
 } // namespace
 
 namespace rendering_engine
@@ -114,9 +114,9 @@ namespace rendering_engine
         // Per-draw layout (slot 1): the model matrix UBO at binding 1,
         // identical to the layout every 3D renderable builds its
         // per-draw bind group against, so those bind groups bind here
-        // unchanged.
+        // unchanged, at the same dynamic offset into the per-draw ring.
         gpu::bind_group_layout_descriptor draw_layout{};
-        draw_layout.entries.push_back({draw_model_binding, gpu::binding_kind::uniform_buffer});
+        draw_layout.entries.push_back(per_draw_model_layout_entry());
         m_draw_layout = gpu.create_bind_group_layout(draw_layout);
 
         gpu::buffer_descriptor ubo_descriptor{};

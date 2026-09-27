@@ -30,7 +30,7 @@
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/materials/grid_material.hpp>
 #include <rendering_engine/renderables/draw_item.hpp>
-#include <rendering_engine/renderables/per_draw_ubo.hpp>
+#include <rendering_engine/renderables/per_draw_ring.hpp>
 #include <rendering_engine/rendering_engine.hpp>
 #include <runtime/engine.hpp>
 
@@ -46,24 +46,13 @@ namespace rendering_engine::debug
     infinite_grid::~infinite_grid()
     {
         auto& gpu = *runtime::current_engine().gpu;
-        if (m_draw_bind_group.valid())
-        {
-            gpu.destroy(m_draw_bind_group);
-            m_draw_bind_group = {};
-        }
-        if (m_draw_ubo.valid())
-        {
-            gpu.destroy(m_draw_ubo);
-            m_draw_ubo = {};
-        }
         if (m_vertex_buffer.valid())
         {
             gpu.destroy(m_vertex_buffer);
             m_vertex_buffer = {};
         }
-        // The material (and with it its template's layouts and pipeline)
-        // goes after the bind group that was built against its per-draw
-        // layout.
+        // The per-draw ring releases its group over this material's layout
+        // once the grid has stopped drawing.
         m_material.reset();
     }
 
@@ -84,19 +73,6 @@ namespace rendering_engine::debug
         vertex_descriptor.hint = gpu::buffer_usage_hint::static_data;
         vertex_descriptor.initial_data = vertices.data();
         m_vertex_buffer = gpu.create_buffer(vertex_descriptor);
-
-        // Per-draw block (identity model for the origin grid, see
-        // per_draw_ubo.hpp); the shader references the model matrix when
-        // reconstructing depth. Static: the grid never moves.
-        const per_draw_payload payload = make_per_draw_payload(core::math::mat4{});
-        gpu::buffer_descriptor ubo_descriptor{};
-        ubo_descriptor.size = per_draw_ubo_size;
-        ubo_descriptor.usage = gpu::buffer_usage_uniform | gpu::buffer_usage_copy_dst;
-        ubo_descriptor.hint = gpu::buffer_usage_hint::static_data;
-        ubo_descriptor.initial_data = &payload;
-        m_draw_ubo = gpu.create_buffer(ubo_descriptor);
-
-        m_draw_bind_group = create_per_draw_bind_group(gpu, m_material->per_draw_layout(), m_draw_ubo);
     }
 
     void infinite_grid::collect_draw_items(std::vector<draw_item>& out)
@@ -108,8 +84,15 @@ namespace rendering_engine::debug
 
         draw_item item{};
         item.mat = m_material.get();
+        // Per-draw block (the identity model of the origin grid, see
+        // per_draw_ubo.hpp); the shader references the model matrix when
+        // reconstructing depth. The grid never moves, so the block is
+        // built once and only copied into the per-draw ring per frame.
+        if (!m_per_draw.bind(m_transform, m_material->per_draw_layout(), item))
+        {
+            return;
+        }
         item.vertex_buffer = m_vertex_buffer;
-        item.per_draw_bind_group = m_draw_bind_group;
         item.vertex_stride = sizeof(core::math::vec3);
         item.vertex_count = 3;
         out.push_back(item);

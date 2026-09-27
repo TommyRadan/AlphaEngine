@@ -39,6 +39,7 @@
 #include <rendering_engine/lighting/directional_light.hpp>
 #include <rendering_engine/lighting/light.hpp>
 #include <rendering_engine/lighting/lights_ubo.hpp>
+#include <rendering_engine/renderables/per_draw_ubo.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
 #include <runtime/engine.hpp>
 
@@ -89,10 +90,10 @@ namespace
     // Binding numbers within the depth-only pipeline. Both are UBOs and
     // share OpenGL's global UBO namespace, so they mirror the lit
     // pipeline: the per-cascade view-projection takes 0 and the per-draw
-    // model matrix takes 1 — the latter matching every renderable's own
-    // per-draw bind group so they bind unchanged here.
+    // model matrix takes 1 (per_draw_model_layout_entry) — the latter
+    // matching every renderable's per-draw bind group so they bind
+    // unchanged here.
     constexpr uint32_t light_frame_binding = 0;
-    constexpr uint32_t draw_model_binding = 1;
 
     // One of the camera frustum's four side edges: its near- and
     // far-plane corners in world space and the view depth of each.
@@ -364,9 +365,9 @@ namespace rendering_engine
         // Per-draw layout (slot 1): the model matrix UBO at binding 1,
         // identical to the layout every 3D renderable builds its
         // per-draw bind group against, so those bind groups bind here
-        // unchanged.
+        // unchanged, at the same dynamic offset into the per-draw ring.
         gpu::bind_group_layout_descriptor draw_layout{};
-        draw_layout.entries.push_back({draw_model_binding, gpu::binding_kind::uniform_buffer});
+        draw_layout.entries.push_back(per_draw_model_layout_entry());
         m_draw_layout = gpu.create_bind_group_layout(draw_layout);
 
         // One view-projection UBO and bind group per cascade, so each

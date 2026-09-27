@@ -31,7 +31,7 @@
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/materials/material.hpp>
-#include <rendering_engine/renderables/per_draw_ubo.hpp>
+#include <rendering_engine/renderables/per_draw_ring.hpp>
 #include <runtime/engine.hpp>
 
 rendering_engine::line::line(material* mat) : m_material{mat} {}
@@ -39,16 +39,6 @@ rendering_engine::line::line(material* mat) : m_material{mat} {}
 rendering_engine::line::~line()
 {
     auto& gpu = *runtime::current_engine().gpu;
-    if (m_draw_bind_group.valid())
-    {
-        gpu.destroy(m_draw_bind_group);
-        m_draw_bind_group = {};
-    }
-    if (m_draw_ubo.valid())
-    {
-        gpu.destroy(m_draw_ubo);
-        m_draw_ubo = {};
-    }
     if (m_index_buffer.valid())
     {
         gpu.destroy(m_index_buffer);
@@ -190,32 +180,21 @@ void rendering_engine::line::collect_draw_items(std::vector<draw_item>& out)
         return;
     }
 
-    auto& gpu = *runtime::current_engine().gpu;
-
-    if (!m_draw_ubo.valid())
-    {
-        // The PerDraw block: model + normal matrix (see per_draw_ubo.hpp).
-        m_draw_ubo = create_per_draw_ubo(gpu);
-    }
-
-    if (!m_draw_bind_group.valid())
-    {
-        m_draw_bind_group = create_per_draw_bind_group(gpu, m_material->per_draw_layout(), m_draw_ubo);
-    }
-
-    // Upload the model + normal matrix; a mirroring transform flags the
-    // item so the pass draws it with the clockwise-front-face variant.
-    const bool mirrored = write_per_draw_ubo(gpu, m_draw_ubo, transform.get_world_matrix());
-
     // The line topology is baked into the material's pipeline. A strip
     // carries an index buffer expanding the polyline into segment pairs;
     // segments draw the vertices directly, two per segment (an odd
     // trailing vertex is dropped).
     draw_item item{};
     item.mat = m_material;
+    // The model + normal matrix go into this frame's slot of the
+    // per-draw ring (recomputed only when the transform moved); a
+    // mirroring transform flags the item so the pass draws it with
+    // the clockwise-front-face variant.
+    if (!m_per_draw.bind(transform, m_material->per_draw_layout(), item))
+    {
+        return;
+    }
     item.vertex_buffer = m_vertex_buffer;
-    item.per_draw_bind_group = m_draw_bind_group;
-    item.mirrored = mirrored;
     item.vertex_stride = m_vertex_stride;
 
     if (m_index_buffer.valid())

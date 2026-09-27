@@ -139,6 +139,31 @@ uint32_t rendering_engine::instanced_mesh::instance_capacity() const
     return m_capacity;
 }
 
+void rendering_engine::instanced_mesh::reserve_instances(uint32_t capacity)
+{
+    if (capacity <= m_capacity)
+    {
+        return;
+    }
+    // The new records keep instance_record's defaults (identity, white);
+    // collect_draw_items sees the buffer is too small, reallocates it and
+    // uploads every record.
+    m_instances.resize(capacity);
+    m_capacity = capacity;
+}
+
+void rendering_engine::instanced_mesh::mark_dirty(uint32_t index)
+{
+    if (m_dirty_begin == m_dirty_end)
+    {
+        m_dirty_begin = index;
+        m_dirty_end = index + 1;
+        return;
+    }
+    m_dirty_begin = index < m_dirty_begin ? index : m_dirty_begin;
+    m_dirty_end = index + 1 > m_dirty_end ? index + 1 : m_dirty_end;
+}
+
 void rendering_engine::instanced_mesh::set_instance_count(uint32_t count)
 {
     const uint32_t clamped = count > m_capacity ? m_capacity : count;
@@ -163,7 +188,7 @@ void rendering_engine::instanced_mesh::set_instance_transform(uint32_t index, co
         return;
     }
     m_instances[index].model = transform;
-    m_instances_dirty = true;
+    mark_dirty(index);
     m_world_bounds_dirty = true;
 }
 
@@ -178,7 +203,7 @@ void rendering_engine::instanced_mesh::set_instance_color(uint32_t index, const 
                                                 static_cast<float>(color.g) / 255.0f,
                                                 static_cast<float>(color.b) / 255.0f,
                                                 static_cast<float>(color.a) / 255.0f};
-    m_instances_dirty = true;
+    mark_dirty(index);
 }
 
 bool rendering_engine::instanced_mesh::world_bounds(core::math::aabb& out) const
@@ -234,15 +259,30 @@ void rendering_engine::instanced_mesh::collect_draw_items(std::vector<draw_item>
 
     // Per-instance vertex stream: one {mat4 model; vec4 color;} record per
     // instance, bound to slot 1 and stepped once per instance by the
-    // instanced material's per-instance vertex layout.
-    if (!m_instance_buffer.valid())
+    // instanced material's per-instance vertex layout. Reallocated when
+    // reserve_instances grew the capacity past it; the old buffer is
+    // released through the device, which defers the free until no frame
+    // still reads it.
+    if (!m_instance_buffer.valid() || m_buffer_capacity < m_capacity)
     {
+        if (m_instance_buffer.valid())
+        {
+            gpu.destroy(m_instance_buffer);
+        }
         gpu::buffer_descriptor instance_descriptor{};
-        instance_descriptor.size = m_capacity * sizeof(instance_record);
+        instance_descriptor.size = static_cast<size_t>(m_capacity) * sizeof(instance_record);
         instance_descriptor.usage = gpu::buffer_usage_vertex | gpu::buffer_usage_copy_dst;
         instance_descriptor.hint = gpu::buffer_usage_hint::dynamic_data;
         m_instance_buffer = gpu.create_buffer(instance_descriptor);
-        m_instances_dirty = true;
+        m_buffer_capacity = m_instance_buffer.valid() ? m_capacity : 0;
+        // A fresh buffer holds nothing: fill every record, so a later
+        // count increase never samples uninitialised storage.
+        m_dirty_begin = 0;
+        m_dirty_end = m_capacity;
+        if (!m_instance_buffer.valid())
+        {
+            return;
+        }
     }
 
     // Indirect command buffer holding a single DrawElementsIndirectCommand;
@@ -258,13 +298,16 @@ void rendering_engine::instanced_mesh::collect_draw_items(std::vector<draw_item>
         m_indirect_dirty = true;
     }
 
-    // Re-upload the whole per-instance array when any record changed. The
-    // full capacity is written so a later count increase never samples
-    // uninitialised storage.
-    if (m_instances_dirty)
+    // Upload only the records changed since the last draw (all of them
+    // right after an allocation).
+    if (m_dirty_end > m_dirty_begin)
     {
-        gpu.write_buffer(m_instance_buffer, m_instances.data(), m_capacity * sizeof(instance_record), 0);
-        m_instances_dirty = false;
+        gpu.write_buffer(m_instance_buffer,
+                         m_instances.data() + m_dirty_begin,
+                         static_cast<size_t>(m_dirty_end - m_dirty_begin) * sizeof(instance_record),
+                         static_cast<size_t>(m_dirty_begin) * sizeof(instance_record));
+        m_dirty_begin = 0;
+        m_dirty_end = 0;
     }
 
     // Rewrite the command whenever either of its live fields changed: the

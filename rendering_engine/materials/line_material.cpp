@@ -28,6 +28,7 @@
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/gpu/shader_bindings.hpp>
+#include <rendering_engine/renderables/per_draw_ubo.hpp>
 
 namespace
 {
@@ -70,9 +71,9 @@ namespace rendering_engine
         descriptor.vertex_format_without_tangents = vertex_format::position_color;
 
         // Per-draw layout (slot 1): the model + normal matrix UBO at
-        // binding 1, matching the line renderable's bind group.
-        descriptor.draw_layout.entries.push_back(
-            {gpu::shader_bindings::per_draw_model, gpu::binding_kind::uniform_buffer});
+        // binding 1, read at a dynamic offset into the per-draw ring
+        // (per_draw_ubo.hpp) and matching the shadow passes' layout.
+        descriptor.draw_layout.entries.push_back(per_draw_model_layout_entry());
         descriptor.frame_layout = frame_layout;
 
         // Per-material layout (slot 2): the tint params UBO owned by each

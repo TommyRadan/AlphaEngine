@@ -76,10 +76,14 @@ namespace rendering_engine
      * @brief Records caster draw items into an open shadow render pass.
      *
      * Picks the single-draw or the instanced pipeline per item (an item
-     * with an indirect command is an instanced batch), binding the light
+     * with a per-instance stream is an instanced batch), binding the light
      * bind group at slot 0 again whenever the pipeline changes, and issues
-     * the matching draw. Items that carry neither a per-draw group nor an
-     * instance stream have no model matrix to cast with and are skipped.
+     * the matching draw — indexed-indirect when the item carries an
+     * indirect command, else with the item's own counts and geometry
+     * offsets. A single draw binds its per-draw group with the item's
+     * dynamic offset, so it reads the very block the scene pass does.
+     * Items that carry neither a per-draw group nor an instance stream
+     * have no model matrix to cast with and are skipped.
      */
     class shadow_caster_dispatch
     {

@@ -32,6 +32,7 @@
 #include <rendering_engine/ibl/environment.hpp>
 #include <rendering_engine/mesh/tangent.hpp>
 #include <rendering_engine/mesh/vertex.hpp>
+#include <rendering_engine/renderables/per_draw_ubo.hpp>
 
 namespace
 {
@@ -79,16 +80,19 @@ namespace rendering_engine
         descriptor.tangent_location = tangent_location;
 
         // Per-draw layout (slot 1): the model + normal matrix UBO at
-        // binding 1, matching every 3D renderable's bind group.
-        descriptor.draw_layout.entries.push_back(
-            {gpu::shader_bindings::per_draw_model, gpu::binding_kind::uniform_buffer});
+        // binding 1, read at a dynamic offset into the per-draw ring
+        // (per_draw_ubo.hpp) and matching the shadow passes' layout.
+        descriptor.draw_layout.entries.push_back(per_draw_model_layout_entry());
         descriptor.frame_layout = frame_layout;
 
         // Skinning (the SKINNED keyword): the joint indices, fetched as a
         // uvec4 of the record's four uint16 values, and the four weights,
         // read after the tangent of vertex_position_uv_normal_tangent_skin;
         // the per-draw group gains the joint-matrix storage buffer the
-        // vertex stage reads. Only the vertex stage declares it.
+        // vertex stage reads. Only the vertex stage declares it. A skinned
+        // draw's group carries its own palette, so it cannot be the ring's
+        // shared group: its PerDraw block lives in a private buffer bound
+        // without a dynamic offset (see model::collect_draw_items).
         using skin_vertex = vertex_position_uv_normal_tangent_skin;
         gpu::vertex_attribute joints_attribute{
             joints_location, 4, gpu::scalar_type::uint16, static_cast<uint32_t>(offsetof(skin_vertex, joints))};
@@ -98,6 +102,7 @@ namespace rendering_engine
             {weights_location, 4, gpu::scalar_type::float32, static_cast<uint32_t>(offsetof(skin_vertex, weights))});
         descriptor.skinned_vertex_format = vertex_format::position_uv_normal_tangent_skin;
         descriptor.skinned_draw_layout = descriptor.draw_layout;
+        descriptor.skinned_draw_layout.entries.front().has_dynamic_offset = false;
         gpu::bind_group_layout_entry joints_entry{gpu::shader_bindings::per_draw_joints,
                                                   gpu::binding_kind::storage_buffer};
         joints_entry.stages = gpu::shader_stages_vertex;

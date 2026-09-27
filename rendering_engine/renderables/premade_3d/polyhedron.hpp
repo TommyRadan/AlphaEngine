@@ -27,6 +27,7 @@
 #include <vector>
 
 #include <rendering_engine/gpu/handle.hpp>
+#include <rendering_engine/renderables/per_draw_ring.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
 #include <rendering_engine/util/transform.hpp>
 
@@ -81,7 +82,8 @@ namespace rendering_engine
         // Shared geometry from the asset cache, keyed by base tables + radius +
         // detail; freed when the last polyhedron referencing it is destroyed.
         std::shared_ptr<mesh_asset> m_mesh;
-        gpu::buffer m_draw_ubo{};
-        gpu::bind_group m_draw_bind_group{};
+        // The PerDraw block and this frame's slot of it in the per-draw
+        // ring; no buffer of its own.
+        per_draw_binding m_per_draw;
     };
 } // namespace rendering_engine

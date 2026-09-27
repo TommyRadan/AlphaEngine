@@ -35,6 +35,7 @@
 #include <rendering_engine/lighting/light.hpp>
 #include <rendering_engine/lighting/lights_ubo.hpp>
 #include <rendering_engine/lighting/point_light.hpp>
+#include <rendering_engine/renderables/per_draw_ubo.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
 #include <runtime/engine.hpp>
 
@@ -66,7 +67,6 @@ namespace
     constexpr float shadow_depth_bias_constant = 1.0f;
 
     constexpr uint32_t light_frame_binding = 0;
-    constexpr uint32_t draw_model_binding = 1;
 
     // Look direction and up for each of the six faces, in cube-map face
     // order +X, -X, +Y, -Y, +Z, -Z. The ups are the ones the cube-map face
@@ -149,8 +149,10 @@ namespace rendering_engine
         light_layout.entries.push_back({light_frame_binding, gpu::binding_kind::uniform_buffer});
         m_light_layout = gpu.create_bind_group_layout(light_layout);
 
+        // The renderables' per-draw groups bind here unchanged, at the
+        // same dynamic offset into the per-draw ring.
         gpu::bind_group_layout_descriptor draw_layout{};
-        draw_layout.entries.push_back({draw_model_binding, gpu::binding_kind::uniform_buffer});
+        draw_layout.entries.push_back(per_draw_model_layout_entry());
         m_draw_layout = gpu.create_bind_group_layout(draw_layout);
 
         for (int face = 0; face < point_shadow_face_count; ++face)

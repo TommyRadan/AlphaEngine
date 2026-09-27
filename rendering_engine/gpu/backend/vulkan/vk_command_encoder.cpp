@@ -114,6 +114,35 @@ namespace rendering_engine::gpu::backend::vulkan
                     group);
         }
 
+        // True when @p dynamic_offsets carries exactly one offset per
+        // dynamic slot of @p bg: a mismatched count is invalid for
+        // vkCmdBindDescriptorSets, so the group is not bound and the
+        // call site is reported once per handle per pass encoder.
+        bool dynamic_offsets_match(std::vector<uint64_t>& reported,
+                                   const char* encoder,
+                                   uint32_t group,
+                                   bind_group handle,
+                                   const vk_bind_group& bg,
+                                   std::span<const uint32_t> dynamic_offsets)
+        {
+            if (dynamic_offsets.size() == bg.dynamic_count)
+            {
+                return true;
+            }
+            if (std::find(reported.begin(), reported.end(), handle.id) == reported.end())
+            {
+                reported.push_back(handle.id);
+                LOG_ERR("%s::set_bind_group: bind group %llu at slot %u takes %u dynamic offsets, %zu given; "
+                        "it is not bound",
+                        encoder,
+                        static_cast<unsigned long long>(handle.id),
+                        group,
+                        bg.dynamic_count,
+                        dynamic_offsets.size());
+            }
+            return false;
+        }
+
         // True when @p region lies inside @p record and @p size bytes
         // from @p offset stay inside @p buffer; logs the first problem
         // otherwise.
@@ -422,7 +451,9 @@ namespace rendering_engine::gpu::backend::vulkan
         vkCmdBindIndexBuffer(m_cmd, buf->object, 0, to_vk_index_type(format));
     }
 
-    void vk_render_pass_encoder::set_bind_group(uint32_t group, bind_group bind_group_handle)
+    void vk_render_pass_encoder::set_bind_group(uint32_t group,
+                                                bind_group bind_group_handle,
+                                                std::span<const uint32_t> dynamic_offsets)
     {
         if (!m_in_pass || m_current_pipeline_layout == VK_NULL_HANDLE)
         {
@@ -434,14 +465,19 @@ namespace rendering_engine::gpu::backend::vulkan
             report_missing_bind_group(m_reported_bind_groups, "vk_render_pass_encoder", group, bind_group_handle);
             return;
         }
+        if (!dynamic_offsets_match(
+                m_reported_bind_groups, "vk_render_pass_encoder", group, bind_group_handle, *bg, dynamic_offsets))
+        {
+            return;
+        }
         vkCmdBindDescriptorSets(m_cmd,
                                 VK_PIPELINE_BIND_POINT_GRAPHICS,
                                 m_current_pipeline_layout,
                                 group,
                                 1,
                                 &bg->descriptor_set,
-                                0,
-                                nullptr);
+                                static_cast<uint32_t>(dynamic_offsets.size()),
+                                dynamic_offsets.data());
     }
 
     void vk_render_pass_encoder::set_viewport(int x, int y, int width, int height)
@@ -475,20 +511,27 @@ namespace rendering_engine::gpu::backend::vulkan
         }
     }
 
-    void vk_render_pass_encoder::draw(uint32_t vertex_count, uint32_t first_vertex)
+    void vk_render_pass_encoder::draw(uint32_t vertex_count,
+                                      uint32_t instance_count,
+                                      uint32_t first_vertex,
+                                      uint32_t first_instance)
     {
         if (m_in_pass)
         {
-            vkCmdDraw(m_cmd, vertex_count, 1, first_vertex, 0);
+            vkCmdDraw(m_cmd, vertex_count, instance_count, first_vertex, first_instance);
             m_device.note_draw(vertex_count);
         }
     }
 
-    void vk_render_pass_encoder::draw_indexed(uint32_t index_count, uint32_t first_index)
+    void vk_render_pass_encoder::draw_indexed(uint32_t index_count,
+                                              uint32_t instance_count,
+                                              uint32_t first_index,
+                                              int32_t base_vertex,
+                                              uint32_t first_instance)
     {
         if (m_in_pass)
         {
-            vkCmdDrawIndexed(m_cmd, index_count, 1, first_index, 0, 0);
+            vkCmdDrawIndexed(m_cmd, index_count, instance_count, first_index, base_vertex, first_instance);
             m_device.note_draw_indexed(index_count);
         }
     }
@@ -575,7 +618,9 @@ namespace rendering_engine::gpu::backend::vulkan
         vkCmdBindPipeline(m_cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipe->compute_object);
     }
 
-    void vk_compute_pass_encoder::set_bind_group(uint32_t group, bind_group bind_group_handle)
+    void vk_compute_pass_encoder::set_bind_group(uint32_t group,
+                                                 bind_group bind_group_handle,
+                                                 std::span<const uint32_t> dynamic_offsets)
     {
         if (!m_active || m_current_pipeline_layout == VK_NULL_HANDLE)
         {
@@ -585,6 +630,11 @@ namespace rendering_engine::gpu::backend::vulkan
         if (bg == nullptr || bg->descriptor_set == VK_NULL_HANDLE)
         {
             report_missing_bind_group(m_reported_bind_groups, "vk_compute_pass_encoder", group, bind_group_handle);
+            return;
+        }
+        if (!dynamic_offsets_match(
+                m_reported_bind_groups, "vk_compute_pass_encoder", group, bind_group_handle, *bg, dynamic_offsets))
+        {
             return;
         }
         // The descriptors declare storage images as VK_IMAGE_LAYOUT_GENERAL,
@@ -606,8 +656,8 @@ namespace rendering_engine::gpu::backend::vulkan
                                 group,
                                 1,
                                 &bg->descriptor_set,
-                                0,
-                                nullptr);
+                                static_cast<uint32_t>(dynamic_offsets.size()),
+                                dynamic_offsets.data());
     }
 
     void vk_compute_pass_encoder::dispatch(uint32_t x, uint32_t y, uint32_t z)

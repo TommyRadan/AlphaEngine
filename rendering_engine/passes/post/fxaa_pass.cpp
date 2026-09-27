@@ -283,7 +283,7 @@ namespace rendering_engine
         pass_encoder->set_pipeline(m_pipeline);
         pass_encoder->set_bind_group(0, input_bind_group);
         pass_encoder->set_vertex_buffer(0, m_vertex_buffer, 0, 0);
-        pass_encoder->draw(3, 0);
+        pass_encoder->draw(3);
         pass_encoder->end();
     }
 } // namespace rendering_engine

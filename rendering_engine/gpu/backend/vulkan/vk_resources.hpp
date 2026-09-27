@@ -204,6 +204,10 @@ namespace rendering_engine::gpu::backend::vulkan
         // allocated from; a set is only ever freed back to that pool.
         VkDescriptorPool pool{VK_NULL_HANDLE};
         std::vector<binding_value> entries;
+        // Dynamic uniform-buffer slots of the layout the set was
+        // allocated with: how many offsets every bind must pass. Kept
+        // here because the layout may be destroyed before the group.
+        uint32_t dynamic_count{0};
     };
 
     // One attachment of an off-screen target: the texture it renders

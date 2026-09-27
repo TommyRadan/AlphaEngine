@@ -96,6 +96,13 @@ namespace rendering_engine
         return payload;
     }
 
+    gpu::bind_group_layout_entry per_draw_model_layout_entry()
+    {
+        gpu::bind_group_layout_entry entry{gpu::shader_bindings::per_draw_model, gpu::binding_kind::uniform_buffer};
+        entry.has_dynamic_offset = true;
+        return entry;
+    }
+
     gpu::buffer create_per_draw_ubo(gpu::device& device)
     {
         gpu::buffer_descriptor descriptor{};
@@ -113,6 +120,7 @@ namespace rendering_engine
         model_slot.binding = gpu::shader_bindings::per_draw_model;
         model_slot.kind = gpu::binding_kind::uniform_buffer;
         model_slot.buffer_value = ubo;
+        model_slot.size = per_draw_ubo_size;
         descriptor.entries.push_back(model_slot);
         return device.create_bind_group(descriptor);
     }

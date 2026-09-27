@@ -120,12 +120,18 @@ namespace rendering_engine
 
     void shadow_caster_dispatch::draw(const draw_item& item)
     {
-        const bool instanced = item.indirect_buffer.valid();
-        if (instanced ? (!item.instance_buffer.valid() || !item.index_buffer.valid())
-                      : !item.per_draw_bind_group.valid())
+        // An item with a per-instance stream carries its transforms there;
+        // any other one needs its per-draw group.
+        const bool instanced = item.instance_buffer.valid();
+        if (!instanced && !item.per_draw_bind_group.valid())
         {
             // No model matrix to place the caster with: nothing sensible
             // could be rasterized into the map.
+            return;
+        }
+        if (item.indirect_buffer.valid() && !item.index_buffer.valid())
+        {
+            // Only the indexed path is drawn indirect.
             return;
         }
 
@@ -142,23 +148,33 @@ namespace rendering_engine
         m_encoder.set_vertex_buffer(0, item.vertex_buffer, 0, item.vertex_stride);
         if (instanced)
         {
-            // The instance stream at vertex slot 1 carries the transforms;
-            // the indirect record carries the index and instance counts.
+            // The instance stream at vertex slot 1 carries the transforms.
             m_encoder.set_vertex_buffer(1, item.instance_buffer, 0, item.instance_stride);
-            m_encoder.set_index_buffer(item.index_buffer, item.index_format);
-            m_encoder.draw_indexed_indirect(item.indirect_buffer, 0);
-            return;
-        }
-
-        m_encoder.set_bind_group(1, item.per_draw_bind_group);
-        if (item.index_buffer.valid())
-        {
-            m_encoder.set_index_buffer(item.index_buffer, item.index_format);
-            m_encoder.draw_indexed(item.index_count, 0);
         }
         else
         {
-            m_encoder.draw(item.vertex_count, 0);
+            // The same group and dynamic offset the scene pass binds: the
+            // renderable wrote its block into the per-draw ring once this
+            // frame and every pass reads that slot.
+            m_encoder.set_bind_group(1, item.per_draw_bind_group, item.per_draw_offsets());
+        }
+
+        if (item.index_buffer.valid())
+        {
+            m_encoder.set_index_buffer(item.index_buffer, item.index_format);
+            if (item.indirect_buffer.valid())
+            {
+                // The indirect record carries the index and instance counts.
+                m_encoder.draw_indexed_indirect(item.indirect_buffer, 0);
+            }
+            else
+            {
+                m_encoder.draw_indexed(item.index_count, item.instance_count, item.first_index, item.vertex_offset);
+            }
+        }
+        else
+        {
+            m_encoder.draw(item.vertex_count, item.instance_count, static_cast<uint32_t>(item.vertex_offset));
         }
     }
 } // namespace rendering_engine

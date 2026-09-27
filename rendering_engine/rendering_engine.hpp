@@ -61,6 +61,7 @@ namespace rendering_engine
     struct line_material;
     struct grid_material;
     struct ui_material;
+    class per_draw_ring;
 
     namespace debug
     {
@@ -285,6 +286,15 @@ namespace rendering_engine
         ui_material& get_ui_material();
 
         /**
+         * @brief The per-frame allocator the 3D renderables write their
+         *        PerDraw block into (see @ref per_draw_ring). Created in
+         *        @ref init right after the device, rewound by @ref render
+         *        at the top of every frame and released in @ref quit
+         *        before the device.
+         */
+        per_draw_ring& get_per_draw_ring();
+
+        /**
          * @brief The tonemap post pass, for live tuning of its exposure
          *        and operator (@ref tonemap_pass::set_exposure /
          *        @ref tonemap_pass::set_operator). Constructed in
@@ -479,6 +489,9 @@ namespace rendering_engine
         // single built-in instance. Released after the materials in
         // @ref quit.
         std::shared_ptr<material_template> m_standard_template;
+
+        // The per-draw ring (see @ref get_per_draw_ring).
+        std::unique_ptr<per_draw_ring> m_per_draw_ring;
 
         // This frame's draw statistics, filled by the scene pass (which
         // holds a pointer to it) and surfaced via @ref get_render_stats.

@@ -54,6 +54,10 @@ namespace rendering_engine::gpu::backend::vulkan
         // runaway leak grows in bounded steps.
         constexpr uint32_t k_base_sets = 256;
         constexpr uint32_t k_base_uniform_buffers = 512;
+        // Dynamic uniform buffers back the shared per-draw groups: one
+        // per (ring buffer, per-draw layout) pair rather than one per
+        // renderable, so a small budget covers every material.
+        constexpr uint32_t k_base_dynamic_uniform_buffers = 64;
         constexpr uint32_t k_base_combined_image_samplers = 2048;
         constexpr uint32_t k_base_storage_buffers = 64;
         constexpr uint32_t k_base_storage_images = 64;
@@ -116,6 +120,7 @@ namespace rendering_engine::gpu::backend::vulkan
         descriptor_pool_budget budget{};
         budget.max_sets = k_base_sets * scale;
         budget.uniform_buffers = k_base_uniform_buffers * scale;
+        budget.dynamic_uniform_buffers = k_base_dynamic_uniform_buffers * scale;
         budget.combined_image_samplers = k_base_combined_image_samplers * scale;
         budget.storage_buffers = k_base_storage_buffers * scale;
         budget.storage_images = k_base_storage_images * scale;

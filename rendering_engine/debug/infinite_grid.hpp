@@ -26,6 +26,8 @@
 
 #include <rendering_engine/debug/helper.hpp>
 #include <rendering_engine/gpu/handle.hpp>
+#include <rendering_engine/renderables/per_draw_ring.hpp>
+#include <rendering_engine/util/transform.hpp>
 
 namespace rendering_engine
 {
@@ -63,7 +65,11 @@ namespace rendering_engine::debug
         // grid's fade distance; released with the grid, before the device.
         std::unique_ptr<grid_material> m_material;
         gpu::buffer m_vertex_buffer{};
-        gpu::buffer m_draw_ubo{};
-        gpu::bind_group m_draw_bind_group{};
+
+        // The grid sits at the world origin: an identity transform whose
+        // PerDraw block is computed once and copied into the per-draw
+        // ring each frame the grid draws.
+        util::transform m_transform;
+        per_draw_binding m_per_draw;
     };
 } // namespace rendering_engine::debug

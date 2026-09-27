@@ -64,9 +64,10 @@ namespace rendering_engine::gpu::shader_bindings
     constexpr uint32_t point_shadow = 14;
     constexpr uint32_t point_shadow_map = 15;
 
-    // Set 1, owned by each renderable: the per-draw model matrix. Every
-    // 3D renderable builds its per-draw bind group against this number,
-    // so the depth-only shadow pipelines reuse those groups unchanged.
+    // Set 1, per draw: the per-draw model matrix, a slot of the per-draw
+    // ring read at a dynamic offset. Every 3D renderable's per-draw group
+    // binds it at this number, so the depth-only shadow pipelines reuse
+    // those groups (and offsets) unchanged.
     constexpr uint32_t per_draw_model = 1;
 
     // Set 2, owned by each material: the params block and up to five

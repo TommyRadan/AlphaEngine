@@ -1492,7 +1492,7 @@ namespace rendering_engine::gpu::backend::vulkan
     {
         const uint32_t index = static_cast<uint32_t>(m_descriptor_pools.size());
         const descriptor_pool_budget budget = descriptor_pool_budget_for(index);
-        std::array<VkDescriptorPoolSize, 4> sizes{};
+        std::array<VkDescriptorPoolSize, 5> sizes{};
         sizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         sizes[0].descriptorCount = budget.uniform_buffers;
         sizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -1501,6 +1501,8 @@ namespace rendering_engine::gpu::backend::vulkan
         sizes[2].descriptorCount = budget.storage_buffers;
         sizes[3].type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
         sizes[3].descriptorCount = budget.storage_images;
+        sizes[4].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+        sizes[4].descriptorCount = budget.dynamic_uniform_buffers;
 
         VkDescriptorPoolCreateInfo info{};
         info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -1514,11 +1516,12 @@ namespace rendering_engine::gpu::backend::vulkan
             return false;
         }
         m_descriptor_pools.push_back(pool);
-        LOG_INF("Vulkan descriptor pool %u: %u sets (%u uniform buffers, %u combined image samplers, "
-                "%u storage buffers, %u storage images)",
+        LOG_INF("Vulkan descriptor pool %u: %u sets (%u uniform buffers, %u dynamic uniform buffers, "
+                "%u combined image samplers, %u storage buffers, %u storage images)",
                 index,
                 budget.max_sets,
                 budget.uniform_buffers,
+                budget.dynamic_uniform_buffers,
                 budget.combined_image_samplers,
                 budget.storage_buffers,
                 budget.storage_images);

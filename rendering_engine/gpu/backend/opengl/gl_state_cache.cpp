@@ -55,6 +55,20 @@ namespace rendering_engine::gpu::backend::opengl
                 glDisablei(capability, index);
             }
         }
+
+        // An indexed buffer binding: the whole buffer when @p size is 0,
+        // otherwise @p size bytes from @p offset.
+        void bind_buffer_range(GLenum target, GLuint index, GLuint buffer, GLintptr offset, GLsizeiptr size)
+        {
+            if (size == 0)
+            {
+                glBindBufferBase(target, index, buffer);
+            }
+            else
+            {
+                glBindBufferRange(target, index, buffer, offset, size);
+            }
+        }
     } // namespace
 
     void gl_state_cache::invalidate()
@@ -330,19 +344,19 @@ namespace rendering_engine::gpu::backend::opengl
         }
     }
 
-    void gl_state_cache::bind_uniform_buffer(GLuint index, GLuint buffer)
+    void gl_state_cache::bind_uniform_buffer(GLuint index, GLuint buffer, GLintptr offset, GLsizeiptr size)
     {
-        if (index >= cached_buffer_bindings || m_uniform_buffers[index].update(buffer))
+        if (index >= cached_buffer_bindings || m_uniform_buffers[index].update(buffer_range{buffer, offset, size}))
         {
-            glBindBufferBase(GL_UNIFORM_BUFFER, index, buffer);
+            bind_buffer_range(GL_UNIFORM_BUFFER, index, buffer, offset, size);
         }
     }
 
-    void gl_state_cache::bind_storage_buffer(GLuint index, GLuint buffer)
+    void gl_state_cache::bind_storage_buffer(GLuint index, GLuint buffer, GLintptr offset, GLsizeiptr size)
     {
-        if (index >= cached_buffer_bindings || m_storage_buffers[index].update(buffer))
+        if (index >= cached_buffer_bindings || m_storage_buffers[index].update(buffer_range{buffer, offset, size}))
         {
-            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, index, buffer);
+            bind_buffer_range(GL_SHADER_STORAGE_BUFFER, index, buffer, offset, size);
         }
     }
 } // namespace rendering_engine::gpu::backend::opengl

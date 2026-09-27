@@ -27,6 +27,7 @@
 #include <core/math/math.hpp>
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/mesh/vertex.hpp>
+#include <rendering_engine/renderables/per_draw_ring.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
 #include <rendering_engine/util/transform.hpp>
 
@@ -81,8 +82,9 @@ namespace rendering_engine
         bool m_has_local_bounds{false};
 
         gpu::buffer m_vertex_buffer{};
-        gpu::buffer m_draw_ubo{};
-        gpu::bind_group m_draw_bind_group{};
+        // The PerDraw block and this frame's slot of it in the per-draw
+        // ring; no buffer of its own.
+        per_draw_binding m_per_draw;
 
         size_t m_vertex_count{0};
         uint32_t m_vertex_stride{0};
