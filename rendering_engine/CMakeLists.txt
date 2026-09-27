@@ -18,7 +18,6 @@ target_sources(AlphaEngine PRIVATE
     window.hpp
 )
 
-add_subdirectory(animation)
 add_subdirectory(assets)
 add_subdirectory(camera)
 add_subdirectory(editor)

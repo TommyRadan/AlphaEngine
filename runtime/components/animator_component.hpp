@@ -19,8 +19,8 @@
 
 #include <core/math/math.hpp>
 #include <core/subscription.hpp>
-#include <rendering_engine/animation/animation_clip.hpp>
-#include <rendering_engine/animation/skeleton.hpp>
+#include <runtime/animation/animation_clip.hpp>
+#include <runtime/animation/skeleton.hpp>
 
 namespace runtime
 {
@@ -41,7 +41,7 @@ namespace runtime
     /**
      * @brief Animates a skeleton and writes the result into the scene.
      *
-     * Holds a shared @ref rendering_engine::skeleton and the clips that pose
+     * Holds a shared @ref animation::skeleton and the clips that pose
      * it. A *layer* is one clip playing at its own time and speed; @ref play
      * with a fade starts a new layer at weight 0 and fades every older layer
      * out over the same time, so any number of cross-fades can overlap and
@@ -90,8 +90,8 @@ namespace runtime
          *        skeleton with no clips holds its bind pose, which still
          *        gives bound skins a palette).
          */
-        animator_component(std::shared_ptr<const rendering_engine::skeleton> skeleton,
-                           std::vector<std::shared_ptr<const rendering_engine::animation_clip>> clips);
+        animator_component(std::shared_ptr<const animation::skeleton> skeleton,
+                           std::vector<std::shared_ptr<const animation::animation_clip>> clips);
 
         ~animator_component();
         animator_component(animator_component&& other) noexcept;
@@ -127,14 +127,14 @@ namespace runtime
 
         /**
          * @brief Feeds skin @p skin's palette, relative to @p mesh_joint (the
-         *        joint the mesh hangs from, or @ref rendering_engine::no_joint
+         *        joint the mesh hangs from, or @ref animation::no_joint
          *        for a mesh in the skeleton's model space), to the model of
          *        @p mesh_node's @c mesh_component every frame.
          */
         void bind_skin(std::size_t skin, std::size_t mesh_joint, node& mesh_node);
 
-        const std::shared_ptr<const rendering_engine::skeleton>& skeleton() const noexcept;
-        const std::vector<std::shared_ptr<const rendering_engine::animation_clip>>& clips() const noexcept;
+        const std::shared_ptr<const animation::skeleton>& skeleton() const noexcept;
+        const std::vector<std::shared_ptr<const animation::animation_clip>>& clips() const noexcept;
 
         /** @brief Index of the first clip named @p name, or @ref no_clip. */
         std::size_t find_clip(std::string_view name) const noexcept;

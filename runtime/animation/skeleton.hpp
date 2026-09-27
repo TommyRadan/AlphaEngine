@@ -18,7 +18,7 @@
 
 #include <core/math/math.hpp>
 
-namespace rendering_engine
+namespace runtime::animation
 {
     /** @brief "No joint": a root's parent, a palette entry that names nothing. */
     inline constexpr std::size_t no_joint = static_cast<std::size_t>(-1);
@@ -117,4 +117,4 @@ namespace rendering_engine
         // Joint indices with every parent ahead of its children.
         std::vector<std::size_t> m_order;
     };
-} // namespace rendering_engine
+} // namespace runtime::animation

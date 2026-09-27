@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2015-2026 Tomislav Radanovic
 
-#include <rendering_engine/animation/skeleton.hpp>
+#include <runtime/animation/skeleton.hpp>
 
 #include <algorithm>
 #include <cstdint>
@@ -10,7 +10,7 @@
 
 #include <core/log.hpp>
 
-namespace rendering_engine
+namespace runtime::animation
 {
     skeleton::skeleton(std::vector<skeleton_joint> joints, std::vector<skeleton_skin> skins)
         : m_joints{std::move(joints)}, m_skins{std::move(skins)}
@@ -181,4 +181,4 @@ namespace rendering_engine
             out[i] = to_mesh * model[joint] * palette.inverse_bind_matrices[i];
         }
     }
-} // namespace rendering_engine
+} // namespace runtime::animation

@@ -1266,6 +1266,13 @@ namespace rendering_engine
             }
         }
 
+        using runtime::animation::animation_clip;
+        using runtime::animation::joint_track;
+        using runtime::animation::no_joint;
+        using runtime::animation::skeleton;
+        using runtime::animation::skeleton_joint;
+        using runtime::animation::skeleton_skin;
+
         // CPU stage: the skeleton over every node, with one palette per glTF
         // skin. Only built when something will pose it (a skin or an
         // animation).

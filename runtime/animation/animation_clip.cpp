@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2015-2026 Tomislav Radanovic
 
-#include <rendering_engine/animation/animation_clip.hpp>
+#include <runtime/animation/animation_clip.hpp>
 
 #include <algorithm>
 #include <utility>
 
-namespace rendering_engine
+namespace runtime::animation
 {
     animation_clip::animation_clip(std::string name, std::vector<joint_track> tracks)
         : m_name{std::move(name)}, m_tracks{std::move(tracks)}
@@ -62,4 +62,4 @@ namespace rendering_engine
             }
         }
     }
-} // namespace rendering_engine
+} // namespace runtime::animation

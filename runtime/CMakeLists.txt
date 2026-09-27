@@ -25,6 +25,7 @@ target_sources(AlphaEngine PRIVATE
     scene_serializer.hpp
 )
 
+add_subdirectory(animation)
 add_subdirectory(components)
 add_subdirectory(physics)
 add_subdirectory(scripting)

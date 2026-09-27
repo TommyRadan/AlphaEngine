@@ -17,13 +17,13 @@
 #include <vector>
 
 #include <core/math/math.hpp>
-#include <rendering_engine/animation/animation_clip.hpp>
-#include <rendering_engine/animation/skeleton.hpp>
 #include <rendering_engine/assets/image.hpp>
 #include <rendering_engine/assets/mesh_asset.hpp>
 #include <rendering_engine/assets/texture_asset.hpp>
 #include <rendering_engine/gpu/types.hpp>
 #include <rendering_engine/materials/standard_material.hpp>
+#include <runtime/animation/animation_clip.hpp>
+#include <runtime/animation/skeleton.hpp>
 
 namespace rendering_engine
 {
@@ -236,13 +236,13 @@ namespace rendering_engine
         // carrying one skin per glTF skin (the palette in the skin's joint
         // order, with its inverse bind matrices). Null when the file has
         // neither skins nor animations.
-        std::shared_ptr<const skeleton> node_skeleton;
+        std::shared_ptr<const runtime::animation::skeleton> node_skeleton;
 
         // One clip per glTF animation, in file order, whose tracks drive
         // @ref node_skeleton joints (so node indices): translation, rotation
         // and scale channels with their step / linear / cubic-spline
         // sampling. Morph-target weight channels are not imported.
-        std::vector<std::shared_ptr<const animation_clip>> animations;
+        std::vector<std::shared_ptr<const runtime::animation::animation_clip>> animations;
 
         // One cache entry per glTF texture, index-aligned with the file's
         // texture array and uploaded in the colour space the material that
