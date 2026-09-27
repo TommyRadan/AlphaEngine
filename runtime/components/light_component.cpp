@@ -22,6 +22,7 @@
 
 #include <runtime/components/light_component.hpp>
 
+#include <core/log.hpp>
 #include <core/math/math.hpp>
 #include <rendering_engine/lighting/ambient_light.hpp>
 #include <rendering_engine/lighting/directional_light.hpp>
@@ -73,9 +74,27 @@ runtime::light_component runtime::light_component::clone() const
         copy = std::move(point);
         break;
     }
+    case rendering_engine::light_type::spot:
+    {
+        const auto& source = static_cast<const rendering_engine::spot_light&>(*m_light);
+        auto spot = std::make_unique<rendering_engine::spot_light>();
+        spot->position = source.position;
+        spot->direction = source.direction;
+        spot->range = source.range;
+        spot->constant_attenuation = source.constant_attenuation;
+        spot->linear_attenuation = source.linear_attenuation;
+        spot->quadratic_attenuation = source.quadratic_attenuation;
+        spot->outer_angle = source.outer_angle;
+        spot->inner_angle = source.inner_angle;
+        spot->cast_shadow = source.cast_shadow;
+        copy = std::move(spot);
+        break;
+    }
     }
     if (!copy)
     {
+        LOG_WRN("runtime::light_component::clone: unhandled light_type %d; the clone owns no light",
+                static_cast<int>(m_light->type()));
         return light_component{};
     }
     copy->color = m_light->color;
