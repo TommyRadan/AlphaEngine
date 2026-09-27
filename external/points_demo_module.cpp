@@ -21,19 +21,19 @@
  */
 
 #include "api/game_module.hpp"
-#include "api/log.hpp"
-#include "api/time.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <memory>
+#include <utility>
 #include <vector>
 
-#include <core/log.hpp>
 #include <core/math/math.hpp>
 #include <rendering_engine/materials/points_material.hpp>
 #include <rendering_engine/renderables/points.hpp>
 #include <rendering_engine/rendering_engine.hpp>
 #include <rendering_engine/util/color.hpp>
+#include <runtime/components/renderable_component.hpp>
 #include <runtime/engine.hpp>
 
 namespace
@@ -43,12 +43,23 @@ namespace
     // Number of points on the Fibonacci-sphere cloud.
     constexpr int point_count = 2000;
 
-    std::unique_ptr<rendering_engine::points> g_points;
-    float g_rotation = 0.0f;
-    const float g_rotation_speed = 3.14f / 6;
+    // Turns its node about the world up axis (+Z) at a constant rate.
+    struct turntable final : runtime::behavior
+    {
+        void on_update(float delta_time) override
+        {
+            m_angle += rotation_speed * (delta_time / 1000.0f);
+            owner().transform.set_rotation(math::vec3{0.0f, 0.0f, m_angle});
+        }
+
+    private:
+        static constexpr float rotation_speed = 3.14f / 6; // radians / second
+
+        float m_angle{0.0f};
+    };
 } // namespace
 
-static void on_engine_start(const core::engine_start& event)
+GAME_MODULE()
 {
     auto& material = runtime::current_engine().renderer->get_points_material();
     material.set_size(6.0f);
@@ -74,31 +85,12 @@ static void on_engine_start(const core::engine_start& event)
         colors.push_back(math::vec3{0.5f + 0.5f * position.x, 0.5f + 0.5f * position.y, 0.5f + 0.5f * position.z});
     }
 
-    g_points = std::make_unique<rendering_engine::points>(&material);
-    g_points->set_positions(positions, colors);
-    g_points->upload();
-    runtime::current_engine().renderer->register_scene_renderable(g_points.get());
-}
+    auto dots = std::make_unique<rendering_engine::points>(&material);
+    dots->set_positions(positions, colors);
+    dots->upload();
 
-static void on_engine_stop(const core::engine_stop& event)
-{
-    runtime::current_engine().renderer->unregister_scene_renderable(g_points.get());
-    g_points.reset();
-}
-
-static void on_render_update(const core::render_update& event)
-{
-    g_rotation += g_rotation_speed * (event.m_delta_time / 1000.0f);
-    g_points->transform.set_rotation(math::vec3{0.0f, 0.0f, g_rotation});
-}
-
-GAME_MODULE()
-{
-    LOG_INF("Registering external module: points_demo_module");
-    struct game_module_info info = {};
-    info.on_engine_start = on_engine_start;
-    info.on_engine_stop = on_engine_stop;
-    info.on_render_update = on_render_update;
-    register_game_module(info);
-    return true;
+    // The cloud turns with its node.
+    runtime::node& cloud = scene.create_node("point_cloud");
+    cloud.add_component(runtime::renderable_component{std::move(dots)});
+    runtime::add_behavior<turntable>(cloud);
 }

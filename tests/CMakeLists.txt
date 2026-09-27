@@ -191,7 +191,6 @@ set(ALPHAENGINE_TEST_SOURCES
     rendering_engine/gpu/vk_staging_ring_test.cpp
     rendering_engine/util/font_test.cpp
     rendering_engine/util/image_test.cpp
-    external/camera_id_test.cpp
 )
 
 add_executable(AlphaEngineTests

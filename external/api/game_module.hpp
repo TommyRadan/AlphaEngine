@@ -20,53 +20,58 @@
  * SOFTWARE.
  */
 
+/**
+ * @file game_module.hpp
+ * @brief The game-module entry point, @c GAME_MODULE().
+ *
+ * A game module is one translation unit under @c external/ that brings a
+ * piece of the game into the world. It keeps no state of its own: its
+ * @c GAME_MODULE() body is a bootstrap that runs once, when the engine has
+ * brought every subsystem up, and spawns nodes, gives them components and
+ * attaches the @ref runtime::behavior objects that carry the logic from then
+ * on. Everything it makes belongs to a scene, so the scenes tear it down —
+ * before the renderer — however the engine shuts down.
+ *
+ * @code
+ * struct spinner final : runtime::behavior
+ * {
+ *     void on_update(float delta_time) override
+ *     {
+ *         m_angle += delta_time / 1000.0f;
+ *         owner().transform.set_rotation(core::math::vec3{0.0f, 0.0f, m_angle});
+ *     }
+ *
+ * private:
+ *     float m_angle{0.0f};
+ * };
+ *
+ * GAME_MODULE()
+ * {
+ *     runtime::node& prop = scene.create_node("prop");
+ *     runtime::add_behavior<spinner>(prop);
+ * }
+ * @endcode
+ *
+ * The body receives @c scene, the engine's active scene at start-up (the
+ * persistent scene); a module may load scenes of its own through
+ * @c runtime::current_engine().scenes. A game-wide concern that belongs to
+ * no object may still subscribe to the event bus from its bootstrap.
+ */
+
 #pragma once
 
-#include <functional>
+#include <runtime/components/behavior_component.hpp>
+#include <runtime/game_module.hpp>
+#include <runtime/node.hpp>
+#include <runtime/scene_graph.hpp>
 
-#include <core/event_engine.hpp>
-
-struct game_module_info
-{
-    std::function<void(const core::engine_start&)> on_engine_start;
-    std::function<void(const core::engine_stop&)> on_engine_stop;
-    std::function<void(const core::frame&)> on_frame;
-    std::function<void(const core::render_update&)> on_render_update;
-    std::function<void(const core::key_down&)> on_key_down;
-    std::function<void(const core::key_up&)> on_key_up;
-    std::function<void(const core::mouse_key_down&)> on_mouse_key_down;
-    std::function<void(const core::mouse_key_up&)> on_mouse_key_up;
-    std::function<void(const core::mouse_move&)> on_mouse_move;
-    std::function<void(const core::mouse_wheel&)> on_mouse_wheel;
-    std::function<void(const core::text_input&)> on_text_input;
-    std::function<void(const core::window_resized&)> on_window_resized;
-    std::function<void(const core::window_focus&)> on_window_focus;
-    std::function<void(const core::window_minimized&)> on_window_minimized;
-    std::function<void(const core::gamepad_connected&)> on_gamepad_connected;
-    std::function<void(const core::gamepad_disconnected&)> on_gamepad_disconnected;
-    std::function<void(const core::gamepad_button&)> on_gamepad_button;
-    std::function<void(const core::gamepad_axis&)> on_gamepad_axis;
-
-    game_module_info()
-        : on_engine_start{nullptr}, on_engine_stop{nullptr}, on_frame{nullptr}, on_render_update{nullptr},
-          on_key_down{nullptr}, on_key_up{nullptr}, on_mouse_key_down{nullptr}, on_mouse_key_up{nullptr},
-          on_mouse_move{nullptr}, on_mouse_wheel{nullptr}, on_text_input{nullptr}, on_window_resized{nullptr},
-          on_window_focus{nullptr}, on_window_minimized{nullptr}, on_gamepad_connected{nullptr},
-          on_gamepad_disconnected{nullptr}, on_gamepad_button{nullptr}, on_gamepad_axis{nullptr}
-    {
-    }
-};
-
-void register_game_module(const game_module_info& info);
-
-#ifdef INTERNAL_GAMEMODULE_IMPLEMENTATION
-// Engine-side hook, deliberately kept out of the module-facing surface (a
-// module translation unit gets the GAME_MODULE() block below instead).
-// runtime::engine::init calls it once the event bus is live to wire every
-// registration queued at static-init time onto the bus.
-void install_pending_game_modules();
-#else
-#define GAME_MODULE() static bool module_init()
-static bool module_init();
-static bool init_status = module_init();
-#endif
+/**
+ * @brief Opens the definition of this translation unit's bootstrap — a
+ *        function of @c runtime::context& @c scene — and registers it through
+ *        @ref runtime::register_game_module. Use it once per module.
+ */
+#define GAME_MODULE()                                                                                                  \
+    static void game_module_bootstrap(runtime::context& scene);                                                        \
+    [[maybe_unused]] static const bool game_module_registered =                                                        \
+        runtime::register_game_module(__FILE__, &game_module_bootstrap);                                               \
+    static void game_module_bootstrap([[maybe_unused]] runtime::context& scene)

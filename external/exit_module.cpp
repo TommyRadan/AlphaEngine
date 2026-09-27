@@ -20,24 +20,31 @@
  * SOFTWARE.
  */
 
-#include "api/game_module.hpp"
-#include "api/log.hpp"
-#include <core/event_engine.hpp>
-#include <core/log.hpp>
-#include <runtime/engine.hpp>
+/**
+ * @file exit_module.cpp
+ * @brief Quits the engine when Escape is pressed.
+ *
+ * Quitting is a game-wide concern that belongs to no object in the world, so
+ * this module spawns nothing: its bootstrap subscribes a listener to the event
+ * bus for the bus's lifetime.
+ */
 
-static void on_key_down(const core::key_down& event)
-{
-    if (event.m_key_code != core::key_code::escape)
-        return;
-    runtime::current_engine().events->emit<core::quit_requested>();
-}
+#include "api/game_module.hpp"
+
+#include <core/event_engine.hpp>
+#include <runtime/engine.hpp>
 
 GAME_MODULE()
 {
-    LOG_INF("Registering external module: exit_module");
-    struct game_module_info info;
-    info.on_key_down = on_key_down;
-    register_game_module(info);
-    return true;
+    core::event_bus& events = *runtime::current_engine().events;
+    events
+        .subscribe<core::key_down>(
+            [](const core::key_down& event)
+            {
+                if (event.m_key_code == core::key_code::escape)
+                {
+                    runtime::current_engine().events->emit<core::quit_requested>();
+                }
+            })
+        .release();
 }

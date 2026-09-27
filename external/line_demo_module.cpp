@@ -21,19 +21,18 @@
  */
 
 #include "api/game_module.hpp"
-#include "api/log.hpp"
-#include "api/time.hpp"
 
 #include <cmath>
 #include <memory>
+#include <utility>
 #include <vector>
 
-#include <core/log.hpp>
 #include <core/math/math.hpp>
 #include <rendering_engine/materials/line_material.hpp>
 #include <rendering_engine/renderables/line.hpp>
 #include <rendering_engine/rendering_engine.hpp>
 #include <rendering_engine/util/color.hpp>
+#include <runtime/components/renderable_component.hpp>
 #include <runtime/engine.hpp>
 
 namespace
@@ -43,12 +42,23 @@ namespace
     // Number of samples along the helix strip.
     constexpr int sample_count = 400;
 
-    std::unique_ptr<rendering_engine::line> g_helix;
-    float g_rotation = 0.0f;
-    const float g_rotation_speed = 3.14f / 6;
+    // Turns its node about the Y axis at a constant rate.
+    struct turntable final : runtime::behavior
+    {
+        void on_update(float delta_time) override
+        {
+            m_angle += rotation_speed * (delta_time / 1000.0f);
+            owner().transform.set_rotation(math::vec3{0.0f, m_angle, 0.0f});
+        }
+
+    private:
+        static constexpr float rotation_speed = 3.14f / 6; // radians / second
+
+        float m_angle{0.0f};
+    };
 } // namespace
 
-static void on_engine_start(const core::engine_start& event)
+GAME_MODULE()
 {
     auto& material = runtime::current_engine().renderer->get_line_material();
     material.set_color(rendering_engine::util::color{255, 255, 255, 255});
@@ -70,32 +80,13 @@ static void on_engine_start(const core::engine_start& event)
         colors.push_back(math::vec3{0.5f + 0.5f * std::cos(angle), t, 0.5f + 0.5f * std::sin(angle)});
     }
 
-    g_helix = std::make_unique<rendering_engine::line>(&material);
-    g_helix->set_mode(rendering_engine::line_mode::strip);
-    g_helix->set_positions(positions, colors);
-    g_helix->upload();
-    runtime::current_engine().renderer->register_scene_renderable(g_helix.get());
-}
+    auto strip = std::make_unique<rendering_engine::line>(&material);
+    strip->set_mode(rendering_engine::line_mode::strip);
+    strip->set_positions(positions, colors);
+    strip->upload();
 
-static void on_engine_stop(const core::engine_stop& event)
-{
-    runtime::current_engine().renderer->unregister_scene_renderable(g_helix.get());
-    g_helix.reset();
-}
-
-static void on_render_update(const core::render_update& event)
-{
-    g_rotation += g_rotation_speed * (event.m_delta_time / 1000.0f);
-    g_helix->transform.set_rotation(math::vec3{0.0f, g_rotation, 0.0f});
-}
-
-GAME_MODULE()
-{
-    LOG_INF("Registering external module: line_demo_module");
-    struct game_module_info info = {};
-    info.on_engine_start = on_engine_start;
-    info.on_engine_stop = on_engine_stop;
-    info.on_render_update = on_render_update;
-    register_game_module(info);
-    return true;
+    // The helix turns with its node.
+    runtime::node& helix = scene.create_node("helix");
+    helix.add_component(runtime::renderable_component{std::move(strip)});
+    runtime::add_behavior<turntable>(helix);
 }

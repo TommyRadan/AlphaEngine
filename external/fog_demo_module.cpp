@@ -21,9 +21,7 @@
  */
 
 #include "api/game_module.hpp"
-#include "api/log.hpp"
 
-#include <core/log.hpp>
 #include <core/math/math.hpp>
 #include <rendering_engine/fog.hpp>
 #include <rendering_engine/lighting/ambient_light.hpp>
@@ -33,32 +31,72 @@
 #include <rendering_engine/renderables/premade_3d/sphere.hpp>
 #include <rendering_engine/rendering_engine.hpp>
 #include <rendering_engine/util/color.hpp>
+#include <runtime/components/light_component.hpp>
+#include <runtime/components/renderable_component.hpp>
 #include <runtime/engine.hpp>
 
 #include <memory>
-#include <vector>
+#include <utility>
 
 // A row of spheres marching away from the camera over a long ground
 // plane, with linear distance fog: the near spheres read at full colour
 // while the far ones dissolve into the haze, showcasing the fog added in
-// issue #122.
-static std::vector<std::unique_ptr<rendering_engine::sphere>> g_spheres;
-static std::unique_ptr<rendering_engine::plane> g_ground;
-static std::unique_ptr<rendering_engine::ambient_light> g_ambient;
-static std::unique_ptr<rendering_engine::directional_light> g_sun;
+// issue #122. Every object is a node under one "fog_demo" node, whose
+// behaviour turns the fog on while the showcase is enabled.
 
-// Linear RGB the scene fades into; matched to the fog colour so the
-// receding plane and spheres melt into a uniform haze.
-static const rendering_engine::util::color g_fog_color{90, 115, 160, 255};
-
-static void on_engine_start(const core::engine_start& event)
+namespace
 {
-    auto& renderer = *runtime::current_engine().renderer;
+    // Linear RGB the scene fades into; matched to the fog colour so the
+    // receding plane and spheres melt into a uniform haze.
+    constexpr rendering_engine::util::color fog_color{90, 115, 160, 255};
 
-    auto& material = renderer.get_phong_material();
+    // Holds the scene-wide fog on while its node is enabled, and clears it
+    // when the node is disabled or destroyed.
+    struct fog_zone final : runtime::behavior
+    {
+        void on_enable() override
+        {
+            // Linear distance fog: clear up close, fully saturated by the
+            // far end of the sphere row.
+            rendering_engine::fog_settings fog{};
+            fog.mode = rendering_engine::fog_mode::linear;
+            fog.color = core::math::vec3{static_cast<float>(fog_color.r) / 255.0f,
+                                         static_cast<float>(fog_color.g) / 255.0f,
+                                         static_cast<float>(fog_color.b) / 255.0f};
+            fog.near_distance = 3.0f;
+            fog.far_distance = 18.0f;
+            runtime::current_engine().renderer->set_fog(fog);
+        }
+
+        void on_disable() override
+        {
+            runtime::current_engine().renderer->set_fog(rendering_engine::fog_settings{});
+        }
+    };
+
+    // Uploads @p shape and hangs it on a new child of @p parent at @p position.
+    template<typename Shape>
+    void spawn_prop(runtime::context& scene,
+                    runtime::node& parent,
+                    const core::math::vec3& position,
+                    std::unique_ptr<Shape> shape)
+    {
+        shape->upload();
+        runtime::node& prop = scene.create_node({}, &parent);
+        prop.transform.set_position(position);
+        prop.add_component(runtime::renderable_component{std::move(shape)});
+    }
+} // namespace
+
+GAME_MODULE()
+{
+    auto& material = runtime::current_engine().renderer->get_phong_material();
     material.set_diffuse(rendering_engine::util::color{230, 126, 34, 255});
     material.set_specular(rendering_engine::util::color{255, 255, 255, 255});
     material.set_shininess(48.0f);
+
+    runtime::node& demo = scene.create_node("fog_demo");
+    runtime::add_behavior<fog_zone>(demo);
 
     // The camera looks from -X toward the origin. Lay the spheres out as
     // a field that both recedes (+X, increasing distance) and spreads
@@ -72,67 +110,31 @@ static void on_engine_start(const core::engine_start& event)
     {
         for (int col = 0; col < lateral_cols; ++col)
         {
-            auto ball = std::make_unique<rendering_engine::sphere>(&material);
             const float x = static_cast<float>(row) * 4.0f;
             const float y = (static_cast<float>(col) - static_cast<float>(lateral_cols - 1) * 0.5f) * 3.0f;
-            ball->transform.set_position(core::math::vec3{x, y, 0.0f});
-            ball->upload();
-            renderer.register_scene_renderable(ball.get());
-            g_spheres.push_back(std::move(ball));
+            spawn_prop(
+                scene, demo, core::math::vec3{x, y, 0.0f}, std::make_unique<rendering_engine::sphere>(&material));
         }
     }
 
     // A long ground plane below the spheres; world up is +Z, so the
     // plane's default +Z normal already faces the sky.
-    g_ground = std::make_unique<rendering_engine::plane>(&material, 120.0f, 120.0f);
-    g_ground->transform.set_position(core::math::vec3{16.0f, 0.0f, -1.5f});
-    g_ground->upload();
-    renderer.register_scene_renderable(g_ground.get());
+    spawn_prop(scene,
+               demo,
+               core::math::vec3{16.0f, 0.0f, -1.5f},
+               std::make_unique<rendering_engine::plane>(&material, 120.0f, 120.0f));
 
-    // Lights self-register on construction; keeping them alive is enough
-    // for the scene pass to pack them into the per-frame lights UBO.
-    g_ambient = std::make_unique<rendering_engine::ambient_light>();
-    g_ambient->color = core::math::vec3{1.0f, 1.0f, 1.0f};
-    g_ambient->intensity = 0.2f;
+    // The lights are components on nodes of their own; the light component
+    // keeps the sun's direction on its node's forward (+X) axis.
+    auto ambient = std::make_unique<rendering_engine::ambient_light>();
+    ambient->color = core::math::vec3{1.0f, 1.0f, 1.0f};
+    ambient->intensity = 0.2f;
+    scene.create_node("ambient", &demo).add_component(runtime::light_component{std::move(ambient)});
 
-    g_sun = std::make_unique<rendering_engine::directional_light>();
-    g_sun->direction = core::math::vec3{1.0f, -0.4f, -0.6f};
-    g_sun->color = core::math::vec3{1.0f, 0.97f, 0.9f};
-    g_sun->intensity = 1.0f;
-
-    // Linear distance fog: clear up close, fully saturated by the far
-    // end of the sphere row.
-    rendering_engine::fog_settings fog{};
-    fog.mode = rendering_engine::fog_mode::linear;
-    fog.color = core::math::vec3{static_cast<float>(g_fog_color.r) / 255.0f,
-                                 static_cast<float>(g_fog_color.g) / 255.0f,
-                                 static_cast<float>(g_fog_color.b) / 255.0f};
-    fog.near_distance = 3.0f;
-    fog.far_distance = 18.0f;
-    renderer.set_fog(fog);
-}
-
-static void on_engine_stop(const core::engine_stop& event)
-{
-    auto& renderer = *runtime::current_engine().renderer;
-    renderer.set_fog(rendering_engine::fog_settings{});
-    for (auto& ball : g_spheres)
-    {
-        renderer.unregister_scene_renderable(ball.get());
-    }
-    g_spheres.clear();
-    renderer.unregister_scene_renderable(g_ground.get());
-    g_ground.reset();
-    g_sun.reset();
-    g_ambient.reset();
-}
-
-GAME_MODULE()
-{
-    LOG_INF("Registering external module: fog_demo_module");
-    struct game_module_info info = {};
-    info.on_engine_start = on_engine_start;
-    info.on_engine_stop = on_engine_stop;
-    register_game_module(info);
-    return true;
+    auto sun_light = std::make_unique<rendering_engine::directional_light>();
+    sun_light->color = core::math::vec3{1.0f, 0.97f, 0.9f};
+    sun_light->intensity = 1.0f;
+    runtime::node& sun = scene.create_node("sun", &demo);
+    sun.look_at(sun.world_position() + core::math::vec3{1.0f, -0.4f, -0.6f});
+    sun.add_component(runtime::light_component{std::move(sun_light)});
 }

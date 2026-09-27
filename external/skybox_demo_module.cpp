@@ -21,12 +21,12 @@
  */
 
 #include "api/game_module.hpp"
-#include "api/log.hpp"
 
 #include <array>
 #include <cmath>
 #include <cstdint>
 #include <memory>
+#include <utility>
 #include <vector>
 
 #include <core/log.hpp>
@@ -38,6 +38,8 @@
 #include <rendering_engine/renderables/premade_3d/sphere.hpp>
 #include <rendering_engine/rendering_engine.hpp>
 #include <rendering_engine/util/color.hpp>
+#include <runtime/components/light_component.hpp>
+#include <runtime/components/renderable_component.hpp>
 #include <runtime/engine.hpp>
 
 namespace
@@ -62,13 +64,6 @@ namespace
     // sphere's bottom sits at z = -(grid_row_height/2 + sphere_scale), so
     // the plane clears it with a small margin.
     constexpr float ground_z = -1.05f;
-
-    std::unique_ptr<rendering_engine::environment> g_environment;
-    std::vector<std::unique_ptr<rendering_engine::standard_material>> g_materials;
-    std::vector<std::unique_ptr<rendering_engine::sphere>> g_spheres;
-    std::unique_ptr<rendering_engine::standard_material> g_ground_material;
-    std::unique_ptr<rendering_engine::plane> g_ground;
-    std::unique_ptr<rendering_engine::directional_light> g_sun;
 
     // The world-space direction a cube texel faces, matching the OpenGL
     // cube-map convention the @ref environment samples with (kept in
@@ -151,97 +146,113 @@ namespace
         return faces;
     }
 
-    void on_engine_start(const core::engine_start& /*event*/)
+    // The showcase's root: owns the procedural sky environment — the scene
+    // background and image-based ambient while the node is enabled — and the
+    // materials its props draw with. The props are its children, so the
+    // scene frees them before it.
+    struct sky_showcase final : runtime::behavior
     {
-        auto& renderer = *runtime::current_engine().renderer;
-
-        // Build the IBL environment from the procedural sky and make it the
-        // scene background + ambient source. set_environment also stores it
-        // so create_standard_material below inherits the lighting.
-        g_environment = std::make_unique<rendering_engine::environment>(face_size, generate_sky_faces());
-        renderer.set_environment(g_environment.get());
-
-        // A roughness x metalness grid. The camera sits at -X looking
-        // toward the origin with +Z up, so the grid is laid out across Y
-        // (columns) and Z (rows) at the origin plane.
-        for (int row = 0; row < grid_rows; ++row)
+        sky_showcase() : m_environment{std::make_unique<rendering_engine::environment>(face_size, generate_sky_faces())}
         {
-            const bool metal = row == 0;
-            for (int col = 0; col < grid_columns; ++col)
-            {
-                auto material = renderer.create_standard_material();
-                material->set_metalness(metal ? 1.0f : 0.0f);
-                // Crisp mirror at the left, fully rough at the right.
-                const float roughness = 0.05f + 0.95f * static_cast<float>(col) / static_cast<float>(grid_columns - 1);
-                material->set_roughness(roughness);
-                material->set_base_color(metal ? rendering_engine::util::color{245, 245, 245, 255}
-                                               : rendering_engine::util::color{220, 70, 50, 255});
-
-                auto ball = std::make_unique<rendering_engine::sphere>(material.get());
-                const float y = (static_cast<float>(col) - static_cast<float>(grid_columns - 1) * 0.5f) * grid_spacing;
-                const float z = (static_cast<float>(grid_rows - 1) * 0.5f - static_cast<float>(row)) * grid_row_height;
-                ball->transform.set_position(math::vec3{0.0f, y, z});
-                ball->transform.set_scale(math::vec3{sphere_scale, sphere_scale, sphere_scale});
-                ball->upload();
-                renderer.register_scene_renderable(ball.get());
-
-                g_materials.push_back(std::move(material));
-                g_spheres.push_back(std::move(ball));
-            }
         }
 
-        // A large rough dielectric ground plane below the grid to catch
-        // the spheres' shadows. The plane lies in XY with a +Z normal
-        // (world up), so it just needs dropping below the lowest ball.
-        // Matte and slightly warm so the cast shadows read clearly.
-        g_ground_material = renderer.create_standard_material();
-        g_ground_material->set_metalness(0.0f);
-        g_ground_material->set_roughness(0.9f);
-        g_ground_material->set_base_color(rendering_engine::util::color{180, 180, 185, 255});
-
-        g_ground = std::make_unique<rendering_engine::plane>(g_ground_material.get(), 40.0f, 40.0f);
-        g_ground->transform.set_position(math::vec3{0.0f, 0.0f, ground_z});
-        g_ground->upload();
-        renderer.register_scene_renderable(g_ground.get());
-
-        // A warm key light aligned with the sun in the sky so the direct
-        // and image-based lighting agree. It casts the scene's shadow map
-        // so the spheres drop shadows onto the ground plane.
-        g_sun = std::make_unique<rendering_engine::directional_light>();
-        g_sun->direction = math::vec3{-1.0f, 0.35f, -0.5f};
-        g_sun->color = math::vec3{1.0f, 0.96f, 0.88f};
-        g_sun->intensity = 2.0f;
-        g_sun->cast_shadow = true;
-    }
-
-    void on_engine_stop(const core::engine_stop& /*event*/)
-    {
-        auto& renderer = *runtime::current_engine().renderer;
-
-        // Clear the environment before it dies so neither the skybox pass
-        // nor any material keeps a dangling cube-map handle.
-        renderer.set_environment(nullptr);
-        for (auto& ball : g_spheres)
+        // Makes the environment the scene background + ambient source. The
+        // renderer attaches it to every standard material, whenever it was
+        // created.
+        void on_enable() override
         {
-            renderer.unregister_scene_renderable(ball.get());
+            runtime::current_engine().renderer->set_environment(m_environment.get());
         }
-        renderer.unregister_scene_renderable(g_ground.get());
 
-        g_sun.reset();
-        g_ground.reset();
-        g_ground_material.reset();
-        g_spheres.clear();
-        g_materials.clear();
-        g_environment.reset();
+        // Clears it again, so neither the skybox pass nor any material keeps
+        // a dangling cube-map handle once the environment is gone.
+        void on_disable() override
+        {
+            runtime::current_engine().renderer->set_environment(nullptr);
+        }
+
+        rendering_engine::standard_material* make_material()
+        {
+            m_materials.push_back(runtime::current_engine().renderer->create_standard_material());
+            return m_materials.back().get();
+        }
+
+    private:
+        // Declared first so it is destroyed last, after the materials.
+        std::unique_ptr<rendering_engine::environment> m_environment;
+        std::vector<std::unique_ptr<rendering_engine::standard_material>> m_materials;
+    };
+
+    // Uploads @p shape and hangs it on a new child of @p parent at @p position.
+    template<typename Shape>
+    runtime::node&
+    spawn_prop(runtime::context& scene, runtime::node& parent, const math::vec3& position, std::unique_ptr<Shape> shape)
+    {
+        shape->upload();
+        runtime::node& prop = scene.create_node({}, &parent);
+        prop.transform.set_position(position);
+        prop.add_component(runtime::renderable_component{std::move(shape)});
+        return prop;
     }
 } // namespace
 
 GAME_MODULE()
 {
-    LOG_INF("Registering external module: skybox_demo_module");
-    struct game_module_info info = {};
-    info.on_engine_start = on_engine_start;
-    info.on_engine_stop = on_engine_stop;
-    register_game_module(info);
-    return true;
+    // Build the IBL environment from the procedural sky; enabling the
+    // showcase makes it the scene background + ambient source.
+    runtime::node& demo = scene.create_node("skybox_demo");
+    sky_showcase* sky = runtime::add_behavior<sky_showcase>(demo);
+    if (sky == nullptr)
+    {
+        return;
+    }
+
+    // A roughness x metalness grid. The camera sits at -X looking
+    // toward the origin with +Z up, so the grid is laid out across Y
+    // (columns) and Z (rows) at the origin plane.
+    for (int row = 0; row < grid_rows; ++row)
+    {
+        const bool metal = row == 0;
+        for (int col = 0; col < grid_columns; ++col)
+        {
+            rendering_engine::standard_material* material = sky->make_material();
+            material->set_metalness(metal ? 1.0f : 0.0f);
+            // Crisp mirror at the left, fully rough at the right.
+            const float roughness = 0.05f + 0.95f * static_cast<float>(col) / static_cast<float>(grid_columns - 1);
+            material->set_roughness(roughness);
+            material->set_base_color(metal ? rendering_engine::util::color{245, 245, 245, 255}
+                                           : rendering_engine::util::color{220, 70, 50, 255});
+
+            const float y = (static_cast<float>(col) - static_cast<float>(grid_columns - 1) * 0.5f) * grid_spacing;
+            const float z = (static_cast<float>(grid_rows - 1) * 0.5f - static_cast<float>(row)) * grid_row_height;
+            runtime::node& ball =
+                spawn_prop(scene, demo, math::vec3{0.0f, y, z}, std::make_unique<rendering_engine::sphere>(material));
+            ball.transform.set_scale(math::vec3{sphere_scale, sphere_scale, sphere_scale});
+        }
+    }
+
+    // A large rough dielectric ground plane below the grid to catch
+    // the spheres' shadows. The plane lies in XY with a +Z normal
+    // (world up), so it just needs dropping below the lowest ball.
+    // Matte and slightly warm so the cast shadows read clearly.
+    rendering_engine::standard_material* ground_material = sky->make_material();
+    ground_material->set_metalness(0.0f);
+    ground_material->set_roughness(0.9f);
+    ground_material->set_base_color(rendering_engine::util::color{180, 180, 185, 255});
+    spawn_prop(scene,
+               demo,
+               math::vec3{0.0f, 0.0f, ground_z},
+               std::make_unique<rendering_engine::plane>(ground_material, 40.0f, 40.0f));
+
+    // A warm key light aligned with the sun in the sky so the direct
+    // and image-based lighting agree. It casts the scene's shadow map
+    // so the spheres drop shadows onto the ground plane. The light
+    // component keeps its direction on the node's forward (+X) axis.
+    auto sun_light = std::make_unique<rendering_engine::directional_light>();
+    sun_light->color = math::vec3{1.0f, 0.96f, 0.88f};
+    sun_light->intensity = 2.0f;
+    sun_light->cast_shadow = true;
+    runtime::node& sun = scene.create_node("sun", &demo);
+    sun.look_at(sun.world_position() + math::vec3{-1.0f, 0.35f, -0.5f});
+    sun.add_component(runtime::light_component{std::move(sun_light)});
 }

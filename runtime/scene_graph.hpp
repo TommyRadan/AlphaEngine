@@ -148,9 +148,10 @@ namespace runtime
          *        every deferred command.
          *
          * Called once per rendered frame (through the scene manager) from
-         * @ref runtime::engine::tick after game-module @c on_frame and before
-         * the renderer draws. Only nodes linked under @ref root and
-         * effectively active are updated.
+         * @ref runtime::engine::tick after the fixed steps and the
+         * @c core::render_update listeners, and before the renderer draws.
+         * Only nodes linked under @ref root and effectively active are
+         * updated.
          */
         void update();
 
@@ -193,7 +194,8 @@ namespace runtime
          * Every copied node takes its source's name, local pose and active
          * flag, and a copy of each component whose type can be copied — one
          * defining @c C @c clone() @c const, or else a copy-constructible
-         * one; a component of neither kind is skipped with a warning. Copies
+         * one; a component of neither kind is skipped with a warning, as is
+         * one whose @c clone() returns an empty @c std::optional<C>. Copies
          * attach (@c on_attach) as @c add_component would. The subtree is
          * planned before anything is created, so cloning a node under its
          * own descendant copies the original subtree once. Called while the

@@ -21,10 +21,7 @@
  */
 
 #include "api/game_module.hpp"
-#include "api/log.hpp"
-#include "api/time.hpp"
 
-#include <core/log.hpp>
 #include <core/math/math.hpp>
 #include <rendering_engine/lighting/ambient_light.hpp>
 #include <rendering_engine/lighting/directional_light.hpp>
@@ -34,10 +31,13 @@
 #include <rendering_engine/renderables/premade_3d/sphere.hpp>
 #include <rendering_engine/rendering_engine.hpp>
 #include <rendering_engine/util/color.hpp>
+#include <runtime/components/light_component.hpp>
+#include <runtime/components/renderable_component.hpp>
 #include <runtime/engine.hpp>
 
 #include <cmath>
 #include <memory>
+#include <utility>
 #include <vector>
 
 // Shadow showcase for the auto-fit directional shadow frustum (issue
@@ -67,66 +67,130 @@
 // Controls (from camera_module): WASD to move, hold left mouse to look,
 // space/ctrl to rise/sink, shift to move faster. Roam around — the
 // shadows stay sharp wherever you look.
+//
+// The scene it builds, all in the scene the engine hands the bootstrap:
+//
+//   shadow_demo     (shadow_field: the materials; the ambient light)
+//   ├── ground      (plane)
+//   ├── 15 spheres  (sphere each)
+//   ├── 3 pillars   (box each)
+//   └── sun         (orbiting_sun: the shadow-casting directional light)
 
 namespace
 {
     namespace math = core::math;
-
-    std::vector<std::unique_ptr<rendering_engine::sphere>> g_spheres;
-    std::vector<std::unique_ptr<rendering_engine::box>> g_pillars;
-    std::vector<std::unique_ptr<rendering_engine::standard_material>> g_materials;
-    std::unique_ptr<rendering_engine::plane> g_ground;
-    std::unique_ptr<rendering_engine::standard_material> g_ground_material;
-    std::unique_ptr<rendering_engine::ambient_light> g_ambient;
-    std::unique_ptr<rendering_engine::directional_light> g_sun;
 
     // Top of the ground plane in world Z (world up is +Z). Objects rest on it.
     constexpr float ground_z = -1.5f;
 
     // The sun slowly orbits in azimuth so the shadows sweep across the plane;
     // the downward tilt is held constant so they never grow unbounded.
-    float g_sun_angle = 0.0f;
     constexpr float sun_orbit_speed = 0.25f; // radians / second
     constexpr float sun_tilt = -0.65f;       // downward (-Z) component
 
-    rendering_engine::standard_material* make_material(const rendering_engine::util::color& base, float roughness)
+    // The showcase's root: owns the materials its props draw with. The props
+    // are its children, so the scene frees them before it.
+    struct shadow_field final : runtime::behavior
     {
-        auto material = runtime::current_engine().renderer->create_standard_material();
-        material->set_base_color(base);
-        material->set_metalness(0.0f);
-        material->set_roughness(roughness);
-        g_materials.push_back(std::move(material));
-        return g_materials.back().get();
-    }
+        rendering_engine::standard_material* make_material(const rendering_engine::util::color& base, float roughness)
+        {
+            auto material = runtime::current_engine().renderer->create_standard_material();
+            material->set_base_color(base);
+            material->set_metalness(0.0f);
+            material->set_roughness(roughness);
+            m_materials.push_back(std::move(material));
+            return m_materials.back().get();
+        }
 
-    void update_sun_direction()
+    private:
+        std::vector<std::unique_ptr<rendering_engine::standard_material>> m_materials;
+    };
+
+    // The single shadow-casting directional light, orbiting. Its frustum is
+    // auto-fitted to the camera view every frame (see shadow_pass). It lights
+    // the scene only while its node is enabled.
+    struct orbiting_sun final : runtime::behavior
     {
-        g_sun->direction = math::vec3{std::cos(g_sun_angle) * 0.7f, std::sin(g_sun_angle) * 0.7f, sun_tilt};
+        orbiting_sun() : m_light{std::make_unique<rendering_engine::directional_light>()}
+        {
+            m_light->color = math::vec3{1.0f, 0.97f, 0.9f};
+            m_light->intensity = 1.0f;
+            m_light->cast_shadow = true;
+            m_light->set_enabled(false);
+            aim();
+        }
+
+        void on_enable() override
+        {
+            m_light->set_enabled(true);
+        }
+
+        void on_disable() override
+        {
+            m_light->set_enabled(false);
+        }
+
+        void on_update(float delta_time) override
+        {
+            m_angle += sun_orbit_speed * (delta_time / 1000.0f);
+            aim();
+        }
+
+    private:
+        void aim()
+        {
+            m_light->direction = math::vec3{std::cos(m_angle) * 0.7f, std::sin(m_angle) * 0.7f, sun_tilt};
+        }
+
+        std::unique_ptr<rendering_engine::directional_light> m_light;
+        float m_angle{0.0f};
+    };
+
+    // Uploads @p shape and hangs it on a new child of @p parent at @p position.
+    template<typename Shape>
+    void
+    spawn_prop(runtime::context& scene, runtime::node& parent, const math::vec3& position, std::unique_ptr<Shape> shape)
+    {
+        shape->upload();
+        runtime::node& prop = scene.create_node({}, &parent);
+        prop.transform.set_position(position);
+        prop.add_component(runtime::renderable_component{std::move(shape)});
     }
 } // namespace
 
-static void on_engine_start(const core::engine_start& event)
+GAME_MODULE()
 {
-    auto& renderer = *runtime::current_engine().renderer;
+    runtime::node& demo = scene.create_node("shadow_demo");
+    shadow_field* field = runtime::add_behavior<shadow_field>(demo);
+    if (field == nullptr)
+    {
+        return;
+    }
+
+    // Dim ambient so the shadowed areas read as genuinely dark.
+    auto ambient = std::make_unique<rendering_engine::ambient_light>();
+    ambient->color = math::vec3{1.0f, 1.0f, 1.0f};
+    ambient->intensity = 0.12f;
+    demo.add_component(runtime::light_component{std::move(ambient)});
 
     // A wide, neutral ground plane to catch the shadows. World up is +Z,
     // so the plane's default +Z normal already faces the sky.
-    g_ground_material = renderer.create_standard_material();
-    g_ground_material->set_base_color(rendering_engine::util::color{185, 188, 195, 255});
-    g_ground_material->set_metalness(0.0f);
-    g_ground_material->set_roughness(0.95f);
-
-    g_ground = std::make_unique<rendering_engine::plane>(g_ground_material.get(), 60.0f, 60.0f);
-    g_ground->transform.set_position(math::vec3{6.0f, 0.0f, ground_z});
-    g_ground->upload();
-    renderer.register_scene_renderable(g_ground.get());
+    rendering_engine::standard_material* ground_material =
+        field->make_material(rendering_engine::util::color{185, 188, 195, 255}, 0.95f);
+    spawn_prop(scene,
+               demo,
+               math::vec3{6.0f, 0.0f, ground_z},
+               std::make_unique<rendering_engine::plane>(ground_material, 60.0f, 60.0f));
 
     // A few coloured surfaces shared across the field.
-    rendering_engine::standard_material* warm = make_material(rendering_engine::util::color{230, 126, 34, 255}, 0.55f);
-    rendering_engine::standard_material* cool = make_material(rendering_engine::util::color{52, 152, 219, 255}, 0.4f);
-    rendering_engine::standard_material* pale = make_material(rendering_engine::util::color{236, 240, 241, 255}, 0.7f);
+    rendering_engine::standard_material* warm =
+        field->make_material(rendering_engine::util::color{230, 126, 34, 255}, 0.55f);
+    rendering_engine::standard_material* cool =
+        field->make_material(rendering_engine::util::color{52, 152, 219, 255}, 0.4f);
+    rendering_engine::standard_material* pale =
+        field->make_material(rendering_engine::util::color{236, 240, 241, 255}, 0.7f);
     rendering_engine::standard_material* pillar_material =
-        make_material(rendering_engine::util::color{120, 200, 140, 255}, 0.6f);
+        field->make_material(rendering_engine::util::color{120, 200, 140, 255}, 0.6f);
 
     // A grid of unit spheres spread across the plane. The camera looks
     // from -X, so the grid recedes along +X and spreads across +/-Y. It is
@@ -140,15 +204,12 @@ static void on_engine_start(const core::engine_start& event)
         for (int col = 0; col < lateral_cols; ++col)
         {
             rendering_engine::standard_material* tint = tints[(row + col) % 3];
-            auto ball = std::make_unique<rendering_engine::sphere>(tint);
             const float x = static_cast<float>(row) * 5.0f;
             const float y = (static_cast<float>(col) - static_cast<float>(lateral_cols - 1) * 0.5f) * 4.0f;
             // Unit sphere (radius 1): centre one radius above the plane so it
             // rests on the ground and casts a contact shadow.
-            ball->transform.set_position(math::vec3{x, y, ground_z + 1.0f});
-            ball->upload();
-            renderer.register_scene_renderable(ball.get());
-            g_spheres.push_back(std::move(ball));
+            spawn_prop(
+                scene, demo, math::vec3{x, y, ground_z + 1.0f}, std::make_unique<rendering_engine::sphere>(tint));
         }
     }
 
@@ -163,61 +224,12 @@ static void on_engine_start(const core::engine_start& event)
     constexpr float pillar_height = 5.0f;
     for (const math::vec3& spot : pillar_spots)
     {
-        auto pillar = std::make_unique<rendering_engine::box>(pillar_material, 0.8f, 0.8f, pillar_height);
-        pillar->transform.set_position(math::vec3{spot.x, spot.y, ground_z + pillar_height * 0.5f});
-        pillar->upload();
-        renderer.register_scene_renderable(pillar.get());
-        g_pillars.push_back(std::move(pillar));
+        spawn_prop(scene,
+                   demo,
+                   math::vec3{spot.x, spot.y, ground_z + pillar_height * 0.5f},
+                   std::make_unique<rendering_engine::box>(pillar_material, 0.8f, 0.8f, pillar_height));
     }
 
-    // Dim ambient so the shadowed areas read as genuinely dark.
-    g_ambient = std::make_unique<rendering_engine::ambient_light>();
-    g_ambient->color = math::vec3{1.0f, 1.0f, 1.0f};
-    g_ambient->intensity = 0.12f;
-
-    // The single shadow-casting directional light. Its frustum is
-    // auto-fitted to the camera view every frame (see shadow_pass).
-    g_sun = std::make_unique<rendering_engine::directional_light>();
-    g_sun->color = math::vec3{1.0f, 0.97f, 0.9f};
-    g_sun->intensity = 1.0f;
-    g_sun->cast_shadow = true;
-    update_sun_direction();
-}
-
-static void on_engine_stop(const core::engine_stop& event)
-{
-    auto& renderer = *runtime::current_engine().renderer;
-    for (auto& ball : g_spheres)
-    {
-        renderer.unregister_scene_renderable(ball.get());
-    }
-    g_spheres.clear();
-    for (auto& pillar : g_pillars)
-    {
-        renderer.unregister_scene_renderable(pillar.get());
-    }
-    g_pillars.clear();
-    renderer.unregister_scene_renderable(g_ground.get());
-    g_ground.reset();
-    g_sun.reset();
-    g_ambient.reset();
-    g_materials.clear();
-    g_ground_material.reset();
-}
-
-static void on_render_update(const core::render_update& event)
-{
-    g_sun_angle += sun_orbit_speed * (event.m_delta_time / 1000.0f);
-    update_sun_direction();
-}
-
-GAME_MODULE()
-{
-    LOG_INF("Registering external module: shadow_demo_module");
-    struct game_module_info info = {};
-    info.on_engine_start = on_engine_start;
-    info.on_engine_stop = on_engine_stop;
-    info.on_render_update = on_render_update;
-    register_game_module(info);
-    return true;
+    runtime::node& sun = scene.create_node("sun", &demo);
+    runtime::add_behavior<orbiting_sun>(sun);
 }
