@@ -41,4 +41,9 @@ namespace rendering_engine
     // untouched when @p mesh is null (nothing uploaded yet), so the caller
     // is treated as unbounded rather than culled.
     bool mesh_world_bounds(const mesh_asset* mesh, const util::transform& world, core::math::aabb& out);
+
+    // The same box in the space of @p local's parent: the asset's bounds
+    // under @p local's own matrix only, for @ref renderable::local_bounds.
+    // Returns false and leaves @p out untouched when @p mesh is null.
+    bool mesh_local_bounds(const mesh_asset* mesh, const util::transform& local, core::math::aabb& out);
 } // namespace rendering_engine

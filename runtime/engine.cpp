@@ -42,6 +42,7 @@
 #include <rendering_engine/rendering_engine.hpp>
 #include <rendering_engine/window.hpp>
 #include <runtime/game_module.hpp>
+#include <runtime/physics/physics_world.hpp>
 #include <runtime/scene_manager.hpp>
 
 namespace runtime
@@ -118,6 +119,7 @@ namespace runtime
         // until init() because they compile GL shader programs and
         // need the GL context to be live first.
         renderer = std::make_unique<rendering_engine::context>();
+        physics = std::make_unique<runtime::physics::world>();
         scenes = std::make_unique<runtime::scene_manager>();
     }
 
@@ -127,6 +129,7 @@ namespace runtime
         // current-engine pointer last so any destructor side effects
         // that reach for current_engine() still see a valid engine.
         scenes.reset();
+        physics.reset();
         renderer.reset();
         // Destroyed after its consumers (renderer / scenes) so their handles
         // are already released, and before the gpu device so any asset still
@@ -178,6 +181,9 @@ namespace runtime
         // engine global.
         rendering_engine::set_asset_device(gpu.get());
         assets->init();
+        // After the renderer: debug builds give the physics world a line
+        // helper that draws its colliders.
+        physics->init();
         scenes->init();
 
         // Register our own quit_requested listener now that the event
@@ -198,6 +204,9 @@ namespace runtime
         // renderer, light and camera registration and releases its GPU
         // buffers, which needs the renderer and the asset cache still up.
         scenes->quit();
+        // Every physics component has unregistered with its scene; the world
+        // goes before the renderer its debug helper draws through.
+        physics->quit();
         // Scene teardown is where the bulk of the asset handles drop; reclaim
         // the index slots they leave behind before the cache itself goes.
         const std::size_t swept = assets->collect_unused();
@@ -249,7 +258,14 @@ namespace runtime
         while (time->next_fixed_step())
         {
             events->emit<core::frame>(frame);
+            // The simulation advances after the step's game logic, so forces
+            // and moves made in it apply to this step; contact events are
+            // dispatched before the next one.
+            physics->step(static_cast<float>(time->fixed_delta_time() / 1000.0));
         }
+        // Place the simulated nodes between the last two physics steps, so
+        // they move smoothly at the render rate.
+        physics->interpolate(static_cast<float>(time->interpolation_alpha()));
 
         // Per-render-frame update for visual / input-driven game logic, carrying
         // the variable render delta so it stays smooth at the render rate rather

@@ -20,30 +20,33 @@
  * SOFTWARE.
  */
 
-#include <rendering_engine/renderables/mesh_bounds.hpp>
+#pragma once
 
-#include <rendering_engine/assets/mesh_asset.hpp>
-#include <rendering_engine/util/transform.hpp>
+#include <core/math/vec3.hpp>
 
-namespace rendering_engine
+namespace core::math
 {
-    bool mesh_world_bounds(const mesh_asset* mesh, const util::transform& world, core::math::aabb& out)
+    /**
+     * @brief Half-line starting at @ref origin and running along
+     *        @ref direction.
+     *
+     * The direction need not be unit length: @ref point_at scales it as
+     * given, so a parameter reads as a distance only when the direction is
+     * normalised. Queries that report a hit distance (the physics raycast)
+     * normalise it themselves.
+     */
+    struct ray
     {
-        if (mesh == nullptr)
-        {
-            return false;
-        }
-        out = core::math::transform(mesh->bounds, world.get_world_matrix());
-        return true;
-    }
+        vec3 origin{0.0f, 0.0f, 0.0f};
+        vec3 direction{1.0f, 0.0f, 0.0f};
 
-    bool mesh_local_bounds(const mesh_asset* mesh, const util::transform& local, core::math::aabb& out)
-    {
-        if (mesh == nullptr)
+        constexpr ray() noexcept = default;
+        constexpr ray(const vec3& in_origin, const vec3& in_direction) noexcept
+            : origin{in_origin}, direction{in_direction}
         {
-            return false;
         }
-        out = core::math::transform(mesh->bounds, local.get_transform_matrix());
-        return true;
-    }
-} // namespace rendering_engine
+
+        /** @brief The point @c origin + @p t * @c direction. */
+        vec3 point_at(float t) const noexcept;
+    };
+} // namespace core::math

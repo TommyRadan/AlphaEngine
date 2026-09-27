@@ -14,6 +14,8 @@ target_sources(AlphaEngine PRIVATE
     math.hpp
     quat.cpp
     quat.hpp
+    ray.cpp
+    ray.hpp
     sphere.cpp
     sphere.hpp
     trs.cpp

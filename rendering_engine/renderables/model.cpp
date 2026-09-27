@@ -136,6 +136,20 @@ bool rendering_engine::model::world_bounds(core::math::aabb& out) const
     return true;
 }
 
+bool rendering_engine::model::local_bounds(core::math::aabb& out) const
+{
+    if (m_mesh)
+    {
+        return mesh_local_bounds(m_mesh.get(), transform, out);
+    }
+    if (!m_has_local_bounds)
+    {
+        return false;
+    }
+    out = core::math::transform(m_local_bounds, transform.get_transform_matrix());
+    return true;
+}
+
 void rendering_engine::model::collect_draw_items(std::vector<draw_item>& out)
 {
     if (m_material == nullptr)

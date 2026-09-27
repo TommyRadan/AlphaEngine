@@ -20,30 +20,26 @@
  * SOFTWARE.
  */
 
-#include <rendering_engine/renderables/mesh_bounds.hpp>
+#include <runtime/physics/physics_debug_draw.hpp>
 
-#include <rendering_engine/assets/mesh_asset.hpp>
-#include <rendering_engine/util/transform.hpp>
+#include <runtime/physics/physics_world.hpp>
 
-namespace rendering_engine
+namespace runtime::physics
 {
-    bool mesh_world_bounds(const mesh_asset* mesh, const util::transform& world, core::math::aabb& out)
-    {
-        if (mesh == nullptr)
-        {
-            return false;
-        }
-        out = core::math::transform(mesh->bounds, world.get_world_matrix());
-        return true;
-    }
+    debug_draw::debug_draw(const world& source) : line_helper("Physics"), m_world{source} {}
 
-    bool mesh_local_bounds(const mesh_asset* mesh, const util::transform& local, core::math::aabb& out)
+    void debug_draw::refresh()
     {
-        if (mesh == nullptr)
+        const std::uint64_t revision = m_world.revision();
+        if (m_built && revision == m_revision)
         {
-            return false;
+            return;
         }
-        out = core::math::transform(mesh->bounds, local.get_transform_matrix());
-        return true;
+        m_revision = revision;
+        m_built = true;
+        m_positions.clear();
+        m_colors.clear();
+        m_world.debug_lines(m_positions, m_colors);
+        set_segments(m_positions, m_colors);
     }
-} // namespace rendering_engine
+} // namespace runtime::physics

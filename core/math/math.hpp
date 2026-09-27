@@ -56,6 +56,7 @@
 #include <core/math/mat3.hpp>
 #include <core/math/mat4.hpp>
 #include <core/math/quat.hpp>
+#include <core/math/ray.hpp>
 #include <core/math/sphere.hpp>
 #include <core/math/trs.hpp>
 #include <core/math/vec2.hpp>

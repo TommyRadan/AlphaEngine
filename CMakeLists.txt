@@ -298,6 +298,93 @@ target_link_libraries(imgui PUBLIC SDL3::SDL3-static Vulkan::Vulkan)
 target_link_libraries(AlphaEngine $<$<CONFIG:Debug>:imgui>)
 target_compile_definitions(AlphaEngine PRIVATE $<$<CONFIG:Debug>:ALPHAENGINE_HAS_IMGUI>)
 
+# Jolt Physics — fetched and built as a static library behind the engine's
+# physics subsystem (runtime/physics). Jolt keeps its CMake project under
+# Build/, and as a non-top-level project it configures only the library;
+# the unit tests, samples, viewer and install rules are switched off
+# explicitly all the same. The FetchContent name is `JoltPhysics`, so an
+# offline build points FETCHCONTENT_SOURCE_DIR_JOLTPHYSICS at a checkout.
+#
+# The options keep Jolt's build from reaching into ours and ours from
+# reaching into Jolt's:
+# - no -Werror / /WX (ENABLE_ALL_WARNINGS), no link-time optimisation (a
+#   Release libJolt.a of LTO objects would not link into a non-LTO
+#   engine), and CMake's own per-config flags instead of Jolt's overrides;
+# - the shared (DLL) MSVC runtime like the rest of the build — Jolt
+#   defaults to the static one, which fails the link with a runtime
+#   mismatch;
+# - RTTI on, as for glslang above: engine code derives from Jolt's
+#   interfaces (contact listener, layer filters), and UBSan's vptr check
+#   needs the typeinfo a -fno-rtti library never emits;
+# - the GPU compute interfaces (DX12 / Vulkan / Metal / CPU, which need
+#   dxc), the debug renderer, the profiler, object streams and floating-
+#   point exceptions off — the engine uses none of them and draws its
+#   debug geometry itself;
+# - x86 instruction sets capped at SSE4.2 (x86-64-v2). Jolt defaults to
+#   AVX2 + FMA + F16C + LZCNT/TZCNT, which would make the executable
+#   require a Haswell-class CPU; inline functions shared between the
+#   physics translation units and the rest of the engine are merged at
+#   link time, so whatever those units are compiled for can surface in
+#   engine code too.
+set(TARGET_UNIT_TESTS OFF CACHE BOOL "" FORCE)
+set(TARGET_HELLO_WORLD OFF CACHE BOOL "" FORCE)
+set(TARGET_PERFORMANCE_TEST OFF CACHE BOOL "" FORCE)
+set(TARGET_SAMPLES OFF CACHE BOOL "" FORCE)
+set(TARGET_VIEWER OFF CACHE BOOL "" FORCE)
+set(ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
+set(JPH_BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+set(ENABLE_ALL_WARNINGS OFF CACHE BOOL "" FORCE)
+set(INTERPROCEDURAL_OPTIMIZATION OFF CACHE BOOL "" FORCE)
+set(OVERRIDE_CXX_FLAGS OFF CACHE BOOL "" FORCE)
+set(GENERATE_DEBUG_SYMBOLS OFF CACHE BOOL "" FORCE)
+set(USE_STATIC_MSVC_RUNTIME_LIBRARY OFF CACHE BOOL "" FORCE)
+set(CPP_RTTI_ENABLED ON CACHE BOOL "" FORCE)
+set(JPH_USE_DX12 OFF CACHE BOOL "" FORCE)
+set(JPH_USE_VK OFF CACHE BOOL "" FORCE)
+set(JPH_USE_MTL OFF CACHE BOOL "" FORCE)
+set(JPH_USE_CPU_COMPUTE OFF CACHE BOOL "" FORCE)
+set(DEBUG_RENDERER_IN_DEBUG_AND_RELEASE OFF CACHE BOOL "" FORCE)
+set(PROFILER_IN_DEBUG_AND_RELEASE OFF CACHE BOOL "" FORCE)
+set(ENABLE_OBJECT_STREAM OFF CACHE BOOL "" FORCE)
+set(FLOATING_POINT_EXCEPTIONS_ENABLED OFF CACHE BOOL "" FORCE)
+set(USE_SSE4_1 ON CACHE BOOL "" FORCE)
+set(USE_SSE4_2 ON CACHE BOOL "" FORCE)
+set(USE_AVX OFF CACHE BOOL "" FORCE)
+set(USE_AVX2 OFF CACHE BOOL "" FORCE)
+set(USE_AVX512 OFF CACHE BOOL "" FORCE)
+set(USE_LZCNT OFF CACHE BOOL "" FORCE)
+set(USE_TZCNT OFF CACHE BOOL "" FORCE)
+set(USE_F16C OFF CACHE BOOL "" FORCE)
+set(USE_FMADD OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(
+    JoltPhysics
+    GIT_REPOSITORY https://github.com/jrouwe/JoltPhysics.git
+    GIT_TAG v5.6.0
+    GIT_SHALLOW TRUE
+    SOURCE_SUBDIR Build
+)
+FetchContent_MakeAvailable(JoltPhysics)
+# Jolt publishes its configuration as usage requirements: JPH_* defines
+# that must be identical in every translation unit that includes a Jolt
+# header (Jolt checks them against the library in RegisterTypes) plus the
+# matching instruction-set flags. Linking the target normally would push
+# all of that onto every engine source, so the engine links the library
+# alone — through an interface target whose $<LINK_ONLY:...> link carries
+# no usage requirements — and hands them to the physics implementation
+# unit, the only one that includes Jolt, as source properties (set here
+# because source properties apply to targets defined in the same
+# directory). Both sides evaluate the same properties per configuration,
+# so the Debug / Release defines always agree with the library's.
+add_library(jolt_link_only INTERFACE)
+target_link_libraries(jolt_link_only INTERFACE $<LINK_ONLY:Jolt>)
+target_link_libraries(AlphaEngine jolt_link_only)
+set_source_files_properties(
+    ${CMAKE_SOURCE_DIR}/runtime/physics/physics_world.cpp
+    PROPERTIES
+        COMPILE_DEFINITIONS "$<TARGET_PROPERTY:Jolt,INTERFACE_COMPILE_DEFINITIONS>"
+        COMPILE_OPTIONS "$<TARGET_PROPERTY:Jolt,INTERFACE_COMPILE_OPTIONS>"
+        INCLUDE_DIRECTORIES "$<TARGET_PROPERTY:Jolt,INTERFACE_INCLUDE_DIRECTORIES>")
+
 # Post-build
 if(APPLE)
     target_link_libraries(AlphaEngine "-framework CoreFoundation -framework IOKit -framework CoreVideo")

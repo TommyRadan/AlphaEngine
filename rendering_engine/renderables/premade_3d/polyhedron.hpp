@@ -61,9 +61,11 @@ namespace rendering_engine
         void upload() final;
         void collect_draw_items(std::vector<draw_item>& out) final;
 
-        // The cached mesh's object-space box under @ref transform; false
-        // until @ref upload has fetched the geometry.
+        // The cached mesh's object-space box under @ref transform (its world
+        // matrix, or its own matrix only for local_bounds); false until
+        // @ref upload has fetched the geometry.
         bool world_bounds(core::math::aabb& out) const final;
+        bool local_bounds(core::math::aabb& out) const final;
 
         gpu::buffer get_vertex_buffer() const;
         gpu::buffer get_index_buffer() const;
