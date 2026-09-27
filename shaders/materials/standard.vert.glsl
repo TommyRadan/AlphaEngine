@@ -34,6 +34,11 @@ layout(location = 3) out vec3 cameraPosition;
 layout(location = 4) out vec4 worldTangent;
 #endif
 
+// The depth pre-pass runs this same module in a depth-only pipeline and
+// the scene pass then compares against the depth it wrote, so the clip
+// position must come out bit-identical in both pipelines.
+invariant gl_Position;
+
 void main()
 {
 #ifdef SKINNED

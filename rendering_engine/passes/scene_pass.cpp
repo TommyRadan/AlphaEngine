@@ -316,8 +316,18 @@ namespace rendering_engine
         return m_overlay_frame_bind_group.valid() ? m_overlay_frame_bind_group : m_frame_bind_group;
     }
 
-    void scene_pass::record(gpu::command_encoder& encoder, const frame_context& ctx)
+    void scene_pass::prepare(const frame_context& ctx)
     {
+        // Once per frame: the depth pre-pass may already have prepared
+        // this frame ahead of record(), and must see what record() draws.
+        if (m_prepared_frame == ctx.frame_index)
+        {
+            return;
+        }
+        m_prepared_frame = ctx.frame_index;
+        m_depth_prepassed = false;
+        m_items.clear();
+
         auto& eng = runtime::current_engine();
         auto& gpu = *eng.gpu;
 
@@ -335,26 +345,9 @@ namespace rendering_engine
             m_stats->spot_shadow_culled = m_spot_shadow != nullptr ? m_spot_shadow->culled_count() : 0u;
         }
 
-        // Render into the HDR scene-colour target so the post chain
-        // can sample real luminance. The tonemap post pass maps the
-        // result onto the swapchain before the UI composites.
-        gpu::render_pass_descriptor descriptor{};
-        descriptor.target = ctx.scene_color_target;
-        descriptor.color[0].load = gpu::load_op::clear;
-        descriptor.color[0].clear_color = {0.0f, 0.0f, 0.0f, 1.0f};
-        descriptor.use_depth = true;
-        descriptor.depth.load = gpu::load_op::clear;
-        descriptor.depth.clear_depth = 1.0f;
-
-        auto pass_encoder = encoder.begin_render_pass(descriptor);
-
-        // No camera, no scene — but we still opened the pass so the
-        // HDR target gets cleared to black. Otherwise the tonemap
-        // would map stale or driver-uninitialised contents into the
-        // swapchain on no-camera frames.
+        // No camera, no scene: nothing to upload or collect.
         if (ctx.active_camera == nullptr)
         {
-            pass_encoder->end();
             return;
         }
 
@@ -489,7 +482,6 @@ namespace rendering_engine
         const uint32_t camera_mask = ctx.active_camera->culling_mask();
         uint32_t submitted = 0;
         uint32_t culled = 0;
-        m_items.clear();
         for (auto* r : *m_registry)
         {
             if ((r->layer_mask & camera_mask) == 0)
@@ -558,16 +550,86 @@ namespace rendering_engine
                 tally_primitives(*m_stats, item.mat->get_template().descriptor().topology, submitted_vertices);
             }
         }
+    }
 
+    void scene_pass::record_depth_prepass(gpu::render_pass_encoder& pass_encoder)
+    {
+        m_depth_prepassed = true;
+        dispatch(pass_encoder, draw_phase::depth_prepass);
+    }
+
+    void scene_pass::record(gpu::command_encoder& encoder, const frame_context& ctx)
+    {
+        // A no-op when the depth pre-pass already prepared this frame.
+        prepare(ctx);
+
+        // Render into the HDR scene-colour target so the post chain
+        // can sample real luminance. The tonemap post pass maps the
+        // result onto the swapchain before the UI composites. The depth
+        // is cleared unless the depth pre-pass laid the opaque queue's
+        // depth into it this frame, in which case it is loaded and the
+        // pre-passed items below test against it without writing.
+        gpu::render_pass_descriptor descriptor{};
+        descriptor.target = ctx.scene_color_target;
+        descriptor.color[0].load = gpu::load_op::clear;
+        descriptor.color[0].clear_color = {0.0f, 0.0f, 0.0f, 1.0f};
+        descriptor.use_depth = true;
+        descriptor.depth.load = m_depth_prepassed ? gpu::load_op::load : gpu::load_op::clear;
+        descriptor.depth.clear_depth = 1.0f;
+
+        auto pass_encoder = encoder.begin_render_pass(descriptor);
+
+        // No camera, no scene — but we still opened the pass so the
+        // HDR target gets cleared to black. Otherwise the tonemap
+        // would map stale or driver-uninitialised contents into the
+        // swapchain on no-camera frames. (The depth pre-pass never runs
+        // without a camera, so the depth is cleared here too.)
+        if (ctx.active_camera == nullptr)
+        {
+            pass_encoder->end();
+            return;
+        }
+
+        dispatch(*pass_encoder, draw_phase::shading);
+
+        pass_encoder->end();
+    }
+
+    void scene_pass::dispatch(gpu::render_pass_encoder& pass_encoder, draw_phase phase)
+    {
         uint64_t last_pipeline_id = 0;
         const material* last_material = nullptr;
         bool first_iter = true;
         for (const auto& item : m_items)
         {
-            const gpu::pipeline pipeline = item.mat->pipeline(item.mirrored);
+            // An item is pre-passed when the pre-pass ran this frame and
+            // its material takes part: the pre-pass draws exactly those
+            // (the list is sorted, so the opaque ones front-to-back) with
+            // the depth-only twin of the item's pipeline, and this pass
+            // shades them with the twin that tests less-or-equal against
+            // that depth without writing it. Everything else — the
+            // transparent queue, surfaces that skip the depth test or
+            // write, templates that opt out — is drawn by this pass alone
+            // with its ordinary pipeline.
+            const bool prepassed = m_depth_prepassed && item.mat->draws_in_depth_prepass();
+            gpu::pipeline pipeline{};
+            if (phase == draw_phase::depth_prepass)
+            {
+                if (!prepassed)
+                {
+                    continue;
+                }
+                pipeline = item.mat->depth_prepass_pipeline(item.mirrored);
+            }
+            else
+            {
+                pipeline =
+                    prepassed ? item.mat->depth_prepassed_pipeline(item.mirrored) : item.mat->pipeline(item.mirrored);
+            }
+
             if (pipeline.id != last_pipeline_id)
             {
-                pass_encoder->set_pipeline(pipeline);
+                pass_encoder.set_pipeline(pipeline);
 
                 // Per-frame bind group bound once per frame after
                 // the first pipeline change; the binding sticks
@@ -575,7 +637,7 @@ namespace rendering_engine
                 // same pass.
                 if (first_iter)
                 {
-                    pass_encoder->set_bind_group(0, m_frame_bind_group);
+                    pass_encoder.set_bind_group(0, m_frame_bind_group);
                     first_iter = false;
                 }
                 last_pipeline_id = pipeline.id;
@@ -591,7 +653,7 @@ namespace rendering_engine
             {
                 if (item.mat->per_material_bind_group().valid())
                 {
-                    pass_encoder->set_bind_group(item.mat->per_material_slot(), item.mat->per_material_bind_group());
+                    pass_encoder.set_bind_group(item.mat->per_material_slot(), item.mat->per_material_bind_group());
                 }
                 last_material = item.mat;
             }
@@ -603,35 +665,33 @@ namespace rendering_engine
             // the renderable's block.
             if (item.per_draw_bind_group.valid())
             {
-                pass_encoder->set_bind_group(
+                pass_encoder.set_bind_group(
                     item.mat->per_draw_slot(), item.per_draw_bind_group, item.per_draw_offsets());
             }
-            pass_encoder->set_vertex_buffer(0, item.vertex_buffer, 0, item.vertex_stride);
+            pass_encoder.set_vertex_buffer(0, item.vertex_buffer, 0, item.vertex_stride);
             if (item.instance_buffer.valid())
             {
-                pass_encoder->set_vertex_buffer(1, item.instance_buffer, 0, item.instance_stride);
+                pass_encoder.set_vertex_buffer(1, item.instance_buffer, 0, item.instance_stride);
             }
             if (item.index_buffer.valid())
             {
-                pass_encoder->set_index_buffer(item.index_buffer, item.index_format);
+                pass_encoder.set_index_buffer(item.index_buffer, item.index_format);
                 if (item.indirect_buffer.valid())
                 {
                     // Instanced draw: index and instance counts come from
                     // the indirect command record (see @ref instanced_mesh).
-                    pass_encoder->draw_indexed_indirect(item.indirect_buffer, 0);
+                    pass_encoder.draw_indexed_indirect(item.indirect_buffer, 0);
                 }
                 else
                 {
-                    pass_encoder->draw_indexed(
+                    pass_encoder.draw_indexed(
                         item.index_count, item.instance_count, item.first_index, item.vertex_offset);
                 }
             }
             else
             {
-                pass_encoder->draw(item.vertex_count, item.instance_count, static_cast<uint32_t>(item.vertex_offset));
+                pass_encoder.draw(item.vertex_count, item.instance_count, static_cast<uint32_t>(item.vertex_offset));
             }
         }
-
-        pass_encoder->end();
     }
 } // namespace rendering_engine

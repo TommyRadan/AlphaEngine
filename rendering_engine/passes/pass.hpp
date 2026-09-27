@@ -127,8 +127,9 @@ namespace rendering_engine
         // value. shaders/include/depth_utils.glsl ships the GLSL to invert it:
         // depth_to_ndc(d) = 2d - 1 and linearize_depth(d, near, far) =
         // near * far / (far - d * (far - near)), the positive view-space
-        // distance in [near, far]. The scene pass clears it to 1.0, so
-        // untouched background texels linearize to the far plane.
+        // distance in [near, far]. The scene pass (or, on frames it runs,
+        // the depth pre-pass ahead of it) clears it to 1.0, so untouched
+        // background texels linearize to the far plane.
         //
         // Synchronisation is the backends' concern: OpenGL samples the
         // depth texture directly, and the Vulkan render-pass cache rests
@@ -200,6 +201,13 @@ namespace rendering_engine
         // block so the lit materials can blend toward it by camera
         // distance. Defaults to @ref fog_mode::none (no fog).
         fog_settings fog{};
+
+        // Whether the depth pre-pass is enabled, copied from
+        // @ref context::set_depth_prepass each frame (seeded at init from
+        // @c core::settings::graphics.depth_prepass). @ref depth_prepass
+        // records nothing while it is off or no camera is active, and the
+        // scene pass then clears the scene depth itself.
+        bool depth_prepass{false};
 
         // Runtime-tunable post-processing chain parameters, copied from
         // @ref context::set_post_settings each frame. @ref bloom_pass,

@@ -15,6 +15,11 @@ layout(location = 1) out vec3 worldNormal;
 layout(location = 2) out vec2 texCoord;
 layout(location = 3) out vec3 cameraPosition;
 
+// The depth pre-pass runs this same module in a depth-only pipeline and
+// the scene pass then compares against the depth it wrote, so the clip
+// position must come out bit-identical in both pipelines.
+invariant gl_Position;
+
 void main()
 {
     vec4 world = u_draw.modelMatrix * vec4(position, 1.0);

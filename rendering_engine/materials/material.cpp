@@ -65,11 +65,39 @@ namespace rendering_engine
         }
         if (!m_mirrored_pipeline.valid())
         {
-            pipeline_variant_key mirrored_key = m_key;
-            mirrored_key.front = gpu::front_face::clockwise;
-            m_mirrored_pipeline = m_template->pipeline(mirrored_key);
+            m_mirrored_pipeline = m_template->pipeline(facing_key(true));
         }
         return m_mirrored_pipeline;
+    }
+
+    bool material::draws_in_depth_prepass() const
+    {
+        // The queue test is the scene pass's own (transparent picks the
+        // transparent queue), and a transparent key never writes depth
+        // anyway. A variant that skips the test or the write must not be
+        // pre-passed either: depth it never writes in the scene pass
+        // would otherwise start occluding other surfaces.
+        return m_template->descriptor().depth_prepass && !m_params.transparent && m_key.depth_test && m_key.depth_write;
+    }
+
+    gpu::pipeline material::depth_prepass_pipeline(bool mirrored)
+    {
+        gpu::pipeline& twin = m_depth_prepass_pipelines[mirrored ? 1 : 0];
+        if (!twin.valid())
+        {
+            twin = m_template->pipeline(depth_prepass_variant(facing_key(mirrored)));
+        }
+        return twin;
+    }
+
+    gpu::pipeline material::depth_prepassed_pipeline(bool mirrored)
+    {
+        gpu::pipeline& twin = m_depth_prepassed_pipelines[mirrored ? 1 : 0];
+        if (!twin.valid())
+        {
+            twin = m_template->pipeline(depth_prepassed_variant(facing_key(mirrored)));
+        }
+        return twin;
     }
 
     const pipeline_variant_key& material::variant_key() const
@@ -258,8 +286,21 @@ namespace rendering_engine
         }
         m_key = key;
         m_pipeline = m_template->pipeline(key);
-        // The clockwise twin belongs to the old key; the next mirrored
-        // draw resolves it again through the cache.
+        // The clockwise and depth pre-pass twins belong to the old key;
+        // the next draw that wants one resolves it again through the
+        // cache.
         m_mirrored_pipeline = {};
+        m_depth_prepass_pipelines = {};
+        m_depth_prepassed_pipelines = {};
+    }
+
+    pipeline_variant_key material::facing_key(bool mirrored) const
+    {
+        pipeline_variant_key key = m_key;
+        if (mirrored)
+        {
+            key.front = gpu::front_face::clockwise;
+        }
+        return key;
     }
 } // namespace rendering_engine

@@ -22,6 +22,7 @@
 
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <memory>
 
@@ -58,7 +59,9 @@ namespace rendering_engine
     // A draw whose model matrix mirrors (negative determinant) reverses
     // every triangle's winding; the passes ask for @ref pipeline(true)
     // for such items, which is the same variant with the front face
-    // flipped to clockwise, resolved lazily on first use.
+    // flipped to clockwise, resolved lazily on first use. The depth
+    // pre-pass twins (@ref depth_prepass_pipeline and
+    // @ref depth_prepassed_pipeline) are resolved the same way.
     struct material
     {
         virtual ~material();
@@ -76,6 +79,27 @@ namespace rendering_engine
         // or does not flip handedness. The mirrored variant is looked
         // up or built on first request and cached until the key changes.
         gpu::pipeline pipeline(bool mirrored);
+
+        // Whether the depth pre-pass lays this surface's depth down ahead
+        // of the scene pass: the bound variant is in the opaque queue
+        // (not @c transparent, so unblended), depth-tested and
+        // depth-writing, and the template allows it
+        // (@ref material_template_descriptor::depth_prepass). Anything
+        // else keeps drawing with @ref pipeline in the scene pass alone.
+        bool draws_in_depth_prepass() const;
+
+        // The depth-only twin of @ref pipeline(bool) the depth pre-pass
+        // draws this instance with (@ref depth_prepass_variant): the same
+        // vertex module and rasterizer state, no fragment stage. Looked
+        // up or built on first request and cached until the key changes,
+        // like the mirrored variant.
+        gpu::pipeline depth_prepass_pipeline(bool mirrored);
+
+        // The twin of @ref pipeline(bool) the scene pass draws this
+        // instance with once the depth pre-pass has laid it down
+        // (@ref depth_prepassed_variant): depth writes off, compared with
+        // @ref depth_prepassed_compare. Cached like the other twins.
+        gpu::pipeline depth_prepassed_pipeline(bool mirrored);
 
         // The variant key the instance is currently bound to.
         const pipeline_variant_key& variant_key() const;
@@ -186,11 +210,22 @@ namespace rendering_engine
 
     private:
         // Recompute the key from params + keywords and refresh the bound
-        // pipeline; the mirrored twin is dropped and resolved lazily.
+        // pipeline; the mirrored and depth pre-pass twins are dropped and
+        // resolved lazily.
         void rebind_variant();
+
+        // The bound key, with the front face flipped to clockwise for a
+        // @p mirrored draw.
+        pipeline_variant_key facing_key(bool mirrored) const;
 
         pipeline_variant_key m_key{};
         gpu::pipeline m_pipeline{};
         gpu::pipeline m_mirrored_pipeline{};
+
+        // The depth pre-pass twins of the bound variant, indexed by
+        // mirroring (0 counter-clockwise, 1 clockwise front face);
+        // invalid until first asked for.
+        std::array<gpu::pipeline, 2> m_depth_prepass_pipelines{};
+        std::array<gpu::pipeline, 2> m_depth_prepassed_pipelines{};
     };
 } // namespace rendering_engine

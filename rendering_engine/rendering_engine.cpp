@@ -51,6 +51,7 @@
 #include <rendering_engine/materials/standard_material.hpp>
 #include <rendering_engine/materials/ui_material.hpp>
 #include <rendering_engine/passes/debug_pass.hpp>
+#include <rendering_engine/passes/depth_prepass.hpp>
 #include <rendering_engine/passes/pass.hpp>
 #include <rendering_engine/passes/point_shadow_pass.hpp>
 #include <rendering_engine/passes/post/auto_exposure_pass.hpp>
@@ -224,6 +225,13 @@ void rendering_engine::context::init()
     m_spot_shadow = spot_shadow.get();
     auto scene = std::make_unique<scene_pass>(
         &m_scene_renderables, shadow.get(), point_shadow.get(), spot_shadow.get(), &m_render_stats, taa_enabled);
+    // The optional depth pre-pass runs right before the scene pass, over
+    // the scene pass's own draw list and per-frame group, and lays the
+    // opaque depth into the scene target for it to load. It is always in
+    // the pass list and records nothing while disabled, so
+    // set_depth_prepass can flip it at runtime.
+    auto depth_pre = std::make_unique<depth_prepass>(scene.get());
+    m_depth_prepass_enabled = (eng.settings != nullptr) && eng.settings->graphics.depth_prepass;
     // The material templates below are built against the same per-frame
     // layout the scene pass binds at slot 0.
     const gpu::bind_group_layout scene_frame_layout = scene->frame_bind_group_layout();
@@ -370,10 +378,14 @@ void rendering_engine::context::init()
     // visualisations) register with the debug-renderable registry
     // rather than adding new passes.
     // The shadow pass renders the light's depth map first so the scene
-    // pass can sample it the same frame.
+    // pass can sample it the same frame. The depth pre-pass follows the
+    // shadow passes (the scene pass's per-frame uploads, which the
+    // pre-pass triggers, read their matrices) and precedes the scene pass
+    // that loads its depth.
     m_passes.push_back(std::move(shadow));
     m_passes.push_back(std::move(point_shadow));
     m_passes.push_back(std::move(spot_shadow));
+    m_passes.push_back(std::move(depth_pre));
     m_passes.push_back(std::move(scene));
     m_passes.push_back(std::move(skybox));
     // Motion vectors are computed from the finalised scene depth, before
@@ -642,6 +654,7 @@ void rendering_engine::context::render()
     ctx.velocity_texture = (m_velocity != nullptr) ? m_velocity->velocity_texture() : gpu::texture{};
     ctx.taa_resolve_texture = (m_taa != nullptr) ? m_taa->output_texture() : gpu::texture{};
     ctx.fog = m_fog;
+    ctx.depth_prepass = m_depth_prepass_enabled;
     ctx.post = m_post_settings;
     // The HDR image the chain after motion blur works on: the blurred copy
     // when the pass draws this frame, else the scene colour itself. Asked
@@ -1003,6 +1016,20 @@ void rendering_engine::context::update_grading_lut()
             static_cast<unsigned int>(size),
             static_cast<unsigned int>(size),
             static_cast<unsigned int>(size));
+}
+
+void rendering_engine::context::set_depth_prepass(bool enabled)
+{
+    if (enabled != m_depth_prepass_enabled)
+    {
+        LOG_INF("Rendering Engine: depth pre-pass %s", enabled ? "enabled" : "disabled");
+    }
+    m_depth_prepass_enabled = enabled;
+}
+
+bool rendering_engine::context::depth_prepass_enabled() const
+{
+    return m_depth_prepass_enabled;
 }
 
 const rendering_engine::render_stats& rendering_engine::context::get_render_stats() const

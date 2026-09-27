@@ -225,6 +225,19 @@ namespace rendering_engine
         bool depth_test{true};
         bool depth_write{true};
 
+        // The depth comparison while @c depth_test is on. Never chosen by
+        // @ref material_params: every key @ref make_pipeline_variant_key
+        // builds compares @c less, and only the depth pre-pass twins
+        // (@ref depth_prepassed_variant) ask for another one.
+        gpu::compare_function depth_compare{gpu::compare_function::less};
+
+        // The pipeline has no fragment stage: the variant's vertex shader
+        // alone rasterizes depth into a depth-only target. Set only on the
+        // depth pre-pass twin (@ref depth_prepass_variant), which draws the
+        // same vertex module as the colour variant so both pass the same
+        // depth for every fragment.
+        bool depth_only{false};
+
         // The key as one 64-bit word: the keyword mask in the low 32
         // bits, the fixed-function fields packed above it. Unique per
         // distinct key, so it serves as the cache's hash key directly.
@@ -240,13 +253,37 @@ namespace rendering_engine
     // @c wireframe into both the polygon mode and the @c WIREFRAME
     // keyword, and a cleared @c fog into the @c NO_FOG keyword. @c opacity
     // does not take part: it lives in the parameter block, not the
-    // pipeline.
+    // pipeline. The key compares depth with @c less and has a fragment
+    // stage.
     pipeline_variant_key make_pipeline_variant_key(const material_params& params,
                                                    uint32_t keywords,
                                                    gpu::front_face front = gpu::front_face::counter_clockwise);
 
+    // The depth comparison the scene pass draws depth pre-passed geometry
+    // with. @c less_equal rather than @c equal: the pre-pass and the scene
+    // pass run the same vertex module with an invariant @c gl_Position, so
+    // a surface's own fragments compare equal and pass either way, and
+    // anything behind the nearest surface fails either way; @c less_equal
+    // only differs where a fragment would come out nearer than the stored
+    // depth, where it still shades the surface instead of leaving a hole.
+    constexpr gpu::compare_function depth_prepassed_compare = gpu::compare_function::less_equal;
+
+    // The depth pre-pass twin of @p key: the same keywords (so the same
+    // vertex module and vertex layout), cull mode, front face and polygon
+    // mode, but @c depth_only, depth-tested with @c less and written, and
+    // with no blending (there is no colour attachment to blend into).
+    pipeline_variant_key depth_prepass_variant(const pipeline_variant_key& key);
+
+    // The scene-pass twin of @p key for geometry the depth pre-pass has
+    // already laid down: the same state with depth writes off and the
+    // comparison relaxed to @ref depth_prepassed_compare, so each fragment
+    // passes only where its surface is the nearest one the pre-pass
+    // stored, and shades exactly once.
+    pipeline_variant_key depth_prepassed_variant(const pipeline_variant_key& key);
+
     // Fixed-function state for a key. Depth is encoded once: the test is
-    // enabled or not, and the comparison is always @c less. Blend maps
+    // enabled or not, and the comparison is the key's @c depth_compare
+    // (@c less for every key a material's params produce). Blend maps
     // each preset onto its factors — @c normal is src_alpha /
     // one_minus_src_alpha, @c additive src_alpha / one, @c subtractive
     // src_alpha / one with @c reverse_subtract (destination minus the

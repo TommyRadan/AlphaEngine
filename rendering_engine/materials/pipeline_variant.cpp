@@ -41,7 +41,9 @@ namespace rendering_engine
     {
         // Bit layout: [0, 32) keywords, [32, 35) blending, [35, 37) cull,
         // [37] front face, [38, 40) polygon, [40] depth test, [41] depth
-        // write. Every field fits its width with room to spare.
+        // write, [42, 45) depth compare, [45] depth only. Every field fits
+        // its width with room to spare.
+        static_assert(static_cast<uint64_t>(gpu::compare_function::always) < 8, "depth compare packs into 3 bits");
         uint64_t packed = keywords;
         packed |= static_cast<uint64_t>(blending) << 32;
         packed |= static_cast<uint64_t>(cull) << 35;
@@ -49,6 +51,8 @@ namespace rendering_engine
         packed |= static_cast<uint64_t>(polygon) << 38;
         packed |= static_cast<uint64_t>(depth_test ? 1u : 0u) << 40;
         packed |= static_cast<uint64_t>(depth_write ? 1u : 0u) << 41;
+        packed |= static_cast<uint64_t>(depth_compare) << 42;
+        packed |= static_cast<uint64_t>(depth_only ? 1u : 0u) << 45;
         return packed;
     }
 
@@ -92,12 +96,37 @@ namespace rendering_engine
         return key;
     }
 
+    pipeline_variant_key depth_prepass_variant(const pipeline_variant_key& key)
+    {
+        // The keywords stay: they pick the vertex module, and the pre-pass
+        // must run exactly the one the scene pass will, or the two could
+        // round a vertex differently. So do the rasterizer fields, which
+        // decide which fragments a triangle covers at all. Blending has no
+        // attachment to act on, so it is normalised away rather than
+        // splitting otherwise identical depth-only variants.
+        pipeline_variant_key prepass = key;
+        prepass.blending = blend_mode::none;
+        prepass.depth_test = true;
+        prepass.depth_write = true;
+        prepass.depth_compare = gpu::compare_function::less;
+        prepass.depth_only = true;
+        return prepass;
+    }
+
+    pipeline_variant_key depth_prepassed_variant(const pipeline_variant_key& key)
+    {
+        pipeline_variant_key prepassed = key;
+        prepassed.depth_write = false;
+        prepassed.depth_compare = depth_prepassed_compare;
+        return prepassed;
+    }
+
     gpu::depth_state to_depth_state(const pipeline_variant_key& key)
     {
         gpu::depth_state depth{};
         depth.test_enabled = key.depth_test;
         depth.write_enabled = key.depth_write;
-        depth.compare = gpu::compare_function::less;
+        depth.compare = key.depth_compare;
         return depth;
     }
 

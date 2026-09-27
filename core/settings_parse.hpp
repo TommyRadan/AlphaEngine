@@ -106,12 +106,12 @@ namespace core
 
     /**
      * @brief Applies the `ALPHAENGINE_WIDTH`, `_HEIGHT`, `_WINDOW_MODE`, `_VSYNC`, `_GRAPHICS_BACKEND`, `_TAA`,
-     *        `_FRAMES_IN_FLIGHT`, `_SHADOW_RESOLUTION`, `_SHADOW_DISTANCE`, `_SHADOW_CASCADES`, `_SHADOW_BIAS`,
-     *        `_SHADOW_SLOPE_BIAS`, `_SHADOW_PCF_KERNEL` and `_ASSET_ROOT` variables on top of @p out, plus one
-     *        variable per @ref post_process_settings field: `ALPHAENGINE_` followed by its `post` key in upper
-     *        case (`ALPHAENGINE_EXPOSURE`, `_TONEMAP`, `_BLOOM`, `_BLOOM_THRESHOLD`, ..., `_GRADING_LUT`,
-     *        `_MOTION_BLUR`, `_AUTO_EXPOSURE`, `_AUTO_EXPOSURE_MIN_EV`, ...). An unset or empty variable leaves its
-     *        setting as it is. (`ALPHAENGINE_LOG_LEVEL` belongs to @ref core::logging::init.)
+     *        `_DEPTH_PREPASS`, `_FRAMES_IN_FLIGHT`, `_SHADOW_RESOLUTION`, `_SHADOW_DISTANCE`, `_SHADOW_CASCADES`,
+     *        `_SHADOW_BIAS`, `_SHADOW_SLOPE_BIAS`, `_SHADOW_PCF_KERNEL` and `_ASSET_ROOT` variables on top of
+     *        @p out, plus one variable per @ref post_process_settings field: `ALPHAENGINE_` followed by its `post`
+     *        key in upper case (`ALPHAENGINE_EXPOSURE`, `_TONEMAP`, `_BLOOM`, `_BLOOM_THRESHOLD`, ...,
+     *        `_GRADING_LUT`, `_MOTION_BLUR`, `_AUTO_EXPOSURE`, `_AUTO_EXPOSURE_MIN_EV`, ...). An unset or empty
+     *        variable leaves its setting as it is. (`ALPHAENGINE_LOG_LEVEL` belongs to @ref core::logging::init.)
      */
     void apply_environment(settings& out, const environment_getter& get);
 

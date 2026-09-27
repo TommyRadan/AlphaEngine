@@ -200,7 +200,8 @@ namespace core
 
         const settings& s = result.values;
         LOG_INF("Settings resolved: window=%ux%u%s mode=%s vsync=%s double_buffered=%s backend=%s temporal_aa=%s "
-                "frames_in_flight=%u fov=%.1f mouse_sensitivity=%.4f mouse_reversed=%s title='%s' asset_root='%s'",
+                "depth_prepass=%s frames_in_flight=%u fov=%.1f mouse_sensitivity=%.4f mouse_reversed=%s title='%s' "
+                "asset_root='%s'",
                 s.window.width,
                 s.window.height,
                 s.window.uses_native_resolution() ? " (match the display)" : "",
@@ -209,6 +210,7 @@ namespace core
                 on_off(s.window.double_buffered),
                 graphics_backend_name(s.graphics.backend),
                 on_off(s.graphics.temporal_aa),
+                on_off(s.graphics.depth_prepass),
                 s.graphics.frames_in_flight,
                 static_cast<double>(s.camera.field_of_view),
                 static_cast<double>(s.input.mouse_sensitivity),

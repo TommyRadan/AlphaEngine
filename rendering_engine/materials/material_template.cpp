@@ -151,7 +151,11 @@ namespace rendering_engine
 
         gpu::pipeline_descriptor pipeline_descriptor{};
         pipeline_descriptor.vertex_shader = shaders.vertex;
-        pipeline_descriptor.fragment_shader = shaders.fragment;
+        // A depth-only variant (the depth pre-pass's) draws into a target
+        // with no colour attachment, so like the shadow passes it has no
+        // fragment stage; its vertex stage is the very module the colour
+        // variants of these keywords run.
+        pipeline_descriptor.fragment_shader = key.depth_only ? gpu::shader_module{} : shaders.fragment;
         pipeline_descriptor.vertex_buffers = vertex_layouts_for(key.keywords);
         pipeline_descriptor.topology = m_descriptor.topology;
         pipeline_descriptor.depth = to_depth_state(key);

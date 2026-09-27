@@ -22,6 +22,8 @@
 
 #pragma once
 
+#include <cstdint>
+#include <optional>
 #include <vector>
 
 #include <rendering_engine/gpu/handle.hpp>
@@ -38,13 +40,24 @@ namespace rendering_engine
     struct spot_shadow_pass;
 
     /**
-     * @brief 3D scene pass. Clears the swapchain colour and depth,
+     * @brief 3D scene pass. Clears the HDR scene colour and depth (or
+     *        loads the depth the @ref depth_prepass laid down this frame),
      *        layer-filters and frustum-culls the scene-renderable
      *        registry against the camera, collects draw items from the
      *        survivors, sorts them by render queue / depth / pipeline via
      *        @ref draw_item::sort_key, and dispatches them. Every draw
      *        reaches the pass as a registered renderable's
      *        @ref draw_item; @ref record runs no event listener.
+     *
+     * The per-frame uploads and the sorted draw list are built once per
+     * frame by @ref prepare, which the depth pre-pass calls first when it
+     * runs, so both passes draw the same items with the same per-frame
+     * and per-draw data. On such a frame the pass loads the scene depth
+     * rather than clearing it and draws every pre-passed item
+     * (@ref material::draws_in_depth_prepass) with its
+     * @ref material::depth_prepassed_pipeline — depth writes off, a
+     * less-or-equal test — so each covered pixel shades once; the other
+     * items keep their ordinary variant.
      *
      * A renderable whose @ref renderable::layer_mask shares no bit with
      * the camera's @ref camera::culling_mask is skipped outright. Culling
@@ -114,9 +127,30 @@ namespace rendering_engine
             io.read("shadow_map");
             io.read("point_shadow");
             io.read("spot_shadow");
+            // Loaded rather than cleared on frames the depth pre-pass ran.
+            io.read("scene_depth");
             io.write("scene_color");
             io.write("scene_depth");
         }
+
+        // Builds this frame's state once: resets the stats, uploads the
+        // per-frame blocks (view_globals, lights, the shadow blocks) and
+        // collects, keys and sorts the draw list. A second call for the
+        // same @ref frame_context::frame_index returns at once, so the
+        // depth pre-pass can run it ahead of this pass's @ref record and
+        // both passes see one list. Must run after the shadow passes have
+        // recorded (their matrices and tallies feed the uploads and
+        // stats). With no camera it only resets the stats.
+        void prepare(const frame_context& ctx);
+
+        // Draws this frame's pre-passed items (the opaque queue, filtered
+        // by @ref material::draws_in_depth_prepass, front-to-back) through
+        // their @ref material::depth_prepass_pipeline into @p pass_encoder,
+        // a depth-only pass the @ref depth_prepass opened over the scene
+        // depth attachment. Call after @ref prepare. Marks the frame as
+        // pre-passed, so the following @ref record loads that depth and
+        // draws those items with their depth-prepassed variants.
+        void record_depth_prepass(gpu::render_pass_encoder& pass_encoder);
 
         // Layout for the per-frame bind group bound at slot 0 each
         // frame. The matching material's pipeline_descriptor must
@@ -143,6 +177,23 @@ namespace rendering_engine
         // through frame_context already scaled to the live target size.
 
     private:
+        // Which of the two passes a @ref dispatch walk records for.
+        enum class draw_phase
+        {
+            // The depth pre-pass: pre-passed items only, depth-only
+            // variants.
+            depth_prepass,
+            // This pass: every item, pre-passed ones through their
+            // depth-prepassed variants when the pre-pass ran this frame.
+            shading,
+        };
+
+        // Binds and draws @ref m_items for @p phase into @p pass_encoder:
+        // the per-frame group once, the pipeline when it changes, the
+        // per-material group when the instance changes, then each item's
+        // per-draw group, vertex / index streams and draw call.
+        void dispatch(gpu::render_pass_encoder& pass_encoder, draw_phase phase);
+
         // Non-owning back-pointer to the engine context's
         // scene-renderable registry. The context outlives every
         // pass so the pointer stays valid for the pass's lifetime.
@@ -195,5 +246,14 @@ namespace rendering_engine
 
         // Reused across frames so the underlying allocation persists.
         std::vector<draw_item> m_items;
+
+        // The frame index @ref prepare last built @ref m_items for; empty
+        // until the first frame.
+        std::optional<uint64_t> m_prepared_frame;
+
+        // Whether the depth pre-pass laid this frame's opaque depth down
+        // (@ref record_depth_prepass ran since @ref prepare started the
+        // frame). Picks load vs clear and the pre-passed variants.
+        bool m_depth_prepassed{false};
     };
 } // namespace rendering_engine
