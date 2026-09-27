@@ -27,8 +27,10 @@
 #include <core/math/mat3.hpp>
 #include <rendering_engine/gpu/bind_group.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
+#include <rendering_engine/gpu/command_encoder.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/gpu/shader_bindings.hpp>
+#include <rendering_engine/renderables/draw_item.hpp>
 
 namespace
 {
@@ -94,6 +96,33 @@ namespace rendering_engine
             }
         }
         return payload;
+    }
+
+    bool per_draw_push_constants(const gpu::device& device)
+    {
+        return device.features().push_constants;
+    }
+
+    gpu::push_constant_range per_draw_push_constant_range()
+    {
+        gpu::push_constant_range range{};
+        range.stages = gpu::shader_stages_vertex | gpu::shader_stages_fragment;
+        range.offset = 0;
+        range.size = static_cast<uint32_t>(per_draw_ubo_size);
+        return range;
+    }
+
+    void bind_per_draw(gpu::render_pass_encoder& encoder, const draw_item& item, uint32_t slot)
+    {
+        if (item.per_draw_push != nullptr)
+        {
+            const gpu::push_constant_range range = per_draw_push_constant_range();
+            encoder.push_constants(range.stages, range.offset, range.size, item.per_draw_push);
+        }
+        if (item.per_draw_bind_group.valid())
+        {
+            encoder.set_bind_group(slot, item.per_draw_bind_group, item.per_draw_offsets());
+        }
     }
 
     gpu::bind_group_layout_entry per_draw_model_layout_entry()

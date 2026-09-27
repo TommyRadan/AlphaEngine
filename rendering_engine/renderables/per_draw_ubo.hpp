@@ -34,12 +34,26 @@
  * material's clockwise-front-face pipeline variant instead of culling
  * its outside.
  *
- * Rigid renderables do not own a buffer for the block: they write it
- * into the frame's slice of the shared @ref per_draw_ring and bind the
- * ring's group with the slot's dynamic offset, which is why the block's
- * layout entry (@ref per_draw_model_layout_entry) is dynamic. Only the
- * skinned per-draw group, which also carries a draw's own joint palette,
- * keeps a private uniform buffer.
+ * On a device with push constants (Vulkan) the block is the pipeline's
+ * push constants: a renderable hands the pass its cached block
+ * (@ref draw_item::per_draw_push) and the pass pushes it right before
+ * the draw (@ref bind_per_draw), so no buffer, descriptor set or upload
+ * is involved. Every material template's pipelines and the single-draw
+ * shadow pipelines declare @ref per_draw_push_constant_range for it, and
+ * the shaders read the block from push constants under the
+ * @c AE_PUSH_CONSTANTS backend define (shaders/include/per_draw.glsl).
+ *
+ * Without push constants (OpenGL) rigid renderables still own no buffer
+ * for the block: they write it into the frame's slice of the shared
+ * @ref per_draw_ring and bind the ring's group with the slot's dynamic
+ * offset, which is why the block's layout entry
+ * (@ref per_draw_model_layout_entry) is dynamic.
+ *
+ * A skinned draw's per-draw group also carries its own joint palette, so
+ * it cannot be the ring's shared one and keeps the block in a private
+ * uniform buffer. Where the device takes push constants the skinned draw
+ * pushes its block like any other and binds the group for the palette
+ * alone.
  */
 
 #pragma once
@@ -51,13 +65,16 @@
 #include <core/math/mat4.hpp>
 #include <rendering_engine/gpu/bind_group.hpp>
 #include <rendering_engine/gpu/handle.hpp>
+#include <rendering_engine/gpu/pipeline.hpp>
 
 namespace rendering_engine
 {
     namespace gpu
     {
         struct device;
-    }
+        struct render_pass_encoder;
+    } // namespace gpu
+    struct draw_item;
 
     // std140 layout of the PerDraw block: mat4 modelMatrix at 0, mat4
     // normalMatrix at 64 (the 3x3 in its upper-left, identity elsewhere,
@@ -70,6 +87,33 @@ namespace rendering_engine
 
     constexpr size_t per_draw_ubo_size = sizeof(per_draw_payload);
     static_assert(per_draw_ubo_size == 128, "PerDraw block must be two std140 mat4s");
+    static_assert(per_draw_ubo_size <= gpu::min_push_constants_size,
+                  "PerDraw block must fit the push constants every device with them has");
+
+    // Whether @p device takes the block as push constants: it has
+    // @c device_features::push_constants, which guarantees room for it.
+    // Fixed for the device's lifetime; it decides at once whether the
+    // pipelines declare @ref per_draw_push_constant_range, whether the
+    // shaders read the block from push constants (the device's library
+    // modules are compiled with @c AE_PUSH_CONSTANTS) and whether the
+    // renderables push it instead of taking a per-draw ring slot.
+    bool per_draw_push_constants(const gpu::device& device);
+
+    // The push-constant range the block occupies: offset 0, the whole
+    // block, visible to the vertex and fragment stages like the uniform
+    // block it replaces (the infinite grid reads the model matrix in its
+    // fragment stage). On a device with push constants every material
+    // template's pipelines declare it whether or not their shaders read
+    // the block, so the pipelines a pass switches between keep the same
+    // layout for the per-frame group it binds once; the single-draw
+    // shadow pipelines declare it too.
+    gpu::push_constant_range per_draw_push_constant_range();
+
+    // Record @p item's per-draw data ahead of its draw: push its block
+    // when it carries one (@ref draw_item::per_draw_push), then bind its
+    // per-draw group, if any, at @p slot with its dynamic offsets. Every
+    // pass that dispatches draw items calls this before each draw.
+    void bind_per_draw(gpu::render_pass_encoder& encoder, const draw_item& item, uint32_t slot);
 
     // Determinant of @p model's upper-left 3x3: negative when the
     // transform mirrors (an odd number of negative scale axes).

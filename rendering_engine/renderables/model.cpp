@@ -188,9 +188,10 @@ void rendering_engine::model::collect_draw_items(std::vector<draw_item>& out)
     item.mat = m_material;
     // The model + normal matrix (recomputed only when the transform
     // moved); a mirroring transform flags the item so the pass draws it
-    // with the clockwise-front-face variant. A rigid model writes them
-    // into this frame's slot of the per-draw ring; a skinned one keeps
-    // them in the private group that also carries its joint palette.
+    // with the clockwise-front-face variant. With push constants the pass
+    // pushes them; otherwise a rigid model writes them into this frame's
+    // slot of the per-draw ring and a skinned one keeps them in the
+    // private group that also carries its joint palette.
     if (!(skinned ? bind_skinned(item) : m_per_draw.bind(transform, m_material->per_draw_layout(), item)))
     {
         return;
@@ -261,11 +262,17 @@ bool rendering_engine::model::bind_skinned(draw_item& item)
         return false;
     }
 
-    // The private buffer keeps its contents between frames, so it is
-    // rewritten only when the block changed.
     m_per_draw.refresh(transform);
-    if (m_draw_ubo_version != m_per_draw.world_version())
+    if (per_draw_push_constants(gpu))
     {
+        // The pass pushes the block; the group is bound for the palette
+        // alone and its uniform block goes unread.
+        item.per_draw_push = &m_per_draw.payload();
+    }
+    else if (m_draw_ubo_version != m_per_draw.world_version())
+    {
+        // The private buffer keeps its contents between frames, so it is
+        // rewritten only when the block changed.
         gpu.write_buffer(m_draw_ubo, &m_per_draw.payload(), per_draw_ubo_size, 0);
         m_draw_ubo_version = m_per_draw.world_version();
     }

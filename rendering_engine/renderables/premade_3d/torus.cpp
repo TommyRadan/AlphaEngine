@@ -166,8 +166,8 @@ void rendering_engine::torus::collect_draw_items(std::vector<draw_item>& out)
 
     draw_item item{};
     item.mat = m_material;
-    // The model + normal matrix go into this frame's slot of the
-    // per-draw ring (recomputed only when the transform moved); a
+    // The model + normal matrix, pushed or put in this frame's per-draw
+    // ring slot (recomputed only when the transform moved); a
     // mirroring transform flags the item so the pass draws it with
     // the clockwise-front-face variant.
     if (!m_per_draw.bind(transform, m_material->per_draw_layout(), item))

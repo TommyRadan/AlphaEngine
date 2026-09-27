@@ -306,6 +306,12 @@ namespace rendering_engine::gpu::backend::opengl
         // levels and glGenerateTextureMipmap: the IBL tables convolve
         // on the GPU.
         m_features.compute_prefilter = true;
+        // ARB_gl_spirv has no push constants: a SPIR-V program declaring
+        // a PushConstant block does not specialize. Pipelines' push-
+        // constant ranges are ignored and the renderer keeps per-draw
+        // data in uniform buffers (m_limits.max_push_constants_size
+        // stays 0).
+        m_features.push_constants = false;
 
         LOG_INF("OpenGL limits: texture %u / 3d %u / cube %u, %u array layers, %u colour attachments, "
                 "anisotropy %.0f, msaa colour 0x%x depth 0x%x, timestamps %s",

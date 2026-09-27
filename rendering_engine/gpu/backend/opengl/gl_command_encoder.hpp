@@ -56,6 +56,10 @@ namespace rendering_engine::gpu::backend::opengl
         void set_bind_group(uint32_t group,
                             bind_group bind_group_handle,
                             std::span<const uint32_t> dynamic_offsets) override;
+        // Records nothing: ARB_gl_spirv programs have no push constants
+        // (device_features::push_constants is false here). Reported once
+        // per pipeline.
+        void push_constants(shader_stages stages, uint32_t offset, uint32_t size, const void* data) override;
         void set_viewport(int x, int y, int width, int height) override;
         void set_scissor(int x, int y, int width, int height) override;
         void set_stencil_reference(uint32_t reference) override;

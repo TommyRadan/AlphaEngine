@@ -100,6 +100,18 @@ namespace rendering_engine::gpu
         // backends implement this today; the IBL builder falls back to
         // the CPU convolution when it is false.
         bool compute_prefilter{false};
+        // @c render_pass_encoder::push_constants reaches the shaders
+        // through the pipeline's @c push_constant_ranges, with at least
+        // @c min_push_constants_size bytes (see
+        // @c device_limits::max_push_constants_size). Set on Vulkan when
+        // maxPushConstantsSize reaches that minimum, which every
+        // conformant device does. OpenGL loads SPIR-V through
+        // ARB_gl_spirv, which has no push constants, so it is false
+        // there. Every library shader module of a device with the
+        // feature is compiled with @c AE_PUSH_CONSTANTS defined (see
+        // @c create_library_shader_module), so a shader declares a
+        // push-constant block only where the device has one.
+        bool push_constants{false};
     };
 
     // Numeric limits of the device, filled beside @ref device_features.
@@ -127,6 +139,10 @@ namespace rendering_engine::gpu
         float timestamp_period_ns{1.0f};
         uint32_t max_compute_workgroup_count[3]{0, 0, 0};
         uint32_t max_compute_workgroup_invocations{0};
+        // Bytes of push constants a pipeline may declare (Vulkan's
+        // maxPushConstantsSize); 0 on a device without
+        // @c device_features::push_constants.
+        uint32_t max_push_constants_size{0};
     };
 
     // Timestamp queries a frame writes and later reads back. A set is

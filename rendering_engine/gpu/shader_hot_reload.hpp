@@ -75,6 +75,10 @@ namespace rendering_engine::gpu
      * @brief Compile the library shader @p variant for @p stage and create
      *        its module on @p device.
      *
+     * The variant is compiled with the backend define of @p device on top
+     * of its own: @ref push_constants_define when the device has
+     * @c device_features::push_constants.
+     *
      * In a debug build, a module created while a @ref shader_hot_reload
      * is installed for @p device is registered with it, so an edit of its
      * source (or of anything it includes) reaches the module and every

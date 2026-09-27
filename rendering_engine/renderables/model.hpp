@@ -123,14 +123,17 @@ namespace rendering_engine
         gpu::buffer m_vertex_buffer{};
 
         // The PerDraw block, recomputed when the transform moves, and its
-        // slot in the per-draw ring while the material is rigid.
+        // slot in the per-draw ring while the material is rigid (on a
+        // device without push constants).
         per_draw_binding m_per_draw;
 
         // A skinned draw's own per-draw group: its joint palette cannot
         // live in the ring's shared group, so the block sits in a private
         // uniform buffer beside it, bound without a dynamic offset and
         // rewritten only when @ref m_draw_ubo_version falls behind the
-        // block. Allocated on the first skinned draw.
+        // block. Allocated on the first skinned draw. On a device with
+        // push constants the block is pushed instead and the buffer is
+        // never written.
         gpu::buffer m_draw_ubo{};
         gpu::bind_group m_draw_bind_group{};
         uint64_t m_draw_ubo_version{0};

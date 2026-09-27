@@ -29,6 +29,7 @@
 #include <rendering_engine/gpu/shader.hpp>
 #include <rendering_engine/gpu/shader_hot_reload.hpp>
 #include <rendering_engine/materials/instanced_material.hpp>
+#include <rendering_engine/renderables/per_draw_ubo.hpp>
 #include <runtime/engine.hpp>
 
 namespace
@@ -118,9 +119,9 @@ namespace rendering_engine
     void shadow_caster_dispatch::draw(const draw_item& item)
     {
         // An item with a per-instance stream carries its transforms there;
-        // any other one needs its per-draw group.
+        // any other one needs its PerDraw block, pushed or in its group.
         const bool instanced = item.instance_buffer.valid();
-        if (!instanced && !item.per_draw_bind_group.valid())
+        if (!instanced && item.per_draw_push == nullptr && !item.per_draw_bind_group.valid())
         {
             // No model matrix to place the caster with: nothing sensible
             // could be rasterized into the map.
@@ -150,10 +151,11 @@ namespace rendering_engine
         }
         else
         {
-            // The same group and dynamic offset the scene pass binds: the
-            // renderable wrote its block into the per-draw ring once this
-            // frame and every pass reads that slot.
-            m_encoder.set_bind_group(1, item.per_draw_bind_group, item.per_draw_offsets());
+            // The block the scene pass records too: pushed where the device
+            // takes push constants, else the same group and dynamic offset,
+            // the renderable having written its block into the per-draw
+            // ring once this frame for every pass to read.
+            bind_per_draw(m_encoder, item, 1);
         }
 
         if (item.index_buffer.valid())

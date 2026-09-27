@@ -491,6 +491,56 @@ namespace rendering_engine::gpu::backend::vulkan
                                 dynamic_offsets.data());
     }
 
+    void vk_render_pass_encoder::push_constants(shader_stages stages, uint32_t offset, uint32_t size, const void* data)
+    {
+        if (!m_in_pass || m_current_pipeline_layout == VK_NULL_HANDLE || data == nullptr)
+        {
+            return;
+        }
+        // The pushed bytes must sit inside a range the pipeline layout
+        // declares for exactly these stages, and every declared range
+        // they overlap must name the same stages (VUID-vkCmdPushConstants
+        // -offset-01795 / -01796).
+        const auto* pipe = m_device.lookup_pipeline(m_pipeline_handle);
+        const uint64_t end = static_cast<uint64_t>(offset) + size;
+        bool covered = false;
+        bool conflicting = false;
+        if (pipe != nullptr)
+        {
+            for (const auto& range : pipe->descriptor.push_constant_ranges)
+            {
+                const uint64_t range_end = static_cast<uint64_t>(range.offset) + range.size;
+                if (offset >= range_end || end <= range.offset)
+                {
+                    continue;
+                }
+                if (range.stages != stages)
+                {
+                    conflicting = true;
+                }
+                else if (offset >= range.offset && end <= range_end)
+                {
+                    covered = true;
+                }
+            }
+        }
+        if (size == 0 || offset % 4u != 0u || size % 4u != 0u || stages == 0u || !covered || conflicting)
+        {
+            if (!m_push_constants_reported)
+            {
+                m_push_constants_reported = true;
+                LOG_ERR("vk_render_pass_encoder::push_constants: %u bytes at offset %u for stages 0x%x do not match a "
+                        "push-constant range of pipeline %llu; the push is dropped",
+                        size,
+                        offset,
+                        stages,
+                        static_cast<unsigned long long>(m_pipeline_handle.id));
+            }
+            return;
+        }
+        vkCmdPushConstants(m_cmd, m_current_pipeline_layout, to_vk_stage_flags(stages), offset, size, data);
+    }
+
     void vk_render_pass_encoder::set_viewport(int x, int y, int width, int height)
     {
         if (!m_in_pass)

@@ -43,10 +43,13 @@ namespace rendering_engine
      * @brief The instanced twin of a shadow pass's depth-only pipeline.
      *
      * The single-draw shadow pipeline takes each caster's model matrix from
-     * the per-draw UBO its renderable binds at slot 1. An @ref instanced_mesh
-     * has no such group: its transforms travel in the per-instance vertex
-     * stream it binds at vertex slot 1 (four vec4 model columns, then a
-     * tint; see @ref instanced_material) and it draws indexed-indirect. This
+     * the PerDraw block its renderable pushes or binds at slot 1. An
+     * @ref instanced_mesh has none: its transforms travel in the
+     * per-instance vertex stream it binds at vertex slot 1 (four vec4 model
+     * columns, then a tint; see @ref instanced_material) and it draws
+     * indexed-indirect. The instanced pipeline declares no push-constant
+     * range, which is fine because the dispatch rebinds the light group on
+     * every pipeline switch. This
      * pipeline reads the same stream through
      * @c shaders/passes/shadow_instanced.vert.glsl, so instanced batches
      * cast with the same light view-projection and fixed-function state as
@@ -80,10 +83,11 @@ namespace rendering_engine
      * bind group at slot 0 again whenever the pipeline changes, and issues
      * the matching draw — indexed-indirect when the item carries an
      * indirect command, else with the item's own counts and geometry
-     * offsets. A single draw binds its per-draw group with the item's
-     * dynamic offset, so it reads the very block the scene pass does.
-     * Items that carry neither a per-draw group nor an instance stream
-     * have no model matrix to cast with and are skipped.
+     * offsets. A single draw pushes its PerDraw block or binds its
+     * per-draw group with the item's dynamic offset (@ref bind_per_draw),
+     * so it reads the very block the scene pass does. Items that carry
+     * neither a PerDraw block nor an instance stream have no model matrix
+     * to cast with and are skipped.
      */
     class shadow_caster_dispatch
     {

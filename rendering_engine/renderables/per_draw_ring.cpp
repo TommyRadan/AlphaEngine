@@ -62,7 +62,14 @@ namespace rendering_engine
         // device's lifetime, like the slot the device hands out.
         m_frames_in_flight = std::max(device.frames_in_flight(), 1u);
         m_region = device.frame_slot() % m_frames_in_flight;
-        m_main.buffer = create_buffer(m_slots_per_frame * m_frames_in_flight, "per_draw_ring");
+        // With push constants no rigid draw allocates here. Should
+        // something allocate anyway, that frame spills and the next
+        // begin_frame creates the main buffer at the grown size.
+        m_push_constants = per_draw_push_constants(device);
+        if (!m_push_constants)
+        {
+            m_main.buffer = create_buffer(m_slots_per_frame * m_frames_in_flight, "per_draw_ring");
+        }
     }
 
     per_draw_ring::~per_draw_ring()
@@ -267,10 +274,22 @@ namespace rendering_engine
     {
         per_draw_ring& ring = runtime::current_engine().renderer->get_per_draw_ring();
 
+        const bool changed = refresh(transform);
+        if (ring.uses_push_constants())
+        {
+            // The pass pushes the cached block right before the draw; the
+            // bytes are copied into the command stream there, so a draw an
+            // earlier pass recorded keeps the block it pushed.
+            item.per_draw_push = &m_payload;
+            item.per_draw_bind_group = {};
+            item.per_draw_dynamic = false;
+            item.mirrored = m_mirrored;
+            return true;
+        }
+
         // A block that changed needs a fresh slot even mid-frame: an
         // earlier pass may already have recorded a draw that reads the
         // old one.
-        const bool changed = refresh(transform);
         if (changed || m_frame != ring.frame_serial() || m_layout != layout || !m_allocation.bind_group.valid())
         {
             m_allocation = ring.allocate(layout, m_payload);

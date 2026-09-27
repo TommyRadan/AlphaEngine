@@ -110,8 +110,9 @@ namespace rendering_engine
 
         // Per-draw layout (slot 1): the model matrix UBO at binding 1,
         // identical to the layout every 3D renderable builds its
-        // per-draw bind group against, so those bind groups bind here
-        // unchanged, at the same dynamic offset into the per-draw ring.
+        // per-draw bind group against, so on a device without push
+        // constants those bind groups bind here unchanged, at the same
+        // dynamic offset into the per-draw ring.
         gpu::bind_group_layout_descriptor draw_layout{};
         draw_layout.entries.push_back(per_draw_model_layout_entry());
         m_draw_layout = gpu.create_bind_group_layout(draw_layout);
@@ -170,6 +171,12 @@ namespace rendering_engine
         pipeline_descriptor.depth_bias = depth_bias;
         pipeline_descriptor.bind_group_layouts.push_back(m_light_layout);
         pipeline_descriptor.bind_group_layouts.push_back(m_draw_layout);
+        // Where the device takes push constants the casters push their
+        // PerDraw block instead of binding a per-draw group.
+        if (per_draw_push_constants(gpu))
+        {
+            pipeline_descriptor.push_constant_ranges.push_back(per_draw_push_constant_range());
+        }
         m_pipeline = gpu.create_pipeline(pipeline_descriptor);
 
         // Instanced casters rasterize with the same state through the

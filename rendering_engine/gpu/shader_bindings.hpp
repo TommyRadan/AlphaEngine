@@ -70,7 +70,10 @@ namespace rendering_engine::gpu::shader_bindings
     // Set 1, per draw: the per-draw model matrix, a slot of the per-draw
     // ring read at a dynamic offset. Every 3D renderable's per-draw group
     // binds it at this number, so the depth-only shadow pipelines reuse
-    // those groups (and offsets) unchanged.
+    // those groups (and offsets) unchanged. Only on a device without push
+    // constants (OpenGL): with them the block is the pipeline's push
+    // constants and the binding stays in the layouts unread (see
+    // include/per_draw.glsl).
     constexpr uint32_t per_draw_model = 1;
 
     // Set 2, owned by each material: the params block and up to five
