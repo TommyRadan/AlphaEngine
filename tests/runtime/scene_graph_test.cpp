@@ -188,7 +188,7 @@ TEST(scene_graph, defer_destroy_from_on_update_detaches_frees_components_and_rel
     hook_log log;
     auto owned = std::make_unique<node>();
     node* raw = owned.get();
-    raw->name = "doomed";
+    raw->set_name("doomed");
     scene.root.add(*raw);
 
     int released = 0;

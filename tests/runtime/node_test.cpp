@@ -125,11 +125,11 @@ TEST(node, set_world_position_solves_local_under_parent)
 TEST(node, find_locates_descendants_depth_first)
 {
     node root;
-    root.name = "root";
+    root.set_name("root");
     node child;
-    child.name = "child";
+    child.set_name("child");
     node grandchild;
-    grandchild.name = "grandchild";
+    grandchild.set_name("grandchild");
 
     root.add(child);
     child.add(grandchild);

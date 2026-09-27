@@ -27,7 +27,6 @@
 
 #pragma once
 
-#include <memory>
 #include <vector>
 
 #include <rendering_engine/assets/gltf_importer.hpp>
@@ -62,11 +61,13 @@ namespace runtime
      * that rotation belongs here beside the root pre-rotation, not in the
      * components.
      *
-     * The nodes are caller-owned: keep the returned vector alive while they
-     * are in the scene, destroy it (which unregisters every mesh) before
-     * @p model, and both before the engine quits. @p parent must belong to
-     * a scene (carry a component store) or the mesh components cannot be
-     * attached.
+     * The nodes are owned by @p parent's scene (made with
+     * @c context::create_node), and the returned vector names the spawned
+     * root nodes. The mesh components draw with @p model's materials, so the
+     * nodes must be gone before @p model is destroyed: @c destroy_node the
+     * roots (a subtree goes with its root) or unload the scene first. @p parent
+     * must belong to a scene, and that scene must not be mid-traversal (the
+     * mesh components could not be attached); otherwise nothing is spawned.
      */
-    std::vector<std::unique_ptr<node>> instantiate_gltf(const rendering_engine::gltf_model& model, node& parent);
+    std::vector<node*> instantiate_gltf(const rendering_engine::gltf_model& model, node& parent);
 } // namespace runtime

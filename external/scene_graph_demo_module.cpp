@@ -67,6 +67,7 @@
 #include <runtime/engine.hpp>
 #include <runtime/node.hpp>
 #include <runtime/scene_graph.hpp>
+#include <runtime/scene_manager.hpp>
 
 #include <cmath>
 #include <cstdint>
@@ -84,9 +85,10 @@ struct spinner
     float rate; // radians per second; sign sets the direction
 };
 
-// Everything is owned here — the scene-graph root only holds non-owning links,
-// and materials must not outlive the renderer.
-static std::vector<std::unique_ptr<runtime::node>> g_nodes;
+// The nodes live in the demo's own scene, loaded additively on engine start
+// and unloaded on engine stop; everything else is owned here, and the
+// materials must not outlive the renderer (nor the nodes drawing with them).
+static runtime::context* g_scene = nullptr;
 static std::vector<std::unique_ptr<rendering_engine::standard_material>> g_materials;
 static std::vector<spinner> g_spinners;
 static std::unique_ptr<rendering_engine::ambient_light> g_ambient;
@@ -136,10 +138,7 @@ static rendering_engine::mesh_data make_sphere(int stacks, int slices)
 
 static runtime::node* make_child(runtime::node& parent)
 {
-    g_nodes.push_back(std::make_unique<runtime::node>());
-    runtime::node* node = g_nodes.back().get();
-    parent.add(*node);
-    return node;
+    return &g_scene->create_node({}, &parent);
 }
 
 static rendering_engine::standard_material* make_material(const rendering_engine::util::color& base, float roughness)
@@ -185,7 +184,7 @@ static void make_planet(runtime::node& parent,
     g_spinners.push_back(spinner{orbit, orbit_rate});
 
     runtime::node* anchor = make_child(*orbit);
-    anchor->name = "planet" + std::to_string(planet_no++); // reachable via scenes->root.find(...)
+    anchor->set_name("planet" + std::to_string(planet_no++)); // reachable via g_scene->find(...)
     anchor->transform.set_position(math::vec3{distance, 0.0f, 0.0f});
 
     make_visual(*anchor, math::vec3{0.0f, 0.0f, 0.0f}, radius, make_material(color, 0.8f));
@@ -218,7 +217,8 @@ static void on_engine_start(const core::engine_start& event)
     g_ambient->color = math::vec3{1.0f, 1.0f, 1.0f};
     g_ambient->intensity = 0.05f;
 
-    runtime::node& root = runtime::current_engine().scenes->root;
+    g_scene = &runtime::current_engine().scenes->load("scene_graph_demo", runtime::load_mode::additive);
+    runtime::node& root = g_scene->root;
 
     // The sun is the only light: a point light at the world origin, so every
     // body is lit on its sun-facing side and dark on the far side, all the way
@@ -233,7 +233,7 @@ static void on_engine_start(const core::engine_start& event)
     // The sun is a childless leaf, so giving it a scale is safe; its point
     // light sits at the same node and scale never touches a translation.
     runtime::node* sun = make_visual(root, math::vec3{0.0f, 0.0f, 0.0f}, 1.0f, sun_material);
-    sun->name = "sun";
+    sun->set_name("sun");
     auto sun_light = std::make_unique<rendering_engine::point_light>();
     sun_light->color = math::vec3{1.0f, 0.96f, 0.88f};
     sun_light->intensity = 3.0f;
@@ -254,11 +254,15 @@ static void on_engine_start(const core::engine_start& event)
 static void on_engine_stop(const core::engine_stop& event)
 {
     (void)event;
-    // Destroying the nodes frees their components, which unregister their models
-    // and the sun's light from the renderer. Do this — and drop the materials —
-    // before the engine tears the renderer and GPU device down.
+    // Unloading the scene frees its nodes and their components, which unregister
+    // their models and the sun's light from the renderer. Do this — and drop the
+    // materials — before the engine tears the renderer and GPU device down.
     g_spinners.clear();
-    g_nodes.clear();
+    if (g_scene != nullptr)
+    {
+        runtime::current_engine().scenes->unload(*g_scene);
+        g_scene = nullptr;
+    }
     g_materials.clear();
     g_ambient.reset();
     // Drop the last reference to the shared sphere so its GPU buffers are freed

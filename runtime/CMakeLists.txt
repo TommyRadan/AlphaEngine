@@ -9,6 +9,8 @@ target_sources(AlphaEngine PRIVATE
     node.hpp
     scene_graph.cpp
     scene_graph.hpp
+    scene_manager.cpp
+    scene_manager.hpp
 )
 
 add_subdirectory(components)

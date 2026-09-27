@@ -29,6 +29,7 @@
 #include <core/math/math.hpp>
 #include <runtime/components/mesh_component.hpp>
 #include <runtime/node.hpp>
+#include <runtime/scene_graph.hpp>
 
 namespace runtime
 {
@@ -66,8 +67,9 @@ namespace runtime
             rendering_engine::material* material = material_for(model, primitive.material_index);
             if (material == nullptr)
             {
-                LOG_WRN(
-                    "gltf: node '%s' has no material to draw primitive %zu with; skipped", target.name.c_str(), index);
+                LOG_WRN("gltf: node '%s' has no material to draw primitive %zu with; skipped",
+                        target.name().c_str(),
+                        index);
                 return;
             }
             target.add_component<mesh_component>(mesh_component{material, primitive.mesh});
@@ -75,9 +77,10 @@ namespace runtime
 
         void spawn(const rendering_engine::gltf_model& model,
                    std::size_t index,
+                   context& scene,
                    node& parent,
                    bool is_root,
-                   std::vector<std::unique_ptr<node>>& owned,
+                   std::vector<node*>& roots,
                    std::vector<bool>& visited)
         {
             if (index >= model.nodes.size())
@@ -94,8 +97,9 @@ namespace runtime
             visited[index] = true;
 
             const rendering_engine::gltf_node& source = model.nodes[index];
-            auto spawned = std::make_unique<node>();
-            spawned->name = source.name;
+            // Created linked under the parent, so the node carries the
+            // scene's component store before any mesh component is attached.
+            node& current = scene.create_node(source.name, &parent);
 
             math::vec3 position = source.translation;
             math::quat rotation = source.rotation;
@@ -103,16 +107,11 @@ namespace runtime
             {
                 position = k_gltf_to_engine * position;
                 rotation = k_gltf_to_engine * rotation;
+                roots.push_back(&current);
             }
-            spawned->transform.set_position(position);
-            spawned->transform.set_quaternion(rotation);
-            spawned->transform.set_scale(source.scale);
-
-            // Parent first so the node inherits the scene's component store
-            // before any mesh component is attached.
-            parent.add(*spawned);
-            node& current = *spawned;
-            owned.push_back(std::move(spawned));
+            current.transform.set_position(position);
+            current.transform.set_quaternion(rotation);
+            current.transform.set_scale(source.scale);
 
             if (source.primitives.size() == 1)
             {
@@ -124,29 +123,38 @@ namespace runtime
                 // fan out into one child each.
                 for (std::size_t k = 0; k < source.primitives.size(); ++k)
                 {
-                    auto child = std::make_unique<node>();
-                    child->name = source.name + "/primitive" + std::to_string(k);
-                    current.add(*child);
-                    attach_primitive(model, source.primitives[k], *child);
-                    owned.push_back(std::move(child));
+                    node& child = scene.create_node(source.name + "/primitive" + std::to_string(k), &current);
+                    attach_primitive(model, source.primitives[k], child);
                 }
             }
 
             for (const std::size_t child : source.children)
             {
-                spawn(model, child, current, false, owned, visited);
+                spawn(model, child, scene, current, false, roots, visited);
             }
         }
     } // namespace
 
-    std::vector<std::unique_ptr<node>> instantiate_gltf(const rendering_engine::gltf_model& model, node& parent)
+    std::vector<node*> instantiate_gltf(const rendering_engine::gltf_model& model, node& parent)
     {
-        std::vector<std::unique_ptr<node>> owned;
+        std::vector<node*> roots;
+        context* scene = parent.scene();
+        if (scene == nullptr)
+        {
+            LOG_ERR("gltf: the parent node belongs to no scene; nothing instantiated");
+            return roots;
+        }
+        if (scene->is_traversing())
+        {
+            LOG_ERR("gltf: the parent's scene is mid-traversal; instantiate from outside its update");
+            return roots;
+        }
+
         std::vector<bool> visited(model.nodes.size(), false);
         for (const std::size_t root : model.root_nodes)
         {
-            spawn(model, root, parent, true, owned, visited);
+            spawn(model, root, *scene, parent, true, roots, visited);
         }
-        return owned;
+        return roots;
     }
 } // namespace runtime

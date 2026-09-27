@@ -35,11 +35,11 @@
 namespace
 {
     // Tears the engine down after a failure. The engine on main's stack dies
-    // before the game modules' file-scope statics, so those statics — nodes,
-    // lights, models — would otherwise unwind against freed subsystems: the
+    // before the game modules' file-scope statics, so those statics — lights,
+    // materials, models — would otherwise unwind against freed subsystems: the
     // engine_stop broadcast is what makes the modules release them while the
     // renderer and scene are still alive, and quit() then brings the
-    // subsystems down in order. Every subsystem's quit() tolerates an init()
+    // subsystems down in order (the scenes first, freeing every node). Every subsystem's quit() tolerates an init()
     // that never ran or ran only partway. Errors raised here are logged and
     // swallowed so they cannot mask the failure that brought us here.
     void shut_down_after_failure(runtime::engine& engine, bool started)

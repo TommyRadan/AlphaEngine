@@ -28,7 +28,8 @@
 #include <runtime/scene_graph.hpp>
 
 runtime::node::node()
-    : m_parent{nullptr}, m_store{nullptr}, m_active{true}, m_effective_active{true}, m_destroy_pending{false}
+    : m_parent{nullptr}, m_store{nullptr}, m_owning_scene{nullptr}, m_pool_slot{0}, m_active{true},
+      m_effective_active{true}, m_destroy_pending{false}
 {
 }
 
@@ -37,6 +38,9 @@ runtime::node::~node()
     // A node dying mid-traversal is the one mutation that cannot be deferred:
     // the parent's child list is being walked. Nothing to do but say so.
     reject_during_traversal("~node");
+
+    // Drop out of the scene's name index while the store is still reachable.
+    unindex_name();
 
     // Free this node's components before anything else; the store outlives the
     // node, so leaving handles dangling would leak pooled slots.
@@ -71,8 +75,8 @@ void runtime::node::add(node& child)
         if (ancestor == &child)
         {
             LOG_ERR("runtime::node::add: '%s' is '%s' or one of its ancestors; refusing to create a cycle",
-                    child.name.c_str(),
-                    name.c_str());
+                    child.m_name.c_str(),
+                    m_name.c_str());
             return;
         }
     }
@@ -199,7 +203,10 @@ void runtime::node::set_store(component_store* store)
                 }
             }
         }
+        // The name index is per scene: leave the old one, join the new one.
+        unindex_name();
         m_store = store;
+        index_name();
     }
 
     // The whole subtree lives in one scene: hand the store down, migrating
@@ -218,6 +225,11 @@ runtime::component_store* runtime::node::store() const noexcept
 runtime::context* runtime::node::scene() const noexcept
 {
     return m_store != nullptr ? m_store->scene() : nullptr;
+}
+
+runtime::context* runtime::node::owning_scene() const noexcept
+{
+    return m_owning_scene;
 }
 
 bool runtime::node::is_destroy_pending() const noexcept
@@ -239,6 +251,31 @@ void runtime::node::remove_all_components()
     release_components();
 }
 
+void runtime::node::copy_components_from(node& source)
+{
+    if (source.m_store == nullptr || m_store == nullptr)
+    {
+        return;
+    }
+    for (const component_entry& entry : source.m_components)
+    {
+        component_handle handle = source.m_store->clone_into(
+            entry.type, entry.handle, *m_store, component_store::owner_record{this, &m_visit});
+        if (!handle.valid())
+        {
+            continue;
+        }
+        // Record first, then attach, then hide if disabled: the order
+        // add_component uses, so on_attach sees the node as it will be.
+        m_components.push_back(component_entry{entry.type, handle});
+        m_store->attach(entry.type, handle, *this);
+        if (!m_effective_active)
+        {
+            m_store->set_active(entry.type, handle, *this, false);
+        }
+    }
+}
+
 void runtime::node::release_components()
 {
     if (m_store != nullptr)
@@ -251,9 +288,41 @@ void runtime::node::release_components()
     m_components.clear();
 }
 
-runtime::node* runtime::node::find(const std::string& target)
+const core::string_id& runtime::node::name() const noexcept
 {
-    if (name == target)
+    return m_name;
+}
+
+void runtime::node::set_name(core::string_id name)
+{
+    if (name == m_name)
+    {
+        return;
+    }
+    unindex_name();
+    m_name = name;
+    index_name();
+}
+
+void runtime::node::index_name()
+{
+    if (context* owner = scene())
+    {
+        owner->index_name(*this);
+    }
+}
+
+void runtime::node::unindex_name()
+{
+    if (context* owner = scene())
+    {
+        owner->unindex_name(*this);
+    }
+}
+
+runtime::node* runtime::node::find(core::string_id target)
+{
+    if (m_name == target)
     {
         return this;
     }
@@ -364,7 +433,7 @@ bool runtime::node::reject_during_traversal(const char* operation) const
     LOG_ERR("runtime::node::%s on '%s': called from inside a scene traversal (on_update / on_active_changed). "
             "The call is deferred to the end of context::update; use context::defer_* to make that explicit",
             operation,
-            name.c_str());
+            m_name.c_str());
     assert(false && "runtime::node: structural mutation from inside a scene traversal");
     return true;
 }
@@ -374,7 +443,7 @@ void runtime::node::defer(std::function<void()> command)
     context* owner = scene();
     if (owner == nullptr)
     {
-        LOG_ERR("runtime::node::defer on '%s': node belongs to no scene; command dropped", name.c_str());
+        LOG_ERR("runtime::node::defer on '%s': node belongs to no scene; command dropped", m_name.c_str());
         return;
     }
     owner->defer(std::move(command));

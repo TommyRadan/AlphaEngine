@@ -108,6 +108,17 @@ namespace runtime
          */
         void on_active_changed(node& owner, bool active);
 
+        /**
+         * @brief A new component drawing the same cached mesh with the same
+         *        material, for @c context::clone.
+         *
+         * Only a component built from a @ref rendering_engine::mesh_asset can
+         * be cloned — the copy shares the upload; one built from a private
+         * mesh upload has no source data left to copy, so its clone is empty
+         * (with a warning).
+         */
+        mesh_component clone() const;
+
         /** @brief The owned model, or @c nullptr for an empty component. */
         rendering_engine::model* model() const noexcept
         {
@@ -119,6 +130,10 @@ namespace runtime
         void unregister_model();
 
         std::unique_ptr<rendering_engine::model> m_model;
+        // What the model was built from, kept for clone(): the material and,
+        // for the cached-mesh constructor, the shared asset.
+        rendering_engine::material* m_material{nullptr};
+        std::shared_ptr<rendering_engine::mesh_asset> m_mesh;
         bool m_registered{false};
     };
 } // namespace runtime

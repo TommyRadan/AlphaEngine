@@ -79,6 +79,16 @@ namespace runtime
          */
         void on_active_changed(node& owner, bool active);
 
+        /**
+         * @brief A new component owning a light of the same kind and settings
+         *        (colour, intensity, direction or position and attenuation,
+         *        shadow casting), for @c context::clone.
+         *
+         * The copy registers itself like any new light and starts enabled;
+         * the cloned node's active state then applies as usual.
+         */
+        light_component clone() const;
+
         /** @brief The owned light, or @c nullptr for an empty component. */
         rendering_engine::light* get() const noexcept
         {
