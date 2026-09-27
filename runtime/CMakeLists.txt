@@ -15,6 +15,7 @@ target_sources(AlphaEngine PRIVATE
     main_loop.cpp
     node.cpp
     node.hpp
+    overlay.hpp
     reflection.cpp
     reflection.hpp
     scene.cpp

@@ -88,6 +88,7 @@ add_subdirectory(core)
 add_subdirectory(platform)
 add_subdirectory(assets)
 add_subdirectory(rendering_engine)
+add_subdirectory(editor)
 add_subdirectory(external)
 
 # Shaders — the GLSL sources under shaders/ are embedded into the
@@ -242,8 +243,8 @@ endif()
 # ALPHAENGINE_HAS_IMGUI macro is defined for Debug configurations only,
 # via generator expressions so this also holds for multi-config
 # generators (Visual Studio) where CMAKE_BUILD_TYPE is empty at configure
-# time. Release builds never link ImGui and the debug-UI layer compiles
-# down to empty no-ops.
+# time. Release builds never link ImGui and the editor module (editor/)
+# compiles to nothing.
 FetchContent_Declare(
     imgui
     GIT_REPOSITORY https://github.com/ocornut/imgui.git

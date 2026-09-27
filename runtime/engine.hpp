@@ -60,8 +60,9 @@ namespace rendering_engine
 } // namespace rendering_engine
 namespace runtime
 {
+    struct overlay;
     struct scene_manager;
-}
+} // namespace runtime
 namespace runtime
 {
     struct script_host;
@@ -128,6 +129,15 @@ namespace runtime
         /** @brief Returns true when a @c quit_requested event has been observed. */
         bool is_quit_requested() const noexcept;
 
+        /**
+         * @brief Installs @p value, the tool layer drawn over every
+         *        rendered frame (the debug editor), replacing any previous
+         *        one; null installs none. Call before @ref init. The engine
+         *        owns it from then on and drives it as @ref overlay
+         *        describes.
+         */
+        void set_overlay(std::unique_ptr<overlay> value);
+
         // Subsystems. Owned as unique_ptr so lifetime mirrors the
         // engine's own lifetime, in the order they are declared here.
         std::unique_ptr<engine_settings> settings;
@@ -163,6 +173,9 @@ namespace runtime
         // Debug builds: the line helper drawing the physics world's
         // colliders, alive while both the world and the renderer are up.
         std::unique_ptr<runtime::physics::debug_draw> m_physics_debug;
+        // The tool layer drawn over every rendered frame, when the
+        // executable installed one (see set_overlay).
+        std::unique_ptr<runtime::overlay> m_overlay;
     };
 
     /**

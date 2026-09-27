@@ -16,6 +16,10 @@
 #include <runtime/engine.hpp>
 #include <runtime/engine_settings.hpp>
 
+#ifdef ALPHAENGINE_HAS_IMGUI
+#include <editor/editor.hpp>
+#endif
+
 namespace
 {
     // Tears the engine down after a failure. The game lives in the scenes —
@@ -101,6 +105,10 @@ int main(int argc, char* argv[])
     // runtime::current_engine() for the duration of this scope, so every
     // subsystem can resolve its dependencies through the engine.
     runtime::engine engine{std::move(engine_settings)};
+#ifdef ALPHAENGINE_HAS_IMGUI
+    // Debug builds draw the editor over every frame.
+    engine.set_overlay(editor::create_overlay());
+#endif
 
     try
     {
