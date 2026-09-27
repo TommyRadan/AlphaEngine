@@ -133,6 +133,20 @@ namespace core
         return "unknown";
     }
 
+    const char* tonemap_curve_name(tonemap_curve curve) noexcept
+    {
+        switch (curve)
+        {
+        case tonemap_curve::none:
+            return "none";
+        case tonemap_curve::reinhard:
+            return "reinhard";
+        case tonemap_curve::aces:
+            return "aces";
+        }
+        return "unknown";
+    }
+
     settings_load_result load_settings(int argc, char* const argv[])
     {
         settings_load_result result;
@@ -208,6 +222,39 @@ namespace core
                 static_cast<double>(s.shadows.bias),
                 static_cast<double>(s.shadows.slope_bias),
                 s.shadows.pcf_kernel);
+        const post_process_settings& p = s.post;
+        LOG_INF("Post settings: exposure=%.2f tonemap=%s bloom=%s (threshold=%.2f knee=%.2f strength=%.2f) "
+                "taa_feedback=%.2f fxaa=%s volumetric_fog=%s (density_scale=%.2f anisotropy=%.2f max_distance=%.1f "
+                "steps=%u intensity=%.2f)",
+                static_cast<double>(p.exposure),
+                tonemap_curve_name(p.tonemap),
+                on_off(p.bloom),
+                static_cast<double>(p.bloom_threshold),
+                static_cast<double>(p.bloom_knee),
+                static_cast<double>(p.bloom_strength),
+                static_cast<double>(p.taa_feedback),
+                on_off(p.fxaa),
+                on_off(p.volumetric_fog),
+                static_cast<double>(p.volumetric_fog_density_scale),
+                static_cast<double>(p.volumetric_fog_anisotropy),
+                static_cast<double>(p.volumetric_fog_max_distance),
+                p.volumetric_fog_steps,
+                static_cast<double>(p.volumetric_fog_intensity));
+        LOG_INF("Post settings: grading_lut='%s' grading_intensity=%.2f motion_blur=%s (intensity=%.2f samples=%u "
+                "max_radius=%.1f) auto_exposure=%s (ev=[%.1f, %.1f] speed_up=%.2f speed_down=%.2f "
+                "compensation=%.2f)",
+                p.grading_lut.empty() ? "(off)" : p.grading_lut.c_str(),
+                static_cast<double>(p.grading_intensity),
+                on_off(p.motion_blur),
+                static_cast<double>(p.motion_blur_intensity),
+                p.motion_blur_samples,
+                static_cast<double>(p.motion_blur_max_radius),
+                on_off(p.auto_exposure),
+                static_cast<double>(p.auto_exposure_min_ev),
+                static_cast<double>(p.auto_exposure_max_ev),
+                static_cast<double>(p.auto_exposure_speed_up),
+                static_cast<double>(p.auto_exposure_speed_down),
+                static_cast<double>(p.auto_exposure_compensation));
         return result;
     }
 } // namespace core

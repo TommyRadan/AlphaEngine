@@ -29,6 +29,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include <core/math/math.hpp>
@@ -48,7 +49,10 @@ namespace rendering_engine
     struct skybox_pass;
     struct tonemap_pass;
     struct velocity_pass;
+    struct motion_blur_pass;
+    struct auto_exposure_pass;
     struct taa_pass;
+    struct texture_asset;
     struct shadow_pass;
     struct spot_shadow_pass;
     struct environment;
@@ -319,13 +323,26 @@ namespace rendering_engine
          * @c core::settings::graphics.temporal_aa and the drawable size, so
          * whatever this is called with is overwritten with the pass's real
          * presence before it is stored — @ref get_post_settings always
-         * reports the truth. See @ref post_settings for why scene-wide fog
-         * (@ref set_fog) is not part of this struct.
+         * reports the truth. A new @c grading.lut path is loaded through
+         * the asset cache at the top of the next @ref render (the cache is
+         * only up once the engine has finished initialising). See
+         * @ref post_settings for why scene-wide fog (@ref set_fog) is not
+         * part of this struct. @ref init calls this with the values
+         * @c core::settings::post resolved at startup.
          */
         void set_post_settings(const post_settings& settings);
 
         /** @brief The runtime-tunable post-processing chain parameters currently in effect. */
         const post_settings& get_post_settings() const;
+
+        /**
+         * @brief Whether the colour-grading LUT @c post_settings::grading.lut
+         *        names is loaded and usable. False while the path is empty,
+         *        before the next @ref render resolves a new path, and when
+         *        the image failed to load or is not an N^2 x N strip (the
+         *        failure is logged once per path).
+         */
+        bool grading_lut_loaded() const;
 
         /**
          * @brief This frame's scene / draw statistics (renderable count,
@@ -348,7 +365,9 @@ namespace rendering_engine
 
         /**
          * @brief Off-screen HDR scene-colour texture the scene pass renders
-         *        into: post lighting, skybox and bloom, pre-tonemap.
+         *        into: post lighting, skybox, volumetric fog and bloom,
+         *        pre-tonemap (while motion blur runs, bloom lands in the
+         *        pass's blurred copy instead).
          *
          * Read-only accessor for tooling (the debug overlay's render-target
          * viewer); valid between @ref init and @ref quit.
@@ -370,7 +389,8 @@ namespace rendering_engine
 
         /**
          * @brief Per-pixel motion vectors from the velocity pass, or an
-         *        invalid handle while temporal AA is off.
+         *        invalid handle on a degenerate drawable. Only rewritten
+         *        while temporal AA or motion blur consumes it.
          */
         gpu::texture velocity_texture() const;
 
@@ -464,14 +484,24 @@ namespace rendering_engine
         // and operator can be tuned live. Null until @ref init runs.
         tonemap_pass* m_tonemap{nullptr};
 
-        // Non-owning back-pointers to the optional temporal-AA passes
-        // owned by @ref m_passes, null when temporal AA is off. Kept so
-        // @ref render can publish the textures they own (motion vectors,
-        // the TAA resolve) through @ref frame_context every frame; their
-        // consumers compare those handles and rebind on change, which is
-        // how a resize that recreates the targets reaches them.
+        // Non-owning back-pointers to the velocity pass and the optional
+        // TAA pass owned by @ref m_passes (the latter null when temporal
+        // AA is off). Kept so @ref render can publish the textures they own
+        // (motion vectors, the TAA resolve) through @ref frame_context
+        // every frame; their consumers compare those handles and rebind on
+        // change, which is how a resize that recreates the targets reaches
+        // them.
         velocity_pass* m_velocity{nullptr};
         taa_pass* m_taa{nullptr};
+
+        // Non-owning back-pointers to the motion-blur and auto-exposure
+        // passes owned by @ref m_passes. @ref render asks them, before any
+        // pass records, whether they produce output this frame, and
+        // publishes it (@ref frame_context::hdr_color_target /
+        // @c hdr_color_texture, @ref frame_context::exposure_texture) for
+        // the passes after them only when they do.
+        motion_blur_pass* m_motion_blur{nullptr};
+        auto_exposure_pass* m_auto_exposure{nullptr};
 
         // Non-owning back-pointers to the directional and spot shadow
         // passes owned by @ref m_passes, surfaced through
@@ -520,11 +550,20 @@ namespace rendering_engine
 
         // Runtime-tunable post-processing chain parameters, set via
         // @ref set_post_settings and copied into
-        // @ref frame_context::post each @ref render so bloom, TAA and
-        // FXAA can read the fields they own. Defaults match what each
-        // pass already baked in before this existed, so a context that
-        // never calls @ref set_post_settings renders identically.
+        // @ref frame_context::post each @ref render so the post passes
+        // can read the fields they own. Seeded by @ref init from
+        // @c core::settings::post, whose defaults match what each pass
+        // baked in before either existed.
         post_settings m_post_settings{};
+
+        // The colour-grading LUT loaded for @ref m_grading_lut_path (null
+        // when that is empty, failed to load or is not a strip LUT), and
+        // the path it was resolved for. @ref update_grading_lut reloads
+        // when @c m_post_settings.grading.lut differs from the path. The
+        // handle keeps the cached texture alive; released in @ref quit
+        // before the device.
+        std::shared_ptr<texture_asset> m_grading_lut;
+        std::string m_grading_lut_path;
 
         // Built-in materials, constructed after the passes in
         // @ref init so they can read the passes' per-frame bind-group
@@ -594,5 +633,12 @@ namespace rendering_engine
         // Releases the two targets (and their attachments) and resets the
         // members. No-op for invalid handles.
         void release_color_targets();
+
+        // Loads the colour-grading LUT @c m_post_settings.grading.lut
+        // names through the asset cache (as linear data) when it differs
+        // from the one last resolved, validating the strip shape. Called
+        // by @ref render ahead of the frame; a path that fails is logged
+        // and not retried until the path changes.
+        void update_grading_lut();
     };
 } // namespace rendering_engine

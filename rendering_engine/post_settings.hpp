@@ -22,6 +22,8 @@
 
 #pragma once
 
+#include <string>
+
 namespace rendering_engine
 {
     /**
@@ -170,6 +172,112 @@ namespace rendering_engine
     }
 
     /**
+     * @brief Runtime-tunable colour grading (@ref post_settings::grading).
+     *
+     * @ref tonemap_pass applies a lookup table to the display-referred
+     * colour it writes, after the tonemap curve and the gamma encode, and
+     * blends the result with the ungraded colour by @ref intensity. The
+     * table is an ordinary 2D image in the common "strip" layout (the
+     * Unreal convention): N slices of N x N texels side by side, N^2 wide
+     * and N high, black at the top-left; red rises left to right within a
+     * slice, green rises top to bottom and blue rises slice by slice. The
+     * identity table therefore maps every colour to itself, and a grade
+     * authored in any image editor on top of it (or exported by a grading
+     * tool at 16 or 32 texels per axis) reproduces that grade here.
+     *
+     * @ref context loads @ref lut through the asset cache as a
+     * @c gpu::color_space::linear texture (the stored values are already
+     * the encoded output colours and must reach the shader unchanged) the
+     * first frame after the path changes. An empty path, a table that
+     * failed to load or is not N^2 x N, or an @ref intensity of 0 selects
+     * the tonemap variant without the lookup, so grading costs nothing
+     * while it is off.
+     */
+    struct color_grading_settings
+    {
+        /// Path of the strip LUT image, resolved through the virtual
+        /// filesystem like any other asset. Empty turns grading off.
+        std::string lut;
+
+        /// Blend between the ungraded (0) and the fully graded (1) colour.
+        float intensity{1.0f};
+    };
+
+    /**
+     * @brief Runtime-tunable motion blur (@ref post_settings::motion_blur).
+     *
+     * @ref motion_blur_pass smears the HDR scene colour along each pixel's
+     * motion vector from @ref velocity_pass, so it follows camera motion
+     * over the static world (the velocity buffer does not model object
+     * motion yet). Off by default: the pass then records nothing and the
+     * passes after it read the scene colour directly.
+     */
+    struct motion_blur_settings
+    {
+        bool enabled{false};
+
+        /// Shutter scale: the fraction of one frame's motion the blur
+        /// spans. 0.5 is a 180-degree shutter, 1 smears across the whole
+        /// frame-to-frame motion. The motion vectors are per frame, so a
+        /// higher frame rate blurs less, as a real shutter would.
+        float intensity{0.5f};
+
+        /// Taps along each pixel's motion vector; clamped to [2, 32] by
+        /// the pass. A per-pixel offset turns a low count's banding into
+        /// noise.
+        int samples{8};
+
+        /// Longest blur, in pixels, a single pixel's motion may produce.
+        float max_radius{32.0f};
+    };
+
+    /**
+     * @brief Whether @p settings make @ref motion_blur_pass draw at all:
+     *        enabled, with a positive shutter scale and radius.
+     */
+    inline bool motion_blur_active(const motion_blur_settings& settings)
+    {
+        return settings.enabled && settings.intensity > 0.0f && settings.max_radius > 0.0f;
+    }
+
+    /**
+     * @brief Runtime-tunable eye adaptation (@ref post_settings::auto_exposure).
+     *
+     * @ref auto_exposure_pass meters the HDR image tonemap is about to map
+     * (the geometric mean of its luminance, reduced on the GPU), converts
+     * it to EV100, clamps it to [@ref min_ev, @ref max_ev] and eases a
+     * persistent adapted value toward it at @ref speed_up while the scene
+     * brightens and @ref speed_down while it darkens. The exposure that
+     * maps the adapted brightness to middle grey, raised by
+     * @ref compensation stops, replaces @ref post_settings::exposure in
+     * @ref tonemap_pass; while this is off the manual exposure applies.
+     * The first metered frame after enabling snaps straight to the target
+     * rather than easing in from a stale value.
+     */
+    struct auto_exposure_settings
+    {
+        bool enabled{false};
+
+        /// Lowest scene brightness, in EV100, the metering follows: a
+        /// darker scene is brightened only as far as this.
+        float min_ev{-4.0f};
+
+        /// Highest scene brightness, in EV100, the metering follows: a
+        /// brighter scene is darkened only as far as this.
+        float max_ev{16.0f};
+
+        /// Adaptation rate, per second, of the exponential approach while
+        /// the scene gets brighter (0 freezes it).
+        float speed_up{3.0f};
+
+        /// Adaptation rate, per second, while the scene gets darker.
+        float speed_down{1.0f};
+
+        /// Stops added on top of the adapted exposure (positive brightens).
+        float compensation{0.0f};
+    };
+
+    /**
      * @brief Runtime-tunable post-processing chain parameters.
      *
      * Lives on @ref context (@ref context::set_post_settings /
@@ -188,18 +296,26 @@ namespace rendering_engine
      * path the lit materials apply analytically. @ref volumetric only
      * tunes how @ref volumetric_fog_pass raymarches that same height-fog
      * medium in the post chain.
+     *
+     * @ref context::init seeds it from @c core::settings::post (the
+     * settings.json @c post section, the matching @c ALPHAENGINE_*
+     * variables and command-line options), so the engine starts with the
+     * persisted values; later changes live only in the context.
      */
     struct post_settings
     {
         /// Pre-curve exposure scale @ref tonemap_pass applies before the
-        /// operator below.
+        /// operator below, while @ref auto_exposure is off.
         float exposure{1.0f};
 
         /// Tonemap curve @ref tonemap_pass applies.
         tonemap_operator tonemap_op{tonemap_operator::aces};
 
         volumetric_fog_settings volumetric{};
+        motion_blur_settings motion_blur{};
         bloom_settings bloom{};
+        auto_exposure_settings auto_exposure{};
+        color_grading_settings grading{};
         taa_settings taa{};
         fxaa_settings fxaa{};
     };

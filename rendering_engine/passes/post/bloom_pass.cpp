@@ -472,13 +472,15 @@ namespace rendering_engine
             m_settings.strength = ctx.post.bloom.strength;
         }
 
-        // Bind this frame's HDR scene colour for the bright pass. The
-        // handle only changes when the scene target is recreated (a
-        // resize), so compare against the one the bind group was built
-        // with and rebuild on change — the first frame included.
-        if (ctx.scene_color_texture != m_bound_scene_color || !m_threshold_bind_group.valid())
+        // Bind this frame's HDR image for the bright pass: the scene
+        // colour, or motion blur's output while that runs (see
+        // frame_context::hdr_color_texture). The handle only changes when
+        // a target is recreated (a resize) or motion blur is toggled, so
+        // compare against the one the bind group was built with and
+        // rebuild on change — the first frame included.
+        if (ctx.hdr_color_texture != m_bound_scene_color || !m_threshold_bind_group.valid())
         {
-            rebuild_threshold_bind_group(ctx.scene_color_texture);
+            rebuild_threshold_bind_group(ctx.hdr_color_texture);
         }
 
         // Draws a single fullscreen triangle into the currently open pass.
@@ -534,12 +536,12 @@ namespace rendering_engine
         }
 
         // 3. Additively composite every blurred mip back into the HDR
-        //    scene target. Loading (not clearing) preserves the scene the
-        //    tonemap pass will read; linear sampling upscales each mip to
-        //    full resolution as it is composited.
+        //    image it was extracted from. Loading (not clearing) preserves
+        //    the scene the tonemap pass will read; linear sampling upscales
+        //    each mip to full resolution as it is composited.
         {
             gpu::render_pass_descriptor descriptor{};
-            descriptor.target = ctx.scene_color_target;
+            descriptor.target = ctx.hdr_color_target;
             descriptor.color[0].load = gpu::load_op::load;
             descriptor.use_depth = false;
 

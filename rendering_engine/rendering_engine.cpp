@@ -24,8 +24,11 @@
 
 #include <core/event_engine.hpp>
 #include <core/log.hpp>
+#include <core/platform/platform.hpp>
 #include <core/settings.hpp>
 #include <core/time.hpp>
+#include <rendering_engine/assets/asset_cache.hpp>
+#include <rendering_engine/assets/texture_asset.hpp>
 #include <rendering_engine/camera/camera_registry.hpp>
 #include <rendering_engine/camera/perspective_camera.hpp>
 #include <rendering_engine/debug/axes_helper.hpp>
@@ -48,8 +51,10 @@
 #include <rendering_engine/passes/debug_pass.hpp>
 #include <rendering_engine/passes/pass.hpp>
 #include <rendering_engine/passes/point_shadow_pass.hpp>
+#include <rendering_engine/passes/post/auto_exposure_pass.hpp>
 #include <rendering_engine/passes/post/bloom_pass.hpp>
 #include <rendering_engine/passes/post/fxaa_pass.hpp>
+#include <rendering_engine/passes/post/motion_blur_pass.hpp>
 #include <rendering_engine/passes/post/taa_pass.hpp>
 #include <rendering_engine/passes/post/tonemap_pass.hpp>
 #include <rendering_engine/passes/post/velocity_pass.hpp>
@@ -67,6 +72,67 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cstdint>
+#include <exception>
+
+namespace
+{
+    // The renderer's post settings for the values core::settings resolved
+    // at startup (settings.json, the ALPHAENGINE_* variables, the command
+    // line). The two structs mirror each other field for field; core keeps
+    // its own flat copy because it cannot depend on the renderer.
+    rendering_engine::post_settings startup_post_settings(const core::post_process_settings& source)
+    {
+        rendering_engine::post_settings settings{};
+        settings.exposure = source.exposure;
+        switch (source.tonemap)
+        {
+        case core::tonemap_curve::none:
+            settings.tonemap_op = rendering_engine::tonemap_operator::none;
+            break;
+        case core::tonemap_curve::reinhard:
+            settings.tonemap_op = rendering_engine::tonemap_operator::reinhard;
+            break;
+        case core::tonemap_curve::aces:
+            settings.tonemap_op = rendering_engine::tonemap_operator::aces;
+            break;
+        }
+
+        settings.volumetric.enabled = source.volumetric_fog;
+        settings.volumetric.density_scale = source.volumetric_fog_density_scale;
+        settings.volumetric.anisotropy = source.volumetric_fog_anisotropy;
+        settings.volumetric.max_distance = source.volumetric_fog_max_distance;
+        settings.volumetric.steps = static_cast<int>(source.volumetric_fog_steps);
+        settings.volumetric.intensity = source.volumetric_fog_intensity;
+
+        settings.motion_blur.enabled = source.motion_blur;
+        settings.motion_blur.intensity = source.motion_blur_intensity;
+        settings.motion_blur.samples = static_cast<int>(source.motion_blur_samples);
+        settings.motion_blur.max_radius = source.motion_blur_max_radius;
+
+        settings.bloom.enabled = source.bloom;
+        settings.bloom.threshold = source.bloom_threshold;
+        settings.bloom.knee = source.bloom_knee;
+        settings.bloom.strength = source.bloom_strength;
+
+        settings.auto_exposure.enabled = source.auto_exposure;
+        settings.auto_exposure.min_ev = source.auto_exposure_min_ev;
+        settings.auto_exposure.max_ev = source.auto_exposure_max_ev;
+        settings.auto_exposure.speed_up = source.auto_exposure_speed_up;
+        settings.auto_exposure.speed_down = source.auto_exposure_speed_down;
+        settings.auto_exposure.compensation = source.auto_exposure_compensation;
+
+        settings.grading.lut = source.grading_lut;
+        settings.grading.intensity = source.grading_intensity;
+
+        // taa.enabled is overwritten by set_post_settings with the pass's
+        // real presence (graphics.temporal_aa decides that); only the
+        // feedback is a post setting.
+        settings.taa.feedback = source.taa_feedback;
+        settings.fxaa.enabled = source.fxaa;
+        return settings;
+    }
+} // namespace
 
 rendering_engine::context::context() = default;
 rendering_engine::context::~context() = default;
@@ -160,14 +226,35 @@ void rendering_engine::context::init()
     // and draws nothing until post_settings::volumetric enables it.
     auto volumetric_fog =
         std::make_unique<volumetric_fog_pass>(scene_frame_layout, scene->frame_bind_group(), width, height);
+    // Per-pixel motion vectors are reconstructed from the scene depth
+    // buffer: the velocity pass samples the HDR target's depth attachment
+    // through frame_context::scene_depth_texture each frame. They drive
+    // the TAA history reprojection and motion blur; the pass is always
+    // built, since motion blur can be switched on at runtime, and draws
+    // only while one of the two consumes it.
+    auto velocity = std::make_unique<velocity_pass>(width, height);
+    m_velocity = velocity.get();
+    // Motion blur smears the HDR image along those vectors, after the
+    // volumetric fog (so the haze smears with the scene) and before bloom
+    // and auto exposure (so the glow spreads from, and the exposure
+    // meters, the blurred image). It writes a target of its own; render()
+    // publishes it as frame_context::hdr_color_target / _texture while
+    // the pass draws, and the scene colour otherwise.
+    auto motion_blur = std::make_unique<motion_blur_pass>(width, height);
+    m_motion_blur = motion_blur.get();
     // Bloom runs between the scene and tonemap passes: it reads the HDR
-    // scene colour, blurs the bright pixels and additively composites the
-    // glow back into the same target, so tonemap maps the bloomed result.
-    // Neither pass takes the scene-colour texture here: both read it from
-    // frame_context::scene_color_texture every frame and rebind when the
-    // handle changes, so a resize that recreates the target reaches them
-    // without re-plumbing.
+    // image, blurs the bright pixels and additively composites the glow
+    // back into the same target, so tonemap maps the bloomed result.
+    // Neither pass takes the HDR texture here: both read it from
+    // frame_context::hdr_color_texture every frame and rebind when the
+    // handle changes, so a resize that recreates the target (or motion
+    // blur switching on) reaches them without re-plumbing.
     auto bloom = std::make_unique<bloom_pass>(width, height);
+    // Eye adaptation meters the bloomed HDR image tonemap is about to map
+    // and leaves the adapted exposure in a 1x1 texture tonemap samples
+    // (frame_context::exposure_texture) while it is enabled.
+    auto auto_exposure = std::make_unique<auto_exposure_pass>();
+    m_auto_exposure = auto_exposure.get();
     auto post = std::make_unique<tonemap_pass>();
     m_tonemap = post.get();
     // Temporal AA optionally slots in between tonemap and FXAA: it
@@ -181,24 +268,19 @@ void rendering_engine::context::init()
     // rather than constructor arguments: render() publishes them from the
     // owning pass each frame and the consumer rebinds when the handle
     // changes.
-    std::unique_ptr<velocity_pass> velocity;
     std::unique_ptr<taa_pass> taa;
     if (taa_enabled)
     {
-        // Per-pixel motion vectors are reconstructed from the scene depth
-        // buffer: the velocity pass samples the HDR target's depth attachment
-        // through frame_context::scene_depth_texture each frame. They drive
-        // the TAA history reprojection.
-        velocity = std::make_unique<velocity_pass>(width, height);
         taa = std::make_unique<taa_pass>(width, height);
-        m_velocity = velocity.get();
         m_taa = taa.get();
     }
-    // post_settings::taa.enabled mirrors the pass's real presence rather
-    // than being requestable: temporal AA is only ever decided here, at
-    // init, so set_post_settings overwrites whatever it is given with
-    // this instead of trusting the caller.
-    m_post_settings.taa.enabled = taa_enabled;
+    // Start the post chain from the persisted values core::settings
+    // resolved (settings.json, ALPHAENGINE_* variables, command line).
+    // set_post_settings forwards exposure / operator to the tonemap pass
+    // just built and overwrites post_settings::taa.enabled with the TAA
+    // pass's real presence: temporal AA is only ever decided here, at
+    // init, from graphics.temporal_aa.
+    set_post_settings(eng.settings != nullptr ? startup_post_settings(eng.settings->post) : post_settings{});
     // FXAA closes the post chain: it samples the TAA resolve when one is
     // published (else the LDR target) and writes the anti-aliased image to
     // the swapchain. It declares whichever of the two it will actually
@@ -256,15 +338,16 @@ void rendering_engine::context::init()
 
     // Register the built-in passes in render order: scene writes into
     // the HDR target, the skybox pass fills the untouched background of
-    // that target with the environment cube map, the optional velocity
-    // pass reconstructs per-pixel motion vectors from the finalised depth
-    // for the TAA reprojection, the volumetric fog pass blends the lit
-    // medium over it, the bloom post pass blurs its bright pixels back
-    // into that target, the tonemap post pass maps the result to LDR in
-    // the off-screen LDR target, the optional TAA post pass accumulates the
-    // jittered LDR frames into a supersampled image, the FXAA post pass
-    // anti-aliases that result onto the swapchain, and the UI pass
-    // composites on top. The
+    // that target with the environment cube map, the velocity pass
+    // reconstructs per-pixel motion vectors from the finalised depth for
+    // the TAA reprojection and motion blur, the volumetric fog pass blends
+    // the lit medium over it, the motion blur pass smears the result along
+    // the motion vectors, the bloom post pass blurs its bright pixels back
+    // into that image, the auto-exposure pass meters it, the tonemap post
+    // pass maps it to LDR in the off-screen LDR target (exposed, graded),
+    // the optional TAA post pass accumulates the jittered LDR frames into
+    // a supersampled image, the FXAA post pass anti-aliases that result
+    // onto the swapchain, and the UI pass composites on top. The
     // debug pass is appended in debug builds only so debug visuals read on
     // top of the game UI; release builds drop it entirely so the
     // overlay registry has no consumer and the stage costs nothing.
@@ -281,13 +364,12 @@ void rendering_engine::context::init()
     m_passes.push_back(std::move(skybox));
     // Motion vectors are computed from the finalised scene depth, before
     // the post chain consumes the colour, so the velocity pass sits right
-    // after the geometry and skybox. Only present when TAA is enabled.
-    if (velocity)
-    {
-        m_passes.push_back(std::move(velocity));
-    }
+    // after the geometry and skybox.
+    m_passes.push_back(std::move(velocity));
     m_passes.push_back(std::move(volumetric_fog));
+    m_passes.push_back(std::move(motion_blur));
     m_passes.push_back(std::move(bloom));
+    m_passes.push_back(std::move(auto_exposure));
     m_passes.push_back(std::move(post));
     if (taa)
     {
@@ -389,11 +471,18 @@ void rendering_engine::context::quit()
     m_skybox = nullptr;
     m_tonemap = nullptr;
     m_velocity = nullptr;
+    m_motion_blur = nullptr;
+    m_auto_exposure = nullptr;
     m_taa = nullptr;
     m_shadow = nullptr;
     m_spot_shadow = nullptr;
     m_prev_camera = nullptr;
     m_has_prev_view_projection = false;
+
+    // The grading LUT is a cached asset whose texture this handle keeps
+    // alive; drop it while the device it is freed through is still up.
+    m_grading_lut.reset();
+    m_grading_lut_path.clear();
 
     // Then materials, which own pipelines that reference the device.
     // Release them before the device tears its pools down.
@@ -430,6 +519,17 @@ void rendering_engine::context::render()
 {
     auto& eng = runtime::current_engine();
     auto& gpu = *eng.gpu;
+
+    // Resolve a changed colour-grading LUT path through the asset cache
+    // first, outside the frame like any other asset load (the upload is
+    // ordered ahead of the frame that samples it). A no-op while the path
+    // is unchanged. Motion blur likewise allocates its full-resolution
+    // target here, the first time it is switched on.
+    update_grading_lut();
+    if (m_motion_blur != nullptr)
+    {
+        m_motion_blur->prepare(m_post_settings.motion_blur);
+    }
 
     // Open the device frame before anything below touches GPU-visible
     // memory. A deferred-execution backend (Vulkan) blocks here until
@@ -504,13 +604,31 @@ void rendering_engine::context::render()
     ctx.scene_depth_texture = gpu.render_target_depth_texture(m_scene_color_target);
     ctx.ldr_color_target = m_ldr_color_target;
     ctx.ldr_color_texture = m_ldr_color_texture;
-    // The textures the temporal-AA passes own are published the same way:
-    // read from the owning pass every frame so the TAA resolve and FXAA
-    // rebind after a resize recreated them. Invalid while TAA is off.
+    // The textures the velocity and temporal-AA passes own are published
+    // the same way: read from the owning pass every frame so the TAA
+    // resolve, motion blur and FXAA rebind after a resize recreated them.
+    // The TAA resolve is invalid while TAA is off.
     ctx.velocity_texture = (m_velocity != nullptr) ? m_velocity->velocity_texture() : gpu::texture{};
     ctx.taa_resolve_texture = (m_taa != nullptr) ? m_taa->output_texture() : gpu::texture{};
     ctx.fog = m_fog;
     ctx.post = m_post_settings;
+    // The HDR image the chain after motion blur works on: the blurred copy
+    // when the pass draws this frame, else the scene colour itself. Asked
+    // of the pass with the same frame context its record() will see, so
+    // producer and consumers never disagree.
+    const bool motion_blur = (m_motion_blur != nullptr) && m_motion_blur->draws(ctx);
+    ctx.hdr_color_target = motion_blur ? m_motion_blur->output_target() : m_scene_color_target;
+    ctx.hdr_color_texture = motion_blur ? m_motion_blur->output_texture() : m_scene_color_texture;
+    // Tonemap takes its exposure from the eye-adaptation result only
+    // while the pass leaves a valid one this frame, and grades only with
+    // a usable table and a visible blend; otherwise it draws the variant
+    // without that effect.
+    ctx.exposure_texture = (m_auto_exposure != nullptr && m_auto_exposure->produces_exposure(ctx))
+                               ? m_auto_exposure->exposure_texture()
+                               : gpu::texture{};
+    ctx.grading_lut_texture = (m_grading_lut != nullptr && m_post_settings.grading.intensity > 0.0f)
+                                  ? m_grading_lut->texture
+                                  : gpu::texture{};
 
     // One encoder records the frame graph's passes in order — each in a
     // debug group and between the profiler's timestamps — then submits.
@@ -793,6 +911,67 @@ void rendering_engine::context::set_post_settings(const post_settings& settings)
 const rendering_engine::post_settings& rendering_engine::context::get_post_settings() const
 {
     return m_post_settings;
+}
+
+bool rendering_engine::context::grading_lut_loaded() const
+{
+    return m_grading_lut != nullptr && m_grading_lut_path == m_post_settings.grading.lut;
+}
+
+void rendering_engine::context::update_grading_lut()
+{
+    const std::string& path = m_post_settings.grading.lut;
+    if (path == m_grading_lut_path)
+    {
+        return;
+    }
+    // Remember the path before trying it, so a table that fails is
+    // reported once rather than every frame until the path changes.
+    m_grading_lut_path = path;
+    m_grading_lut.reset();
+    if (path.empty())
+    {
+        LOG_INF("Colour grading: off");
+        return;
+    }
+
+    auto& eng = runtime::current_engine();
+    if (eng.assets == nullptr)
+    {
+        LOG_WRN("Colour grading: no asset cache to load '%s' through; grading stays off", path.c_str());
+        return;
+    }
+
+    // Linear, not sRGB: the texels are already the encoded output colours
+    // the lookup must return unchanged.
+    std::shared_ptr<texture_asset> lut;
+    try
+    {
+        lut = eng.assets->load_texture(core::platform::utf8_path(path), gpu::color_space::linear);
+    }
+    catch (const std::exception& error)
+    {
+        LOG_WRN("Colour grading: could not load LUT '%s' (%s); grading stays off", path.c_str(), error.what());
+        return;
+    }
+
+    // An N^2 x N strip: N slices of N x N side by side. Anything else would
+    // be looked up with the wrong slice size.
+    const uint64_t size = lut->height;
+    if (size < 2 || static_cast<uint64_t>(lut->width) != size * size)
+    {
+        LOG_WRN("Colour grading: '%s' is %ux%u, not an N*N x N strip LUT; grading stays off",
+                path.c_str(),
+                lut->width,
+                lut->height);
+        return;
+    }
+    m_grading_lut = std::move(lut);
+    LOG_INF("Colour grading: using '%s' (%ux%ux%u)",
+            path.c_str(),
+            static_cast<unsigned int>(size),
+            static_cast<unsigned int>(size),
+            static_cast<unsigned int>(size));
 }
 
 const rendering_engine::render_stats& rendering_engine::context::get_render_stats() const

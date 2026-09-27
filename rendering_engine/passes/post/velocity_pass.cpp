@@ -261,6 +261,13 @@ namespace rendering_engine
             return;
         }
 
+        // Only the TAA resolve and motion blur read the motion vectors;
+        // with neither running this frame there is nothing to write.
+        if (!ctx.post.taa.enabled && !motion_blur_active(ctx.post.motion_blur))
+        {
+            return;
+        }
+
         auto& gpu = *runtime::current_engine().gpu;
 
         // No camera, or no scene depth to reconstruct positions from: clear

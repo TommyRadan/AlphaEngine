@@ -59,11 +59,16 @@ set(ALPHAENGINE_SHADER_SOURCES
     passes/bloom_blur.frag.glsl
     passes/bloom_composite.frag.glsl
     passes/bloom_threshold.frag.glsl
+    passes/exposure_adapt.frag.glsl
+    passes/exposure_downsample.frag.glsl
+    passes/exposure_luminance.frag.glsl
+    passes/exposure_store.frag.glsl
     passes/fullscreen.vert.glsl
     passes/fxaa.frag.glsl
     passes/ibl_brdf_lut.comp.glsl
     passes/ibl_irradiance.comp.glsl
     passes/ibl_prefilter.comp.glsl
+    passes/motion_blur.frag.glsl
     passes/shadow.vert.glsl
     passes/shadow_instanced.vert.glsl
     passes/skybox.frag.glsl

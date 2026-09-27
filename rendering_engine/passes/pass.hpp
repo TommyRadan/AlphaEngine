@@ -137,6 +137,20 @@ namespace rendering_engine
         // resumes from and returns to that layout).
         gpu::texture scene_depth_texture{};
 
+        // The HDR image the post chain after motion blur works on: the
+        // output of @ref motion_blur_pass when it draws this frame, else
+        // @ref scene_color_target / @ref scene_color_texture themselves.
+        // @ref bloom_pass thresholds this texture and composites its glow
+        // back into this target, @ref auto_exposure_pass meters it and
+        // @ref tonemap_pass maps it, so a disabled motion blur costs its
+        // consumers nothing: they simply read the previous stage. Decided
+        // by @ref context::render before any pass records, so every pass
+        // sees the same choice; in the frame graph both are the logical
+        // "scene_color" resource. Passes before motion blur (the scene,
+        // skybox and volumetric fog) keep using the scene-colour pair.
+        gpu::render_target hdr_color_target{};
+        gpu::texture hdr_color_texture{};
+
         // Off-screen LDR colour target the tonemap pass resolves into.
         // The swapchain is not sampleable as a shader input, so the
         // final post effect (FXAA) reads its tonemapped source from this
@@ -145,12 +159,14 @@ namespace rendering_engine
         gpu::render_target ldr_color_target{};
         gpu::texture ldr_color_texture{};
 
-        // Per-pixel motion vectors the velocity pass wrote this frame
-        // (signed UV displacement in xy), or an invalid handle while
-        // temporal AA is off. The pass owns the target; @ref context
-        // publishes the handle here every frame so the TAA resolve can
-        // sample it without holding a pointer to its producer, and so a
-        // resize that recreates the target is picked up through the same
+        // Per-pixel motion vectors the velocity pass writes (signed UV
+        // displacement in xy), or an invalid handle on a degenerate
+        // drawable. The velocity pass only draws while a consumer needs it
+        // (temporal AA or motion blur), so the contents are stale while
+        // neither runs. The pass owns the target; @ref context publishes
+        // the handle here every frame so the TAA resolve and motion blur
+        // can sample it without holding a pointer to its producer, and so
+        // a resize that recreates the target is picked up through the same
         // handle comparison as @ref scene_depth_texture.
         gpu::texture velocity_texture{};
 
@@ -160,6 +176,24 @@ namespace rendering_engine
         // swapchain always receives a single anti-aliased image. Published
         // by @ref context from the pass that owns the target.
         gpu::texture taa_resolve_texture{};
+
+        // The 1x1 eye-adaptation result @ref tonemap_pass takes its
+        // exposure from (rgba16f: r = the adapted brightness in EV100,
+        // g = log2 of the exposure that maps it to middle grey, the
+        // compensation included), or an invalid handle while auto
+        // exposure is off or has nothing metered yet — tonemap then uses
+        // @ref post_settings::exposure. Owned by @ref auto_exposure_pass,
+        // which writes it this frame before tonemap reads it (or, on a
+        // no-camera frame, keeps the last adapted value); published by
+        // @ref context under the same rule the pass follows.
+        gpu::texture exposure_texture{};
+
+        // The colour-grading lookup table (the strip LUT described on
+        // @ref color_grading_settings) @ref tonemap_pass applies after the
+        // gamma encode, or an invalid handle while grading is off (no
+        // path, a table that failed to load, or a zero intensity). Loaded
+        // and owned by @ref context through the asset cache.
+        gpu::texture grading_lut_texture{};
 
         // Scene-wide atmospheric fog, copied from @ref context::set_fog
         // each frame. The scene pass packs it into the @ref view_globals
@@ -171,13 +205,14 @@ namespace rendering_engine
         // @ref context::set_post_settings each frame. @ref bloom_pass,
         // @ref taa_pass and @ref fxaa_pass read the fields they own here in
         // @c record and rewrite their own UBO only when a value differs
-        // from what they last uploaded (@ref volumetric_fog_pass rewrites
-        // its params every frame it draws, since they carry the camera
-        // and the noise frame too); @ref tonemap_pass is the exception
-        // — its exposure and operator are applied immediately by
-        // @ref context::set_post_settings through its own live-tunable
-        // setters, so it does not need to read this back. See
-        // @ref post_settings for why scene-wide fog is not part of it.
+        // from what they last uploaded (@ref volumetric_fog_pass,
+        // @ref motion_blur_pass and @ref auto_exposure_pass rewrite their
+        // params every frame they draw, since they carry the camera, the
+        // noise frame or the frame delta too); @ref tonemap_pass reads only
+        // the grading intensity here — its exposure and operator are
+        // applied immediately by @ref context::set_post_settings through
+        // its own live-tunable setters. See @ref post_settings for why
+        // scene-wide fog is not part of it.
         post_settings post{};
     };
 
