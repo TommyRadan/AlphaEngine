@@ -679,23 +679,54 @@ namespace rendering_engine::gpu::backend::vulkan
             }
         }
 
+        // One descriptor set per frame slot when the group binds a
+        // multi-buffered buffer (a dynamic_data buffer on a device with
+        // several frames in flight), so each slot's set points at that
+        // slot's copy; otherwise one set serves every slot. See
+        // vk_bind_group::descriptor_sets.
+        record.set_count = 1;
+        for (const auto& entry : descriptor.entries)
+        {
+            if (entry.kind != binding_kind::uniform_buffer && entry.kind != binding_kind::storage_buffer)
+            {
+                continue;
+            }
+            const auto* buf = m_buffers.lookup(entry.buffer_value.id);
+            if (buf != nullptr && buf->region_count > 1)
+            {
+                record.set_count = buf->region_count;
+                break;
+            }
+        }
+
         // From the pool chain: an exhausted pool grows the chain and
         // the allocation is retried, so the per-draw / per-material
         // churn of a larger scene never silently produces an invalid
-        // group. The pool is recorded so destroy() frees the set to
+        // group. Each set's pool is recorded so destroy() frees it to
         // the pool it came from.
-        if (!allocate_descriptor_set(layout_record->object, record.descriptor_set, record.pool))
+        for (uint32_t set_index = 0; set_index < record.set_count; ++set_index)
         {
-            LOG_ERR("vk_device::create_bind_group: no descriptor set could be allocated; the bind group is invalid");
-            return {};
+            if (!allocate_descriptor_set(
+                    layout_record->object, record.descriptor_sets[set_index], record.pools[set_index]))
+            {
+                LOG_ERR("vk_device::create_bind_group: no descriptor set could be allocated; the bind group is "
+                        "invalid");
+                for (uint32_t freed = 0; freed < set_index; ++freed)
+                {
+                    vk_check(vkFreeDescriptorSets(m_device, record.pools[freed], 1, &record.descriptor_sets[freed]),
+                             "vkFreeDescriptorSets");
+                }
+                return {};
+            }
         }
 
         std::vector<VkDescriptorBufferInfo> buffer_infos;
         std::vector<VkDescriptorImageInfo> image_infos;
         std::vector<VkWriteDescriptorSet> writes;
-        buffer_infos.reserve(descriptor.entries.size());
-        image_infos.reserve(descriptor.entries.size());
-        writes.reserve(descriptor.entries.size());
+        const size_t write_capacity = descriptor.entries.size() * record.set_count;
+        buffer_infos.reserve(write_capacity);
+        image_infos.reserve(write_capacity);
+        writes.reserve(write_capacity);
 
         // A standalone sampler entry pairs with the texture entry at
         // the same binding number: the texture's combined image
@@ -719,128 +750,150 @@ namespace rendering_engine::gpu::backend::vulkan
             return VK_NULL_HANDLE;
         };
 
-        for (const auto& entry : descriptor.entries)
+        // Every set gets the same descriptors, except that a buffer
+        // with several regions is bound at set s through region s. The
+        // per-entry problems are reported once, from the first set.
+        for (uint32_t set_index = 0; set_index < record.set_count; ++set_index)
         {
-            VkWriteDescriptorSet w{};
-            w.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            w.dstSet = record.descriptor_set;
-            w.dstBinding = entry.binding;
-            w.descriptorCount = 1;
+            const bool report = set_index == 0;
+            for (const auto& entry : descriptor.entries)
+            {
+                VkWriteDescriptorSet w{};
+                w.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                w.dstSet = record.descriptor_sets[set_index];
+                w.dstBinding = entry.binding;
+                w.descriptorCount = 1;
 
-            switch (entry.kind)
-            {
-            case binding_kind::uniform_buffer:
-            case binding_kind::storage_buffer:
-            {
-                auto* buf = m_buffers.lookup(entry.buffer_value.id);
-                if (buf == nullptr || buf->object == VK_NULL_HANDLE)
+                switch (entry.kind)
                 {
-                    continue;
-                }
-                const bool dynamic = entry.kind == binding_kind::uniform_buffer && dynamic_binding(entry.binding);
-                if (dynamic && entry.size == 0)
+                case binding_kind::uniform_buffer:
+                case binding_kind::storage_buffer:
                 {
-                    // VK_WHOLE_SIZE resolves against the base offset, so
-                    // any non-zero dynamic offset would run past the end.
-                    LOG_WRN("vk_device::create_bind_group: dynamic uniform buffer at binding %u has no size; "
-                            "only a zero dynamic offset stays inside the buffer",
-                            entry.binding);
-                }
-                VkDescriptorBufferInfo bi{};
-                bi.buffer = buf->object;
-                bi.offset = entry.offset;
-                bi.range = entry.size != 0 ? entry.size : VK_WHOLE_SIZE;
-                buffer_infos.push_back(bi);
-                w.descriptorType = to_descriptor_type(entry.kind, dynamic);
-                w.pBufferInfo = &buffer_infos.back();
-                writes.push_back(w);
-                break;
-            }
-            case binding_kind::texture:
-            {
-                auto* tex = m_textures.lookup(entry.texture_value.id);
-                if (tex == nullptr || tex->view == VK_NULL_HANDLE)
-                {
-                    // Unset/invalid sampler slot. Vulkan requires every
-                    // statically-used descriptor to reference a valid
-                    // resource, so substitute the 1x1 placeholder of the
-                    // dimension this binding declares (a material may
-                    // leave maps unbound — e.g. no albedo, or no IBL
-                    // cube when no environment is attached). OpenGL just
-                    // leaves the sampler unbound, which is why it never
-                    // tripped here.
-                    texture_dimension dim = texture_dimension::d2;
-                    for (const auto& layout_entry : layout_record->descriptor.entries)
-                    {
-                        if (layout_entry.binding == entry.binding)
-                        {
-                            dim = layout_entry.dimension;
-                            break;
-                        }
-                    }
-                    tex = m_textures.lookup(default_texture(dim).id);
-                    if (tex == nullptr || tex->view == VK_NULL_HANDLE)
+                    auto* buf = m_buffers.lookup(entry.buffer_value.id);
+                    if (buf == nullptr || buf->object == VK_NULL_HANDLE)
                     {
                         continue;
                     }
+                    const bool dynamic = entry.kind == binding_kind::uniform_buffer && dynamic_binding(entry.binding);
+                    if (report && dynamic && entry.size == 0)
+                    {
+                        // VK_WHOLE_SIZE resolves against the base offset, so
+                        // any non-zero dynamic offset would run past the end.
+                        LOG_WRN("vk_device::create_bind_group: dynamic uniform buffer at binding %u has no size; "
+                                "only a zero dynamic offset stays inside the buffer",
+                                entry.binding);
+                    }
+                    VkDescriptorBufferInfo bi{};
+                    bi.buffer = buf->object;
+                    bi.offset = entry.offset;
+                    bi.range = entry.size != 0 ? entry.size : VK_WHOLE_SIZE;
+                    if (buf->region_count > 1)
+                    {
+                        // Set s reads region s. VK_WHOLE_SIZE would run to
+                        // the end of the last region, so "the rest of the
+                        // buffer" is the rest of this one copy.
+                        bi.offset += set_index * buf->region_stride;
+                        if (entry.size == 0)
+                        {
+                            const auto copy_size = static_cast<VkDeviceSize>(buf->size);
+                            bi.range = copy_size - std::min<VkDeviceSize>(entry.offset, copy_size);
+                        }
+                    }
+                    buffer_infos.push_back(bi);
+                    w.descriptorType = to_descriptor_type(entry.kind, dynamic);
+                    w.pBufferInfo = &buffer_infos.back();
+                    writes.push_back(w);
+                    break;
                 }
-                VkSampler sampler = standalone_sampler(entry.binding);
-                if (sampler == VK_NULL_HANDLE)
+                case binding_kind::texture:
                 {
-                    sampler = tex->default_sampler;
+                    auto* tex = m_textures.lookup(entry.texture_value.id);
+                    if (tex == nullptr || tex->view == VK_NULL_HANDLE)
+                    {
+                        // Unset/invalid sampler slot. Vulkan requires every
+                        // statically-used descriptor to reference a valid
+                        // resource, so substitute the 1x1 placeholder of the
+                        // dimension this binding declares (a material may
+                        // leave maps unbound — e.g. no albedo, or no IBL
+                        // cube when no environment is attached). OpenGL just
+                        // leaves the sampler unbound, which is why it never
+                        // tripped here.
+                        texture_dimension dim = texture_dimension::d2;
+                        for (const auto& layout_entry : layout_record->descriptor.entries)
+                        {
+                            if (layout_entry.binding == entry.binding)
+                            {
+                                dim = layout_entry.dimension;
+                                break;
+                            }
+                        }
+                        tex = m_textures.lookup(default_texture(dim).id);
+                        if (tex == nullptr || tex->view == VK_NULL_HANDLE)
+                        {
+                            continue;
+                        }
+                    }
+                    VkSampler sampler = standalone_sampler(entry.binding);
+                    if (sampler == VK_NULL_HANDLE)
+                    {
+                        sampler = tex->default_sampler;
+                    }
+                    if (sampler == VK_NULL_HANDLE)
+                    {
+                        // The texture's own sampler failed to create (logged
+                        // then). A combined-image-sampler descriptor must
+                        // name a valid sampler, so the device's fallback
+                        // stands in rather than a null handle reaching
+                        // vkUpdateDescriptorSets.
+                        if (report)
+                        {
+                            LOG_ERR("vk_device::create_bind_group: texture %llu bound at %u has no sampler; "
+                                    "using the device fallback sampler",
+                                    static_cast<unsigned long long>(entry.texture_value.id),
+                                    entry.binding);
+                        }
+                        sampler = m_fallback_sampler;
+                    }
+                    VkDescriptorImageInfo ii{};
+                    ii.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                    ii.imageView = tex->view;
+                    ii.sampler = sampler;
+                    image_infos.push_back(ii);
+                    w.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+                    w.pImageInfo = &image_infos.back();
+                    writes.push_back(w);
+                    break;
                 }
-                if (sampler == VK_NULL_HANDLE)
+                case binding_kind::storage_texture:
                 {
-                    // The texture's own sampler failed to create (logged
-                    // then). A combined-image-sampler descriptor must
-                    // name a valid sampler, so the device's fallback
-                    // stands in rather than a null handle reaching
-                    // vkUpdateDescriptorSets.
-                    LOG_ERR("vk_device::create_bind_group: texture %llu bound at %u has no sampler; "
-                            "using the device fallback sampler",
-                            static_cast<unsigned long long>(entry.texture_value.id),
-                            entry.binding);
-                    sampler = m_fallback_sampler;
+                    auto* tex = m_textures.lookup(entry.texture_value.id);
+                    if (tex == nullptr || tex->image == VK_NULL_HANDLE)
+                    {
+                        continue;
+                    }
+                    // A storage descriptor must name exactly one mip level,
+                    // so it binds the lazily-built single-level view rather
+                    // than the whole-chain sampling view.
+                    const VkImageView storage_view = storage_image_view(*tex, entry.storage_level);
+                    if (storage_view == VK_NULL_HANDLE)
+                    {
+                        continue;
+                    }
+                    VkDescriptorImageInfo ii{};
+                    ii.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+                    ii.imageView = storage_view;
+                    image_infos.push_back(ii);
+                    w.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+                    w.pImageInfo = &image_infos.back();
+                    writes.push_back(w);
+                    break;
                 }
-                VkDescriptorImageInfo ii{};
-                ii.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-                ii.imageView = tex->view;
-                ii.sampler = sampler;
-                image_infos.push_back(ii);
-                w.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-                w.pImageInfo = &image_infos.back();
-                writes.push_back(w);
-                break;
-            }
-            case binding_kind::storage_texture:
-            {
-                auto* tex = m_textures.lookup(entry.texture_value.id);
-                if (tex == nullptr || tex->image == VK_NULL_HANDLE)
-                {
-                    continue;
+                case binding_kind::sampler:
+                    // Folded into the combined image sampler of the texture
+                    // bound at the same binding (standalone_sampler above);
+                    // see the comment at the top of the file.
+                    break;
                 }
-                // A storage descriptor must name exactly one mip level,
-                // so it binds the lazily-built single-level view rather
-                // than the whole-chain sampling view.
-                const VkImageView storage_view = storage_image_view(*tex, entry.storage_level);
-                if (storage_view == VK_NULL_HANDLE)
-                {
-                    continue;
-                }
-                VkDescriptorImageInfo ii{};
-                ii.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-                ii.imageView = storage_view;
-                image_infos.push_back(ii);
-                w.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-                w.pImageInfo = &image_infos.back();
-                writes.push_back(w);
-                break;
-            }
-            case binding_kind::sampler:
-                // Folded into the combined image sampler of the texture
-                // bound at the same binding (standalone_sampler above);
-                // see the comment at the top of the file.
-                break;
             }
         }
         if (!writes.empty())
@@ -861,23 +914,29 @@ namespace rendering_engine::gpu::backend::vulkan
             return;
         }
         VkDevice dev = m_device;
-        // The set goes back to the pool it was allocated from, which
+        // Each set goes back to the pool it was allocated from, which
         // need not be the chain's current pool.
-        VkDescriptorPool pool = record->pool;
-        VkDescriptorSet set = record->descriptor_set;
+        const std::array<VkDescriptorPool, k_max_frames_in_flight> pools = record->pools;
+        const std::array<VkDescriptorSet, k_max_frames_in_flight> sets = record->descriptor_sets;
+        const uint32_t set_count = record->set_count;
         // Same deferred-destroy rationale as in destroy(buffer): the
-        // descriptor set might still be referenced by an in-flight
+        // descriptor sets might still be referenced by an in-flight
         // command buffer.
         enqueue_destroy(
-            [dev, pool, set]
+            [dev, pools, sets, set_count]
             {
-                if (set != VK_NULL_HANDLE && pool != VK_NULL_HANDLE)
+                for (uint32_t set_index = 0; set_index < set_count; ++set_index)
                 {
-                    vk_check(vkFreeDescriptorSets(dev, pool, 1, &set), "vkFreeDescriptorSets");
+                    if (sets[set_index] != VK_NULL_HANDLE && pools[set_index] != VK_NULL_HANDLE)
+                    {
+                        vk_check(vkFreeDescriptorSets(dev, pools[set_index], 1, &sets[set_index]),
+                                 "vkFreeDescriptorSets");
+                    }
                 }
             });
-        record->descriptor_set = VK_NULL_HANDLE;
-        record->pool = VK_NULL_HANDLE;
+        record->descriptor_sets.fill(VK_NULL_HANDLE);
+        record->pools.fill(VK_NULL_HANDLE);
+        record->set_count = 0;
         m_bind_groups.remove(handle.id);
     }
 } // namespace rendering_engine::gpu::backend::vulkan

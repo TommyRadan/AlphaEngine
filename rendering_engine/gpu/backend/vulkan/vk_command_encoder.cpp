@@ -279,7 +279,9 @@ namespace rendering_engine::gpu::backend::vulkan
         VkFramebuffer framebuffer = VK_NULL_HANDLE;
         if (target->is_swapchain)
         {
-            const uint32_t idx = device.current_swapchain_image_index();
+            // The acquired image paired with this frame slot's depth
+            // buffer.
+            const uint32_t idx = device.swapchain_framebuffer_index(device.current_swapchain_image_index());
             if (idx < variant->framebuffers.size())
             {
                 framebuffer = variant->framebuffers[idx];
@@ -407,8 +409,12 @@ namespace rendering_engine::gpu::backend::vulkan
         {
             return;
         }
+        // A multi-buffered buffer (an instance stream, the sprite
+        // batch's quads) is read through this frame slot's copy, brought
+        // up to date first.
+        m_device.ensure_host_region_current(*buf);
         VkBuffer obj = buf->object;
-        VkDeviceSize off = offset;
+        VkDeviceSize off = m_device.host_region_offset(*buf) + offset;
         // The pipeline declares VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING
         // _STRIDE_EXT when the extension is available, in which case
         // the spec requires the stride to be supplied via
@@ -448,7 +454,8 @@ namespace rendering_engine::gpu::backend::vulkan
         {
             return;
         }
-        vkCmdBindIndexBuffer(m_cmd, buf->object, 0, to_vk_index_type(format));
+        m_device.ensure_host_region_current(*buf);
+        vkCmdBindIndexBuffer(m_cmd, buf->object, m_device.host_region_offset(*buf), to_vk_index_type(format));
     }
 
     void vk_render_pass_encoder::set_bind_group(uint32_t group,
@@ -460,7 +467,7 @@ namespace rendering_engine::gpu::backend::vulkan
             return;
         }
         auto* bg = m_device.lookup_bind_group(bind_group_handle);
-        if (bg == nullptr || bg->descriptor_set == VK_NULL_HANDLE)
+        if (bg == nullptr || bg->set_count == 0)
         {
             report_missing_bind_group(m_reported_bind_groups, "vk_render_pass_encoder", group, bind_group_handle);
             return;
@@ -470,12 +477,16 @@ namespace rendering_engine::gpu::backend::vulkan
         {
             return;
         }
+        // This frame slot's set: it reads the slot's copy of every
+        // multi-buffered buffer, each brought up to date first.
+        m_device.prepare_bind_group(*bg);
+        const VkDescriptorSet set = bg->descriptor_set(m_device.frame_slot());
         vkCmdBindDescriptorSets(m_cmd,
                                 VK_PIPELINE_BIND_POINT_GRAPHICS,
                                 m_current_pipeline_layout,
                                 group,
                                 1,
-                                &bg->descriptor_set,
+                                &set,
                                 static_cast<uint32_t>(dynamic_offsets.size()),
                                 dynamic_offsets.data());
     }
@@ -547,7 +558,8 @@ namespace rendering_engine::gpu::backend::vulkan
         {
             return;
         }
-        vkCmdDrawIndexedIndirect(m_cmd, buf->object, offset, 1, 0);
+        m_device.ensure_host_region_current(*buf);
+        vkCmdDrawIndexedIndirect(m_cmd, buf->object, m_device.host_region_offset(*buf) + offset, 1, 0);
     }
 
     void vk_render_pass_encoder::multi_draw_indexed_indirect(buffer indirect_buffer,
@@ -564,6 +576,8 @@ namespace rendering_engine::gpu::backend::vulkan
         {
             return;
         }
+        m_device.ensure_host_region_current(*buf);
+        const VkDeviceSize base = m_device.host_region_offset(*buf) + offset;
         if (draw_count > 1 && !m_device.features().multi_draw_indirect)
         {
             // Without multiDrawIndirect a drawCount above one is
@@ -571,11 +585,11 @@ namespace rendering_engine::gpu::backend::vulkan
             // by the caller's stride.
             for (uint32_t i = 0; i < draw_count; ++i)
             {
-                vkCmdDrawIndexedIndirect(m_cmd, buf->object, offset + static_cast<VkDeviceSize>(i) * stride, 1, stride);
+                vkCmdDrawIndexedIndirect(m_cmd, buf->object, base + static_cast<VkDeviceSize>(i) * stride, 1, stride);
             }
             return;
         }
-        vkCmdDrawIndexedIndirect(m_cmd, buf->object, offset, draw_count, stride);
+        vkCmdDrawIndexedIndirect(m_cmd, buf->object, base, draw_count, stride);
     }
 
     void vk_render_pass_encoder::end()
@@ -627,7 +641,7 @@ namespace rendering_engine::gpu::backend::vulkan
             return;
         }
         auto* bg = m_device.lookup_bind_group(bind_group_handle);
-        if (bg == nullptr || bg->descriptor_set == VK_NULL_HANDLE)
+        if (bg == nullptr || bg->set_count == 0)
         {
             report_missing_bind_group(m_reported_bind_groups, "vk_compute_pass_encoder", group, bind_group_handle);
             return;
@@ -650,12 +664,15 @@ namespace rendering_engine::gpu::backend::vulkan
                 m_storage_textures.push_back(entry.texture_value);
             }
         }
+        // This frame slot's set; see vk_render_pass_encoder::set_bind_group.
+        m_device.prepare_bind_group(*bg);
+        const VkDescriptorSet set = bg->descriptor_set(m_device.frame_slot());
         vkCmdBindDescriptorSets(m_cmd,
                                 VK_PIPELINE_BIND_POINT_COMPUTE,
                                 m_current_pipeline_layout,
                                 group,
                                 1,
-                                &bg->descriptor_set,
+                                &set,
                                 static_cast<uint32_t>(dynamic_offsets.size()),
                                 dynamic_offsets.data());
     }
@@ -741,9 +758,14 @@ namespace rendering_engine::gpu::backend::vulkan
         {
             return;
         }
+        // Both sides go through this frame slot's copy. A GPU write
+        // into a multi-buffered destination reaches that copy alone:
+        // the device carries host writes across the copies, not what
+        // the GPU wrote (see vk_buffer::region_count).
+        m_device.ensure_host_region_current(*src_buf);
         VkBufferCopy region{};
-        region.srcOffset = src_offset;
-        region.dstOffset = dst_offset;
+        region.srcOffset = m_device.host_region_offset(*src_buf) + src_offset;
+        region.dstOffset = m_device.host_region_offset(*dst_buf) + dst_offset;
         region.size = size;
         vkCmdCopyBuffer(m_cmd, src_buf->object, dst_buf->object, 1, &region);
     }
@@ -759,7 +781,8 @@ namespace rendering_engine::gpu::backend::vulkan
         {
             return;
         }
-        vkCmdFillBuffer(m_cmd, buf->object, offset, size, value);
+        // See copy_buffer_to_buffer on a multi-buffered destination.
+        vkCmdFillBuffer(m_cmd, buf->object, m_device.host_region_offset(*buf) + offset, size, value);
     }
 
     void vk_command_encoder::barrier(pipeline_stage src_stage,
@@ -838,7 +861,9 @@ namespace rendering_engine::gpu::backend::vulkan
                              nullptr);
         const VkImageLayout rest = dst_tex->layout;
         m_device.record_layout_transition(m_cmd, *dst_tex, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-        const VkBufferImageCopy copy = make_buffer_image_copy(*dst_tex, region, src_offset);
+        m_device.ensure_host_region_current(*src_buf);
+        const VkBufferImageCopy copy =
+            make_buffer_image_copy(*dst_tex, region, m_device.host_region_offset(*src_buf) + src_offset);
         vkCmdCopyBufferToImage(m_cmd, src_buf->object, dst_tex->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
         m_device.record_layout_transition(
             m_cmd, *dst_tex, rest == VK_IMAGE_LAYOUT_UNDEFINED ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : rest);
@@ -872,7 +897,9 @@ namespace rendering_engine::gpu::backend::vulkan
         }
         const VkImageLayout rest = src_tex->layout;
         m_device.record_layout_transition(m_cmd, *src_tex, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-        const VkBufferImageCopy copy = make_buffer_image_copy(*src_tex, region, dst_offset);
+        // See copy_buffer_to_buffer on a multi-buffered destination.
+        const VkBufferImageCopy copy =
+            make_buffer_image_copy(*src_tex, region, m_device.host_region_offset(*dst_buf) + dst_offset);
         vkCmdCopyImageToBuffer(m_cmd, src_tex->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, dst_buf->object, 1, &copy);
         m_device.record_layout_transition(
             m_cmd, *src_tex, rest == VK_IMAGE_LAYOUT_UNDEFINED ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : rest);

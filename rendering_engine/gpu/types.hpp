@@ -391,6 +391,23 @@ namespace rendering_engine::gpu
     // backend places @c static_data in device-local memory (filled
     // through its staging ring) and keeps the other two host-visible
     // and persistently mapped.
+    // Where a buffer lives and how the host may write it.
+    //
+    //   static_data   Filled once (initial data or the odd write_buffer)
+    //                 and read by the GPU: device-local memory, written
+    //                 through a staging copy ordered ahead of the frame.
+    //   dynamic_data  Rewritten from the host, wholly or in part, at any
+    //                 rate: host-visible and persistently mapped, so a
+    //                 write is a memcpy. A backend with several frames in
+    //                 flight keeps one copy per frame slot and carries
+    //                 every write across the copies, so the caller writes
+    //                 it like a single buffer and the GPU never reads a
+    //                 copy the host is writing.
+    //   stream_data   Host-visible and mapped like dynamic_data, but a
+    //                 single copy: the caller partitions it per frame in
+    //                 flight itself (the per-draw ring's regions, sized by
+    //                 device::frames_in_flight) or otherwise never writes
+    //                 what a frame in flight may read.
     enum class buffer_usage_hint
     {
         static_data,

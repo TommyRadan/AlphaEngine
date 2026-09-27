@@ -45,6 +45,13 @@
 
 namespace rendering_engine::gpu::backend::vulkan
 {
+    // Most frames the backend can keep in flight; the per-frame rings
+    // (sync objects, command pools, swapchain depth images, the copies
+    // of a dynamic buffer, a bind group's descriptor sets) are sized by
+    // it and the runtime count (core::graphics_settings::frames_in_flight)
+    // is clamped to it.
+    inline constexpr uint32_t k_max_frames_in_flight = 2;
+
     struct vk_buffer
     {
         VkBuffer object{VK_NULL_HANDLE};
@@ -52,6 +59,9 @@ namespace rendering_engine::gpu::backend::vulkan
         // allocation are created and destroyed as one
         // (vmaCreateBuffer / vmaDestroyBuffer).
         VmaAllocation allocation{VK_NULL_HANDLE};
+        // The size the caller asked for: what one copy holds and what
+        // every offset is checked against. @c object is
+        // @c region_count * @c region_stride bytes long.
         size_t size{0};
         buffer_usage usage{0};
         buffer_usage_hint hint{buffer_usage_hint::static_data};
@@ -61,6 +71,35 @@ namespace rendering_engine::gpu::backend::vulkan
         // device-local buffers; those are written through the staging
         // ring in @c vk_device::write_buffer.
         void* mapped{nullptr};
+
+        // A dynamic_data buffer on a device with several frames in
+        // flight holds one copy ("region") of its @c size bytes per
+        // frame slot, @c region_stride apart (the size rounded up to
+        // the uniform / storage offset alignment), so the host writes
+        // the current frame's copy while the frames in flight read
+        // theirs. Every write lands in the current slot's region; the
+        // regions of the other slots fall behind and each records, as
+        // one byte span, the union of the writes it has missed
+        // (@c gap): before a region is written or bound again the
+        // device copies that span across from @c latest_region — the
+        // region every write so far has reached — so a buffer written
+        // once and one rewritten every frame both read as a single
+        // buffer would. A single-region buffer (static, stream, or one
+        // frame in flight) has @c region_count 1 and no bookkeeping.
+        struct region_gap
+        {
+            VkDeviceSize begin{0};
+            VkDeviceSize end{0};
+
+            bool empty() const noexcept
+            {
+                return end <= begin;
+            }
+        };
+        uint32_t region_count{1};
+        VkDeviceSize region_stride{0};
+        uint32_t latest_region{0};
+        std::array<region_gap, k_max_frames_in_flight> gaps{};
     };
 
     struct vk_texture
@@ -199,15 +238,34 @@ namespace rendering_engine::gpu::backend::vulkan
     struct vk_bind_group
     {
         bind_group_layout layout{};
-        VkDescriptorSet descriptor_set{VK_NULL_HANDLE};
-        // The pool of the device's grow-on-demand chain the set was
-        // allocated from; a set is only ever freed back to that pool.
-        VkDescriptorPool pool{VK_NULL_HANDLE};
+        // One descriptor set per frame slot when any buffer the group
+        // binds is multi-buffered (see vk_buffer::region_count): set
+        // @c s points at region @c s of each such buffer, and a bind
+        // picks the set of the current frame slot. Otherwise a single
+        // set, which every slot binds. The sets are written once, at
+        // creation, and never updated.
+        std::array<VkDescriptorSet, k_max_frames_in_flight> descriptor_sets{};
+        uint32_t set_count{0};
+        // The pool of the device's grow-on-demand chain each set was
+        // allocated from (the chain may grow between two sets of one
+        // group); a set is only ever freed back to its own pool.
+        std::array<VkDescriptorPool, k_max_frames_in_flight> pools{};
         std::vector<binding_value> entries;
         // Dynamic uniform-buffer slots of the layout the set was
         // allocated with: how many offsets every bind must pass. Kept
         // here because the layout may be destroyed before the group.
         uint32_t dynamic_count{0};
+
+        // The set to bind for frame slot @p slot; null for a group whose
+        // allocation failed or that was destroyed.
+        VkDescriptorSet descriptor_set(uint32_t slot) const noexcept
+        {
+            if (set_count == 0)
+            {
+                return VK_NULL_HANDLE;
+            }
+            return descriptor_sets[set_count == 1 ? 0 : slot % set_count];
+        }
     };
 
     // One attachment of an off-screen target: the texture it renders

@@ -30,20 +30,30 @@
  * swapchain / render targets / queries / encoders / lookup_*,
  * vk_device_buffer.cpp for buffers, etc.).
  *
- * The backend ships with a single frame in flight, runtime SPIR-V
- * via @ref gpu::compile_glsl_to_spirv (already used by the GL
- * backend) and no multi-threaded recording. Device memory comes from
- * the Vulkan Memory Allocator (vk_allocator.hpp): every buffer and
- * image is a sub-allocation of VMA's memory blocks rather than its own
+ * The backend keeps up to k_max_frames_in_flight frames in flight
+ * (core::graphics_settings::frames_in_flight, 2 by default): each
+ * frame records into its own slot — an image-available semaphore, an
+ * in-flight fence, a command pool and a swapchain depth image — and
+ * begin_frame waits only for the frame that last used the slot, so the
+ * CPU records frame N+1 while the GPU draws frame N. Everything the
+ * host rewrites is kept apart per slot: a dynamic_data buffer holds one
+ * copy per slot and a bind group over one holds one descriptor set per
+ * slot (see vk_buffer::region_count), so no host write ever lands in
+ * memory a frame in flight reads. Resources are destroyed through a
+ * queue gated on the queue submission that could last have referenced
+ * them (see enqueue_destroy). Shaders are runtime SPIR-V via
+ * @ref gpu::compile_glsl_to_spirv (already used by the GL backend);
+ * there is no multi-threaded recording. Device memory comes from the
+ * Vulkan Memory Allocator (vk_allocator.hpp): every buffer and image is
+ * a sub-allocation of VMA's memory blocks rather than its own
  * vkAllocateMemory, and host-visible buffers are persistently mapped
  * by their allocation. Uploads go through one persistently mapped
  * staging ring and a batched transfer command buffer that is submitted
- * with its own fence ahead of the frame (see stage_upload); the frame
- * command buffers live in a per-frame command pool that is reset at
- * begin_frame. Compute pipelines and storage-image bind groups are
- * implemented (the IBL convolution runs on the GPU just like OpenGL),
- * as are indirect draws, memory barriers, the buffer <-> texture
- * copies, timestamp queries and the VK_EXT_debug_utils labels.
+ * with its own fence ahead of the frame (see stage_upload). Compute
+ * pipelines and storage-image bind groups are implemented (the IBL
+ * convolution runs on the GPU just like OpenGL), as are indirect draws,
+ * memory barriers, the buffer <-> texture copies, timestamp queries
+ * and the VK_EXT_debug_utils labels.
  */
 
 #pragma once
@@ -152,29 +162,35 @@ namespace rendering_engine::gpu::backend::vulkan
         // Queue the encoder's command buffer, after flushing the open
         // transfer batch ahead of it so every upload recorded so far
         // lands first in queue order. Inside a frame that has acquired
-        // a swapchain image the submission waits the image-available
-        // semaphore, signals that image's render-finished semaphore
-        // and the in-flight fence, and leaves the present to
-        // end_frame. Outside a frame (or in a frame whose passes never
-        // reached the swapchain) the work is queued on the in-flight
-        // fence alone — no semaphores, no present, no idle wait — and
-        // the next begin_frame waits for it like a frame.
+        // a swapchain image the submission waits the slot's
+        // image-available semaphore, signals that image's
+        // render-finished semaphore and the slot's in-flight fence, and
+        // leaves the present to end_frame. Outside a frame (or in a
+        // frame whose passes never reached the swapchain) the work is
+        // queued on the current slot's fence alone — no semaphores, no
+        // present, no idle wait — and the next begin_frame of that slot
+        // waits for it like a frame.
         void submit(std::unique_ptr<command_encoder> encoder) override;
 
-        // Frame boundary. begin_frame waits the in-flight fence for
-        // the previous frame's command buffer, reclaims every transfer
-        // batch that has completed (waiting for one that has not, which
-        // only happens before the first frame), resets the frame's
-        // command pool and drains the deferred-destroy queue, so every
+        // Frame boundary. begin_frame waits the in-flight fence of the
+        // frame's slot — armed by the frame that last recorded into it,
+        // frames_in_flight() frames ago — reclaims every transfer batch
+        // that has completed, resets the slot's command pool and drains
+        // the deferred destroys whose submission has retired, so every
         // host write the renderer makes afterwards lands in memory the
         // GPU is done with. It does not acquire an image; while the
         // swapchain is suspended it polls the surface and rebuilds as
         // soon as the extent is usable again. end_frame presents the
         // image acquired this frame (when submit queued work against
         // it), rebuilds the swapchain if the present reported it out of
-        // date or suboptimal, and rolls the per-frame bookkeeping.
+        // date or suboptimal, and advances to the next slot.
         void begin_frame() override;
         void end_frame() override;
+
+        // The slot ring: see gpu::device. The count is read from the
+        // settings at init and clamped to k_max_frames_in_flight.
+        uint32_t frames_in_flight() const noexcept override;
+        uint32_t frame_slot() const noexcept override;
 
         // Internal accessors used by the encoder to map handles
         // back to records. Definitions in vk_device.cpp.
@@ -221,6 +237,11 @@ namespace rendering_engine::gpu::backend::vulkan
         uint64_t swapchain_generation() const noexcept;
         uint32_t current_swapchain_image_index() const noexcept;
         bool have_current_swapchain_image() const noexcept;
+        // Index into a swapchain variant's framebuffers of the one
+        // that attaches swapchain image @p image_index together with
+        // the current frame slot's depth image (one per slot, so two
+        // frames in flight never share a depth buffer).
+        uint32_t swapchain_framebuffer_index(uint32_t image_index) const noexcept;
         bool depth_clip_control_enabled() const noexcept;
         // True when VK_EXT_extended_dynamic_state is enabled. Lets
         // the encoder fall back to vkCmdBindVertexBuffers when the
@@ -304,10 +325,12 @@ namespace rendering_engine::gpu::backend::vulkan
         // extent (minimised) suspends instead and the frame skips the
         // swapchain. Because a rebuild retires the swapchain target's
         // render-pass variants, callers read nothing from that target
-        // until this returns. The in-flight fence is not touched here —
+        // until this returns. The slot's fence is not touched here —
         // submit resets it right before the queue submission that
         // signals it, so a failed acquire never leaves it unsignaled
-        // for the next begin_frame to block on.
+        // for the next begin_frame to block on. An image handed back
+        // while the frame that last drew it is still in flight waits
+        // that frame's fence (see m_image_last_slot).
         void acquire_swapchain_image();
 
         // -- Uploads ------------------------------------------------------
@@ -378,6 +401,29 @@ namespace rendering_engine::gpu::backend::vulkan
         // or the allocation failed (logged).
         VkCommandBuffer acquire_frame_command_buffer();
 
+        // -- Multi-buffered host-visible buffers ---------------------------
+        //
+        // See vk_buffer::region_count. A dynamic_data buffer's writes and
+        // binds all go to the current frame slot's region; these bring a
+        // region up to date before the GPU or the host touches it.
+
+        // Byte offset of the current frame slot's region within
+        // @p record's VkBuffer: what every bind and copy adds to the
+        // caller's offset. 0 for a single-region buffer.
+        VkDeviceSize host_region_offset(const vk_buffer& record) const noexcept;
+
+        // Copy across whatever the current slot's region of @p record
+        // has missed since it was last written, so a bind of it reads
+        // the buffer's latest contents. Called by the encoder for every
+        // buffer it binds or copies from; a no-op for a single-region
+        // buffer or a region that is up to date. Outside a frame the
+        // slot's fence is waited first, since the frame that last used
+        // the slot may still be reading the region.
+        void ensure_host_region_current(vk_buffer& record);
+
+        // ensure_host_region_current for every buffer @p group binds.
+        void prepare_bind_group(vk_bind_group& group);
+
         // Allocate one descriptor set of @p layout from the pool chain:
         // the newest pool first, and when it is exhausted
         // (VK_ERROR_OUT_OF_POOL_MEMORY / VK_ERROR_FRAGMENTED_POOL) a
@@ -411,29 +457,32 @@ namespace rendering_engine::gpu::backend::vulkan
         void note_draw(uint32_t vertex_count);
         void note_draw_indexed(uint32_t index_count);
 
-        // Destroy callbacks queued from @c destroy() overloads. With
-        // a single frame in flight, freeing a buffer or descriptor
-        // set during the frame that submitted it would land the
-        // free while the GPU is still reading from it; the engine's
-        // per-draw UBO / bind-group churn used to trigger streams of
-        // VUID-vkDestroyBuffer-buffer-00922 / VUID-vkFreeDescriptor
-        // Sets-pDescriptorSets-00309. Each @c destroy() pushes a
-        // closure here; @c drain_pending_destroys runs only at two
-        // points where nothing can reference the resources: in
-        // @c begin_frame, after @c vkWaitForFences and before the
-        // renderer records anything for the new frame (so a bind
-        // group a material rebuilds mid-frame is never freed while
-        // the open command buffer already references it), and under
-        // vkDeviceWaitIdle in @c quit. Destroys enqueued outside a
-        // frame — the IBL prefilter scaffold, start-up uploads —
-        // simply wait for the next of those two points; the
-        // out-of-frame submission that referenced them arms the
-        // in-flight fence, so the wait covers it too. A transfer batch
-        // may reference the resource as well — a copy into a buffer
-        // or image destroyed before the batch ran — so each entry
-        // records the newest batch id at enqueue time and a drain runs
-        // it only once every batch up to that id has retired, keeping
-        // the rest for a later drain.
+        // Destroy callbacks queued from @c destroy() overloads. Freeing
+        // a buffer or descriptor set while a command buffer that
+        // references it is executing, or still being recorded, is
+        // invalid (the engine's per-draw UBO / bind-group churn used to
+        // trigger streams of VUID-vkDestroyBuffer-buffer-00922 /
+        // VUID-vkFreeDescriptorSets-pDescriptorSets-00309), and with
+        // several frames in flight the previous frame's command buffer
+        // is still running when a resource is destroyed. Each
+        // @c destroy() pushes a closure here stamped with the serial of
+        // the last queue submission that can reference the resource:
+        // inside a frame that is the frame's own submission, still to
+        // come; outside a frame the most recent one, since nothing is
+        // being recorded. Every frame submission arms its slot's fence
+        // with its serial, and waiting a fence marks its serial — and
+        // every earlier one, which the queue completed first — retired.
+        // @c drain_pending_destroys runs the entries whose serial has
+        // retired, and only at two points where no open command buffer
+        // can reference them: in @c begin_frame, after the slot's fence
+        // wait and before the renderer records anything (so a bind
+        // group a material rebuilds mid-frame is never freed while the
+        // open command buffer already references it), and under
+        // vkDeviceWaitIdle in @c quit. A transfer batch may reference
+        // the resource as well — a copy into a buffer or image destroyed
+        // before the batch ran — so each entry also records the newest
+        // batch id at enqueue time and runs only once every batch up to
+        // that id has retired.
         void enqueue_destroy(std::function<void()> fn);
         void drain_pending_destroys();
 
@@ -504,8 +553,8 @@ namespace rendering_engine::gpu::backend::vulkan
         // the extension.
         void name_object(VkObjectType type, uint64_t object_handle, const char* name);
         // Build the swapchain for @p extent plus everything hanging off
-        // it (image views, the shared depth buffer, the per-image
-        // render-finished semaphores). The previous swapchain, if any,
+        // it (image views, one depth buffer per frame slot, the
+        // per-image render-finished semaphores). The previous swapchain, if any,
         // is handed over as oldSwapchain — which retires it whether or
         // not the call succeeds — and released here. Returns false,
         // with nothing left half-built, when any step fails; the caller
@@ -540,14 +589,27 @@ namespace rendering_engine::gpu::backend::vulkan
         void retire_render_pass_variants(vk_render_target& target, bool device_idle);
         void create_sync_objects();
         void destroy_sync_objects();
-        // Wait the in-flight fence when a submission armed it, and
-        // disarm it. Returns false when the wait failed (the device is
-        // then lost).
-        bool wait_in_flight_fence();
+        // Wait the in-flight fence of @p slot when a submission armed
+        // it, disarm it, and mark the submission it covers (and every
+        // earlier one) retired for the deferred destroys. Returns false
+        // when the wait failed (the device is then lost).
+        bool wait_slot_fence(uint32_t slot);
+        // After vkDeviceWaitIdle: every fence is idle and every
+        // submission has retired.
+        void note_device_idle();
         // vkResetCommandPool on the current frame's pool, after the
         // fence wait proved every buffer from it complete, and rewind
         // its hand-out cursor.
         void reset_frame_command_pool();
+        // Bring @p slot's region of @p record up to date except for
+        // [@p skip_begin, @p skip_end), which the caller is about to
+        // overwrite: copies the rest of the region's gap from the latest
+        // region and clears the gap.
+        void sync_host_region(vk_buffer& record, uint32_t slot, VkDeviceSize skip_begin, VkDeviceSize skip_end);
+        // Before the host writes a multi-buffered region outside a
+        // frame: the frame that last used the current slot may still
+        // read it, so its fence is waited (once; the wait disarms it).
+        void wait_slot_before_host_write();
 
         // One transfer batch: a command buffer from the transfer pool
         // and the fence its submission signals. A slot cycles
@@ -638,19 +700,23 @@ namespace rendering_engine::gpu::backend::vulkan
         // Frame command buffers. Each slot is a command pool plus the
         // primary buffers allocated from it so far, handed out in order
         // by acquire_frame_command_buffer and reclaimed together by a
-        // pool reset at begin_frame once the fence wait has proved them
-        // complete. One slot today (one frame in flight); the ring is
-        // sized so frames in flight (#169) can widen it and rotate
-        // m_frame_slot per frame.
+        // pool reset at begin_frame once the slot's fence wait has
+        // proved them complete. m_frames_in_flight slots are in use;
+        // m_frame_slot is the current frame's and advances at
+        // end_frame.
         struct frame_command_slot
         {
             VkCommandPool pool{VK_NULL_HANDLE};
             std::vector<VkCommandBuffer> buffers;
             size_t next{0};
         };
-        static constexpr uint32_t k_frames_in_flight = 1;
-        std::array<frame_command_slot, k_frames_in_flight> m_frame_command_slots{};
+        std::array<frame_command_slot, k_max_frames_in_flight> m_frame_command_slots{};
+        uint32_t m_frames_in_flight{1};
         uint32_t m_frame_slot{0};
+        // Between begin_frame and end_frame. Decides which submission a
+        // deferred destroy waits for and whether a host write to a
+        // multi-buffered region must wait the slot's fence itself.
+        bool m_in_frame{false};
 
         // Transfer batches (see the upload section above). The pool
         // allows per-buffer resets so an idle slot's buffer is reused
@@ -705,16 +771,38 @@ namespace rendering_engine::gpu::backend::vulkan
         VkExtent2D m_swapchain_extent{};
         std::vector<VkImage> m_swapchain_images;
         std::vector<VkImageView> m_swapchain_image_views;
-        VkImage m_swapchain_depth_image{VK_NULL_HANDLE};
-        VmaAllocation m_swapchain_depth_allocation{VK_NULL_HANDLE};
-        VkImageView m_swapchain_depth_view{VK_NULL_HANDLE};
+        // One depth buffer per frame slot: the swapchain passes of two
+        // frames in flight would otherwise write one image with no
+        // dependency between them. A swapchain framebuffer pairs an
+        // image with a slot's depth (see swapchain_framebuffer_index).
+        std::array<VkImage, k_max_frames_in_flight> m_swapchain_depth_images{};
+        std::array<VmaAllocation, k_max_frames_in_flight> m_swapchain_depth_allocations{};
+        std::array<VkImageView, k_max_frames_in_flight> m_swapchain_depth_views{};
         // The engine-side format of the swapchain depth buffer; the
         // VkFormat backing it is vk_format_for(m_swapchain_depth_format)
         // once resolve_depth_formats has run.
         texture_format m_swapchain_depth_format{texture_format::depth32_float};
         render_target m_swapchain_target{};
 
-        VkSemaphore m_image_available{VK_NULL_HANDLE};
+        // Per frame slot: the semaphore its acquire signals and its
+        // submission waits, and the fence its submission signals.
+        // begin_frame waits the slot's fence before the frame records
+        // anything and submit resets it right before the submission
+        // that signals it; the fences are created signaled so the first
+        // lap does not block. A fence is armed only by a submission
+        // that succeeded, so a failed vkQueueSubmit (nothing will ever
+        // signal the fence) does not leave a begin_frame waiting
+        // forever; the serial it was armed with is what the wait
+        // retires for the deferred destroys.
+        std::array<VkSemaphore, k_max_frames_in_flight> m_image_available{};
+        std::array<VkFence, k_max_frames_in_flight> m_in_flight_fences{};
+        std::array<bool, k_max_frames_in_flight> m_in_flight_fence_armed{};
+        std::array<uint64_t, k_max_frames_in_flight> m_fence_submit_serial{};
+        // Queue submissions of frame command buffers so far, and the
+        // highest serial a fence wait (or an idle wait) has proved
+        // complete; see enqueue_destroy.
+        uint64_t m_submit_serial{0};
+        uint64_t m_completed_submit_serial{0};
         // One render-finished semaphore per swapchain image, indexed by the
         // acquired image index. A semaphore tied to a specific image is not
         // re-signaled until that image is re-acquired, which the acquire/fence
@@ -723,15 +811,13 @@ namespace rendering_engine::gpu::backend::vulkan
         // and destroyed alongside the swapchain so it tracks image-count
         // changes on resize.
         std::vector<VkSemaphore> m_render_finished;
-        // Signaled by the frame submission in submit(); waited in
-        // begin_frame before the next frame records anything and reset
-        // right before the submission that signals it. Created
-        // signaled so frame 0 does not block. m_in_flight_fence_armed
-        // is set only by a submission that succeeded, so a failed
-        // vkQueueSubmit (nothing will ever signal the fence) does not
-        // leave the next begin_frame waiting forever.
-        VkFence m_in_flight_fence{VK_NULL_HANDLE};
-        bool m_in_flight_fence_armed{false};
+        // The frame slot that last rendered into each swapchain image
+        // (k_no_slot for none): the images-in-flight guard. An acquire
+        // that hands an image back while the frame that last drew it is
+        // still in flight waits that frame's fence first, so the image's
+        // render-finished semaphore is never re-signaled while pending.
+        static constexpr uint32_t k_no_slot = UINT32_MAX;
+        std::vector<uint32_t> m_image_last_slot;
         uint32_t m_current_image_index{0};
         bool m_have_current_image{false};
         // Set by the first acquire_swapchain_image of a frame, whatever
@@ -772,10 +858,12 @@ namespace rendering_engine::gpu::backend::vulkan
         texture m_default_texture_2d{};
         texture m_default_texture_cube{};
 
-        // See enqueue_destroy: the closure and the newest transfer
-        // batch id at the time it was queued (0 when none had begun).
+        // See enqueue_destroy: the closure, the frame submission it
+        // waits for, and the newest transfer batch id at the time it
+        // was queued (0 when none had begun).
         struct pending_destroy
         {
+            uint64_t submit_serial{0};
             uint64_t transfer_batch_id{0};
             std::function<void()> fn;
         };

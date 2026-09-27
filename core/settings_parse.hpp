@@ -84,9 +84,10 @@ namespace core
 
     /**
      * @brief Applies the `ALPHAENGINE_WIDTH`, `_HEIGHT`, `_WINDOW_MODE`, `_VSYNC`, `_GRAPHICS_BACKEND`, `_TAA`,
-     *        `_SHADOW_RESOLUTION`, `_SHADOW_DISTANCE`, `_SHADOW_CASCADES`, `_SHADOW_BIAS`, `_SHADOW_SLOPE_BIAS`,
-     *        `_SHADOW_PCF_KERNEL` and `_ASSET_ROOT` variables on top of @p out. An unset or empty variable leaves
-     *        its setting as it is. (`ALPHAENGINE_LOG_LEVEL` belongs to @ref core::logging::init.)
+     *        `_FRAMES_IN_FLIGHT`, `_SHADOW_RESOLUTION`, `_SHADOW_DISTANCE`, `_SHADOW_CASCADES`, `_SHADOW_BIAS`,
+     *        `_SHADOW_SLOPE_BIAS`, `_SHADOW_PCF_KERNEL` and `_ASSET_ROOT` variables on top of @p out. An unset or
+     *        empty variable leaves its setting as it is. (`ALPHAENGINE_LOG_LEVEL` belongs to
+     *        @ref core::logging::init.)
      */
     void apply_environment(settings& out, const environment_getter& get);
 
@@ -98,6 +99,8 @@ namespace core
         std::optional<window_mode> mode;
         std::optional<graphics_backend> backend;
         std::optional<bool> vsync;
+        /** @brief The `--frames-in-flight` override of @ref graphics_settings::frames_in_flight. */
+        std::optional<unsigned int> frames_in_flight;
 
         /** @brief The `--shadow-*` overrides of @ref shadow_settings. */
         std::optional<unsigned int> shadow_resolution;

@@ -26,15 +26,16 @@
  *
  * The profiler brackets every frame-graph pass (and the whole frame)
  * with @c command_encoder::write_timestamp through the graph's
- * @ref render_graph::pass_hooks. Two query sets alternate: the one
- * written this frame and the one written last frame, which is read
- * back with @c device::resolve_queries at the top of the next frame —
- * on Vulkan the frame fence wait in @c begin_frame has retired it by
- * then, on OpenGL the results are simply polled and the previous
- * values kept when a query is still pending. The overlay's profiler
- * panel shows the result. On a device without
- * @c device_features::timestamp_queries the profiler stays disabled
- * and records nothing.
+ * @ref render_graph::pass_hooks. One query set more than the device
+ * keeps frames in flight rotate: a frame writes one set and reads back,
+ * with @c device::resolve_queries at its top, the set written
+ * @c frames_in_flight frames earlier — on Vulkan the frame fence wait in
+ * @c begin_frame has retired that frame by then, so the set it is about
+ * to reset is complete too; on OpenGL (one frame in flight, two sets)
+ * the results are simply polled and the previous values kept when a
+ * query is still pending. The overlay's profiler panel shows the result.
+ * On a device without @c device_features::timestamp_queries the
+ * profiler stays disabled and records nothing.
  */
 
 #pragma once
@@ -75,16 +76,17 @@ namespace rendering_engine
         // Release the query sets.
         void shutdown(gpu::device& device);
 
-        // Read back the set written by the previous frame. Call once per
-        // frame after @c device::begin_frame and before @ref begin_frame.
+        // Read back the set written frames_in_flight frames ago. Call
+        // once per frame after @c device::begin_frame and before
+        // @ref begin_frame.
         void resolve(gpu::device& device);
 
         // Reset this frame's set and stamp the frame start; record it
         // before the graph executes on @p encoder.
         void begin_frame(gpu::command_encoder& encoder);
 
-        // Stamp the frame end and swap sets; record it after the graph
-        // executed on @p encoder.
+        // Stamp the frame end and rotate to the next set; record it after
+        // the graph executed on @p encoder.
         void end_frame(gpu::command_encoder& encoder);
 
         // render_graph::pass_hooks — stamps around each pass.
@@ -121,9 +123,12 @@ namespace rendering_engine
             return first_pass_slot + static_cast<uint32_t>(index) * 2u;
         }
 
-        std::array<gpu::query_set, 2> m_sets{};
+        // frames_in_flight + 1 sets, rotated one per frame; the set
+        // read at a frame's top is the one written frames_in_flight
+        // frames ago, the oldest of the ring.
+        std::vector<gpu::query_set> m_sets;
         // Whether each set holds a frame's stamps to resolve.
-        std::array<bool, 2> m_written{false, false};
+        std::vector<bool> m_written;
         uint32_t m_write_set{0};
         uint32_t m_query_count{0};
         float m_timestamp_period_ns{1.0f};

@@ -351,6 +351,14 @@ namespace core
                 {
                     set_from_json(out.graphics.temporal_aa, "graphics.temporal_aa", value);
                 }
+                else if (key == "frames_in_flight")
+                {
+                    set_from_json(out.graphics.frames_in_flight,
+                                  "graphics.frames_in_flight",
+                                  value,
+                                  1,
+                                  graphics_settings::max_frames_in_flight);
+                }
                 else
                 {
                     warn_unknown_key("graphics", key);
@@ -472,6 +480,7 @@ namespace core
             height,
             backend,
             vsync,
+            frames_in_flight,
             shadow_resolution,
             shadow_distance,
             shadow_cascades,
@@ -494,6 +503,7 @@ namespace core
             {"--height", value_option::height},
             {"--backend", value_option::backend},
             {"--vsync", value_option::vsync},
+            {"--frames-in-flight", value_option::frames_in_flight},
             {"--shadow-resolution", value_option::shadow_resolution},
             {"--shadow-distance", value_option::shadow_distance},
             {"--shadow-cascades", value_option::shadow_cascades},
@@ -556,6 +566,7 @@ Options:
   --borderless             borderless window
   --backend <name>         gpu backend: opengl or vulkan
   --vsync <on|off>         wait for vertical sync
+  --frames-in-flight <n>   frames the vulkan backend keeps in flight, 1 to 2
   --shadow-resolution <n>  texels per side of the shadow maps
   --shadow-distance <d>    view depth the directional cascades cover
   --shadow-cascades <n>    directional shadow cascades, 1 to 4
@@ -764,6 +775,12 @@ the ALPHAENGINE_* environment variables, which override the settings file
         {
             assign_if(out.graphics.temporal_aa, parse_bool_or_warn("ALPHAENGINE_TAA", *text));
         }
+        if (const auto text = read("ALPHAENGINE_FRAMES_IN_FLIGHT"))
+        {
+            assign_if(out.graphics.frames_in_flight,
+                      parse_unsigned_or_warn(
+                          "ALPHAENGINE_FRAMES_IN_FLIGHT", *text, 1, graphics_settings::max_frames_in_flight));
+        }
         if (const auto text = read("ALPHAENGINE_SHADOW_RESOLUTION"))
         {
             assign_if(out.shadows.resolution,
@@ -875,6 +892,10 @@ the ALPHAENGINE_* environment variables, which override the settings file
             case value_option::vsync:
                 store_if(out.vsync, parse_bool_or_warn(name.c_str(), *value));
                 break;
+            case value_option::frames_in_flight:
+                store_if(out.frames_in_flight,
+                         parse_unsigned_or_warn(name.c_str(), *value, 1, graphics_settings::max_frames_in_flight));
+                break;
             case value_option::shadow_resolution:
                 store_if(
                     out.shadow_resolution,
@@ -920,6 +941,7 @@ the ALPHAENGINE_* environment variables, which override the settings file
         assign_if(out.window.mode, options.mode);
         assign_if(out.window.vsync, options.vsync);
         assign_if(out.graphics.backend, options.backend);
+        assign_if(out.graphics.frames_in_flight, options.frames_in_flight);
         assign_if(out.shadows.resolution, options.shadow_resolution);
         assign_if(out.shadows.distance, options.shadow_distance);
         assign_if(out.shadows.cascade_count, options.shadow_cascades);

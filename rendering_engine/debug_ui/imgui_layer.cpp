@@ -1322,11 +1322,12 @@ namespace rendering_engine::debug_ui
         // Rebuild ImGui's main pipeline against the render pass @p encoder
         // is actually recording into, if that differs from the one the
         // pipeline was last built for. Called right before recording,
-        // inside the debug pass: the frame-top fence wait has already
-        // retired the command buffer that last bound the old pipeline,
-        // and this frame has not bound it yet, so ImGui may destroy it
-        // here. Only the pipeline is rebuilt — the font texture, vertex /
-        // index buffers and descriptor pool survive. Returns false when
+        // inside the debug pass: the pass only changes when the swapchain
+        // was rebuilt, which waited the device idle, so no frame in flight
+        // still binds the old pipeline and this frame has not bound it
+        // yet, so ImGui may destroy it here. Only the pipeline is rebuilt
+        // — the font texture, vertex / index buffers and descriptor pool
+        // survive. Returns false when
         // no pipeline could be built (the pass is not open this frame);
         // the caller then skips this frame's overlay.
         bool refresh_vulkan_pipeline(gpu::render_pass_encoder& encoder)
@@ -1372,7 +1373,12 @@ namespace rendering_engine::debug_ui
                 return false;
             }
 
-            const uint32_t image_count = device->swapchain_image_count();
+            // ImGui cycles its own host-visible vertex / index buffers
+            // through ImageCount sets, one per RenderDrawData call, so the
+            // count must cover every frame the device keeps in flight: a
+            // set is rewritten only once the frame that read it has
+            // retired. The backend also requires at least two.
+            const uint32_t image_count = std::max(device->swapchain_image_count(), device->frames_in_flight());
             ImGui_ImplVulkan_InitInfo init_info{};
             init_info.ApiVersion = VK_API_VERSION_1_0;
             init_info.Instance = device->instance();

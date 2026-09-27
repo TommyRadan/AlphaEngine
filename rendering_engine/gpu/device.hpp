@@ -217,7 +217,18 @@ namespace rendering_engine::gpu
         // -- Resource updates ---------------------------------------------
 
         // Overwrite a region of @p buffer with @p size bytes from @p
-        // data, starting at @p offset.
+        // data, starting at @p offset. Every later read of the buffer
+        // by the GPU — in this frame or a later one — sees the new
+        // bytes, and a frame still executing keeps the ones it was
+        // recorded against: a backend with several frames in flight
+        // keeps one copy of a @c dynamic_data buffer per frame slot and
+        // carries writes across the copies as each slot comes round, so
+        // a buffer written once (a material parameter block) and one
+        // rewritten every frame (a per-frame UBO, an instance stream)
+        // both behave as a single buffer would. A @c static_data buffer
+        // is written through a staging copy that is queued ahead of the
+        // frame; a @c stream_data buffer is written in place (see
+        // @c buffer_usage_hint).
         virtual void write_buffer(buffer buffer_handle, const void* data, size_t size, size_t offset = 0) = 0;
 
         // Upload pixel data for a 2D texture. @p data is expected to
@@ -345,13 +356,40 @@ namespace rendering_engine::gpu
 
         // -- Frame boundary -----------------------------------------------
 
+        // Frames the backend may have in flight at once: how many
+        // frames' command buffers can be executing or queued while the
+        // renderer records the next. 1 on an immediate-mode backend
+        // (OpenGL) and on a deferred backend configured for a single
+        // frame; the Vulkan backend reads
+        // @c core::graphics_settings::frames_in_flight at init. Fixed
+        // for the device's lifetime.
+        virtual uint32_t frames_in_flight() const noexcept
+        {
+            return 1;
+        }
+
+        // The slot, in [0, @ref frames_in_flight), the current frame
+        // records into; it advances at @ref end_frame. A frame's slot
+        // is only reused once that frame's GPU work has retired, so a
+        // caller that keeps one copy of a per-frame resource per slot
+        // (the per-draw ring's regions) never rewrites a copy the GPU
+        // may still read. Host-visible buffers created with
+        // @c buffer_usage_hint::dynamic_data need no such care: the
+        // backend keeps a copy per slot itself (see
+        // @ref write_buffer).
+        virtual uint32_t frame_slot() const noexcept
+        {
+            return 0;
+        }
+
         // Open a frame. The renderer calls this once per rendered
         // frame, before it creates the frame's command encoder and
         // before any per-frame host write (UBO uploads, bind-group
         // rebuilds, buffer re-uploads) for that frame. A backend that
-        // defers execution blocks here until the previous frame's GPU
-        // work has finished and then frees the resources whose
-        // destruction it deferred while that work could still
+        // defers execution blocks here until the GPU work of the frame
+        // that last used this frame's slot has finished (the previous
+        // frame at one frame in flight) and then frees the resources
+        // whose destruction it deferred while that work could still
         // reference them — so host writes never race a device read
         // and nothing is freed out from under a command buffer that
         // is being recorded. Immediate-mode backends (OpenGL) treat it

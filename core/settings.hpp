@@ -98,6 +98,19 @@ namespace core
          * Read once during rendering-engine init.
          */
         bool temporal_aa{true};
+
+        /** @brief Upper bound of @ref frames_in_flight; the Vulkan backend sizes its per-frame rings by it. */
+        static constexpr unsigned int max_frames_in_flight = 2;
+
+        /**
+         * @brief Frames the Vulkan backend may have in flight at once, 1 to @ref max_frames_in_flight.
+         *
+         * At 1 the CPU waits for each frame's GPU work before recording the next; at 2 it records frame N+1
+         * while the GPU still draws frame N, and every host-written buffer is double-buffered by the device so
+         * the two never touch the same memory. OpenGL keeps its own implicit synchronisation and ignores it.
+         * Read once during @ref rendering_engine::gpu::device::init.
+         */
+        unsigned int frames_in_flight{2};
     };
 
     /** @brief Camera configuration. */

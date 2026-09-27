@@ -241,9 +241,9 @@ namespace rendering_engine
         }
         reserve_indices(largest);
 
-        // collect runs inside the frame bracket, after begin_frame waited
-        // for the frame that last read these buffers, so they can be
-        // rewritten in place.
+        // collect runs inside the frame bracket: the buffers are
+        // dynamic_data, so the device writes this frame's copy of each
+        // (one per frame in flight) and no frame still drawing reads it.
         auto& gpu = *runtime::current_engine().gpu;
         for (texture_group& group : m_groups)
         {
