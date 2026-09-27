@@ -11,7 +11,7 @@
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/materials/grid_material.hpp>
 #include <rendering_engine/renderables/draw_item.hpp>
-#include <rendering_engine/renderables/per_draw_ring.hpp>
+#include <rendering_engine/renderables/per_draw_ubo.hpp>
 #include <rendering_engine/renderer.hpp>
 #include <runtime/engine.hpp>
 
@@ -32,8 +32,6 @@ namespace rendering_engine::editor
             gpu.destroy(m_vertex_buffer);
             m_vertex_buffer = {};
         }
-        // The per-draw ring releases its group over this material's layout
-        // once the grid has stopped drawing.
         m_material.reset();
     }
 
@@ -68,12 +66,8 @@ namespace rendering_engine::editor
         // Per-draw block (the identity model of the origin grid, see
         // per_draw_ubo.hpp); the shader references the model matrix when
         // reconstructing depth. The grid never moves, so the block is
-        // built once and then only pushed, or copied into the per-draw
-        // ring, per frame.
-        if (!m_per_draw.bind(m_transform, m_material->per_draw_layout(), item))
-        {
-            return;
-        }
+        // built once and then only pushed per frame.
+        m_per_draw.bind(m_transform, item);
         item.vertex_buffer = m_vertex_buffer;
         item.vertex_stride = sizeof(core::math::vec3);
         item.vertex_count = 3;

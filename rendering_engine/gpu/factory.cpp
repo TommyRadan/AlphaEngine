@@ -6,10 +6,8 @@
  * @brief Backend dispatch for @ref rendering_engine::gpu::create_device.
  *
  * Each concrete backend lives behind a small @c make_*_device free
- * function in its own translation unit (@c gl_factory.cpp,
- * @c vk_factory.cpp). Both backends are always linked into the
- * binary; the runtime choice is driven by
- * @c core::settings::graphics.backend, which the engine consults at
+ * function in its own translation unit (@c vk_factory.cpp). The engine
+ * picks the backend from @c core::settings::graphics.backend at
  * construction time.
  */
 
@@ -17,11 +15,6 @@
 
 #include <core/log.hpp>
 #include <rendering_engine/gpu/device.hpp>
-
-namespace rendering_engine::gpu::backend::opengl
-{
-    std::unique_ptr<device> make_gl_device();
-} // namespace rendering_engine::gpu::backend::opengl
 
 namespace rendering_engine::gpu::backend::vulkan
 {
@@ -34,8 +27,6 @@ namespace rendering_engine::gpu
     {
         switch (type)
         {
-        case backend_type::opengl:
-            return backend::opengl::make_gl_device();
         case backend_type::vulkan:
             return backend::vulkan::make_vk_device();
         }

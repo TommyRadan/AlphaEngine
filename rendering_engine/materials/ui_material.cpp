@@ -68,7 +68,7 @@ namespace rendering_engine
         // Slot 0 is the ui pass's per-frame group (the UiFrame block at
         // binding 0); the per-draw group at slot 1 carries the texture at
         // binding 1, a number of its own so it stays unique across the
-        // pipeline's sets as the OpenGL backend requires.
+        // pipeline's sets.
         descriptor.frame_layout = frame_layout;
         descriptor.draw_layout.entries.push_back({texture_binding, gpu::binding_kind::texture});
 

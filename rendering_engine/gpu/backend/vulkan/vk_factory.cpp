@@ -6,7 +6,7 @@
  * @brief Vulkan backend entry point. The shared
  *        @ref rendering_engine::gpu::create_device dispatch in
  *        @c rendering_engine/gpu/factory.cpp calls into here for
- *        @c backend_type::vulkan when the backend is compiled in.
+ *        @c backend_type::vulkan.
  */
 
 #include <memory>

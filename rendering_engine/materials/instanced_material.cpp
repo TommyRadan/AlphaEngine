@@ -20,8 +20,7 @@ namespace
     // geometry position; the model matrix occupies four consecutive vec4
     // slots (one per column) and the tint follows. The vertex shader
     // reads them as ordinary attributes from a per-instance stream
-    // (divisor 1), so the path does not depend on gl_InstanceIndex
-    // behaving across the SPIR-V -> GL translation.
+    // (stepped once per instance).
     constexpr uint32_t position_location = 0;
     constexpr uint32_t model_column0_location = 1;
     constexpr uint32_t instance_color_location = 5;

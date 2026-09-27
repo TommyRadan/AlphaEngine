@@ -5,7 +5,6 @@
 
 #include <bit>
 #include <cstdint>
-#include <span>
 
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/gpu/types.hpp>
@@ -84,23 +83,17 @@ namespace rendering_engine
     // @ref instanced_mesh.
     //
     // @ref per_draw_push, when set, is the draw's PerDraw block (see
-    // per_draw_ubo.hpp) on a device that takes it as push constants: the
-    // pass pushes it right before the draw. It points at the block the
-    // renderable caches, which stays put until the renderable collects
-    // again, so it stays valid while the frame records from the list it
-    // was collected into (the depth pre-pass and the scene pass share
-    // one); the bytes are copied when pushed.
+    // per_draw_ubo.hpp): the pass pushes it right before the draw as
+    // push constants. It points at the block the renderable caches,
+    // which stays put until the renderable collects again, so it stays
+    // valid while the frame records from the list it was collected into
+    // (the depth pre-pass and the scene pass share one); the bytes are
+    // copied when pushed.
     //
-    // @ref per_draw_bind_group is bound at the material's per-draw slot.
-    // Without push constants a rigid 3D renderable's group is the per-
-    // draw ring's group shared by every draw under that layout, and
-    // @ref per_draw_offset selects the renderable's block within it: the
-    // pass hands @ref per_draw_offsets to @c set_bind_group, which carries
-    // the offset only while @ref per_draw_dynamic says the group's layout
-    // takes one (a sprite batch's texture group or a skinned draw's
-    // private group does not). A rigid draw that pushes its block has no
-    // group; a skinned one pushes its block and binds its private group
-    // for the joint palette. @ref bind_per_draw records both.
+    // @ref per_draw_bind_group, when valid, is bound at the material's
+    // per-draw slot: a sprite batch's texture group, or a skinned draw's
+    // private group carrying its joint palette. A rigid 3D draw has none.
+    // @ref bind_per_draw records the push and the group.
     //
     // @ref first_index and @ref vertex_offset address a sub-range of the
     // bound geometry, so several meshes can live in one vertex / index
@@ -131,10 +124,6 @@ namespace rendering_engine
         gpu::index_format index_format{gpu::index_format::uint32};
         uint32_t first_index{0};
         int32_t vertex_offset{0};
-        // Byte offset of this draw's PerDraw block in the buffer behind
-        // @ref per_draw_bind_group; see above.
-        uint32_t per_draw_offset{0};
-        bool per_draw_dynamic{false};
         // Whether the model matrix flips handedness; see above.
         bool mirrored{false};
 
@@ -146,13 +135,5 @@ namespace rendering_engine
         // and debug passes leave it at that and sort by pipeline and
         // material instance directly instead.
         uint64_t sort_key{0};
-
-        // The dynamic offsets to bind @ref per_draw_bind_group with: the
-        // one per-draw offset for a group over the per-draw ring, none
-        // for a group whose layout takes no dynamic offset.
-        std::span<const uint32_t> per_draw_offsets() const noexcept
-        {
-            return per_draw_dynamic ? std::span<const uint32_t>{&per_draw_offset, 1} : std::span<const uint32_t>{};
-        }
     };
 } // namespace rendering_engine

@@ -27,8 +27,8 @@ namespace rendering_engine
     // The renderable emits a single indexed-indirect @ref draw_item: the
     // command record carries the instance count, and the per-instance
     // stream is bound to vertex slot 1 and stepped once per instance
-    // (@c glVertexAttribDivisor / @c VK_VERTEX_INPUT_RATE_INSTANCE), so the
-    // whole batch costs one draw call without relying on @c gl_InstanceIndex.
+    // (@c VK_VERTEX_INPUT_RATE_INSTANCE), so the whole batch costs one
+    // draw call without relying on @c gl_InstanceIndex.
     // It must be fronted by an @ref instanced_material; pass that material
     // to the constructor.
     struct instanced_mesh : public renderable

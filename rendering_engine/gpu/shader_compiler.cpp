@@ -87,10 +87,9 @@ namespace rendering_engine::gpu
             return "unknown";
         }
 
-        // The target environment every compile uses: Vulkan client + SPV
-        // target produces SPIR-V usable both by the Vulkan backend
-        // natively and by the OpenGL 4.6 backend through ARB_gl_spirv.
-        // The input version (100) is the glslang convention for GLSL.
+        // The target environment every compile uses: Vulkan 1.0 client
+        // semantics and SPIR-V 1.0. The input version (100) is the
+        // glslang convention for GLSL.
         constexpr int glsl_input_version = 100;
         constexpr glslang::EShTargetClientVersion client_version = glslang::EShTargetVulkan_1_0;
         constexpr glslang::EShTargetLanguageVersion target_version = glslang::EShTargetSpv_1_0;

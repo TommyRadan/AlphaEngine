@@ -29,23 +29,20 @@
 
 namespace rendering_engine::gpu
 {
-    // Backends supported by @ref create_device. Both backends are
-    // always compiled into the binary; the runtime choice is driven
-    // by @c core::settings::graphics.backend at engine construction.
+    // Backends supported by @ref create_device. The engine picks one
+    // from @c core::settings::graphics.backend at construction.
     enum class backend_type
     {
-        opengl,
         vulkan,
     };
 
     // What the device can do, filled by the backend during @c init
-    // from the context / physical device it brought up and read
-    // through @ref device::features. Every flag is a hard gate:
+    // from the physical device it brought up and read through
+    // @ref device::features. Every flag is a hard gate:
     // consumers ask before they rely on the feature, and a backend
     // that lacks it either degrades (a wireframe material rasterises
     // filled, multi-draw indirect unrolls, anisotropy is ignored) or
-    // refuses (a pipeline with an ungranted stage). The OpenGL 4.6
-    // core profile grants almost everything; the Vulkan backend
+    // refuses (a pipeline with an ungranted stage). The Vulkan backend
     // requests each optional core feature only when the physical
     // device reports it and records the grant here.
     struct device_features
@@ -70,38 +67,16 @@ namespace rendering_engine::gpu
         // @c command_encoder::write_timestamp produces readable ticks.
         bool timestamp_queries{false};
         // Debug groups and object names reach a debugger / the driver's
-        // debug output (KHR_debug; VK_EXT_debug_utils enabled).
+        // debug output (VK_EXT_debug_utils enabled).
         bool debug_labels{false};
         // The device runs on a layered implementation
         // (VK_KHR_portability_subset — MoltenVK). Informational.
         bool portability_subset{false};
         // The image-based-lighting tables can be convolved on the GPU:
         // compute pipelines writing storage images into specific
-        // cube-map mip levels, plus a real mip chain to sample. Both
-        // backends implement this today; the IBL builder falls back to
-        // the CPU convolution when it is false.
+        // cube-map mip levels, plus a real mip chain to sample. The IBL
+        // builder falls back to the CPU convolution when it is false.
         bool compute_prefilter{false};
-        // @c render_pass_encoder::push_constants reaches the shaders
-        // through the pipeline's @c push_constant_ranges, with at least
-        // @c min_push_constants_size bytes (see
-        // @c device_limits::max_push_constants_size). Set on Vulkan when
-        // maxPushConstantsSize reaches that minimum, which every
-        // conformant device does. OpenGL loads SPIR-V through
-        // ARB_gl_spirv, which has no push constants, so it is false
-        // there. Every library shader module of a device with the
-        // feature is compiled with @c AE_PUSH_CONSTANTS defined (see
-        // @c create_library_shader_module), so a shader declares a
-        // push-constant block only where the device has one.
-        bool push_constants{false};
-        // A render pass begun with @c render_pass_descriptor::parallel
-        // takes its draws from secondary encoders
-        // (@c render_pass_encoder::begin_secondary) that several threads
-        // record at once and the pass then executes in order. Set on
-        // Vulkan, where each chunk is a secondary command buffer from
-        // its own command pool; OpenGL records immediately on the
-        // thread that owns the context, so it is false there and every
-        // pass records serially.
-        bool parallel_recording{false};
     };
 
     // Numeric limits of the device, filled beside @ref device_features.
@@ -130,8 +105,8 @@ namespace rendering_engine::gpu
         uint32_t max_compute_workgroup_count[3]{0, 0, 0};
         uint32_t max_compute_workgroup_invocations{0};
         // Bytes of push constants a pipeline may declare (Vulkan's
-        // maxPushConstantsSize); 0 on a device without
-        // @c device_features::push_constants.
+        // maxPushConstantsSize); never below @c min_push_constants_size,
+        // which a device must offer to be brought up.
         uint32_t max_push_constants_size{0};
     };
 
@@ -148,9 +123,9 @@ namespace rendering_engine::gpu
     // Methods are main-thread-only — there is no internal locking. The
     // one exception is recording into the secondary encoders of a
     // parallel render pass (@c render_pass_encoder::begin_secondary), which
-    // a backend with @c device_features::parallel_recording makes safe
-    // from the job pool's workers while the main thread waits on the
-    // fork; nothing else may touch the device in the meantime.
+    // the backend makes safe from the job pool's workers while the main
+    // thread waits on the fork; nothing else may touch the device in the
+    // meantime.
     struct device
     {
         // Out-of-line virtual destructor: pins this class's vtable
@@ -158,8 +133,8 @@ namespace rendering_engine::gpu
         // every translation unit that includes this header.
         virtual ~device();
 
-        // Bring the backend up. Must be called once after the
-        // window/GL context is alive. Throws on failure.
+        // Bring the backend up. Must be called once after the window
+        // is alive. Throws on failure.
         virtual void init() = 0;
 
         // Tear the backend down. Resources still alive at this
@@ -216,10 +191,10 @@ namespace rendering_engine::gpu
         // -- Debug names --------------------------------------------------
 
         // Label a resource for graphics debuggers and the driver's
-        // debug output (@c glObjectLabel; @c vkSetDebugUtilsObjectNameEXT
-        // when @c VK_EXT_debug_utils is enabled). No-ops by default and
-        // on a device without @c device_features::debug_labels; a
-        // backend overrides the ones it can label.
+        // debug output (@c vkSetDebugUtilsObjectNameEXT when
+        // @c VK_EXT_debug_utils is enabled). No-ops by default and on a
+        // device without @c device_features::debug_labels; a backend
+        // overrides the ones it can label.
         virtual void set_debug_name(buffer handle, const char* name);
         virtual void set_debug_name(texture handle, const char* name);
         virtual void set_debug_name(sampler handle, const char* name);
@@ -304,10 +279,10 @@ namespace rendering_engine::gpu
         // the drawable's pixel size, and renderer::init makes the same
         // call once. The swapchain target's recorded extent updates so
         // the next pass viewport defaults match the window. A zero
-        // extent means the window is minimised: a backend that owns
-        // presentation stops presenting (see @ref swapchain_suspended)
-        // until a later non-zero resize, or its own surface poll, gives
-        // it a size to rebuild against.
+        // extent means the window is minimised: the device stops
+        // presenting (see @ref swapchain_suspended) until a later
+        // non-zero resize, or its own surface poll, gives it a size to
+        // rebuild against.
         virtual void resize_swapchain(uint32_t width, uint32_t height) = 0;
 
         // True while the backend has no presentable swapchain: the
@@ -318,12 +293,8 @@ namespace rendering_engine::gpu
         // window, an out-of-date recovery that found no extent, a
         // failed rebuild. While set, a frame that does run executes its
         // off-screen passes but every pass that targets the swapchain
-        // records nothing. Backends that present through the window
-        // (OpenGL) never suspend.
-        virtual bool swapchain_suspended() const
-        {
-            return false;
-        }
+        // records nothing.
+        virtual bool swapchain_suspended() const = 0;
 
         // Allocate an off-screen render target: zero or more colour
         // attachments and an optional depth attachment, as
@@ -372,50 +343,37 @@ namespace rendering_engine::gpu
 
         // Frames the backend may have in flight at once: how many
         // frames' command buffers can be executing or queued while the
-        // renderer records the next. 1 on an immediate-mode backend
-        // (OpenGL) and on a deferred backend configured for a single
-        // frame; the Vulkan backend reads
+        // renderer records the next. The Vulkan backend reads
         // @c core::graphics_settings::frames_in_flight at init. Fixed
         // for the device's lifetime.
-        virtual uint32_t frames_in_flight() const noexcept
-        {
-            return 1;
-        }
+        virtual uint32_t frames_in_flight() const noexcept = 0;
 
         // The slot, in [0, @ref frames_in_flight), the current frame
         // records into; it advances at @ref end_frame. A frame's slot
         // is only reused once that frame's GPU work has retired, so a
         // caller that keeps one copy of a per-frame resource per slot
-        // (the per-draw ring's regions) never rewrites a copy the GPU
-        // may still read. Host-visible buffers created with
-        // @c buffer_usage_hint::dynamic_data need no such care: the
-        // backend keeps a copy per slot itself (see
+        // never rewrites a copy the GPU may still read. Host-visible
+        // buffers created with @c buffer_usage_hint::dynamic_data need
+        // no such care: the backend keeps a copy per slot itself (see
         // @ref write_buffer).
-        virtual uint32_t frame_slot() const noexcept
-        {
-            return 0;
-        }
+        virtual uint32_t frame_slot() const noexcept = 0;
 
         // Open a frame. The renderer calls this once per rendered
         // frame, before it creates the frame's command encoder and
         // before any per-frame host write (UBO uploads, bind-group
-        // rebuilds, buffer re-uploads) for that frame. A backend that
-        // defers execution blocks here until the GPU work of the frame
-        // that last used this frame's slot has finished (the previous
-        // frame at one frame in flight) and then frees the resources
-        // whose destruction it deferred while that work could still
-        // reference them — so host writes never race a device read
-        // and nothing is freed out from under a command buffer that
-        // is being recorded. Immediate-mode backends (OpenGL) treat it
-        // as a no-op.
+        // rebuilds, buffer re-uploads) for that frame. The device blocks
+        // here until the GPU work of the frame that last used this
+        // frame's slot has finished (the previous frame at one frame in
+        // flight) and then frees the resources whose destruction it
+        // deferred while that work could still reference them — so host
+        // writes never race a device read and nothing is freed out from
+        // under a command buffer that is being recorded.
         virtual void begin_frame() = 0;
 
         // Close the frame opened by @ref begin_frame, after the frame's
-        // encoder has been submitted. A backend that owns presentation
-        // (Vulkan) presents the swapchain image it acquired for this
-        // frame here and rolls its per-frame bookkeeping; OpenGL
-        // presents through @c window::swap_buffers and treats this as
-        // a no-op. Work submitted outside a begin_frame / end_frame
+        // encoder has been submitted. The device presents the swapchain
+        // image it acquired for this frame here and rolls its per-frame
+        // bookkeeping. Work submitted outside a begin_frame / end_frame
         // bracket (start-up uploads, the IBL prefilter) needs no
         // bracket: the backend queues it and the next begin_frame
         // waits for it like a frame, so resources it referenced may be
@@ -425,10 +383,8 @@ namespace rendering_engine::gpu
         // -- Command recording --------------------------------------------
 
         // Allocate a new command encoder. Each encoder records one
-        // or more render passes; submission is implicit on the
-        // OpenGL backend (drawing happens immediately as it's
-        // recorded), while the Vulkan backend records into a command
-        // buffer and defers execution until @ref submit.
+        // or more render passes into a command buffer whose execution
+        // is deferred until @ref submit.
         virtual std::unique_ptr<command_encoder> create_command_encoder() = 0;
 
         // Submit the encoder's recorded work for execution. After
@@ -467,6 +423,6 @@ namespace rendering_engine::gpu
 
     // Construct a concrete device for the requested backend. The
     // returned device is in a not-yet-initialised state — the caller
-    // must invoke @c init() once the window/GL context is live.
+    // must invoke @c init() once the window is live.
     std::unique_ptr<device> create_device(backend_type type);
 } // namespace rendering_engine::gpu

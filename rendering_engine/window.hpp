@@ -3,7 +3,7 @@
 
 /**
  * @file window.hpp
- * @brief SDL-backed OS window and GL context owner; source of input events.
+ * @brief SDL-backed OS window owner; source of input events.
  */
 
 #pragma once
@@ -24,12 +24,6 @@ namespace rendering_engine
         void operator()(SDL_Window* w) const noexcept;
     };
 
-    /** @brief Custom deleter that destroys an SDL GL context via @c SDL_GL_DeleteContext. */
-    struct sdl_gl_context_deleter
-    {
-        void operator()(void* ctx) const noexcept;
-    };
-
     /** @brief Custom deleter that closes an @c SDL_Gamepad via @c SDL_CloseGamepad. */
     struct sdl_gamepad_deleter
     {
@@ -38,9 +32,6 @@ namespace rendering_engine
 
     /** @brief RAII-owning handle to an @c SDL_Window. */
     using sdl_window_handle = std::unique_ptr<SDL_Window, sdl_window_deleter>;
-
-    /** @brief RAII-owning handle to an SDL OpenGL context. */
-    using sdl_gl_context_handle = std::unique_ptr<void, sdl_gl_context_deleter>;
 
     /** @brief RAII-owning handle to an opened @c SDL_Gamepad. */
     using sdl_gamepad_handle = std::unique_ptr<SDL_Gamepad, sdl_gamepad_deleter>;
@@ -64,12 +55,12 @@ namespace rendering_engine
     };
 
     /**
-     * @brief Owns the application window, its GL context, and pumps OS input.
+     * @brief Owns the application window and pumps OS input.
      *
-     * Owned by @ref runtime::engine. The window and GL context are
-     * held as @c std::unique_ptr with SDL-specific deleters, so their
-     * lifetime is strictly tied to this instance — @ref init creates
-     * them and @ref quit (or destruction) releases them. Gamepads are
+     * Owned by @ref runtime::engine. The window is held as a
+     * @c std::unique_ptr with an SDL-specific deleter, so its lifetime
+     * is strictly tied to this instance — @ref init creates it and
+     * @ref quit (or destruction) releases it. Gamepads are
      * opened as they connect and closed as they disconnect (or at
      * @ref quit). All methods must be invoked from the main thread.
      */
@@ -78,8 +69,8 @@ namespace rendering_engine
         window();
 
         /**
-         * @brief Initializes SDL video (and the gamepad subsystem), creates
-         *        the window and the GL context using the dimensions and
+         * @brief Initializes SDL video (and the gamepad subsystem) and
+         *        creates the Vulkan-capable window using the dimensions and
          *        flags read from the engine-wide @ref core::settings object.
          *        A zero width or height ("match the display", the release
          *        default) is resolved against the primary display once video
@@ -92,7 +83,7 @@ namespace rendering_engine
          */
         void init();
 
-        /** @brief Closes open gamepads, destroys the GL context and window and shuts down SDL video. */
+        /** @brief Closes open gamepads, destroys the window and shuts down SDL video. */
         void quit();
 
         /**
@@ -110,9 +101,6 @@ namespace rendering_engine
          * @ref runtime::engine::tick.
          */
         void tick();
-
-        /** @brief Presents the back buffer to the screen. */
-        void swap_buffers();
 
         /**
          * @brief Displays a modal message box parented to the window.
@@ -184,21 +172,9 @@ namespace rendering_engine
          */
         SDL_Window* sdl_window() const noexcept;
 
-        /**
-         * @brief Returns the SDL OpenGL context as an opaque pointer, or
-         *        @c nullptr when running on the Vulkan backend.
-         *
-         * Exposed so the debug-UI layer can hand the context to
-         * @c ImGui_ImplSDL3_InitForOpenGL without depending on the SDL
-         * GL types. Ownership stays with the @ref window.
-         */
-        void* gl_context() const noexcept;
-
     private:
         sdl_window_handle m_window;
-        sdl_gl_context_handle m_gl_context;
         gamepad_map m_gamepads;
-        bool m_is_vulkan{false};
         bool m_gamepad_subsystem{false};
         bool m_minimized{false};
     };

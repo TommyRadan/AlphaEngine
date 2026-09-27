@@ -6,19 +6,15 @@
  * @brief GLSL-to-SPIR-V compilation entry point, backed by glslang.
  *
  * The engine authors vanilla GLSL with Vulkan-style
- * @c layout(set, binding) annotations and ships SPIR-V byte blobs.
- * Vulkan backends consume those blobs natively; OpenGL 4.6 backends
- * upload them through @c glShaderBinary + @c glSpecializeShaderARB
- * (core ARB_gl_spirv).
+ * @c layout(set, binding) annotations and ships SPIR-V byte blobs, which
+ * the Vulkan backend turns into shader modules.
  *
  * Sources may @c #include other shaders by their @ref shader_library
  * path (@c #include "include/fog.glsl"); the compiler installs an
  * includer that resolves them from the library, and enables
  * @c GL_GOOGLE_include_directive on the shader's behalf. Preprocessor
  * definitions for variants are injected through
- * @ref shader_compile_options::defines, and the backend define
- * (@ref push_constants_define) by @c create_library_shader_module for a
- * device that takes push constants.
+ * @ref shader_compile_options::defines.
  *
  * Compiled blobs are cached on disk keyed by a digest of the source,
  * every file it (transitively) includes, the defines, the stage and the
@@ -27,9 +23,8 @@
  * lives under @c SDL_GetPrefPath("AlphaEngine", "AlphaEngine")/shader_cache
  * unless @c ALPHAENGINE_SHADER_CACHE names another directory or is
  * @c 0 / @c off / @c false, which disables it; @ref set_shader_cache_directory
- * overrides both. The device backends keep their pipeline caches (the
- * Vulkan @c VkPipelineCache blob, the OpenGL program binaries) in
- * @ref shader_cache_directory as well, so the same switch covers them.
+ * overrides both. The Vulkan backend keeps its @c VkPipelineCache blob
+ * in @ref shader_cache_directory as well, so the same switch covers it.
  *
  * The compiler is initialised lazily on first use and torn down at
  * process exit; callers may invoke it from any thread-confined context
@@ -51,20 +46,6 @@ namespace rendering_engine::gpu
 {
     /** @brief Preprocessor definitions, each a (name, value) pair; an empty value defines a flag. */
     using shader_defines = std::vector<std::pair<std::string, std::string>>;
-
-    /**
-     * @brief The backend define: a flag set in every library shader
-     *        @c create_library_shader_module compiles for a device with
-     *        @c device_features::push_constants (the Vulkan backend).
-     *
-     * Every stage is compiled with Vulkan semantics, but the OpenGL
-     * backend loads SPIR-V through ARB_gl_spirv, which has no push
-     * constants, so a shader declares a @c push_constant block only under
-     * this define and falls back to a uniform buffer without it (see
-     * @c shaders/include/per_draw.glsl). Being a define, it is part of the
-     * SPIR-V cache key, so the two builds of a shader never collide.
-     */
-    inline constexpr std::string_view push_constants_define = "AE_PUSH_CONSTANTS";
 
     /** @brief Options for @ref compile_glsl_to_spirv. */
     struct shader_compile_options

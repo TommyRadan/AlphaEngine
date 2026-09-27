@@ -140,23 +140,20 @@ namespace rendering_engine
         //
         // Encoding: non-linear depth24, @c .r in [0, 1], holding the
         // window-space depth 0.5 * z_ndc + 0.5. The camera's projection
-        // comes from core::math::perspective, which is GL-convention
-        // (clip z in [-w, w], NDC z in [-1, 1]); OpenGL keeps its default
-        // depth range of [0, 1] and every Vulkan pipeline opts into the
-        // same [-1, 1] clip range via VK_EXT_depth_clip_control with a
-        // [0, 1] viewport depth, so both backends store the identical
-        // value. shaders/include/depth_utils.glsl ships the GLSL to invert it:
+        // comes from core::math::perspective, whose clip z spans [-w, w]
+        // (NDC z in [-1, 1]); every pipeline opts into that clip range
+        // via VK_EXT_depth_clip_control with a [0, 1] viewport depth.
+        // shaders/include/depth_utils.glsl ships the GLSL to invert it:
         // depth_to_ndc(d) = 2d - 1 and linearize_depth(d, near, far) =
         // near * far / (far - d * (far - near)), the positive view-space
         // distance in [near, far]. The scene pass (or, on frames it runs,
         // the depth pre-pass ahead of it) clears it to 1.0, so untouched
         // background texels linearize to the far plane.
         //
-        // Synchronisation is the backends' concern: OpenGL samples the
-        // depth texture directly, and the Vulkan render-pass cache rests
-        // an off-screen depth attachment in SHADER_READ_ONLY_OPTIMAL
-        // between render passes (a pass that loads it, the skybox,
-        // resumes from and returns to that layout).
+        // Synchronisation is the backend's concern: the Vulkan
+        // render-pass cache rests an off-screen depth attachment in
+        // SHADER_READ_ONLY_OPTIMAL between render passes (a pass that
+        // loads it, the skybox, resumes from and returns to that layout).
         gpu::texture scene_depth_texture{};
 
         // The HDR image the post chain after motion blur works on: the

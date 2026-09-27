@@ -20,12 +20,11 @@ env:
   # built from source via FetchContent and on Linux its CMake refuses to
   # configure without the X11 (or Wayland) development libraries, even for a
   # build that never opens a window; the root CMakeLists calls
-  # find_package(OpenGL / Vulkan REQUIRED) unconditionally, so every job that
-  # configures needs the GL and Vulkan loader headers.
+  # find_package(Vulkan REQUIRED) unconditionally, so every job that
+  # configures needs the Vulkan loader headers.
   LINUX_DEV_PACKAGES: >-
     cmake
     ninja-build
-    libgl1-mesa-dev
     libvulkan-dev
     libx11-dev
     libxext-dev
@@ -154,9 +153,6 @@ jobs:
             -DCMAKE_C_COMPILER=clang \
             -DCMAKE_CXX_COMPILER=clang++
 
-      - name: Build glad (resolves generated GL headers for tidy)
-        run: cmake --build build --target glad
-
       - name: Run run-clang-tidy on subsystem sources
         run: |
           set -euo pipefail
@@ -168,9 +164,9 @@ jobs:
           run-clang-tidy -p build -quiet "${pattern}"
 
   # ---------------------------------------------------------------------------
-  # build-linux: compile the full AlphaEngine target (both GPU backends, both
-  # windowing paths, glslang, ImGui) with GCC and with Clang + libc++ on
-  # Linux. The engine binary itself is not run interactively here — see the
+  # build-linux: compile the full AlphaEngine target (the Vulkan backend,
+  # glslang, ImGui) with GCC and with Clang + libc++ on Linux. The engine
+  # binary itself is not run interactively here — see the
   # smoke job below for that — so this job proves that the tree compiles and
   # links on both Linux toolchains; with only the MSVC matrix a Linux-only
   # breakage would keep CI green.
@@ -278,9 +274,12 @@ jobs:
   # class of hazard (a missing barrier) the default checks miss.
   #
   # A second matrix entry repeats both runs under AddressSanitizer +
-  # UndefinedBehaviorSanitizer. ThreadSanitizer is left out: lavapipe's own
-  # worker threads produce driver-internal races that would need a
-  # suppressions file, and none of it is engine code.
+  # UndefinedBehaviorSanitizer. Its leak check reads
+  # .github/lsan-suppressions.txt, which covers the state libX11 keeps in its
+  # own globals: SDL unloads the library at shutdown, so that state is
+  # unreachable by the time LeakSanitizer runs. ThreadSanitizer is left out:
+  # lavapipe's own worker threads produce driver-internal races that would
+  # need a suppressions file, and none of it is engine code.
   # ---------------------------------------------------------------------------
   smoke:
     name: smoke (linux vulkan ${{ matrix.name }})
@@ -299,6 +298,7 @@ jobs:
       ALPHAENGINE_GRAPHICS_BACKEND: vulkan
       SDL_AUDIO_DRIVER: dummy
       ASAN_OPTIONS: detect_leaks=1
+      LSAN_OPTIONS: suppressions=${{ github.workspace }}/.github/lsan-suppressions.txt:print_suppressions=0
       UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
       CCACHE_DIR: ${{ github.workspace }}/.ccache
       CCACHE_MAXSIZE: 1G
@@ -389,16 +389,13 @@ jobs:
           retention-days: 14
 
   # ---------------------------------------------------------------------------
-  # build: Windows MSVC build matrix (Debug + Release). Both the OpenGL and
-  # Vulkan backends are compiled into the same binary and the runtime choice
-  # is driven by settings::get_graphics_backend(); the Vulkan SDK is therefore
-  # an unconditional build dependency. The SDK comes from the LunarG installer
+  # build: Windows MSVC build matrix (Debug + Release). The Vulkan SDK is an
+  # unconditional build dependency. The SDK comes from the LunarG installer
   # at a pinned version so the job is reproducible; CMake's find_package(Vulkan)
   # picks it up through the VULKAN_SDK environment variable. glslang is fetched
-  # from source by CMake (used both for the OpenGL ARB_gl_spirv path and the
-  # Vulkan backend's shader compile). The Khronos validation layer is staged
-  # alongside the executable so reviewers can run with VK validation enabled
-  # without a system-wide SDK install.
+  # from source by CMake for the Vulkan backend's shader compile. The Khronos
+  # validation layer is staged alongside the executable so reviewers can run
+  # with VK validation enabled without a system-wide SDK install.
   #
   # Configures with Ninja instead of a Visual Studio generator:
   # CMAKE_<LANG>_COMPILER_LAUNCHER, the hook sccache needs, is

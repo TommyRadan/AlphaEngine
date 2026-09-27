@@ -7,7 +7,7 @@
 
 #include <core/math/transform.hpp>
 #include <rendering_engine/gpu/handle.hpp>
-#include <rendering_engine/renderables/per_draw_ring.hpp>
+#include <rendering_engine/renderables/per_draw_ubo.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
 
 namespace rendering_engine
@@ -50,8 +50,7 @@ namespace rendering_engine
         // Shared geometry from the asset cache, keyed by tessellation; freed
         // when the last sphere referencing it is destroyed.
         std::shared_ptr<mesh_asset> m_mesh;
-        // The PerDraw block and this frame's slot of it in the per-draw
-        // ring; no buffer of its own.
+        // The PerDraw block the pass pushes; no buffer of its own.
         per_draw_binding m_per_draw;
     };
 } // namespace rendering_engine

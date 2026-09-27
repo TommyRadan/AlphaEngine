@@ -16,7 +16,7 @@ namespace rendering_engine
 {
     // Built-in unlit point-cloud material. Its pipeline bakes
     // @c primitive_topology::points, so a @ref points renderable that
-    // fronts it rasterizes one GL point sprite per vertex.
+    // fronts it rasterizes one point sprite per vertex.
     //
     // Vertex stream: position (vec3) + per-point colour (vec3). The
     // fragment colour is the per-point colour modulated by the shared

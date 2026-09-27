@@ -9,7 +9,7 @@
 #include <core/math/transform.hpp>
 #include <rendering_engine/assets/vertex.hpp>
 #include <rendering_engine/gpu/handle.hpp>
-#include <rendering_engine/renderables/per_draw_ring.hpp>
+#include <rendering_engine/renderables/per_draw_ubo.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
 
 namespace rendering_engine
@@ -87,8 +87,7 @@ namespace rendering_engine
 
         gpu::buffer m_vertex_buffer{};
         gpu::buffer m_index_buffer{};
-        // The PerDraw block and this frame's slot of it in the per-draw
-        // ring; no buffer of its own.
+        // The PerDraw block the pass pushes; no buffer of its own.
         per_draw_binding m_per_draw;
 
         size_t m_vertex_count{0};

@@ -57,14 +57,6 @@ namespace rendering_engine
         }
     }
 
-    void sdl_gl_context_deleter::operator()(void* ctx) const noexcept
-    {
-        if (ctx != nullptr)
-        {
-            SDL_GL_DestroyContext(static_cast<SDL_GLContext>(ctx));
-        }
-    }
-
     void sdl_gamepad_deleter::operator()(SDL_Gamepad* gamepad) const noexcept
     {
         if (gamepad != nullptr)
@@ -96,7 +88,6 @@ namespace rendering_engine
         }
 
         core::settings& s{*runtime::current_engine().settings};
-        m_is_vulkan = s.graphics.backend == core::graphics_backend::vulkan;
 
         // A zero width or height means "match the primary display" (the
         // release default). The display can only be queried now that the
@@ -139,7 +130,9 @@ namespace rendering_engine
                         s.window.height);
             }
         }
-        SDL_WindowFlags window_flags{m_is_vulkan ? SDL_WINDOW_VULKAN : SDL_WINDOW_OPENGL};
+        // Vulkan owns presentation through vkQueuePresentKHR; the window
+        // is an SDL_WINDOW_VULKAN container only.
+        SDL_WindowFlags window_flags{SDL_WINDOW_VULKAN};
         // Resizable so the user (and the window manager) can change the size,
         // reported through window_resized; high-pixel-density so the drawable
         // matches the display's native pixel grid instead of a scaled logical
@@ -159,39 +152,11 @@ namespace rendering_engine
             fullscreen = true;
         }
 
-        LOG_INF("Creating window: title='%s' size=%ux%u mode=%s double_buffered=%s",
+        LOG_INF("Creating window: title='%s' size=%ux%u mode=%s",
                 s.window.title.c_str(),
                 s.window.width,
                 s.window.height,
-                core::window_mode_name(mode),
-                s.window.double_buffered ? "true" : "false");
-
-        if (!m_is_vulkan)
-        {
-            SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 8);
-            SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 8);
-            SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 8);
-            SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE, 8);
-            SDL_GL_SetAttribute(SDL_GL_BUFFER_SIZE, 32);
-            // 24-bit depth + 8-bit stencil: the same layout as the
-            // off-screen depth24_stencil8 attachments, and enough depth
-            // precision for the scene's near/far range (16 bits banded
-            // visibly on large scenes).
-            SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
-            SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
-            SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, s.window.double_buffered);
-            SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-            // The OpenGL backend is written against 4.6 core (DSA,
-            // SPIR-V shaders, compute); gl_device::init rejects anything
-            // older with a message box rather than a null-function crash.
-            SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
-            SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 6);
-#if _DEBUG
-            // A debug context makes the driver validate every call and
-            // report through the KHR_debug callback gl_device installs.
-            SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG);
-#endif
-        }
+                core::window_mode_name(mode));
 
         m_window.reset(SDL_CreateWindow(s.window.title.c_str(), s.window.width, s.window.height, window_flags));
 
@@ -211,34 +176,13 @@ namespace rendering_engine
             set_relative_mouse_mode(true);
         }
 
-        if (m_is_vulkan)
-        {
-            // Vulkan owns presentation through vkQueuePresentKHR; the
-            // window stays an SDL_WINDOW_VULKAN container only.
-            LOG_INF("SDL window created (Vulkan presentation)");
-        }
-        else
-        {
-            m_gl_context.reset(SDL_GL_CreateContext(m_window.get()));
-            if (m_gl_context == nullptr)
-            {
-                LOG_FTL("Could not create SDL GL context: %s", SDL_GetError());
-                throw std::runtime_error{SDL_GetError()};
-            }
-            LOG_INF("SDL window and GL context created successfully");
-            const int swap_interval = s.window.vsync ? 1 : 0;
-            if (!SDL_GL_SetSwapInterval(swap_interval))
-            {
-                LOG_WRN("Could not set swap interval to %d: %s", swap_interval, SDL_GetError());
-            }
-        }
+        LOG_INF("SDL window created (Vulkan presentation)");
     }
 
     void window::quit()
     {
         // Close the gamepads before the subsystem that owns them goes.
         m_gamepads.clear();
-        m_gl_context.reset();
         m_window.reset();
 
         if (m_gamepad_subsystem)
@@ -251,24 +195,9 @@ namespace rendering_engine
         LOG_INF("Quit rendering_engine::window");
     }
 
-    void window::swap_buffers()
-    {
-        // Vulkan presents through vkQueuePresentKHR inside
-        // gpu::device::submit; nothing to do here on that path.
-        if (!m_is_vulkan)
-        {
-            SDL_GL_SwapWindow(m_window.get());
-        }
-    }
-
     SDL_Window* window::sdl_window() const noexcept
     {
         return m_window.get();
-    }
-
-    void* window::gl_context() const noexcept
-    {
-        return m_gl_context.get();
     }
 
     void window::show_message(const std::string& title, const std::string& message, message_severity severity)

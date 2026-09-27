@@ -10,7 +10,6 @@
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/gpu/shader_bindings.hpp>
-#include <rendering_engine/renderables/per_draw_ubo.hpp>
 
 namespace
 {
@@ -42,10 +41,8 @@ namespace rendering_engine
         descriptor.required_vertex_format = vertex_format::position_uv;
         descriptor.vertex_format_without_tangents = vertex_format::position_uv;
 
-        // Per-draw layout (slot 1): the model + normal matrix UBO at
-        // binding 1, read at a dynamic offset into the per-draw ring
-        // (per_draw_ubo.hpp) and matching the shadow passes' layout.
-        descriptor.draw_layout.entries.push_back(per_draw_model_layout_entry());
+        // No per-draw bindings: the model + normal matrix are pushed
+        // (per_draw_ubo.hpp), so the per-draw layout (slot 1) is empty.
         descriptor.frame_layout = frame_layout;
 
         // Per-material layout (slot 2): the {color, useTexture} UBO plus

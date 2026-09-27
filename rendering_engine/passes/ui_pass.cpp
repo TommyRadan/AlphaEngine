@@ -95,7 +95,7 @@ namespace rendering_engine
 
         // Left 0, right width; bottom height, top 0: pixel rows grow
         // downwards and land on the engine's y-up clip space (the Vulkan
-        // backend flips its swapchain viewport to match OpenGL).
+        // backend flips its swapchain viewport to keep NDC +Y up).
         ui_frame_block block{};
         block.projection = core::math::ortho(0.0f, width, height, 0.0f, -1.0f, 1.0f);
         block.viewport[0] = width;

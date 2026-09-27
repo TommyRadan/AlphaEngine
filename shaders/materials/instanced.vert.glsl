@@ -4,11 +4,10 @@
 #version 450
 
 // Instanced unlit geometry. The model matrix and colour arrive as
-// ordinary vertex attributes from a per-instance stream (divisor 1), so
-// the path does not depend on gl_InstanceIndex behaving across the
-// SPIR-V -> GL translation. Location 0 is the shared geometry position;
-// the model matrix occupies four consecutive vec4 slots (one per column)
-// and the tint follows.
+// ordinary vertex attributes from a per-instance stream (stepped once per
+// instance) rather than being indexed by gl_InstanceIndex. Location 0 is
+// the shared geometry position; the model matrix occupies four
+// consecutive vec4 slots (one per column) and the tint follows.
 
 #include "include/per_frame.glsl"
 

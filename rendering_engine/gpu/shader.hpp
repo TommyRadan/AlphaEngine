@@ -22,10 +22,7 @@ namespace rendering_engine::gpu
         shader_stage stage{shader_stage::vertex};
 
         // SPIR-V byte blob, produced upstream by
-        // @ref rendering_engine::gpu::compile_glsl_to_spirv. Vulkan
-        // backends consume this natively; the OpenGL 4.6 backend
-        // uploads it via @c glShaderBinary +
-        // @c glSpecializeShaderARB (core ARB_gl_spirv).
+        // @ref rendering_engine::gpu::compile_glsl_to_spirv.
         std::vector<uint32_t> spirv;
     };
 
@@ -58,19 +55,16 @@ namespace rendering_engine::gpu
         // [-1, 1] (signed) — packed colours, quantised normals — and
         // the shader declares a float input. When false an integer
         // attribute is fetched as an integer and the shader declares an
-        // @c ivec / @c uvec input. Ignored for @c float32. Selects
-        // @c glVertexArrayAttribFormat (normalized) versus
-        // @c glVertexArrayAttribIFormat on the OpenGL backend and the
-        // @c _UNORM / @c _SNORM versus @c _UINT / @c _SINT vertex
-        // formats on Vulkan.
+        // @c ivec / @c uvec input. Ignored for @c float32. Selects the
+        // @c _UNORM / @c _SNORM versus @c _UINT / @c _SINT Vulkan vertex
+        // formats.
         bool normalized{false};
     };
 
     // How a vertex buffer slot advances through its attributes. @c vertex
     // steps once per vertex (the default); @c instance steps once per
     // instance, so a single record feeds every vertex of one instanced
-    // draw copy. Maps to @c glVertexAttribDivisor (0 / 1) on the OpenGL
-    // backend and to @c VkVertexInputRate on Vulkan.
+    // draw copy. Maps to @c VkVertexInputRate.
     enum class vertex_step_mode
     {
         vertex,

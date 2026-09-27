@@ -216,9 +216,8 @@ namespace rendering_engine
         input_bind_group_descriptor.entries.push_back(tonemap_slot);
 
         // Either may be invalid when the variant drawn compiles its
-        // sampler out: Vulkan then fills the slot with the device's 1x1
-        // placeholder and OpenGL leaves the unit alone, and the shader
-        // never reads it.
+        // sampler out: the device then fills the slot with its 1x1
+        // placeholder, and the shader never reads it.
         gpu::binding_value grading_slot{};
         grading_slot.binding = 2;
         grading_slot.kind = gpu::binding_kind::texture;

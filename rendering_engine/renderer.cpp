@@ -42,7 +42,6 @@
 #include <rendering_engine/passes/skybox_pass.hpp>
 #include <rendering_engine/passes/spot_shadow_pass.hpp>
 #include <rendering_engine/passes/ui_pass.hpp>
-#include <rendering_engine/renderables/per_draw_ring.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
 #include <rendering_engine/window.hpp>
 #include <runtime/engine.hpp>
@@ -133,10 +132,6 @@ void rendering_engine::renderer::init()
         m_shader_hot_reload = std::make_unique<gpu::shader_hot_reload>(*eng.gpu, root);
     }
 #endif
-
-    // The per-draw ring sizes its slots by the device's uniform-buffer
-    // offset alignment, so it follows the device's init.
-    m_per_draw_ring = std::make_unique<per_draw_ring>(*eng.gpu);
 
     // Tell the device about the initial backbuffer dimensions so that
     // begin_render_pass can default the viewport to the full window. The
@@ -394,8 +389,8 @@ void rendering_engine::renderer::init()
     // without timestamp queries.
     m_gpu_profiler.init(*eng.gpu, m_passes.pass_names());
 
-    // Bring the ImGui debug overlay up now that the window, GL context
-    // and passes are live. No-op in release builds.
+    // Bring the ImGui debug overlay up now that the window, the device
+    // and the passes are live. No-op in release builds.
     editor::init();
 
 #if _DEBUG
@@ -430,7 +425,7 @@ void rendering_engine::renderer::quit()
     m_shader_hot_reload.reset();
 #endif
 
-    // Tear the ImGui overlay down first, while the window and GL context
+    // Tear the ImGui overlay down first, while the window and the device
     // it bound to are still alive. No-op in release builds.
     editor::shutdown();
 
@@ -469,11 +464,6 @@ void rendering_engine::renderer::quit()
     // reference the device. Release them before the device tears its
     // pools down.
     m_materials.quit();
-
-    // The per-draw ring's buffers and shared groups go before the device.
-    // Every renderable has released its per-draw state by now (they hold
-    // no ring resources, only offsets).
-    m_per_draw_ring.reset();
 
     // Release the off-screen HDR and LDR targets before the device tears
     // its pools down. The colour and depth attachments are owned by the
@@ -519,21 +509,15 @@ void rendering_engine::renderer::render()
     }
 
     // Open the device frame before anything below touches GPU-visible
-    // memory. A deferred-execution backend (Vulkan) blocks here until
-    // the frame that last recorded into this frame's slot has finished
-    // and then frees the resources whose destruction it deferred while
-    // a command buffer could still reference them; the per-frame UBO
-    // writes the passes make during the walk land in this slot's copy of
-    // each buffer (see buffer_usage_hint::dynamic_data), so they never
-    // race a frame still in flight.
+    // memory. The device blocks here until the frame that last recorded
+    // into this frame's slot has finished and then frees the resources
+    // whose destruction it deferred while a command buffer could still
+    // reference them; the per-frame UBO writes the passes make during the
+    // walk land in this slot's copy of each buffer (see
+    // buffer_usage_hint::dynamic_data), so they never race a frame still
+    // in flight.
     gpu.begin_frame();
     m_in_frame = true;
-
-    // Rewind the per-draw ring to this frame's region. It must follow
-    // begin_frame: the region is the device's frame slot's, rewritten
-    // from its first slot, which is only safe once the frame that last
-    // read it has retired (see per_draw_ring).
-    m_per_draw_ring->begin_frame();
 
     // Standard materials sampling shared texture assets rebuild their
     // bind group when an asset's texture was replaced since (an
@@ -653,9 +637,8 @@ void rendering_engine::renderer::render()
     m_prev_jitter = ctx.jitter;
     ++m_frame_index;
 
-    // Close the frame. Vulkan presents the swapchain image it acquired
-    // for this frame here; OpenGL presents when the main loop calls
-    // window::swap_buffers.
+    // Close the frame: the device presents the swapchain image it
+    // acquired for this frame.
     gpu.end_frame();
     m_in_frame = false;
 }
@@ -687,11 +670,8 @@ void rendering_engine::renderer::on_resize(uint32_t pixel_width, uint32_t pixel_
     // consumer that compares the handle it bound against the one
     // frame_context publishes (tonemap, bloom, the velocity pass's depth,
     // the TAA resolve's LDR input) sees a different handle next frame;
-    // then release the old ones. OpenGL frees them immediately, which is
-    // fine between frames (its device drops its state cache on every
-    // destroy and at every pass boundary, so nothing here has to reach
-    // it); Vulkan defers the free until the last command buffer that
-    // referenced them has retired.
+    // then release the old ones. The device defers the free until the
+    // last command buffer that referenced them has retired.
     const gpu::render_target old_scene_color = m_scene_color_target;
     const gpu::render_target old_ldr_color = m_ldr_color_target;
     create_color_targets(pixel_width, pixel_height);
@@ -852,11 +832,6 @@ std::unique_ptr<rendering_engine::grid_material> rendering_engine::renderer::cre
 rendering_engine::ui_material& rendering_engine::renderer::get_ui_material()
 {
     return m_materials.get_ui_material();
-}
-
-rendering_engine::per_draw_ring& rendering_engine::renderer::get_per_draw_ring()
-{
-    return *m_per_draw_ring;
 }
 
 rendering_engine::tonemap_pass& rendering_engine::renderer::tonemap()

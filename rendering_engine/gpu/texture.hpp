@@ -60,21 +60,19 @@ namespace rendering_engine::gpu
         uint32_t sample_count{1};
 
         // What the texture may be bound as (see @ref texture_usage).
-        // Explicit-binding backends (Vulkan) bake it into the image, so
-        // a texture attached to a render target needs
-        // @c texture_usage_render_attachment and one bound as a
-        // storage image (the IBL compute convolution) needs
-        // @c texture_usage_storage; the OpenGL backend allows every
-        // use unconditionally. The default covers a sampled, uploaded
-        // asset.
+        // The backend bakes it into the image, so a texture attached to
+        // a render target needs @c texture_usage_render_attachment and
+        // one bound as a storage image (the IBL compute convolution)
+        // needs @c texture_usage_storage. The default covers a sampled,
+        // uploaded asset.
         texture_usage usage{texture_usage_default};
 
-        // Per-texture sampler state. Every backend bakes these onto the
+        // Per-texture sampler state. The backend bakes these onto the
         // texture object at create time so a texture is fully
         // configured by its descriptor and sampled correctly when its
         // binding carries no separate @ref sampler. A standalone
         // sampler bound to the same binding number (@c binding_kind::sampler)
-        // overrides this state for that draw on both backends.
+        // overrides this state for that draw.
         filter_mode min_filter{filter_mode::linear};
         filter_mode mag_filter{filter_mode::linear};
         mipmap_mode mipmap_filter{mipmap_mode::none};
@@ -163,8 +161,7 @@ namespace rendering_engine::gpu
     }
 
     // "No upper LOD clamp": the sampler may read down to the last level
-    // of any chain. Matches Vulkan's @c VK_LOD_CLAMP_NONE and GL's
-    // default @c GL_TEXTURE_MAX_LOD.
+    // of any chain. Matches Vulkan's @c VK_LOD_CLAMP_NONE.
     constexpr float lod_clamp_none = 1000.0f;
 
     struct sampler_descriptor
@@ -180,8 +177,7 @@ namespace rendering_engine::gpu
         // the major axis of a texel footprint. 1 disables it. Clamped
         // to @c device_limits::max_anisotropy, and silently 1 on a
         // device without @c device_features::sampler_anisotropy
-        // (GL: @c GL_TEXTURE_MAX_ANISOTROPY, core in 4.6; Vulkan:
-        // @c anisotropyEnable / @c maxAnisotropy).
+        // (Vulkan's @c anisotropyEnable / @c maxAnisotropy).
         float max_anisotropy{1.0f};
 
         // Level-of-detail range and bias. The chain is sampled between
@@ -199,13 +195,11 @@ namespace rendering_engine::gpu
         // fetched depth texel is compared against the shader's reference
         // coordinate with @ref compare and the (filtered) 0 / 1 result is
         // returned instead of the depth value — the @c sampler2DShadow /
-        // @c samplerCubeShadow contract. Maps to
-        // @c GL_TEXTURE_COMPARE_MODE / @c GL_TEXTURE_COMPARE_FUNC on the
-        // OpenGL sampler object and to @c compareEnable / @c compareOp on
-        // the Vulkan sampler. On Vulkan a standalone sampler reaches the
-        // shader through the combined-image-sampler of the texture bound
-        // at the same binding number in the same bind group, so the two
-        // entries belong together.
+        // @c samplerCubeShadow contract. Maps to @c compareEnable /
+        // @c compareOp on the Vulkan sampler. A standalone sampler
+        // reaches the shader through the combined-image-sampler of the
+        // texture bound at the same binding number in the same bind
+        // group, so the two entries belong together.
         bool compare_enabled{false};
         compare_function compare{compare_function::less_equal};
     };

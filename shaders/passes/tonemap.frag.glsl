@@ -4,9 +4,9 @@
 #version 450
 
 // A selectable tonemap curve followed by an explicit gamma-2.2 encode.
-// The swapchain is regular GL_RGBA8 (no SDL sRGB attribute, no
-// GL_FRAMEBUFFER_SRGB), so the framebuffer is treated as linear and the
-// encode has to happen here. Gamma 2.2 is visually indistinguishable
+// The LDR target and the swapchain are plain UNORM images (no sRGB
+// format, so no encode on store), so the framebuffer is treated as linear
+// and the encode has to happen here. Gamma 2.2 is visually indistinguishable
 // from the piecewise sRGB curve at these magnitudes and is the standard
 // chain partner for these operators.
 //

@@ -6,7 +6,7 @@
 // Reconstructs each pixel's previous-frame screen position from depth.
 // The depth was rasterised with the projection offset by this frame's
 // temporal-AA jitter, so the pixel's clip-space point (NDC xy from the
-// UV, NDC z from the depth buffer, GL convention, z in [-1, 1]) is first
+// UV, NDC z from the depth buffer, z in [-1, 1]) is first
 // moved back by that jitter: that is the surface's true, unjittered
 // position. It is then pushed through the baked reprojection matrix
 // prevViewProj * inverse(curViewProj), both unjittered, which takes it to

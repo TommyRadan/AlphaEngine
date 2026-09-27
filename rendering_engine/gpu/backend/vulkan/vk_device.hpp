@@ -5,11 +5,10 @@
  * @file vk_device.hpp
  * @brief Vulkan implementation of @ref gpu::device.
  *
- * Mirrors @c gl_device.hpp: the @c vk_device class is declared in
- * full and member functions are split across translation units by
- * resource family (vk_device.cpp for lifecycle / capabilities /
- * swapchain / render targets / queries / encoders / lookup_*,
- * vk_device_buffer.cpp for buffers, etc.).
+ * The @c vk_device class is declared in full and member functions are
+ * split across translation units by resource family (vk_device.cpp for
+ * lifecycle / capabilities / swapchain / render targets / queries /
+ * encoders / lookup_*, vk_device_buffer.cpp for buffers, etc.).
  *
  * The backend keeps up to k_max_frames_in_flight frames in flight
  * (core::graphics_settings::frames_in_flight, 2 by default): each
@@ -23,7 +22,7 @@
  * memory a frame in flight reads. Resources are destroyed through a
  * queue gated on the queue submission that could last have referenced
  * them (see enqueue_destroy). Shaders are runtime SPIR-V via
- * @ref gpu::compile_glsl_to_spirv (already used by the GL backend).
+ * @ref gpu::compile_glsl_to_spirv.
  * Recording is single-threaded except inside a render pass begun with
  * render_pass_descriptor::parallel: its draws go into secondary
  * command buffers, one per recording lane (acquire_secondary_command_
@@ -43,7 +42,7 @@
  * staging ring and a batched transfer command buffer that is submitted
  * with its own fence ahead of the frame (see stage_upload). Compute
  * pipelines and storage-image bind groups are implemented (the IBL
- * convolution runs on the GPU just like OpenGL), as are indirect draws,
+ * convolution runs on the GPU), as are indirect draws,
  * memory barriers, the buffer <-> texture copies, timestamp queries
  * and the VK_EXT_debug_utils labels.
  */
@@ -490,7 +489,7 @@ namespace rendering_engine::gpu::backend::vulkan
         // references it is executing, or still being recorded, is
         // invalid (VUID-vkDestroyBuffer-buffer-00922 /
         // VUID-vkFreeDescriptorSets-pDescriptorSets-00309) — the
-        // engine's per-draw UBO / bind-group churn would otherwise
+        // engine's buffer / bind-group churn would otherwise
         // trigger streams of it — and with several frames in flight
         // the previous frame's command buffer is still running when a
         // resource is destroyed. Each
@@ -534,8 +533,8 @@ namespace rendering_engine::gpu::backend::vulkan
         // an unset sampler slot. Vulkan requires every statically-used
         // descriptor to reference a valid resource, so create_bind_group
         // substitutes the matching-dimension default when a material
-        // leaves a texture binding empty (the OpenGL backend just leaves
-        // the sampler unbound). Created in init(), released in quit().
+        // leaves a texture binding empty. Created in init(), released in
+        // quit().
         texture default_texture(texture_dimension dim) const noexcept;
 
     private:
@@ -972,11 +971,11 @@ namespace rendering_engine::gpu::backend::vulkan
         static constexpr uint32_t k_diagnostic_frames = 3;
 
         // VK_EXT_depth_clip_control lets Vulkan accept clip-space Z
-        // in [-w, w] (OpenGL convention) instead of the default
-        // [0, w] range. The engine's projection matrices are
-        // GL-style; without this extension every pipeline would
-        // clip half the view frustum and the framebuffer would
-        // stay at the clear colour. We enable the extension when
+        // in [-w, w] instead of the default [0, w] range. The
+        // engine's projection matrices produce the [-w, w] range;
+        // without this extension every pipeline would clip half the
+        // view frustum and the framebuffer would stay at the clear
+        // colour. We enable the extension when
         // available and chain VkPipelineViewportDepthClipControlCreateInfoEXT
         // into the viewport state of every graphics pipeline.
         bool m_depth_clip_control_enabled{false};

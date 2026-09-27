@@ -52,10 +52,9 @@ void main()
 
     vec3 world = nearPoint + t * rayDirection;
 
-    // Reconstructed depth (references the per-draw model matrix so
-    // the binding stays live; identity for the origin grid). Map
-    // the GL-convention clip z in [-1, 1] to the [0, 1] window
-    // depth range used by both backends.
+    // Reconstructed depth, through the per-draw model matrix
+    // (identity for the origin grid). Map the clip z in [-1, 1] to
+    // the [0, 1] window depth range.
     vec4 clip = u_frame.viewProjectionMatrix * u_draw.modelMatrix * vec4(world, 1.0);
     gl_FragDepth = 0.5 * (clip.z / clip.w) + 0.5;
 

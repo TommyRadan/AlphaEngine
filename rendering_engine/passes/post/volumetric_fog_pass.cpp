@@ -116,9 +116,9 @@ namespace rendering_engine
         m_params_ubo = gpu.create_buffer(ubo_descriptor);
 
         // -- Layouts --------------------------------------------------
-        // The march's slot 1 sits beside the scene's per-frame set, whose
-        // numbers the OpenGL backend flattens into the same namespace, so
-        // its bindings come from the shared table.
+        // The march's slot 1 sits beside the scene's per-frame set, so its
+        // bindings come from the shared table and stay unique across both
+        // sets.
         gpu::bind_group_layout_descriptor march_layout{};
         march_layout.entries.push_back(
             {gpu::shader_bindings::volumetric_fog_params, gpu::binding_kind::uniform_buffer});

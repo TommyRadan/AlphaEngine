@@ -8,7 +8,7 @@
 #include <core/math/transform.hpp>
 #include <rendering_engine/editor/helper.hpp>
 #include <rendering_engine/gpu/handle.hpp>
-#include <rendering_engine/renderables/per_draw_ring.hpp>
+#include <rendering_engine/renderables/per_draw_ubo.hpp>
 
 namespace rendering_engine
 {
@@ -48,8 +48,8 @@ namespace rendering_engine::editor
         gpu::buffer m_vertex_buffer{};
 
         // The grid sits at the world origin: an identity transform whose
-        // PerDraw block is computed once and copied into the per-draw
-        // ring each frame the grid draws.
+        // PerDraw block is computed once and pushed each frame the grid
+        // draws.
         core::transform m_transform;
         per_draw_binding m_per_draw;
     };

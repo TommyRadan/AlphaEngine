@@ -2,7 +2,7 @@
 
 This file orients a contributor working in this repository: what AlphaEngine is, how to build, run and check it, how the modules relate, and the conventions the code follows. It describes the architecture as it stands today; a detail that belongs to one feature, not the architecture, lives in a doxygen comment next to that code instead of here.
 
-AlphaEngine is a C++20, single-executable real-time 3D engine. `runtime::engine` owns SDL3-backed windowing, input and audio, a Vulkan/OpenGL renderer (`rendering_engine`), Jolt Physics (`runtime::physics`), embedded Lua scripting via sol2 (`runtime/scripting`), and a scene graph of pooled nodes and components; gameplay is added through self-registering game modules under `external/`. It targets Windows (MSVC) and Linux (GCC/Clang). There is no separate editor build and no `docs/` tree — the debug-only Dear ImGui overlay and gizmos under `rendering_engine/editor` are the closest thing to an editor, and reference material lives in doxygen comments next to the code they document.
+AlphaEngine is a C++20, single-executable real-time 3D engine. `runtime::engine` owns SDL3-backed windowing, input and audio, a Vulkan renderer (`rendering_engine`), Jolt Physics (`runtime::physics`), embedded Lua scripting via sol2 (`runtime/scripting`), and a scene graph of pooled nodes and components; gameplay is added through self-registering game modules under `external/`. It targets Windows (MSVC) and Linux (GCC/Clang). There is no separate editor build and no `docs/` tree — the debug-only Dear ImGui overlay and gizmos under `rendering_engine/editor` are the closest thing to an editor, and reference material lives in doxygen comments next to the code they document.
 
 ## Build, run and check
 
@@ -20,8 +20,8 @@ AlphaEngine is a C++20, single-executable real-time 3D engine. `runtime::engine`
   ```
   Clang builds the same way with `-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_CXX_FLAGS=-stdlib=libc++`; CI builds both.
 - **Output:** `Binaries/AlphaEngine.exe` (Ninja) or `Binaries/<Configuration>/AlphaEngine.exe` (the Visual Studio generator) on Windows; `Binaries/AlphaEngine` on Linux.
-- **The Vulkan SDK is a required build dependency on every platform**: `find_package(Vulkan REQUIRED)` runs unconditionally, and the Vulkan backend at `rendering_engine/gpu/backend/vulkan/` is the default (`core::settings::graphics.backend`, the `ALPHAENGINE_GRAPHICS_BACKEND` env var, or `--backend`). An OpenGL backend at `rendering_engine/gpu/backend/opengl/` is compiled in as well today.
-- SDL3, GLM, nlohmann/json (backs `settings.json`), glslang (GLSL → SPIR-V, used by both backends), the Vulkan Memory Allocator, Dear ImGui + ImGuizmo (Debug builds only), Jolt Physics, KTX-Software (KTX2 texture loading) and Lua + sol2 are all fetched from source by CMake via `FetchContent`; no system package is needed for any of them. glad (vendored OpenGL loader) and stb/cgltf (vendored, header-only) round out the stack.
+- **The Vulkan SDK is a required build dependency on every platform**: `find_package(Vulkan REQUIRED)` runs unconditionally, and the Vulkan backend at `rendering_engine/gpu/backend/vulkan/` is the only GPU backend (`core::settings::graphics.backend`, the `ALPHAENGINE_GRAPHICS_BACKEND` env var, or `--backend`, which accept `vulkan` and warn about any other value).
+- SDL3, GLM, nlohmann/json (backs `settings.json`), glslang (GLSL → SPIR-V for the Vulkan backend), the Vulkan Memory Allocator, Dear ImGui + ImGuizmo (Debug builds only), Jolt Physics, KTX-Software (KTX2 texture loading) and Lua + sol2 are all fetched from source by CMake via `FetchContent`; no system package is needed for any of them. stb and cgltf (vendored, header-only) round out the stack.
 - **Format and naming gates**, both run in CI on Linux with clang-format/clang-tidy 18:
   - `./scripts/check-style.ps1` (`-Fix` to rewrite in place) runs clang-format over every `.cpp`/`.hpp`/`.h` under `runtime/`, `core/`, `rendering_engine/`, `external/`. See `.clang-format` (Allman braces, 4-space indent, 120 columns, pointer-left).
   - `./scripts/check-naming.ps1` (`-Fix` to apply renames) configures a Ninja `build-tidy/` directory for `compile_commands.json`, then runs clang-tidy's `readability-identifier-naming` check over the same four directories. See `.clang-tidy` (snake_case).
@@ -31,7 +31,6 @@ AlphaEngine is a C++20, single-executable real-time 3D engine. `runtime::engine`
       | xargs clang-format-18 --style=file --dry-run -Werror
     cmake -S . -B build-tidy -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
       -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
-    cmake --build build-tidy --target glad
     run-clang-tidy-18 -p build-tidy -quiet "(runtime|core|rendering_engine|external)/"
     ```
   - Every source, shader, CMake, script and workflow file under `core/`, `runtime/`, `rendering_engine/`, `external/`, `shaders/`, `cmake/`, `scripts/`, the root `CMakeLists.txt` and `.github/workflows/` must start with the SPDX header (see Conventions below); CI checks this alongside clang-format.
@@ -57,7 +56,7 @@ The composition root and world model. `runtime::engine` (`runtime/engine.hpp`) o
 
 Owns the window, the GPU device and the ordered list of render passes, through `rendering_engine::renderer` (`renderer.hpp`), itself owned by `runtime::engine`. `renderer::render()` walks its pass list twice per frame — every pass's `prepare`, then every pass's `record` — inside `gpu::device::begin_frame`/`end_frame`, handing every pass the same per-frame `frame_context` (active camera, off-screen and swapchain targets, viewport, frame index, TAA jitter) so passes cannot disagree mid-frame; the scene pass renders into an off-screen HDR target, a post chain (tonemap, and depending on settings bloom, TAA, FXAA, motion blur, auto-exposure and volumetric fog) resolves it to LDR, and the UI pass composites on top. Renderables register into the world's registries (`register_scene_renderable`/`register_ui_renderable`/`register_debug_renderable`, forwarded by the renderer to `render_world`) rather than drawing themselves; each pass collects, sorts and dispatches its registry's `draw_item`s.
 
-- **`gpu/`** — the backend-agnostic RHI: `gpu::device`, `command_encoder`, `pipeline`, `bind_group`, `buffer`, `texture`, `handle`, and `gpu::create_device(backend_type)`, which builds an implementation under `gpu/backend/vulkan/` (the default: VMA-backed sub-allocation, a staging ring for uploads, push constants where the device reports the feature) or `gpu/backend/opengl/` (also compiled in today). Shader compilation (`shader_compiler`, GLSL → SPIR-V via glslang) and lookup (`shader_library`) live here too.
+- **`gpu/`** — the backend-agnostic RHI: `gpu::device`, `command_encoder`, `pipeline`, `bind_group`, `buffer`, `texture`, `handle`, and `gpu::create_device(backend_type)`, which builds the implementation under `gpu/backend/vulkan/` (VMA-backed sub-allocation, a staging ring for uploads, the per-draw block in push constants). Shader compilation (`shader_compiler`, GLSL → SPIR-V via glslang) and lookup (`shader_library`) live here too.
 - **`passes/`** (+ `passes/post/`) — one type per render pass (`scene_pass`, `shadow_pass`/`point_shadow_pass`/`spot_shadow_pass`, `depth_prepass`, `skybox_pass`, `ui_pass`, and the post passes), each implementing the `rendering_engine::pass` interface.
 - **`materials/`** — a `material_template` per material type (its shaders, layouts, and a cache of pipeline variants) shared by any number of `material` instances; eight built-in types (`basic`, `phong`, `standard`, `instanced`, `points`, `line`, `grid`, `ui`).
 - **`renderables/`** (+ `premade_2d/`, `premade_3d/`) — the `draw_item`-emitting objects a pass draws: `model`, `instanced_mesh`, `line`, `points`, the primitive shapes, and the 2D/UI widgets.
@@ -94,7 +93,7 @@ GLSL under `shaders/` (`include/` for shared `#include`-able pieces, `materials/
 6. Emit `core::render_update`, for render-rate, input-driven logic.
 7. Update every loaded scene (`scene_manager::update`): settle world transforms depth-first, then run each component type's `on_update` in turn — including every enabled `behavior::on_update` — parents before children, then apply the scene's deferred commands.
 8. Update audio (`core::audio::update`), after the scene so this frame's transform changes are already applied; keeps playing while the window is minimized.
-9. Unless the window is minimized: build the debug/editor overlay (`rendering_engine::editor::begin_frame`), render the frame (`renderer::render()` — every pass's `prepare`, then every pass's `record`, bracketed by `gpu::device::begin_frame`/`end_frame`; the Vulkan backend presents inside `end_frame`), then `window::swap_buffers()` (presents on OpenGL; a no-op on Vulkan, already presented inside `end_frame`).
+9. Unless the window is minimized: build the debug/editor overlay (`rendering_engine::editor::begin_frame`), render the frame (`renderer::render()` — every pass's `prepare`, then every pass's `record`, bracketed by `gpu::device::begin_frame`/`end_frame`; the device presents inside `end_frame`).
 10. If `core::settings::diagnostics.frame_limit` is non-zero and reached, request quit (`core::quit_requested`).
 
 ## Conventions
@@ -128,7 +127,7 @@ GLSL under `shaders/` (`include/` for shared `#include`-able pieces, `materials/
 `.github/workflows/ci.yml` runs on every push and pull request to `master`:
 
 - **`format`** (Ubuntu) — clang-format 18 `--dry-run -Werror` over `core/`, `runtime/`, `rendering_engine/`, `external/`, plus the SPDX-header check over those directories and `shaders/`, `cmake/`, `scripts/`, `CMakeLists.txt` and `.github/workflows/`.
-- **`tidy`** (Ubuntu, Clang 18 + libc++) — configures the tree for `compile_commands.json`, builds the `glad` target, then runs `run-clang-tidy` (the `readability-identifier-naming` check) over `core/`, `runtime/`, `rendering_engine/`, `external/`.
+- **`tidy`** (Ubuntu, Clang 18 + libc++) — configures the tree for `compile_commands.json`, then runs `run-clang-tidy` (the `readability-identifier-naming` check) over `core/`, `runtime/`, `rendering_engine/`, `external/`.
 - **`build-linux`** (matrix: GCC, Clang + libc++) — configures and builds the `AlphaEngine` target on both Linux toolchains; it does not run the binary.
 - **`smoke`** (matrix: plain, ASan+UBSan) — builds a Debug binary and runs it headlessly under `xvfb-run` on Mesa lavapipe with the Khronos validation layer, twice (once with synchronization validation added), 300 frames each, failing on any `[ERR]`/`[FTL]`/validation-layer line.
 - **`build`** (Windows, matrix: Debug/Release) — installs the Vulkan SDK, builds with MSVC, stages the Khronos validation layer next to a Debug binary, and uploads both configurations as workflow artifacts.
