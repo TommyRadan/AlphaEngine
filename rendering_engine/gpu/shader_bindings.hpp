@@ -44,7 +44,10 @@
  *
  * Pass-private pipelines (the depth-only shadow passes, the fullscreen
  * post chain, the IBL compute kernels) bind nothing from the scene's
- * per-frame set and number their few resources locally from 0.
+ * per-frame set and number their few resources locally from 0. The one
+ * exception is the volumetric fog raymarch, which binds the per-frame
+ * set for the view, the lights and the shadow maps, so its own set's
+ * numbers come from this table too.
  */
 
 #pragma once
@@ -104,4 +107,11 @@ namespace rendering_engine::gpu::shader_bindings
     // palette has no fixed joint cap. 22 and 23 are spent by the spot
     // shadow resources above, so this resumes at 24.
     constexpr uint32_t per_draw_joints = 24;
+
+    // Set 1 of the volumetric fog raymarch, whose set 0 is the scene
+    // pass's per-frame group: its parameters block and the scene depth
+    // it reconstructs world positions from. 24 is spent by the joint
+    // palette above, so these resume at 25.
+    constexpr uint32_t volumetric_fog_params = 25;
+    constexpr uint32_t volumetric_fog_depth = 26;
 } // namespace rendering_engine::gpu::shader_bindings

@@ -50,14 +50,23 @@ vec3 apply_fog(vec3 color, vec3 worldPosition, vec3 cameraPosition)
     // The trailing ratio -> 1 as falloff * deltaZ -> 0 (a near-horizontal
     // ray sees a constant density over its length), so a small-epsilon
     // check stands in for that limit instead of dividing by zero.
+    //
+    // While the volumetric fog pass runs it marches this same medium from
+    // the camera out to heightFogParams.z, so the integral here starts
+    // that far along the ray (a fragment closer than that gets no height
+    // fog of its own) instead of attenuating the stretch a second time.
+    // At 0, the default, the ray starts at the camera as above.
     if (heightDensity > 0.0)
     {
         float falloff = u_frame.heightFogParams.x;
         float referenceHeight = u_frame.heightFogParams.y;
-        float deltaZ = worldPosition.z - cameraPosition.z;
+        float skipped = min(u_frame.heightFogParams.z, dist);
+        vec3 rayStart = cameraPosition + (worldPosition - cameraPosition) * (skipped / max(dist, 1e-4));
+        float rayLength = dist - skipped;
+        float deltaZ = worldPosition.z - rayStart.z;
         float falloffDeltaZ = falloff * deltaZ;
         float ratio = abs(falloffDeltaZ) > 1e-4 ? (1.0 - exp(-falloffDeltaZ)) / falloffDeltaZ : 1.0;
-        float opticalDepth = heightDensity * exp(-falloff * (cameraPosition.z - referenceHeight)) * dist * ratio;
+        float opticalDepth = heightDensity * exp(-falloff * (rayStart.z - referenceHeight)) * rayLength * ratio;
         factor = clamp(factor * exp(-opticalDepth), 0.0, 1.0);
     }
 

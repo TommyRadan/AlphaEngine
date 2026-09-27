@@ -113,6 +113,63 @@ namespace rendering_engine
     };
 
     /**
+     * @brief Runtime-tunable volumetric fog parameters
+     *        (@ref post_settings::volumetric).
+     *
+     * @ref volumetric_fog_pass raymarches the scene's exponential height
+     * fog (@ref fog_settings::height_density, @c height_falloff and
+     * @c reference_height, set through @ref context::set_fog) as a
+     * participating medium lit by the scene lights, so the medium itself
+     * is not duplicated here: with a height density of 0 there is nothing
+     * to march and the pass draws nothing even while enabled. These fields
+     * only tune how it is marched and lit. @ref volumetric_fog_pass::record
+     * reads them every frame; there is no baked state to invalidate.
+     *
+     * Off by default, so the pass stays in the frame graph but records no
+     * draws and the image is exactly what it was without it.
+     */
+    struct volumetric_fog_settings
+    {
+        bool enabled{false};
+
+        /// Multiplier on the height-fog density: the medium's extinction
+        /// (and, at a white albedo, its scattering) coefficient per world
+        /// unit is density_scale * the height fog's density at that point.
+        float density_scale{1.0f};
+
+        /// Henyey-Greenstein anisotropy g of the phase function, in
+        /// (-1, 1): 0 scatters evenly in every direction, positive values
+        /// scatter forward (bright halos looking toward a light), negative
+        /// values back toward the light. Clamped to +-0.99 by the pass.
+        float anisotropy{0.2f};
+
+        /// World-space distance from the camera the march stops at; the
+        /// scene beyond it keeps only the lit materials' analytic fog.
+        float max_distance{64.0f};
+
+        /// March steps per ray, clamped to [1, 128] by the pass. The
+        /// per-pixel step jitter turns a low count's banding into noise
+        /// that temporal AA averages away.
+        int steps{32};
+
+        /// Scale on the in-scattered light (not on the extinction).
+        float intensity{1.0f};
+    };
+
+    /**
+     * @brief Whether @p settings make @ref volumetric_fog_pass march at
+     *        all: enabled, with a positive density scale and reach.
+     *
+     * The lit materials' analytic height fog starts at @c max_distance
+     * instead of the camera exactly when this holds, so the stretch the
+     * pass marches is not attenuated twice.
+     */
+    inline bool volumetric_fog_active(const volumetric_fog_settings& settings)
+    {
+        return settings.enabled && settings.density_scale > 0.0f && settings.max_distance > 0.0f;
+    }
+
+    /**
      * @brief Runtime-tunable post-processing chain parameters.
      *
      * Lives on @ref context (@ref context::set_post_settings /
@@ -126,11 +183,11 @@ namespace rendering_engine
      * @ref tonemap_pass::record has no need to read them back out of the
      * frame context.
      *
-     * Scene-wide fog is deliberately not part of this struct: it stays on
-     * the existing @ref context::set_fog / @ref fog_settings path (being
-     * extended for height fog in parallel), and folding it into the post
-     * chain as a fullscreen pass over depth is a documented follow-on, not
-     * part of this one.
+     * The scene-wide fog medium is deliberately not part of this struct:
+     * it stays on the existing @ref context::set_fog / @ref fog_settings
+     * path the lit materials apply analytically. @ref volumetric only
+     * tunes how @ref volumetric_fog_pass raymarches that same height-fog
+     * medium in the post chain.
      */
     struct post_settings
     {
@@ -141,6 +198,7 @@ namespace rendering_engine
         /// Tonemap curve @ref tonemap_pass applies.
         tonemap_operator tonemap_op{tonemap_operator::aces};
 
+        volumetric_fog_settings volumetric{};
         bloom_settings bloom{};
         taa_settings taa{};
         fxaa_settings fxaa{};
