@@ -95,6 +95,15 @@ namespace rendering_engine
         shadow_pass(const shadow_pass&) = delete;
         shadow_pass& operator=(const shadow_pass&) = delete;
 
+        // Finds the caster, fits the cascades to the frame's camera,
+        // culls and collects the casters, and uploads each active
+        // cascade's matrix; every accessor below reports this frame from
+        // here on. Runs ahead of the scene pass's prepare, which reads
+        // them.
+        void prepare(const frame_context& ctx) override;
+
+        // Clears every cascade layer and draws the casters @ref prepare
+        // collected into the active ones.
         void record(gpu::command_encoder& encoder, const frame_context& ctx) override;
 
         const char* name() const override
@@ -125,7 +134,7 @@ namespace rendering_engine
         int cascade_count() const;
 
         // Light-space view-projection of cascade @p cascade, refreshed
-        // every @ref record. Only meaningful below @ref cascade_count.
+        // every @ref prepare. Only meaningful below @ref cascade_count.
         const core::math::mat4& light_view_projection(int cascade) const;
 
         // View depth at which cascade @p cascade ends and the next one
@@ -156,7 +165,7 @@ namespace rendering_engine
         // shadows that one light. -1 when @ref has_shadow is false.
         int shadow_light_index() const;
 
-        // Caster / cascade pairs skipped by the last @ref record because
+        // Caster / cascade pairs skipped by the last @ref prepare because
         // the caster's world bounds could not reach that cascade (a
         // caster outside every cascade counts once per cascade). Zero on
         // no-caster frames.
@@ -220,7 +229,7 @@ namespace rendering_engine
         std::array<gpu::bind_group, max_shadow_cascades> m_light_bind_groups{};
 
         // Reused across frames so the allocations persist. Collected
-        // once per frame ahead of the cascades.
+        // once per frame by prepare(), ahead of the cascades.
         std::vector<draw_item> m_items;
         std::vector<caster_range> m_casters;
 

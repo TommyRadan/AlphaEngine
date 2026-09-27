@@ -268,7 +268,7 @@ namespace rendering_engine
         return m_caster_mask;
     }
 
-    void spot_shadow_pass::record(gpu::command_encoder& encoder, const frame_context& /*ctx*/)
+    void spot_shadow_pass::prepare(const frame_context& /*ctx*/)
     {
         // Nothing in the frame context shapes a spot map: it is a fixed
         // perspective view from the light, independent of the camera, so
@@ -276,6 +276,7 @@ namespace rendering_engine
         // registry, like point_shadow_pass.
         auto& gpu = *runtime::current_engine().gpu;
         m_culled = 0;
+        m_items.clear();
 
         // Locate the first shadow-casting spot light, tracking its index
         // within the packed spot array so the lit shader can match it.
@@ -303,22 +304,8 @@ namespace rendering_engine
         }
 
         m_has_shadow = caster != nullptr;
-
-        // Always open the pass so the depth map is cleared even on
-        // no-caster frames; the lit shader keys off has_shadow rather
-        // than the (possibly stale) contents. The target has no colour
-        // attachment, so only the depth ops matter.
-        gpu::render_pass_descriptor descriptor{};
-        descriptor.target = m_target;
-        descriptor.use_depth = true;
-        descriptor.depth.load = gpu::load_op::clear;
-        descriptor.depth.clear_depth = 1.0f;
-
-        auto pass_encoder = encoder.begin_render_pass(descriptor);
-
         if (!m_has_shadow)
         {
-            pass_encoder->end();
             return;
         }
 
@@ -346,7 +333,6 @@ namespace rendering_engine
         // rasterize into the map, so they are skipped before their items
         // are even built; a renderable without bounds always casts.
         const math::frustum light_frustum = math::frustum::from_view_projection(m_light_view_projection);
-        m_items.clear();
         for (auto* r : *m_registry)
         {
             if (!r->casts_shadow() || (r->layer_mask & m_caster_mask) == 0)
@@ -360,6 +346,27 @@ namespace rendering_engine
                 continue;
             }
             r->collect_draw_items(m_items);
+        }
+    }
+
+    void spot_shadow_pass::record(gpu::command_encoder& encoder, const frame_context& /*ctx*/)
+    {
+        // Always open the pass so the depth map is cleared even on
+        // no-caster frames; the lit shader keys off has_shadow rather
+        // than the (possibly stale) contents. The target has no colour
+        // attachment, so only the depth ops matter.
+        gpu::render_pass_descriptor descriptor{};
+        descriptor.target = m_target;
+        descriptor.use_depth = true;
+        descriptor.depth.load = gpu::load_op::clear;
+        descriptor.depth.clear_depth = 1.0f;
+
+        auto pass_encoder = encoder.begin_render_pass(descriptor);
+
+        if (!m_has_shadow)
+        {
+            pass_encoder->end();
+            return;
         }
 
         shadow_caster_dispatch dispatch(*pass_encoder, m_pipeline, m_instanced.pipeline, m_light_bind_group);

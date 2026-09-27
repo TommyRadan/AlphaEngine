@@ -112,6 +112,15 @@ namespace rendering_engine::gpu
         // @c create_library_shader_module), so a shader declares a
         // push-constant block only where the device has one.
         bool push_constants{false};
+        // A render pass begun with @c render_pass_descriptor::parallel
+        // takes its draws from secondary encoders
+        // (@c render_pass_encoder::begin_secondary) that several threads
+        // record at once and the pass then executes in order. Set on
+        // Vulkan, where each chunk is a secondary command buffer from
+        // its own command pool; OpenGL records immediately on the
+        // thread that owns the context, so it is false there and every
+        // pass records serially.
+        bool parallel_recording{false};
     };
 
     // Numeric limits of the device, filled beside @ref device_features.
@@ -155,7 +164,12 @@ namespace rendering_engine::gpu
 
     // Top-level GPU device interface. All resource creation,
     // destruction and command recording flows through this struct.
-    // Methods are main-thread-only — there is no internal locking.
+    // Methods are main-thread-only — there is no internal locking. The
+    // one exception is recording into the secondary encoders of a
+    // parallel render pass (@c render_pass_encoder::begin_secondary), which
+    // a backend with @c device_features::parallel_recording makes safe
+    // from the job pool's workers while the main thread waits on the
+    // fork; nothing else may touch the device in the meantime.
     struct device
     {
         // Out-of-line virtual destructor: pins this class's vtable

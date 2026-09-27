@@ -90,6 +90,10 @@ namespace rendering_engine
         fxaa_pass(const fxaa_pass&) = delete;
         fxaa_pass& operator=(const fxaa_pass&) = delete;
 
+        // Picks and (on a miss) builds the input bind group for this
+        // frame's image, and applies a pending edge-step rewrite.
+        void prepare(const frame_context& ctx) override;
+
         void record(gpu::command_encoder& encoder, const frame_context& ctx) override;
 
         const char* name() const override
@@ -106,9 +110,9 @@ namespace rendering_engine
         }
 
         // Notes the new drawable size for the per-texel edge step; the next
-        // record() rewrites the rcp_frame UBO with it, inside the frame
+        // prepare() rewrites the rcp_frame UBO with it, inside the frame
         // bracket. The input bind group needs no work here: it is rebound
-        // by record() when the sampled handle changes.
+        // by prepare() when the sampled handle changes.
         void resize(uint32_t width, uint32_t height) override;
 
     private:
@@ -126,7 +130,7 @@ namespace rendering_engine
         gpu::bind_group bind_group_for(gpu::texture input_color);
 
         // Writes {1/width, 1/height, 0, 0} to the rcp_frame UBO; a zero
-        // dimension writes a zero step. Only called from record(), after
+        // dimension writes a zero step. Only called from prepare(), after
         // begin_frame has waited for the previous frame that may still
         // read the buffer.
         void write_rcp_frame(uint32_t width, uint32_t height);
@@ -140,7 +144,7 @@ namespace rendering_engine
         bool m_rcp_frame_dirty{false};
 
         // Whether the UBO currently holds the real edge step (true) or the
-        // zero step that disables the effect (false). record() compares
+        // zero step that disables the effect (false). prepare() compares
         // frame_context::post.fxaa.enabled against this and only rewrites
         // the UBO on a mismatch (or when resize() set m_rcp_frame_dirty),
         // baking m_pending_width / m_pending_height when enabling and a
@@ -156,9 +160,12 @@ namespace rendering_engine
 
         // Two cached inputs — the two halves of the TAA ping-pong, or just
         // the LDR target — and the slot the next miss is built into.
-        // Entries are invalid until the first record() builds one.
+        // Entries are invalid until the first prepare() builds one.
         std::array<bound_input, 2> m_inputs{};
         size_t m_next_input_slot{0};
+
+        // The cached group this frame draws with, picked by prepare().
+        gpu::bind_group m_input_bind_group{};
 
         // Whether the engine wires the TAA resolve as this pass's input.
         bool m_taa_enabled{false};

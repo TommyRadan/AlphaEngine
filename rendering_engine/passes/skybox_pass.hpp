@@ -54,6 +54,10 @@ namespace rendering_engine
         skybox_pass(const skybox_pass&) = delete;
         skybox_pass& operator=(const skybox_pass&) = delete;
 
+        // Decides whether the frame draws the sky and uploads the
+        // jittered inverse view-projection it unprojects with.
+        void prepare(const frame_context& ctx) override;
+
         void record(gpu::command_encoder& encoder, const frame_context& ctx) override;
 
         const char* name() const override
@@ -84,6 +88,10 @@ namespace rendering_engine
         void rebuild_bind_group();
 
         gpu::texture m_cubemap{};
+
+        // Whether this frame's record() draws (a cube map and a camera),
+        // decided by prepare().
+        bool m_draws{false};
 
         gpu::shader_module m_vertex_shader{};
         gpu::shader_module m_fragment_shader{};

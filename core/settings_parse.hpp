@@ -50,6 +50,8 @@ namespace core
     inline constexpr float k_max_field_of_view = 179.0f;
     inline constexpr float k_min_mouse_sensitivity = 0.0001f;
     inline constexpr float k_max_mouse_sensitivity = 10.0f;
+    /** @brief Largest @ref graphics_settings::parallel_draw_threshold accepted; 0 disables parallel recording. */
+    inline constexpr unsigned int k_max_parallel_draw_threshold = 1u << 20;
     inline constexpr unsigned int k_min_shadow_resolution = 256;
     inline constexpr unsigned int k_max_shadow_resolution = 8192;
     inline constexpr float k_min_shadow_distance = 1.0f;
@@ -106,7 +108,8 @@ namespace core
 
     /**
      * @brief Applies the `ALPHAENGINE_WIDTH`, `_HEIGHT`, `_WINDOW_MODE`, `_VSYNC`, `_GRAPHICS_BACKEND`, `_TAA`,
-     *        `_DEPTH_PREPASS`, `_FRAMES_IN_FLIGHT`, `_SHADOW_RESOLUTION`, `_SHADOW_DISTANCE`, `_SHADOW_CASCADES`,
+     *        `_DEPTH_PREPASS`, `_FRAMES_IN_FLIGHT`, `_PARALLEL_DRAW_THRESHOLD`, `_SHADOW_RESOLUTION`,
+     *        `_SHADOW_DISTANCE`, `_SHADOW_CASCADES`,
      *        `_SHADOW_BIAS`, `_SHADOW_SLOPE_BIAS`, `_SHADOW_PCF_KERNEL` and `_ASSET_ROOT` variables on top of
      *        @p out, plus one variable per @ref post_process_settings field: `ALPHAENGINE_` followed by its `post`
      *        key in upper case (`ALPHAENGINE_EXPOSURE`, `_TONEMAP`, `_BLOOM`, `_BLOOM_THRESHOLD`, ...,
@@ -134,6 +137,8 @@ namespace core
         std::optional<bool> vsync;
         /** @brief The `--frames-in-flight` override of @ref graphics_settings::frames_in_flight. */
         std::optional<unsigned int> frames_in_flight;
+        /** @brief The `--parallel-draw-threshold` override of @ref graphics_settings::parallel_draw_threshold. */
+        std::optional<unsigned int> parallel_draw_threshold;
 
         /** @brief The `--shadow-*` overrides of @ref shadow_settings. */
         std::optional<unsigned int> shadow_resolution;

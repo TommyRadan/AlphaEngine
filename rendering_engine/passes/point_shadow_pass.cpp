@@ -334,7 +334,7 @@ namespace rendering_engine
         return m_caster_mask;
     }
 
-    void point_shadow_pass::record(gpu::command_encoder& encoder, const frame_context& /*ctx*/)
+    void point_shadow_pass::prepare(const frame_context& /*ctx*/)
     {
         // Nothing in the frame context shapes an omni map: the six faces
         // are fixed 90-degree views from the light, independent of the
@@ -385,43 +385,64 @@ namespace rendering_engine
         // Walk the registry once per frame, not once per face: every caster
         // builds its draw items (and writes its per-draw UBO) exactly once,
         // and its world bounds are recorded beside its item range so each
-        // face below can cull against its own frustum without asking the
+        // face can cull against its own frustum without asking the
         // renderable again. A caster that reports no bounds casts into
         // every face.
         m_items.clear();
         m_casters.clear();
-        if (m_has_shadow)
+        if (!m_has_shadow)
         {
-            for (auto* r : *m_registry)
+            return;
+        }
+        for (auto* r : *m_registry)
+        {
+            if (!r->casts_shadow() || (r->layer_mask & m_caster_mask) == 0)
             {
-                if (!r->casts_shadow() || (r->layer_mask & m_caster_mask) == 0)
-                {
-                    continue;
-                }
-                caster_range range{};
-                range.first = m_items.size();
-                range.bounded = r->world_bounds(range.bounds);
-                r->collect_draw_items(m_items);
-                range.count = m_items.size() - range.first;
-                if (range.count != 0)
-                {
-                    m_casters.push_back(range);
-                }
+                continue;
+            }
+            caster_range range{};
+            range.first = m_items.size();
+            range.bounded = r->world_bounds(range.bounds);
+            r->collect_draw_items(m_items);
+            range.count = m_items.size() - range.first;
+            if (range.count != 0)
+            {
+                m_casters.push_back(range);
             }
         }
 
-        // Refresh and render each face. Faces are always cleared (even with no
-        // caster) so the lit shader keys off has_shadow, not stale depth.
+        // Refresh each face's matrix and UBO, then cull every caster
+        // against each face: only casters whose bounds touch a face's
+        // 90-degree frustum can rasterize into its map, so each caster
+        // records the faces it reaches and record() draws it into those
+        // alone.
         for (int face = 0; face < point_shadow_face_count; ++face)
         {
-            if (m_has_shadow)
-            {
-                const math::vec3 eye = m_light_position;
-                const math::mat4 view = math::look_at(eye, eye + face_bases[face].dir, face_bases[face].up);
-                m_light_view_projections[face] = projection * view;
-                gpu.write_buffer(m_light_ubos[face], m_light_view_projections[face].data(), sizeof(math::mat4), 0);
-            }
+            const math::vec3 eye = m_light_position;
+            const math::mat4 view = math::look_at(eye, eye + face_bases[face].dir, face_bases[face].up);
+            m_light_view_projections[face] = projection * view;
+            gpu.write_buffer(m_light_ubos[face], m_light_view_projections[face].data(), sizeof(math::mat4), 0);
 
+            const uint32_t bit = 1u << static_cast<uint32_t>(face);
+            const math::frustum face_frustum = math::frustum::from_view_projection(m_light_view_projections[face]);
+            for (auto& caster : m_casters)
+            {
+                if (caster.bounded && !face_frustum.intersects(caster.bounds))
+                {
+                    ++m_culled;
+                    continue;
+                }
+                caster.faces |= bit;
+            }
+        }
+    }
+
+    void point_shadow_pass::record(gpu::command_encoder& encoder, const frame_context& /*ctx*/)
+    {
+        // Render each face. Faces are always cleared (even with no caster)
+        // so the lit shader keys off has_shadow, not stale depth.
+        for (int face = 0; face < point_shadow_face_count; ++face)
+        {
             // Depth-only face target: only the depth ops matter.
             gpu::render_pass_descriptor descriptor{};
             descriptor.target = m_targets[face];
@@ -436,21 +457,17 @@ namespace rendering_engine
                 continue;
             }
 
-            // Only casters whose bounds touch this face's 90-degree frustum
-            // can rasterize into its map; the rest are skipped here without
-            // touching their items. The dispatch picks the single-draw or
-            // instanced pipeline per item and binds this face's light group
-            // with it.
+            // Only the casters prepare() found reaching this face. The
+            // dispatch picks the single-draw or instanced pipeline per item
+            // and binds this face's light group with it.
+            const uint32_t bit = 1u << static_cast<uint32_t>(face);
             shadow_caster_dispatch dispatch(*pass_encoder, m_pipeline, m_instanced.pipeline, m_light_bind_groups[face]);
-            const math::frustum face_frustum = math::frustum::from_view_projection(m_light_view_projections[face]);
             for (const auto& caster : m_casters)
             {
-                if (caster.bounded && !face_frustum.intersects(caster.bounds))
+                if ((caster.faces & bit) == 0)
                 {
-                    ++m_culled;
                     continue;
                 }
-
                 for (std::size_t i = caster.first; i < caster.first + caster.count; ++i)
                 {
                     dispatch.draw(m_items[i]);

@@ -83,6 +83,14 @@ namespace rendering_engine
         point_shadow_pass(const point_shadow_pass&) = delete;
         point_shadow_pass& operator=(const point_shadow_pass&) = delete;
 
+        // Finds the caster, collects the casters with their bounds,
+        // refreshes and uploads the six face matrices and culls each
+        // caster against each face; every accessor below reports this
+        // frame from here on. Runs ahead of the scene pass's prepare.
+        void prepare(const frame_context& ctx) override;
+
+        // Clears every face and draws into it the casters @ref prepare
+        // found reaching it.
         void record(gpu::command_encoder& encoder, const frame_context& ctx) override;
 
         const char* name() const override
@@ -100,13 +108,13 @@ namespace rendering_engine
         // bind group.
         gpu::texture shadow_map() const;
 
-        // Light-space view-projection for face @p face, refreshed every record.
+        // Light-space view-projection for face @p face, refreshed every prepare.
         const core::math::mat4& light_view_projection(int face) const;
 
-        // World-space position of the active caster, refreshed every record.
+        // World-space position of the active caster, refreshed every prepare.
         const core::math::vec3& light_position() const;
 
-        // Near / far planes of the six face frustums, refreshed every record
+        // Near / far planes of the six face frustums, refreshed every prepare
         // (the far plane follows the caster's range); the lit shader
         // reconstructs a face's stored depth from them.
         float shadow_near() const;
@@ -123,7 +131,7 @@ namespace rendering_engine
         // Base depth-comparison bias the lit shader slope-scales.
         float depth_bias() const;
 
-        // Caster / face pairs skipped by the last @ref record because the
+        // Caster / face pairs skipped by the last @ref prepare because the
         // caster's world bounds fell outside that face's frustum (a caster
         // outside every face counts six times). Zero on no-caster frames.
         uint32_t culled_count() const;
@@ -139,14 +147,17 @@ namespace rendering_engine
     private:
         // One shadow caster's slice of @ref m_items plus the world bounds it
         // reported, recorded once per frame so each face culls against its
-        // own frustum without re-walking the registry. @c bounded is false
-        // for a renderable that reports no bounds; it casts into every face.
+        // own frustum without re-walking the registry, and the faces that
+        // culling found it reaching (bit n for face n), which record()
+        // draws it into. @c bounded is false for a renderable that reports
+        // no bounds; it casts into every face.
         struct caster_range
         {
             std::size_t first{0};
             std::size_t count{0};
             bool bounded{false};
             core::math::aabb bounds{};
+            uint32_t faces{0};
         };
 
         // Non-owning back-pointer to the render world's scene-renderable
@@ -171,7 +182,7 @@ namespace rendering_engine
         std::array<gpu::bind_group, point_shadow_face_count> m_light_bind_groups{};
 
         // Reused across frames so the allocations persist. Collected once
-        // per frame ahead of the six faces.
+        // per frame by prepare(), ahead of the six faces.
         std::vector<draw_item> m_items;
         std::vector<caster_range> m_casters;
 

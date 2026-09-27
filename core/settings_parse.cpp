@@ -395,6 +395,14 @@ namespace core
                                   1,
                                   graphics_settings::max_frames_in_flight);
                 }
+                else if (key == "parallel_draw_threshold")
+                {
+                    set_from_json(out.graphics.parallel_draw_threshold,
+                                  "graphics.parallel_draw_threshold",
+                                  value,
+                                  0,
+                                  k_max_parallel_draw_threshold);
+                }
                 else
                 {
                     warn_unknown_key("graphics", key);
@@ -774,6 +782,7 @@ namespace core
             backend,
             vsync,
             frames_in_flight,
+            parallel_draw_threshold,
             shadow_resolution,
             shadow_distance,
             shadow_cascades,
@@ -797,6 +806,7 @@ namespace core
             {"--backend", value_option::backend},
             {"--vsync", value_option::vsync},
             {"--frames-in-flight", value_option::frames_in_flight},
+            {"--parallel-draw-threshold", value_option::parallel_draw_threshold},
             {"--shadow-resolution", value_option::shadow_resolution},
             {"--shadow-distance", value_option::shadow_distance},
             {"--shadow-cascades", value_option::shadow_cascades},
@@ -860,6 +870,9 @@ Options:
   --backend <name>         gpu backend: opengl or vulkan
   --vsync <on|off>         wait for vertical sync
   --frames-in-flight <n>   frames the vulkan backend keeps in flight, 1 to 2
+  --parallel-draw-threshold <n>
+                           draws above which the scene pass records in parallel
+                           on vulkan (and per recording chunk); 0 disables
   --shadow-resolution <n>  texels per side of the shadow maps
   --shadow-distance <d>    view depth the directional cascades cover
   --shadow-cascades <n>    directional shadow cascades, 1 to 4
@@ -1126,6 +1139,12 @@ the ALPHAENGINE_* environment variables, which override the settings file
                       parse_unsigned_or_warn(
                           "ALPHAENGINE_FRAMES_IN_FLIGHT", *text, 1, graphics_settings::max_frames_in_flight));
         }
+        if (const auto text = read("ALPHAENGINE_PARALLEL_DRAW_THRESHOLD"))
+        {
+            assign_if(
+                out.graphics.parallel_draw_threshold,
+                parse_unsigned_or_warn("ALPHAENGINE_PARALLEL_DRAW_THRESHOLD", *text, 0, k_max_parallel_draw_threshold));
+        }
         if (const auto text = read("ALPHAENGINE_SHADOW_RESOLUTION"))
         {
             assign_if(out.shadows.resolution,
@@ -1264,6 +1283,10 @@ the ALPHAENGINE_* environment variables, which override the settings file
                 store_if(out.frames_in_flight,
                          parse_unsigned_or_warn(name.c_str(), *value, 1, graphics_settings::max_frames_in_flight));
                 break;
+            case value_option::parallel_draw_threshold:
+                store_if(out.parallel_draw_threshold,
+                         parse_unsigned_or_warn(name.c_str(), *value, 0, k_max_parallel_draw_threshold));
+                break;
             case value_option::shadow_resolution:
                 store_if(
                     out.shadow_resolution,
@@ -1310,6 +1333,7 @@ the ALPHAENGINE_* environment variables, which override the settings file
         assign_if(out.window.vsync, options.vsync);
         assign_if(out.graphics.backend, options.backend);
         assign_if(out.graphics.frames_in_flight, options.frames_in_flight);
+        assign_if(out.graphics.parallel_draw_threshold, options.parallel_draw_threshold);
         assign_if(out.shadows.resolution, options.shadow_resolution);
         assign_if(out.shadows.distance, options.shadow_distance);
         assign_if(out.shadows.cascade_count, options.shadow_cascades);

@@ -22,11 +22,12 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
-#include <optional>
 #include <vector>
 
 #include <rendering_engine/gpu/handle.hpp>
+#include <rendering_engine/gpu/render_target.hpp>
 #include <rendering_engine/passes/pass.hpp>
 #include <rendering_engine/render_stats.hpp>
 #include <rendering_engine/renderables/draw_item.hpp>
@@ -45,15 +46,38 @@ namespace rendering_engine
      *        reaches the pass as a registered renderable's
      *        @ref draw_item; @ref record runs no event listener.
      *
-     * The per-frame uploads and the sorted draw list are built once per
-     * frame by @ref prepare, which the depth pre-pass calls first when it
-     * runs, so both passes draw the same items with the same per-frame
-     * and per-draw data. On such a frame the pass loads the scene depth
-     * rather than clearing it and draws every pre-passed item
+     * The per-frame uploads, the sorted draw list and the pipeline every
+     * item binds are built once per frame by @ref prepare; @ref record
+     * (and @ref record_depth_prepass, which the depth pre-pass calls
+     * ahead of it) then only encode from that list, so both passes draw
+     * the same items with the same per-frame and per-draw data. The
+     * depth pre-pass announces the frames it runs through
+     * @ref expect_depth_prepass before this pass prepares: the pass then
+     * resolves each pre-passed item's depth-only twin
+     * (@ref material::depth_prepass_pipeline) for it, loads the scene
+     * depth rather than clearing it and draws every pre-passed item
      * (@ref material::draws_in_depth_prepass) with its
      * @ref material::depth_prepassed_pipeline — depth writes off, a
      * less-or-equal test — so each covered pixel shades once; the other
      * items keep their ordinary variant.
+     *
+     * On a device with @c device_features::parallel_recording (Vulkan)
+     * a frame whose draw list is longer than the parallel draw threshold
+     * (@c core::graphics_settings::parallel_draw_threshold) is recorded
+     * in parallel: the sorted list is cut into contiguous chunks of at
+     * least that many draws, at most one per recording thread (the job
+     * pool's workers plus the main thread), the pass is begun with
+     * @c render_pass_descriptor::parallel and every chunk is dispatched
+     * into a secondary encoder of its own on a worker, in the list's
+     * order, while the main thread helps and waits; the primary then
+     * executes the secondaries in order, so the frame's draws land
+     * exactly as the serial walk would issue them. Each chunk binds the
+     * per-frame group and its pipelines itself, since bound state does
+     * not carry into a secondary. Below the threshold, with it at 0,
+     * without workers or on OpenGL the list is dispatched serially on
+     * the primary. The shading pass and the depth pre-pass both take
+     * this path; the render stats are tallied from the list in
+     * @ref prepare, so they are the same either way.
      *
      * A renderable whose @ref renderable::layer_mask shares no bit with
      * the camera's @ref camera::culling_mask is skipped outright. Culling
@@ -97,12 +121,30 @@ namespace rendering_engine
         // jitter through @ref frame_context::jitter: the pass then applies
         // it to the projection it uploads and builds the unjittered overlay
         // twin of its per-frame bind group (see @ref overlay_frame_bind_group).
-        scene_pass(const std::vector<renderable*>* registry, render_stats* stats, bool taa_jitter);
+        // @p parallel_draw_threshold is the draw count above which a frame
+        // is recorded in parallel, and the fewest draws per chunk (see the
+        // class comment); 0 keeps every frame serial.
+        scene_pass(const std::vector<renderable*>* registry,
+                   render_stats* stats,
+                   bool taa_jitter,
+                   uint32_t parallel_draw_threshold);
         ~scene_pass() override;
 
         scene_pass(const scene_pass&) = delete;
         scene_pass& operator=(const scene_pass&) = delete;
 
+        // Builds this frame's state: resets the stats, (re)builds the
+        // per-frame groups, uploads the per-frame blocks (view_globals,
+        // lights, the shadow blocks — from the shadow passes, which
+        // prepared ahead of this one), collects, keys and sorts the draw
+        // list and resolves the pipeline every item binds in each of the
+        // two dispatches. With no camera it only resets the stats and
+        // leaves the list empty. Consumes the depth pre-pass's
+        // @ref expect_depth_prepass for the frame.
+        void prepare(const frame_context& ctx) override;
+
+        // Opens the scene pass over the HDR target and dispatches the
+        // list @ref prepare built (in parallel above the threshold).
         void record(gpu::command_encoder& encoder, const frame_context& ctx) override;
 
         const char* name() const override
@@ -121,24 +163,24 @@ namespace rendering_engine
             io.write("scene_depth");
         }
 
-        // Builds this frame's state once: resets the stats, uploads the
-        // per-frame blocks (view_globals, lights, the shadow blocks) and
-        // collects, keys and sorts the draw list. A second call for the
-        // same @ref frame_context::frame_index returns at once, so the
-        // depth pre-pass can run it ahead of this pass's @ref record and
-        // both passes see one list. Must run after the shadow passes have
-        // recorded (their matrices and tallies feed the uploads and
-        // stats). With no camera it only resets the stats.
-        void prepare(const frame_context& ctx);
+        // Called by the @ref depth_prepass from its own prepare, which the
+        // pass list runs right before this pass's, on a frame it will lay
+        // the opaque depth down: this pass's @ref prepare then resolves the
+        // pre-passed items' depth-only twins and @ref record loads the
+        // depth and shades those items with their depth-prepassed
+        // variants. Holds for the next @ref prepare only.
+        void expect_depth_prepass();
 
         // Draws this frame's pre-passed items (the opaque queue, filtered
         // by @ref material::draws_in_depth_prepass, front-to-back) through
-        // their @ref material::depth_prepass_pipeline into @p pass_encoder,
-        // a depth-only pass the @ref depth_prepass opened over the scene
-        // depth attachment. Call after @ref prepare. Marks the frame as
-        // pre-passed, so the following @ref record loads that depth and
-        // draws those items with their depth-prepassed variants.
-        void record_depth_prepass(gpu::render_pass_encoder& pass_encoder);
+        // their @ref material::depth_prepass_pipeline into a pass begun
+        // on @p encoder with @p descriptor, a depth-only pass the
+        // @ref depth_prepass describes over the scene depth attachment;
+        // this pass begins and ends it, since above the threshold it is
+        // begun for parallel recording and the items are dispatched from
+        // worker threads like the shading pass's. Call after @ref prepare,
+        // on a frame announced through @ref expect_depth_prepass.
+        void record_depth_prepass(gpu::command_encoder& encoder, const gpu::render_pass_descriptor& descriptor);
 
         // Layout for the per-frame bind group bound at slot 0 each
         // frame. The matching material's pipeline_descriptor must
@@ -179,16 +221,43 @@ namespace rendering_engine
             shading,
         };
 
+        // The pipelines one item of @ref m_items binds, resolved by
+        // @ref prepare in the list's order (@ref m_pipelines): the one the
+        // shading pass draws it with (its ordinary variant, or the
+        // depth-prepassed twin on a pre-passed frame) and the depth-only
+        // twin the pre-pass draws it with — invalid for an item the
+        // pre-pass skips.
+        struct item_pipelines
+        {
+            gpu::pipeline shading{};
+            gpu::pipeline depth{};
+        };
+
         // (Re)builds @ref m_frame_bind_group and its overlay twin when they do
         // not exist yet or a shadow map @p ctx publishes differs from the one
         // they were built with. Called by @ref prepare.
         void update_frame_bind_groups(const frame_context& ctx);
 
-        // Binds and draws @ref m_items for @p phase into @p pass_encoder:
-        // the per-frame group once, the pipeline when it changes, the
-        // per-material group when the instance changes, then each item's
-        // per-draw group, vertex / index streams and draw call.
-        void dispatch(gpu::render_pass_encoder& pass_encoder, draw_phase phase);
+        // The chunks a dispatch of @p draw_count items is cut into: 1 (a
+        // serial walk on the primary) at or below the threshold, with the
+        // threshold at 0, without a parallel-recording device or without
+        // workers; otherwise draw_count / threshold contiguous chunks, at
+        // least two and at most one per recording thread.
+        uint32_t plan_chunks(size_t draw_count) const;
+
+        // Begins @p descriptor's pass on @p encoder, dispatches the
+        // @p phase's share of @ref m_items — serially, or in parallel
+        // through one secondary encoder per chunk (see the class comment)
+        // — and ends the pass.
+        void record_phase(gpu::command_encoder& encoder, gpu::render_pass_descriptor descriptor, draw_phase phase);
+
+        // Binds and draws @ref m_items in [@p first, @p last) for @p phase
+        // into @p pass_encoder: the per-frame group once, the pipeline
+        // when it changes, the per-material group when the instance
+        // changes, then each item's per-draw block, vertex / index streams
+        // and draw call. Reads only what @ref prepare left, so several
+        // chunks run on several threads at once.
+        void dispatch(gpu::render_pass_encoder& pass_encoder, draw_phase phase, size_t first, size_t last) const;
 
         // Non-owning back-pointer to the render world's
         // scene-renderable registry. The world outlives every pass
@@ -198,7 +267,7 @@ namespace rendering_engine
 
         // Per-frame state — owned by the pass; the layout and buffers are
         // created at construction, the groups by the first prepare(), and
-        // the buffers refilled every record(). Released in the destructor before
+        // the buffers refilled every prepare(). Released in the destructor before
         // the device tears its pools down. The frame UBO carries the
         // @ref view_globals block (camera matrices, viewport, clock,
         // jitter and fog) at binding 0; the lights UBO carries the
@@ -229,12 +298,12 @@ namespace rendering_engine
         gpu::texture m_bound_point_shadow_map{};
         gpu::texture m_bound_spot_shadow_map{};
 
-        // Non-owning; filled each record() with this frame's draw stats.
+        // Non-owning; filled each prepare() with this frame's draw stats.
         // Owned by the renderer, which outlives the pass. Null
         // disables collection.
         render_stats* m_stats{nullptr};
 
-        // Temporal-AA projection jitter. When set, each record() offsets
+        // Temporal-AA projection jitter. When set, each prepare() offsets
         // the camera projection by the sub-pixel jitter the renderer
         // published in frame_context::jitter (a Halton step computed from
         // the live target size) before uploading it, so consecutive frames
@@ -244,15 +313,26 @@ namespace rendering_engine
         bool m_taa_jitter{false};
 
         // Reused across frames so the underlying allocation persists.
+        // The sorted list and, in the same order, the pipelines each item
+        // binds; @ref m_depth_item_end is one past the last item the
+        // pre-pass draws (the list sorts the opaque queue first, so the
+        // pre-passed items are a prefix bar the ones their material opts
+        // out of). Written by @ref prepare, read by the dispatches.
         std::vector<draw_item> m_items;
+        std::vector<item_pipelines> m_pipelines;
+        size_t m_depth_item_end{0};
 
-        // The frame index @ref prepare last built @ref m_items for; empty
-        // until the first frame.
-        std::optional<uint64_t> m_prepared_frame;
+        // Draw count above which a dispatch is recorded in parallel and
+        // the fewest draws per chunk (0: never), and whether the device
+        // records secondaries at all; both fixed at construction.
+        uint32_t m_parallel_draw_threshold{0};
+        bool m_parallel_recording{false};
 
-        // Whether the depth pre-pass laid this frame's opaque depth down
-        // (@ref record_depth_prepass ran since @ref prepare started the
-        // frame). Picks load vs clear and the pre-passed variants.
+        // The depth pre-pass announced itself for the next @ref prepare
+        // (@ref expect_depth_prepass), and whether it runs this frame,
+        // consumed from that by @ref prepare: picks load vs clear and the
+        // pre-passed variants.
+        bool m_depth_prepass_requested{false};
         bool m_depth_prepassed{false};
     };
 } // namespace rendering_engine

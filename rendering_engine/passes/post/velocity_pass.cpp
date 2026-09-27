@@ -249,8 +249,9 @@ namespace rendering_engine
         m_bound_depth = scene_depth;
     }
 
-    void velocity_pass::record(gpu::command_encoder& encoder, const frame_context& ctx)
+    void velocity_pass::prepare(const frame_context& ctx)
     {
+        m_action = frame_action::none;
         if (!m_enabled)
         {
             return;
@@ -272,13 +273,7 @@ namespace rendering_engine
         // rather than reprojecting across the gap.
         if (ctx.active_camera == nullptr || !ctx.scene_depth_texture.valid())
         {
-            gpu::render_pass_descriptor descriptor{};
-            descriptor.target = m_velocity_target;
-            descriptor.color[0].load = gpu::load_op::clear;
-            descriptor.color[0].clear_color = {0.0f, 0.0f, 0.0f, 0.0f};
-            descriptor.use_depth = false;
-            auto pass_encoder = encoder.begin_render_pass(descriptor);
-            pass_encoder->end();
+            m_action = frame_action::clear;
             return;
         }
 
@@ -308,6 +303,15 @@ namespace rendering_engine
         {
             rebuild_bind_group(ctx.scene_depth_texture);
         }
+        m_action = frame_action::draw;
+    }
+
+    void velocity_pass::record(gpu::command_encoder& encoder, const frame_context& /*ctx*/)
+    {
+        if (m_action == frame_action::none)
+        {
+            return;
+        }
 
         gpu::render_pass_descriptor descriptor{};
         descriptor.target = m_velocity_target;
@@ -316,10 +320,13 @@ namespace rendering_engine
         descriptor.use_depth = false;
 
         auto pass_encoder = encoder.begin_render_pass(descriptor);
-        pass_encoder->set_pipeline(m_pipeline);
-        pass_encoder->set_bind_group(0, m_bind_group);
-        pass_encoder->set_vertex_buffer(0, m_vertex_buffer, 0, 0);
-        pass_encoder->draw(3);
+        if (m_action == frame_action::draw)
+        {
+            pass_encoder->set_pipeline(m_pipeline);
+            pass_encoder->set_bind_group(0, m_bind_group);
+            pass_encoder->set_vertex_buffer(0, m_vertex_buffer, 0, 0);
+            pass_encoder->draw(3);
+        }
         pass_encoder->end();
     }
 } // namespace rendering_engine

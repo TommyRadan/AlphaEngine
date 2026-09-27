@@ -124,7 +124,7 @@ namespace rendering_engine
         runtime::current_engine().gpu->write_buffer(m_frame_ubo, &block, sizeof(block), 0);
     }
 
-    void ui_pass::record(gpu::command_encoder& encoder, const frame_context& ctx)
+    void ui_pass::prepare(const frame_context& /*ctx*/)
     {
         // Inside the frame bracket: the frame that last read the block has
         // retired, so a resize's new projection can be written now.
@@ -133,18 +133,6 @@ namespace rendering_engine
             write_frame_block();
             m_frame_dirty = false;
         }
-
-        gpu::render_pass_descriptor descriptor{};
-        descriptor.target = ctx.swapchain_target;
-        // The scene pass already cleared the framebuffer (or there
-        // was no camera and we're drawing UI on a fresh black
-        // backbuffer); either way the UI overlay is drawn on top
-        // without re-clearing the colour, and depth is disabled so
-        // the overlay always wins.
-        descriptor.color[0].load = gpu::load_op::load;
-        descriptor.use_depth = false;
-
-        auto pass_encoder = encoder.begin_render_pass(descriptor);
 
         m_items.clear();
         for (auto* r : *m_registry)
@@ -168,6 +156,21 @@ namespace rendering_engine
                              }
                              return std::less<const material*>{}(a.mat, b.mat);
                          });
+    }
+
+    void ui_pass::record(gpu::command_encoder& encoder, const frame_context& ctx)
+    {
+        gpu::render_pass_descriptor descriptor{};
+        descriptor.target = ctx.swapchain_target;
+        // The scene pass already cleared the framebuffer (or there
+        // was no camera and we're drawing UI on a fresh black
+        // backbuffer); either way the UI overlay is drawn on top
+        // without re-clearing the colour, and depth is disabled so
+        // the overlay always wins.
+        descriptor.color[0].load = gpu::load_op::load;
+        descriptor.use_depth = false;
+
+        auto pass_encoder = encoder.begin_render_pass(descriptor);
 
         uint64_t last_pipeline_id = 0;
         const material* last_material = nullptr;

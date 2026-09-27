@@ -1358,6 +1358,9 @@ namespace rendering_engine::gpu::backend::vulkan
         // the per-draw range, so it runs without push constants and the
         // renderer keeps its per-draw blocks in uniform buffers.
         m_features.push_constants = limits.maxPushConstantsSize >= min_push_constants_size;
+        // Secondary command buffers from per-lane pools (see the file
+        // comment): core Vulkan, so every device records in parallel.
+        m_features.parallel_recording = true;
         if (!m_features.push_constants)
         {
             LOG_WRN("Vulkan maxPushConstantsSize is %u, below the required %u bytes: push constants are disabled "
@@ -1501,6 +1504,14 @@ namespace rendering_engine::gpu::backend::vulkan
                 vkDestroyCommandPool(m_device, slot.pool, nullptr);
                 slot.pool = VK_NULL_HANDLE;
             }
+            for (frame_command_slot::lane& lane : slot.lanes)
+            {
+                if (lane.pool != VK_NULL_HANDLE)
+                {
+                    vkDestroyCommandPool(m_device, lane.pool, nullptr);
+                }
+            }
+            slot.lanes.clear();
         }
     }
 
@@ -2505,6 +2516,14 @@ namespace rendering_engine::gpu::backend::vulkan
         m_frame_stats.indices += index_count;
     }
 
+    void vk_device::note_draws(uint32_t draws, uint32_t vertices, uint32_t draws_indexed, uint32_t indices)
+    {
+        m_frame_stats.draws += draws;
+        m_frame_stats.vertices += vertices;
+        m_frame_stats.draws_indexed += draws_indexed;
+        m_frame_stats.indices += indices;
+    }
+
     // -- Command recording ---------------------------------------------
 
     std::unique_ptr<command_encoder> vk_device::create_command_encoder()
@@ -2681,6 +2700,63 @@ namespace rendering_engine::gpu::backend::vulkan
             vk_check(vkResetCommandPool(m_device, slot.pool, 0), "vkResetCommandPool (frame)");
         }
         slot.next = 0;
+        // The secondaries of this slot's frame were executed by its
+        // primary, so the same fence wait proved them complete.
+        for (frame_command_slot::lane& lane : slot.lanes)
+        {
+            if (lane.pool != VK_NULL_HANDLE)
+            {
+                vk_check(vkResetCommandPool(m_device, lane.pool, 0), "vkResetCommandPool (lane)");
+            }
+            lane.next = 0;
+        }
+    }
+
+    VkCommandBuffer vk_device::acquire_secondary_command_buffer(uint32_t lane_index)
+    {
+        if (m_device_lost || m_device == VK_NULL_HANDLE)
+        {
+            return VK_NULL_HANDLE;
+        }
+        frame_command_slot& slot = m_frame_command_slots[m_frame_slot];
+        // Lanes are appended as a wider fork asks for them; a pool that
+        // failed to create leaves its lane empty and every later request
+        // for it retries.
+        if (lane_index >= slot.lanes.size())
+        {
+            slot.lanes.resize(static_cast<size_t>(lane_index) + 1);
+        }
+        frame_command_slot::lane& lane = slot.lanes[lane_index];
+        if (lane.pool == VK_NULL_HANDLE)
+        {
+            // Transient and reset whole, like the frame's primary pool.
+            VkCommandPoolCreateInfo info{};
+            info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+            info.queueFamilyIndex = m_graphics_queue_family;
+            info.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
+            if (!vk_check(vkCreateCommandPool(m_device, &info, nullptr, &lane.pool), "vkCreateCommandPool (lane)"))
+            {
+                lane.pool = VK_NULL_HANDLE;
+                return VK_NULL_HANDLE;
+            }
+        }
+        if (lane.next < lane.buffers.size())
+        {
+            return lane.buffers[lane.next++];
+        }
+        VkCommandBufferAllocateInfo ai{};
+        ai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        ai.commandPool = lane.pool;
+        ai.level = VK_COMMAND_BUFFER_LEVEL_SECONDARY;
+        ai.commandBufferCount = 1;
+        VkCommandBuffer cmd = VK_NULL_HANDLE;
+        if (!vk_check(vkAllocateCommandBuffers(m_device, &ai, &cmd), "vkAllocateCommandBuffers (lane)"))
+        {
+            return VK_NULL_HANDLE;
+        }
+        lane.buffers.push_back(cmd);
+        ++lane.next;
+        return cmd;
     }
 
     VkCommandBuffer vk_device::acquire_frame_command_buffer()

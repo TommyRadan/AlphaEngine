@@ -568,7 +568,7 @@ namespace rendering_engine
         return m_caster_mask;
     }
 
-    void shadow_pass::record(gpu::command_encoder& encoder, const frame_context& ctx)
+    void shadow_pass::prepare(const frame_context& ctx)
     {
         auto& gpu = *runtime::current_engine().gpu;
         m_culled = 0;
@@ -698,15 +698,22 @@ namespace rendering_engine
 
             // The boxes are final: build each cascade's matrix, and scale
             // the receiver bias so it stays the same share of the
-            // cascade's radius however far the box now reaches back.
+            // cascade's radius however far the box now reaches back. Each
+            // active cascade's matrix goes to its own UBO now, so record()
+            // only binds.
             for (int cascade = 0; cascade < m_active_cascades; ++cascade)
             {
                 const cascade_box& box = boxes[cascade];
                 m_light_view_projections[cascade] = box_view_projection(box, light_rotation);
                 m_depth_biases[cascade] = m_bias * (caster_depth_scale + 1.0f) * box.radius / (box.reach + box.radius);
+                gpu.write_buffer(
+                    m_light_ubos[cascade], m_light_view_projections[cascade].data(), sizeof(math::mat4), 0);
             }
         }
+    }
 
+    void shadow_pass::record(gpu::command_encoder& encoder, const frame_context& /*ctx*/)
+    {
         // Render each cascade's layer. Every layer is cleared, even with
         // no caster, so the lit shader keys off the enabled flag and the
         // cascade count rather than stale depth; the target has no colour
@@ -714,11 +721,6 @@ namespace rendering_engine
         for (int cascade = 0; cascade < m_cascade_count; ++cascade)
         {
             const bool active = cascade < m_active_cascades;
-            if (active)
-            {
-                gpu.write_buffer(
-                    m_light_ubos[cascade], m_light_view_projections[cascade].data(), sizeof(math::mat4), 0);
-            }
 
             gpu::render_pass_descriptor descriptor{};
             descriptor.target = m_targets[cascade];

@@ -313,7 +313,18 @@ namespace rendering_engine::gpu::backend::vulkan
 
     void vk_device::ensure_host_region_current(vk_buffer& record)
     {
-        if (record.region_count <= 1 || record.mapped == nullptr || record.gaps[m_frame_slot].empty())
+        if (record.region_count <= 1 || record.mapped == nullptr)
+        {
+            return;
+        }
+        // Two secondary encoders of a parallel render pass may bind the
+        // same multi-buffered buffer at once (an instance stream drawn
+        // from two chunks); the gap check and the copy that clears it
+        // are one critical section so the region is brought up to date
+        // exactly once. The host writes that widen a gap happen on the
+        // main thread outside any fork.
+        const std::lock_guard<std::mutex> lock(m_host_region_mutex);
+        if (record.gaps[m_frame_slot].empty())
         {
             return;
         }

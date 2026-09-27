@@ -62,9 +62,9 @@ namespace rendering_engine
      * "scene_color", which this pass reads and writes like bloom does.
      *
      * The output target is only allocated the first time motion blur is
-     * switched on (@ref prepare, called by @ref renderer::render outside the
-     * frame), so the default configuration does not pay for a
-     * full-resolution target it never draws; once allocated it stays for
+     * switched on (@ref ensure_target, called by @ref renderer::render
+     * outside the frame), so the default configuration does not pay for
+     * a full-resolution target it never draws; once allocated it stays for
      * the pass's lifetime. The inputs arrive through the frame context and
      * the bind group is rebuilt whenever either handle differs from the one
      * it was built against; @ref resize recreates an allocated output
@@ -81,6 +81,10 @@ namespace rendering_engine
 
         motion_blur_pass(const motion_blur_pass&) = delete;
         motion_blur_pass& operator=(const motion_blur_pass&) = delete;
+
+        // Decides whether the frame blurs (@ref draws), writes the params
+        // block and rebinds the inputs when their handles changed.
+        void prepare(const frame_context& ctx) override;
 
         void record(gpu::command_encoder& encoder, const frame_context& ctx) override;
 
@@ -112,20 +116,21 @@ namespace rendering_engine
          *        frame bracket; a no-op once the target exists or while
          *        motion blur stays off.
          */
-        void prepare(const motion_blur_settings& settings);
+        void ensure_target(const motion_blur_settings& settings);
 
         /**
-         * @brief Whether @ref record draws for @p ctx: the pass is live and
-         *        its target allocated, @ref frame_context::post enables
+         * @brief Whether the frame @p ctx describes blurs: the pass is live
+         *        and its target allocated, @ref frame_context::post enables
          *        motion blur (@ref motion_blur_active) and motion vectors
          *        are published. @ref renderer::render decides
-         *        @ref frame_context::hdr_color_target by it.
+         *        @ref frame_context::hdr_color_target by it, and
+         *        @ref prepare whether @ref record draws.
          */
         bool draws(const frame_context& ctx) const;
 
         /// The blurred HDR image's target and texture (see the class
-        /// comment); invalid until @ref prepare allocates them, and they
-        /// change on @ref resize.
+        /// comment); invalid until @ref ensure_target allocates them, and
+        /// they change on @ref resize.
         gpu::render_target output_target() const;
         gpu::texture output_texture() const;
 
@@ -168,5 +173,9 @@ namespace rendering_engine
         // False when the backbuffer dimensions are degenerate (no
         // settings, zero-sized window); record() then no-ops.
         bool m_enabled{false};
+
+        // Whether this frame's record() draws (@ref draws held in
+        // prepare()).
+        bool m_draws{false};
     };
 } // namespace rendering_engine

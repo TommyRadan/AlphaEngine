@@ -75,6 +75,13 @@ namespace rendering_engine
         spot_shadow_pass(const spot_shadow_pass&) = delete;
         spot_shadow_pass& operator=(const spot_shadow_pass&) = delete;
 
+        // Finds the caster, builds and uploads its light-space matrix
+        // and culls and collects the casters; every accessor below
+        // reports this frame from here on. Runs ahead of the scene
+        // pass's prepare.
+        void prepare(const frame_context& ctx) override;
+
+        // Clears the map and draws the casters @ref prepare collected.
         void record(gpu::command_encoder& encoder, const frame_context& ctx) override;
 
         const char* name() const override
@@ -93,7 +100,7 @@ namespace rendering_engine
         gpu::texture shadow_map() const;
 
         // Light-space view-projection matrix for the active caster,
-        // refreshed every @ref record. Only meaningful when
+        // refreshed every @ref prepare. Only meaningful when
         // @ref has_shadow is true.
         const core::math::mat4& light_view_projection() const;
 
@@ -110,7 +117,7 @@ namespace rendering_engine
         // suppress shadow acne.
         float depth_bias() const;
 
-        // Casters skipped by the last @ref record because their world
+        // Casters skipped by the last @ref prepare because their world
         // bounds fell outside the light's perspective frustum. Zero on
         // no-caster frames.
         uint32_t culled_count() const;
@@ -150,7 +157,8 @@ namespace rendering_engine
         gpu::buffer m_light_ubo{};
         gpu::bind_group m_light_bind_group{};
 
-        // Reused across frames so the allocation persists.
+        // Reused across frames so the allocation persists. Collected by
+        // prepare(), drawn by record().
         std::vector<draw_item> m_items;
 
         core::math::mat4 m_light_view_projection{};

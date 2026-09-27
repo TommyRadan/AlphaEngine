@@ -91,6 +91,10 @@ namespace rendering_engine
         auto_exposure_pass(const auto_exposure_pass&) = delete;
         auto_exposure_pass& operator=(const auto_exposure_pass&) = delete;
 
+        // Decides whether the frame meters, writes the adaptation params
+        // and rebinds the HDR input when its handle changed.
+        void prepare(const frame_context& ctx) override;
+
         void record(gpu::command_encoder& encoder, const frame_context& ctx) override;
 
         const char* name() const override
@@ -108,7 +112,8 @@ namespace rendering_engine
          * @brief Whether @ref exposure_texture holds a valid exposure once
          *        this frame's @ref record has run: auto exposure is
          *        enabled and either a camera is metered this frame or an
-         *        earlier frame already adapted.
+         *        earlier frame already adapted. Asked by the renderer
+         *        before the passes prepare.
          */
         bool produces_exposure(const frame_context& ctx) const;
 
@@ -120,7 +125,7 @@ namespace rendering_engine
     private:
         // One level of the log2 luminance reduction: its target, and the
         // bind group that samples the level before it (the HDR input for
-        // level 0, which record() rebuilds on a new handle instead).
+        // level 0, which prepare() rebuilds on a new handle instead).
         struct reduction_level
         {
             gpu::render_target target{};
@@ -174,7 +179,12 @@ namespace rendering_engine
 
         // Whether the history holds a real adapted value: false before
         // the first metered frame and again whenever auto exposure is
-        // disabled, so the next metered frame snaps to its target.
+        // disabled, so the next metered frame snaps to its target. Set
+        // by prepare() for the frame record() meters.
         bool m_has_history{false};
+
+        // Whether this frame's record() meters (enabled and a camera),
+        // decided by prepare().
+        bool m_meters{false};
     };
 } // namespace rendering_engine

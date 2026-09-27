@@ -89,6 +89,10 @@ namespace rendering_engine
         bloom_pass(const bloom_pass&) = delete;
         bloom_pass& operator=(const bloom_pass&) = delete;
 
+        // Decides whether the frame blooms, rewrites the UBO(s) a changed
+        // setting affects and rebinds the HDR input when its handle changed.
+        void prepare(const frame_context& ctx) override;
+
         void record(gpu::command_encoder& encoder, const frame_context& ctx) override;
 
         const char* name() const override
@@ -158,7 +162,7 @@ namespace rendering_engine
         gpu::bind_group m_threshold_bind_group{};
 
         // The HDR texture @ref m_threshold_bind_group was built against;
-        // invalid until the first record() builds the group.
+        // invalid until the first prepare() builds the group.
         gpu::texture m_bound_scene_color{};
 
         std::vector<bloom_level> m_levels;
@@ -194,16 +198,20 @@ namespace rendering_engine
         bloom_settings m_settings{};
 
         // Rewrites m_threshold_ubo from {threshold, knee}; called from
-        // record() whenever either differs from m_settings.
+        // prepare() whenever either differs from m_settings.
         void write_threshold_ubo(float threshold, float knee);
 
         // Rewrites every level's weight_ubo from strength; called from
-        // record() whenever it differs from m_settings.
+        // prepare() whenever it differs from m_settings.
         void write_weights(float strength);
 
         // False when the backbuffer dimensions are degenerate (no
         // settings, zero-sized window); record() then no-ops so the scene
         // target passes straight through to tonemap.
         bool m_enabled{false};
+
+        // Whether this frame's record() draws (the pass is live and bloom
+        // is enabled), decided by prepare().
+        bool m_draws{false};
     };
 } // namespace rendering_engine

@@ -433,13 +433,14 @@ namespace rendering_engine
         }
     }
 
-    void bloom_pass::record(gpu::command_encoder& encoder, const frame_context& ctx)
+    void bloom_pass::prepare(const frame_context& ctx)
     {
         // bloom_settings::enabled early-outs entirely rather than removing
         // this pass from the pass list: the HDR scene colour it would
         // have brightened just flows through untouched to tonemap, exactly
-        // like the degenerate-backbuffer case below.
-        if (!m_enabled || !ctx.post.bloom.enabled)
+        // like the degenerate-backbuffer case.
+        m_draws = m_enabled && ctx.post.bloom.enabled;
+        if (!m_draws)
         {
             return;
         }
@@ -468,6 +469,14 @@ namespace rendering_engine
         if (ctx.hdr_color_texture != m_bound_scene_color || !m_threshold_bind_group.valid())
         {
             rebuild_threshold_bind_group(ctx.hdr_color_texture);
+        }
+    }
+
+    void bloom_pass::record(gpu::command_encoder& encoder, const frame_context& ctx)
+    {
+        if (!m_draws)
+        {
+            return;
         }
 
         // Draws a single fullscreen triangle into the currently open pass.
