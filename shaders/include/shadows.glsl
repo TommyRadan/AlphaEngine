@@ -78,7 +78,8 @@ float cascade_shadow(int cascade, vec3 worldPosition, float slope)
 {
     vec4 lightClip = u_shadow.lightViewProj[cascade] * vec4(worldPosition, 1.0);
     vec3 proj = lightClip.xyz / lightClip.w;
-    proj = proj * 0.5 + 0.5;
+    // NDC xy in [-1, 1] -> map UV; the depth is already in [0, 1].
+    proj.xy = proj.xy * 0.5 + 0.5;
     if (proj.z > 1.0 || proj.x < 0.0 || proj.x > 1.0 || proj.y < 0.0 || proj.y > 1.0)
     {
         return 1.0;
@@ -145,16 +146,15 @@ float directional_shadow(vec3 worldPosition, int lightIndex, vec3 N, vec3 L)
 
 // The window-space depth a face of the omni cube stores for a point at
 // distance z along that face's axis: the 90-degree perspective with the
-// pass's near / far planes, through the engine's [-1, 1] clip-depth
-// projection (0.5 * z_ndc + 0.5, see depth_utils.glsl). Every face
-// has the same near and far, so the depth depends only on the distance
-// along the face axis, never on which face or where within it.
+// pass's near / far planes, whose [0, 1] NDC depth the rasteriser stores
+// unchanged (see depth_utils.glsl). Every face has the same near and
+// far, so the depth depends only on the distance along the face axis,
+// never on which face or where within it.
 float point_face_depth(float z)
 {
     float n = u_point_shadow.lightPos.w;
     float f = u_point_shadow.params.w;
-    float zNdc = (f + n) / (f - n) - (2.0 * f * n) / ((f - n) * max(z, n));
-    return zNdc * 0.5 + 0.5;
+    return f / (f - n) - (f * n) / ((f - n) * max(z, n));
 }
 
 // The receiver's depth in the face a lookup direction lands on. The
@@ -250,7 +250,8 @@ float spot_shadow(vec3 worldPosition, int lightIndex, vec3 N, vec3 L)
     }
     vec4 lightClip = u_spot_shadow.lightViewProj * vec4(worldPosition, 1.0);
     vec3 proj = lightClip.xyz / lightClip.w;
-    proj = proj * 0.5 + 0.5;
+    // NDC xy in [-1, 1] -> map UV; the depth is already in [0, 1].
+    proj.xy = proj.xy * 0.5 + 0.5;
     if (proj.z > 1.0 || proj.x < 0.0 || proj.x > 1.0 || proj.y < 0.0 || proj.y > 1.0)
     {
         return 1.0;

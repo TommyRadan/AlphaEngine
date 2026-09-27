@@ -324,24 +324,10 @@ namespace rendering_engine::gpu::backend::vulkan
             const bool uses_tess =
                 descriptor.topology == primitive_topology::patches && descriptor.patch_control_points > 0;
 
-            // The engine's projection matrices (core::math::perspective /
-            // ortho) emit clip-space Z in [-w, w].
-            // VK_EXT_depth_clip_control's negativeOneToOne == VK_TRUE
-            // tells Vulkan to use that range instead of the default
-            // [0, w]; without it everything in the front half of the
-            // view frustum is clipped before reaching rasterization.
-            VkPipelineViewportDepthClipControlCreateInfoEXT dcc_info{};
-            dcc_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_DEPTH_CLIP_CONTROL_CREATE_INFO_EXT;
-            dcc_info.negativeOneToOne = VK_TRUE;
-
             VkPipelineViewportStateCreateInfo vp{};
             vp.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
             vp.viewportCount = 1;
             vp.scissorCount = 1;
-            if (device.depth_clip_control_enabled())
-            {
-                vp.pNext = &dcc_info;
-            }
 
             VkPipelineRasterizationStateCreateInfo rs{};
             rs.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
@@ -483,10 +469,9 @@ namespace rendering_engine::gpu::backend::vulkan
                 vkCreateGraphicsPipelines(device.vk_handle(), device.pipeline_cache(), 1, &gpi, nullptr, &result);
             if (r != VK_SUCCESS)
             {
-                LOG_ERR("vkCreateGraphicsPipelines failed: %s (stages=%u dcc=%s)",
+                LOG_ERR("vkCreateGraphicsPipelines failed: %s (stages=%u)",
                         vk_result_to_string(r),
-                        static_cast<unsigned>(stages.size()),
-                        device.depth_clip_control_enabled() ? "on" : "off");
+                        static_cast<unsigned>(stages.size()));
             }
             return result;
         }

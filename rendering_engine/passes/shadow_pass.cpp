@@ -101,9 +101,11 @@ namespace
         float reach{1.0f};
     };
 
-    // Unprojects the eight NDC-cube corners through the camera and pairs
-    // them into the frustum's four side edges. The camera looks down -z
-    // in view space, so forward depth is -(view * p).z.
+    // Unprojects the eight corners of the clip volume (x and y in
+    // [-1, 1], depth 0 on the near plane and 1 on the far plane) through
+    // the camera and pairs them into the frustum's four side edges. The
+    // camera looks down -z in view space, so forward depth is
+    // -(view * p).z.
     std::array<frustum_edge, 4> camera_frustum_edges(const math::mat4& view, const math::mat4& projection)
     {
         const math::mat4 inverse_view_proj = math::inverse(projection * view);
@@ -116,7 +118,7 @@ namespace
                 const float x = xi == 0 ? -1.0f : 1.0f;
                 const float y = yi == 0 ? -1.0f : 1.0f;
 
-                const math::vec4 near_h = inverse_view_proj * math::vec4{x, y, -1.0f, 1.0f};
+                const math::vec4 near_h = inverse_view_proj * math::vec4{x, y, 0.0f, 1.0f};
                 const math::vec4 far_h = inverse_view_proj * math::vec4{x, y, 1.0f, 1.0f};
 
                 frustum_edge& edge = edges[count++];

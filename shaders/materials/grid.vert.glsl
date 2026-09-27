@@ -26,8 +26,8 @@ vec3 unproject(vec2 ndc, float z, mat4 inverseViewProj)
 void main()
 {
     vec2 ndc = position.xy;
-    // Clip space: near plane at z = -1, far at z = 1.
-    nearPoint = unproject(ndc, -1.0, u_frame.inverseViewProjectionMatrix);
+    // NDC depth: near plane at z = 0, far at z = 1.
+    nearPoint = unproject(ndc, 0.0, u_frame.inverseViewProjectionMatrix);
     farPoint = unproject(ndc, 1.0, u_frame.inverseViewProjectionMatrix);
     cameraPoint = u_frame.cameraPosition.xyz;
 

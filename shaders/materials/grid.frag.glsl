@@ -53,10 +53,10 @@ void main()
     vec3 world = nearPoint + t * rayDirection;
 
     // Reconstructed depth, through the per-draw model matrix
-    // (identity for the origin grid). Map the clip z in [-1, 1] to
-    // the [0, 1] window depth range.
+    // (identity for the origin grid). The NDC z is already the [0, 1]
+    // window depth.
     vec4 clip = u_frame.viewProjectionMatrix * u_draw.modelMatrix * vec4(world, 1.0);
-    gl_FragDepth = 0.5 * (clip.z / clip.w) + 0.5;
+    gl_FragDepth = clip.z / clip.w;
 
     vec2 plane = world.xy;
     float minor = gridCoverage(plane, 1.0);

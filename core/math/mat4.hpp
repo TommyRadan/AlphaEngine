@@ -53,6 +53,13 @@ namespace core::math
     mat4& operator*=(mat4& a, const mat4& b) noexcept;
 
     mat4 look_at(const vec3& eye, const vec3& center, const vec3& up) noexcept;
+
+    /**
+     * @brief Right-handed projections with clip-space depth in [0, w]:
+     *        after the perspective divide a point on the near plane has
+     *        z = 0 and one on the far plane z = 1, which is also the
+     *        window depth the rasteriser stores.
+     */
     mat4 perspective(float fov_y, float aspect, float near_z, float far_z) noexcept;
     mat4 ortho(float left, float right, float bottom, float top, float near_z, float far_z) noexcept;
 

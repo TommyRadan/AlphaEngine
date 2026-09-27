@@ -67,12 +67,12 @@ namespace core::math
 
     mat4 perspective(float fov_y, float aspect, float near_z, float far_z) noexcept
     {
-        return store(glm::perspective(fov_y, aspect, near_z, far_z));
+        return store(glm::perspectiveRH_ZO(fov_y, aspect, near_z, far_z));
     }
 
     mat4 ortho(float left, float right, float bottom, float top, float near_z, float far_z) noexcept
     {
-        return store(glm::ortho(left, right, bottom, top, near_z, far_z));
+        return store(glm::orthoRH_ZO(left, right, bottom, top, near_z, far_z));
     }
 
     mat4 translate(const vec3& v) noexcept
