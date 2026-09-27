@@ -14,6 +14,6 @@ layout(location = 0) out vec2 texCoord;
 void main()
 {
     texCoord = uv;
-    mat4 MVP = u_frame.projectionMatrix * u_frame.viewMatrix * u_draw.modelMatrix;
+    mat4 MVP = u_frame.viewProjectionMatrix * u_draw.modelMatrix;
     gl_Position = MVP * vec4(position, 1.0);
 }

@@ -22,5 +22,5 @@ void main()
 {
     mat4 model = mat4(model0, model1, model2, model3);
     instanceColor = instanceTint;
-    gl_Position = u_frame.projectionMatrix * u_frame.viewMatrix * model * vec4(position, 1.0);
+    gl_Position = u_frame.viewProjectionMatrix * model * vec4(position, 1.0);
 }

@@ -38,9 +38,9 @@
 #include <rendering_engine/materials/material.hpp>
 #include <rendering_engine/materials/material_template.hpp>
 #include <rendering_engine/passes/point_shadow_pass.hpp>
-#include <rendering_engine/passes/projection_jitter.hpp>
 #include <rendering_engine/passes/shadow_pass.hpp>
 #include <rendering_engine/passes/spot_shadow_pass.hpp>
+#include <rendering_engine/passes/view_globals.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
 #include <runtime/engine.hpp>
 
@@ -48,19 +48,12 @@ namespace rendering_engine
 {
     namespace
     {
-        // std140 layout for the per-view PerFrame UBO: mat4 viewMatrix
-        // at offset 0, mat4 projectionMatrix at offset 64, then the fog
-        // block — vec4 fogColor at 128 (rgb colour, a = fog mode), vec4
-        // fogParams at 144 (x near, y far, z density, w height density)
-        // and vec4 heightFogParams at 160 (x falloff, y reference
-        // height). mat4 / vec4 are 16-byte aligned, so no padding is
-        // needed between members. 176 bytes total.
-        constexpr size_t per_frame_ubo_size = 2 * sizeof(core::math::mat4) + 3 * sizeof(core::math::vec4);
-
         // Binding numbers within the per-frame bind group (slot 0), from
         // the global table in gpu/shader_bindings.hpp (which explains why
         // they stay unique across both descriptor sets of a lit pipeline).
-        constexpr uint32_t camera_binding = gpu::shader_bindings::per_frame;
+        // The view_globals block (view_globals.hpp) takes the per-frame
+        // binding.
+        constexpr uint32_t view_globals_binding = gpu::shader_bindings::per_frame;
         constexpr uint32_t lights_binding = gpu::shader_bindings::lights;
 
         // Directional shadow data shares the per-frame group.
@@ -115,7 +108,7 @@ namespace rendering_engine
         auto& gpu = *runtime::current_engine().gpu;
 
         gpu::bind_group_layout_descriptor frame_layout_descriptor{};
-        frame_layout_descriptor.entries.push_back({camera_binding, gpu::binding_kind::uniform_buffer});
+        frame_layout_descriptor.entries.push_back({view_globals_binding, gpu::binding_kind::uniform_buffer});
         frame_layout_descriptor.entries.push_back({lights_binding, gpu::binding_kind::uniform_buffer});
         frame_layout_descriptor.entries.push_back({shadow_binding, gpu::binding_kind::uniform_buffer});
         // The directional cascades are one depth array read through a
@@ -140,13 +133,13 @@ namespace rendering_engine
         m_frame_layout = gpu.create_bind_group_layout(frame_layout_descriptor);
 
         gpu::buffer_descriptor ubo_descriptor{};
-        ubo_descriptor.size = per_frame_ubo_size;
+        ubo_descriptor.size = sizeof(view_globals);
         ubo_descriptor.usage = gpu::buffer_usage_uniform | gpu::buffer_usage_copy_dst;
         ubo_descriptor.hint = gpu::buffer_usage_hint::dynamic_data;
         m_frame_ubo = gpu.create_buffer(ubo_descriptor);
 
-        // The unjittered camera UBO only exists when jitter is active; it
-        // backs the overlay bind group built below.
+        // The unjittered view_globals twin only exists when jitter is
+        // active; it backs the overlay bind group built below.
         if (m_taa_jitter)
         {
             m_overlay_frame_ubo = gpu.create_buffer(ubo_descriptor);
@@ -179,11 +172,11 @@ namespace rendering_engine
         gpu::bind_group_descriptor frame_bind_group_descriptor{};
         frame_bind_group_descriptor.layout = m_frame_layout;
 
-        gpu::binding_value camera_slot{};
-        camera_slot.binding = camera_binding;
-        camera_slot.kind = gpu::binding_kind::uniform_buffer;
-        camera_slot.buffer_value = m_frame_ubo;
-        frame_bind_group_descriptor.entries.push_back(camera_slot);
+        gpu::binding_value view_globals_slot{};
+        view_globals_slot.binding = view_globals_binding;
+        view_globals_slot.kind = gpu::binding_kind::uniform_buffer;
+        view_globals_slot.buffer_value = m_frame_ubo;
+        frame_bind_group_descriptor.entries.push_back(view_globals_slot);
 
         gpu::binding_value lights_slot{};
         lights_slot.binding = lights_binding;
@@ -246,9 +239,9 @@ namespace rendering_engine
         m_frame_bind_group = gpu.create_bind_group(frame_bind_group_descriptor);
 
         // The overlay twin shares every binding with the main group except
-        // the camera UBO (entries[0], pushed first above), which it points
-        // at the unjittered buffer so the debug pass projects without the
-        // sub-pixel jitter.
+        // the view_globals block (entries[0], pushed first above), which it
+        // points at the unjittered buffer so the debug pass projects without
+        // the sub-pixel jitter.
         if (m_taa_jitter)
         {
             frame_bind_group_descriptor.entries[0].buffer_value = m_overlay_frame_ubo;
@@ -365,61 +358,33 @@ namespace rendering_engine
             return;
         }
 
-        // Refill the per-frame UBO before any draw consults it.
-        // Layout matches the GLSL @c PerFrame block: viewMatrix at
-        // offset 0, projectionMatrix at offset sizeof(mat4), then the
-        // fog block (fogColor at float 32, fogParams at float 36,
-        // heightFogParams at float 40).
-        std::array<float, 44> ubo_payload{};
-        const auto view = ctx.active_camera->get_view_matrix();
-        const core::math::mat4 projection = ctx.active_camera->get_projection_matrix();
-        std::memcpy(ubo_payload.data(), view.data(), sizeof(core::math::mat4));
-        std::memcpy(ubo_payload.data() + 16, projection.data(), sizeof(core::math::mat4));
-        // fogColor.rgb + fogColor.a = mode (0 none, 1 linear, 2 exp2);
-        // the lit shaders skip the blend when the mode is 0.
-        ubo_payload[32] = ctx.fog.color.x;
-        ubo_payload[33] = ctx.fog.color.y;
-        ubo_payload[34] = ctx.fog.color.z;
-        ubo_payload[35] = static_cast<float>(static_cast<int>(ctx.fog.mode));
-        ubo_payload[36] = ctx.fog.near_distance;
-        ubo_payload[37] = ctx.fog.far_distance;
-        ubo_payload[38] = ctx.fog.density;
-        // Height fog: fogParams.w is the height density (0 disables the
-        // term); heightFogParams.xy carry the falloff and reference
-        // height, keeping the same UBO the distance fog already uses.
-        ubo_payload[39] = ctx.fog.height_density;
-        ubo_payload[40] = ctx.fog.height_falloff;
-        ubo_payload[41] = ctx.fog.reference_height;
-
-        // The overlay group carries the unjittered projection so the debug
-        // pass — which paints after the TAA resolve and so cannot average
-        // the jitter away — draws steady gizmos. Upload it before applying
-        // the jitter below.
+        // Refill the view_globals block before any draw consults it: the
+        // camera matrices and their inverses, the camera position, the
+        // viewport, the clock, the jitter with the previous
+        // view-projection, and the fog, all from the frame context.
+        //
+        // Temporal-AA sub-pixel jitter: the projection is offset by the
+        // Halton step the context published for this frame (already scaled
+        // to the live target size) so this frame samples the scene a
+        // fraction of a pixel away from the last. The jitter feeds the
+        // taa_pass accumulation and is otherwise invisible — culling still
+        // uses the camera's unjittered frustum, the skybox applies the same
+        // offset so its depth test agrees, and the velocity pass subtracts
+        // it again. The overlay group carries the same view unjittered so
+        // the debug pass — which paints after the TAA resolve and so cannot
+        // average the jitter away — draws steady gizmos.
         if (m_overlay_frame_ubo.valid())
         {
-            gpu.write_buffer(m_overlay_frame_ubo, ubo_payload.data(), per_frame_ubo_size, 0);
+            const view_globals overlay_globals = make_view_globals(ctx, false);
+            gpu.write_buffer(m_overlay_frame_ubo, &overlay_globals, sizeof(view_globals), 0);
         }
-
-        // Temporal-AA sub-pixel jitter: offset the projection by the
-        // Halton step the context published for this frame (already
-        // scaled to the live target size) so this frame samples the scene
-        // a fraction of a pixel away from the last. The jitter feeds the
-        // taa_pass accumulation and is otherwise invisible — culling still
-        // uses the camera's unjittered frustum, the overlay group above
-        // keeps the unjittered matrices, the skybox applies the same
-        // offset so its depth test agrees, and the velocity pass subtracts
-        // it again.
-        if (m_taa_jitter)
-        {
-            const core::math::mat4 jittered = jitter_projection(projection, ctx.jitter);
-            std::memcpy(ubo_payload.data() + 16, jittered.data(), sizeof(core::math::mat4));
-        }
-        gpu.write_buffer(m_frame_ubo, ubo_payload.data(), per_frame_ubo_size, 0);
+        const view_globals globals = make_view_globals(ctx, m_taa_jitter);
+        gpu.write_buffer(m_frame_ubo, &globals, sizeof(view_globals), 0);
 
         // Pack every live light into the std140 lights block and upload
-        // it alongside the camera UBO. Lit materials read this from the
-        // per-frame group; the scene pass owns it so light objects never
-        // touch the GPU directly.
+        // it alongside the view_globals block. Lit materials read this
+        // from the per-frame group; the scene pass owns it so light objects
+        // never touch the GPU directly.
         gpu_lights lights_payload{};
         pack_lights(registered_lights(), lights_payload);
         gpu.write_buffer(m_lights_ubo, &lights_payload, sizeof(gpu_lights), 0);

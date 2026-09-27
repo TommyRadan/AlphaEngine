@@ -22,14 +22,11 @@ vec3 unproject(vec2 ndc, float z, mat4 inverseViewProj)
 
 void main()
 {
-    mat4 viewProj = u_frame.projectionMatrix * u_frame.viewMatrix;
-    mat4 inverseViewProj = inverse(viewProj);
-
     vec2 ndc = position.xy;
     // GL-convention clip space: near plane at z = -1, far at z = 1.
-    nearPoint = unproject(ndc, -1.0, inverseViewProj);
-    farPoint = unproject(ndc, 1.0, inverseViewProj);
-    cameraPoint = camera_position();
+    nearPoint = unproject(ndc, -1.0, u_frame.inverseViewProjectionMatrix);
+    farPoint = unproject(ndc, 1.0, u_frame.inverseViewProjectionMatrix);
+    cameraPoint = u_frame.cameraPosition.xyz;
 
     gl_Position = vec4(ndc, 0.0, 1.0);
 }

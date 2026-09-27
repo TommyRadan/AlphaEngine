@@ -53,7 +53,7 @@ void main()
     // the binding stays live; identity for the origin grid). Map
     // the GL-convention clip z in [-1, 1] to the [0, 1] window
     // depth range used by both backends.
-    vec4 clip = u_frame.projectionMatrix * u_frame.viewMatrix * u_draw.modelMatrix * vec4(world, 1.0);
+    vec4 clip = u_frame.viewProjectionMatrix * u_draw.modelMatrix * vec4(world, 1.0);
     gl_FragDepth = 0.5 * (clip.z / clip.w) + 0.5;
 
     vec2 plane = world.xy;

@@ -351,8 +351,8 @@ namespace rendering_engine
         /**
          * @brief Sets the scene-wide atmospheric fog.
          *
-         * Stored and copied into the per-view @c PerFrame UBO by the
-         * scene pass each frame, so the built-in lit materials
+         * Stored and copied into the per-view @ref view_globals block by
+         * the scene pass each frame, so the built-in lit materials
          * (@ref phong_material, @ref standard_material) blend toward the
          * fog colour by camera distance. Pass a @ref fog_settings with
          * @ref fog_mode::none (the default) to disable fog.

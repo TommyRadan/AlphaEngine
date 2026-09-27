@@ -53,10 +53,10 @@
 
 namespace rendering_engine::gpu::shader_bindings
 {
-    // Set 0, owned by the scene pass: the per-view block (camera
-    // matrices + fog), the packed lights, the directional and omni
-    // shadow data and their depth maps (the omni map is one depth
-    // cube, sampled as a samplerCube).
+    // Set 0, owned by the scene pass: the per-view view_globals block
+    // (camera matrices, viewport, clock, jitter and fog), the packed
+    // lights, the directional and omni shadow data and their depth maps
+    // (the omni map is one depth cube, sampled as a samplerCube).
     constexpr uint32_t per_frame = 0;
     constexpr uint32_t lights = 2;
     constexpr uint32_t shadow_map = 9;
