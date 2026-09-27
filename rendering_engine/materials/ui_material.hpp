@@ -6,8 +6,8 @@
 #include <cstdint>
 #include <memory>
 
+#include <assets/color.hpp>
 #include <core/math/vec2.hpp>
-#include <rendering_engine/assets/color.hpp>
 #include <rendering_engine/gpu/bind_group.hpp>
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/materials/material.hpp>
@@ -39,7 +39,7 @@ namespace rendering_engine
         core::math::vec2 corner_offset{0.0f, 0.0f};
         core::math::vec2 rotation{1.0f, 0.0f};
         core::math::vec2 uv{0.0f, 0.0f};
-        rendering_engine::color color{255, 255, 255, 255};
+        assets::color color{255, 255, 255, 255};
     };
 
     static_assert(sizeof(ui_vertex) == 52, "ui_vertex must be six packed vec2s and one RGBA8 colour");

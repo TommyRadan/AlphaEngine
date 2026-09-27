@@ -39,7 +39,6 @@
 #include <core/math/math.hpp>
 #include <core/os/os.hpp>
 #include <core/settings.hpp>
-#include <rendering_engine/assets/mesh_asset.hpp>
 #include <rendering_engine/camera/camera_registry.hpp>
 #include <rendering_engine/camera/orthographic_camera.hpp>
 #include <rendering_engine/camera/perspective_camera.hpp>
@@ -52,6 +51,7 @@
 #include <rendering_engine/materials/material_template.hpp>
 #include <rendering_engine/materials/phong_material.hpp>
 #include <rendering_engine/renderer.hpp>
+#include <rendering_engine/resources/mesh_asset.hpp>
 #include <runtime/components/animator_component.hpp>
 #include <runtime/components/audio_listener_component.hpp>
 #include <runtime/components/audio_source_component.hpp>

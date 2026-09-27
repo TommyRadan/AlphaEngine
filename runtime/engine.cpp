@@ -20,14 +20,13 @@
 #include <platform/audio_device.hpp>
 #include <platform/platform.hpp>
 #include <platform/window.hpp>
-#include <rendering_engine/assets/asset_cache.hpp>
-#include <rendering_engine/assets/asset_device.hpp>
-#include <rendering_engine/assets/gltf_material_factory.hpp>
 #include <rendering_engine/editor/imgui_layer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/gpu/surface.hpp>
 #include <rendering_engine/renderer.hpp>
+#include <rendering_engine/resources/asset_cache.hpp>
 #include <runtime/game_module.hpp>
+#include <runtime/physics/physics_debug_draw.hpp>
 #include <runtime/physics/physics_world.hpp>
 #include <runtime/scene_manager.hpp>
 #include <runtime/scripting/script_host.hpp>
@@ -141,15 +140,13 @@ namespace runtime
         // that reach for current_engine() still see a valid engine.
         scenes.reset();
         scripts.reset();
+        m_physics_debug.reset();
         physics.reset();
         renderer.reset();
         // Destroyed after its consumers (renderer / scenes) so their handles
         // are already released, and before the gpu device so any asset still
         // alive can free its GPU resource against a live device.
         assets.reset();
-        // The asset layer no longer has a device to free against once the
-        // device is gone; clear the accessor before destroying it.
-        rendering_engine::set_asset_device(nullptr);
         gpu.reset();
         window.reset();
         // Reverse of construction order: input was made after audio, so it goes first here.
@@ -191,22 +188,21 @@ namespace runtime
         gpu->init(surface_for(*window, *settings), settings->graphics.frames_in_flight);
         renderer->init();
         // The asset cache's loaders need a live device, so it is initialised
-        // right after the renderer. Publish the live device to the asset
-        // layer first, so the cache and the reference-counted asset handles
-        // resolve it without reaching into the engine global.
-        rendering_engine::set_asset_device(gpu.get());
-        assets->init();
-        // Asynchronous glTF loads build their materials against the live
-        // renderer through the standard factory.
-        assets->set_gltf_material_factory(std::make_shared<rendering_engine::gltf_standard_material_factory>());
+        // right after the renderer, handed the device its uploads (and every
+        // asset's release) go to and the renderer its glTF materials are
+        // built through.
+        assets->init(*gpu, *renderer);
 #if _DEBUG
         // Debug builds reload a texture whose file under the content root
         // changes on disk (polled from assets->pump()).
         assets->enable_hot_reload(content_root);
 #endif
-        // After the renderer: debug builds give the physics world a line
-        // helper that draws its colliders.
         physics->init();
+#if _DEBUG
+        // After the renderer and the world: the line helper that draws the
+        // world's colliders.
+        m_physics_debug = std::make_unique<runtime::physics::debug_draw>(*physics);
+#endif
         // Before the scenes, so the game modules' bootstraps and scene files
         // can attach scripted behaviours; scripts read through the VFS
         // mounted above.
@@ -234,7 +230,9 @@ namespace runtime
         // Every scripted behaviour went with its scene; close the Lua state.
         scripts->quit();
         // Every physics component has unregistered with its scene; the world
-        // goes before the renderer its debug helper draws through.
+        // and its debug helper go before the renderer the helper draws
+        // through.
+        m_physics_debug.reset();
         physics->quit();
         // Scene teardown is where the bulk of the asset handles drop; reclaim
         // the index slots they leave behind before the cache itself goes.

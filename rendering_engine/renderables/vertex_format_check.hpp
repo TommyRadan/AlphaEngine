@@ -5,7 +5,7 @@
 
 #include <cstdint>
 
-#include <rendering_engine/assets/vertex.hpp>
+#include <assets/vertex.hpp>
 
 namespace rendering_engine
 {
@@ -28,8 +28,11 @@ namespace rendering_engine
     // in debug builds, and @c false is returned so the caller skips the
     // draw instead of reading out of bounds. @p renderable_name labels the
     // log line.
-    bool validate_vertex_format(
-        const material& mat, vertex_format format, uint32_t vertex_stride, const char* renderable_name, bool& reported);
+    bool validate_vertex_format(const material& mat,
+                                assets::vertex_format format,
+                                uint32_t vertex_stride,
+                                const char* renderable_name,
+                                bool& reported);
 
     // Convenience overload for a cached @ref mesh_asset: checks its recorded
     // format and stride.

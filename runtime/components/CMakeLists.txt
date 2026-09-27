@@ -15,6 +15,8 @@ target_sources(AlphaEngine PRIVATE
     collider_component.cpp
     collider_component.hpp
     component_types.cpp
+    drawn_bounds.cpp
+    drawn_bounds.hpp
     light_component.cpp
     light_component.hpp
     mesh_component.cpp

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2015-2026 Tomislav Radanovic
 
-#include <rendering_engine/assets/asset_cache.hpp>
+#include <rendering_engine/resources/asset_cache.hpp>
 
 #include <algorithm>
 #include <chrono>
@@ -12,17 +12,18 @@
 #include <system_error>
 #include <utility>
 
+#include <assets/color.hpp>
+#include <assets/gltf_importer.hpp>
+#include <assets/image.hpp>
 #include <core/job_pool.hpp>
 #include <core/log.hpp>
 #include <core/os/directory_watcher.hpp>
 #include <core/os/os.hpp>
 #include <core/vfs/vfs.hpp>
-#include <rendering_engine/assets/asset_device.hpp>
-#include <rendering_engine/assets/cache_key.hpp>
-#include <rendering_engine/assets/color.hpp>
-#include <rendering_engine/assets/gltf_importer.hpp>
-#include <rendering_engine/assets/image.hpp>
 #include <rendering_engine/gpu/device.hpp>
+#include <rendering_engine/resources/cache_key.hpp>
+#include <rendering_engine/resources/gltf_model.hpp>
+#include <rendering_engine/resources/texture_formats.hpp>
 
 namespace rendering_engine
 {
@@ -48,12 +49,12 @@ namespace rendering_engine
         // The colour-space suffix of a texture key. An sRGB and a linear
         // upload of one file are different GPU resources (the sampler
         // decodes one and not the other), so they must not alias.
-        const char* color_space_key(gpu::color_space space)
+        const char* color_space_key(assets::color_space space)
         {
-            return space == gpu::color_space::srgb ? "srgb" : "linear";
+            return space == assets::color_space::srgb ? "srgb" : "linear";
         }
 
-        std::string texture_key(const std::string& identity, gpu::color_space space)
+        std::string texture_key(const std::string& identity, assets::color_space space)
         {
             return identity + '|' + color_space_key(space);
         }
@@ -119,16 +120,15 @@ namespace rendering_engine
             uint32_t height{0};
         };
 
-        // Upload @p image as a mipmapped, repeat-addressed 2D texture in the
-        // RGBA8 format for @p space. Shared by every loader so an image
-        // file, an in-memory image and an asynchronous load all produce
-        // identical textures.
-        uploaded_texture upload_image(const image& image, gpu::color_space space)
+        // Upload @p image to @p gpu as a mipmapped, repeat-addressed 2D
+        // texture in the RGBA8 format for @p space. Shared by every loader
+        // so an image file, an in-memory image and an asynchronous load all
+        // produce identical textures.
+        uploaded_texture upload_image(gpu::device& gpu, const assets::image& image, assets::color_space space)
         {
-            auto& gpu = asset_device();
             gpu::texture_descriptor descriptor{};
             descriptor.dimension = gpu::texture_dimension::d2;
-            descriptor.format = gpu::rgba8_format(space);
+            descriptor.format = rgba8_format(space);
             descriptor.width = image.get_width();
             descriptor.height = image.get_height();
             descriptor.mipmaps = true;
@@ -140,8 +140,8 @@ namespace rendering_engine
             descriptor.address_w = gpu::address_mode::repeat;
 
             const gpu::texture texture = gpu.create_texture(descriptor);
-            const size_t pixel_bytes =
-                static_cast<size_t>(image.get_width()) * static_cast<size_t>(image.get_height()) * sizeof(color);
+            const size_t pixel_bytes = static_cast<size_t>(image.get_width()) *
+                                       static_cast<size_t>(image.get_height()) * sizeof(assets::color);
             gpu.write_texture(texture, image.get_pixels(), pixel_bytes);
             gpu.generate_mipmaps(texture);
             return uploaded_texture{texture, descriptor.format, image.get_width(), image.get_height()};
@@ -151,18 +151,19 @@ namespace rendering_engine
         // pre-built levels (a KTX2 file) as they are, with the same sampler
         // state. Block-compressed textures are created sampled-only: they
         // can be neither attached nor copied from.
-        uploaded_texture
-        upload_decoded(const decoded_texture& decoded, gpu::color_space space, const std::string& label)
+        uploaded_texture upload_decoded(gpu::device& gpu,
+                                        const assets::decoded_texture& decoded,
+                                        assets::color_space space,
+                                        const std::string& label)
         {
             if (!decoded.has_levels())
             {
-                return upload_image(decoded.image, space);
+                return upload_image(gpu, decoded.image, space);
             }
 
-            auto& gpu = asset_device();
             gpu::texture_descriptor descriptor{};
             descriptor.dimension = gpu::texture_dimension::d2;
-            descriptor.format = decoded.format;
+            descriptor.format = texture_format_for(decoded.format, space);
             descriptor.width = decoded.width;
             descriptor.height = decoded.height;
             descriptor.mip_level_count = static_cast<uint32_t>(decoded.levels.size());
@@ -172,7 +173,7 @@ namespace rendering_engine
             descriptor.address_u = gpu::address_mode::repeat;
             descriptor.address_v = gpu::address_mode::repeat;
             descriptor.address_w = gpu::address_mode::repeat;
-            if (gpu::is_compressed_texture_format(decoded.format))
+            if (gpu::is_compressed_texture_format(descriptor.format))
             {
                 descriptor.usage = gpu::texture_usage_sampled | gpu::texture_usage_copy_dst;
             }
@@ -200,7 +201,7 @@ namespace rendering_engine
                     return {};
                 }
             }
-            return uploaded_texture{texture, decoded.format, decoded.width, decoded.height};
+            return uploaded_texture{texture, descriptor.format, decoded.width, decoded.height};
         }
 
         // Makes @p uploaded the texture of @p asset, which owns it from now on.
@@ -215,10 +216,10 @@ namespace rendering_engine
         }
 
         // Replaces the texture of an @p asset already handed out with
-        // @p uploaded: releases the previous one unless it is the shared
-        // placeholder, and moves the generation so the consumers that bound
-        // the old handle rebuild.
-        void replace(texture_asset& asset, const uploaded_texture& uploaded)
+        // @p uploaded: releases the previous one on @p gpu unless it is the
+        // shared placeholder, and moves the generation so the consumers that
+        // bound the old handle rebuild.
+        void replace(gpu::device& gpu, texture_asset& asset, const uploaded_texture& uploaded)
         {
             const gpu::texture previous = asset.texture;
             const bool owned_previous = asset.owns_texture;
@@ -226,13 +227,13 @@ namespace rendering_engine
             ++asset.generation;
             if (owned_previous && previous.valid())
             {
-                asset_device().destroy(previous);
+                gpu.destroy(previous);
             }
         }
 
-        std::shared_ptr<texture_asset> make_asset(const uploaded_texture& uploaded)
+        std::shared_ptr<texture_asset> make_asset(gpu::device& gpu, const uploaded_texture& uploaded)
         {
-            auto asset = std::make_shared<texture_asset>();
+            auto asset = std::make_shared<texture_asset>(gpu);
             install(*asset, uploaded);
             return asset;
         }
@@ -253,9 +254,11 @@ namespace rendering_engine
         wait_pending();
     }
 
-    void asset_cache::init()
+    void asset_cache::init(gpu::device& device, renderer& renderer)
     {
         LOG_INF("Init Asset Cache");
+        m_device = &device;
+        m_renderer = &renderer;
     }
 
     void asset_cache::quit()
@@ -279,14 +282,17 @@ namespace rendering_engine
             job->abandon();
         }
         m_reloading.clear();
-        m_gltf_factory.reset();
         m_compressed_support.reset();
         m_placeholder.reset();
 
-        std::unique_lock lock{m_mutex};
-        m_textures.clear();
-        m_fonts.clear();
-        m_meshes.clear();
+        {
+            std::unique_lock lock{m_mutex};
+            m_textures.clear();
+            m_fonts.clear();
+            m_meshes.clear();
+        }
+        m_renderer = nullptr;
+        m_device = nullptr;
     }
 
     void asset_cache::set_jobs(core::job_pool* jobs)
@@ -294,11 +300,24 @@ namespace rendering_engine
         m_jobs = jobs;
     }
 
-    const compressed_format_support& asset_cache::compressed_support()
+    gpu::device& asset_cache::device()
+    {
+        if (m_device == nullptr)
+        {
+            // An asset created with no device installed — before init or
+            // after quit — is a lifetime bug. It must fail loudly in every
+            // configuration rather than become a null dereference.
+            LOG_FTL("asset_cache used with no gpu device installed (before init or after quit)");
+            throw std::logic_error{"asset_cache used with no gpu device installed"};
+        }
+        return *m_device;
+    }
+
+    const assets::compressed_format_support& asset_cache::compressed_support()
     {
         if (!m_compressed_support.has_value())
         {
-            m_compressed_support = compressed_format_support::query(asset_device());
+            m_compressed_support = query_compressed_support(device());
             LOG_INF("asset_cache: block-compressed formats the device samples: BC1 %s, BC3 %s, BC4 %s, BC5 %s, "
                     "BC7 %s, ASTC 4x4 %s",
                     yes_no(m_compressed_support->bc1),
@@ -311,7 +330,8 @@ namespace rendering_engine
         return *m_compressed_support;
     }
 
-    std::shared_ptr<texture_asset> asset_cache::load_texture(const std::filesystem::path& path, gpu::color_space space)
+    std::shared_ptr<texture_asset> asset_cache::load_texture(const std::filesystem::path& path,
+                                                             assets::color_space space)
     {
         const std::string key = texture_key(path_key(path), space);
         {
@@ -324,15 +344,15 @@ namespace rendering_engine
 
         // Miss: decode the file (throws on failure) and upload it once. Only
         // a KTX2 file needs to know what the device samples.
-        const decoded_texture decoded =
-            decode_texture_file(path, space, is_ktx2_path(path) ? compressed_support() : compressed_format_support{});
+        const assets::decoded_texture decoded = assets::decode_texture_file(
+            path, space, assets::is_ktx2_path(path) ? compressed_support() : assets::compressed_format_support{});
         const std::string label = core::os::path_to_utf8(path);
-        const uploaded_texture uploaded = upload_decoded(decoded, space, label);
+        const uploaded_texture uploaded = upload_decoded(device(), decoded, space, label);
         if (!uploaded.texture.valid())
         {
             throw std::runtime_error{"Could not upload texture (" + label + ")"};
         }
-        auto asset = make_asset(uploaded);
+        auto asset = make_asset(device(), uploaded);
         std::unique_lock lock{m_mutex};
         m_textures[key] = asset;
         return asset;
@@ -345,8 +365,8 @@ namespace rendering_engine
             // 1x1 mid grey: samples as 0.5 in every channel whatever the
             // colour space of the asset standing in on it, which keeps a
             // still-loading albedo or data map from flashing black or white.
-            const image pixel{1, 1, color{128, 128, 128, 255}};
-            m_placeholder = make_asset(upload_image(pixel, gpu::color_space::linear));
+            const assets::image pixel{1, 1, assets::color{128, 128, 128, 255}};
+            m_placeholder = make_asset(device(), upload_image(device(), pixel, assets::color_space::linear));
         }
         return m_placeholder;
     }
@@ -382,7 +402,7 @@ namespace rendering_engine
 
     void asset_cache::queue_texture_decode(const std::shared_ptr<texture_asset>& asset,
                                            const std::filesystem::path& path,
-                                           gpu::color_space space,
+                                           assets::color_space space,
                                            bool reload)
     {
         // Everything the worker reads and writes; nothing else is shared
@@ -391,16 +411,16 @@ namespace rendering_engine
         {
             std::filesystem::path path;
             std::string label; // the path as given, for the log
-            gpu::color_space space{gpu::color_space::srgb};
-            compressed_format_support support;
-            decoded_texture decoded;
+            assets::color_space space{assets::color_space::srgb};
+            assets::compressed_format_support support;
+            assets::decoded_texture decoded;
             std::string error;
         };
         auto state = std::make_shared<decode_state>();
         state->path = path;
         state->label = core::os::path_to_utf8(path);
         state->space = space;
-        if (is_ktx2_path(path))
+        if (assets::is_ktx2_path(path))
         {
             // Queried here, on the main thread: the worker must not touch
             // the device.
@@ -412,7 +432,7 @@ namespace rendering_engine
         {
             try
             {
-                state->decoded = decode_texture_file(state->path, state->space, state->support);
+                state->decoded = assets::decode_texture_file(state->path, state->space, state->support);
             }
             catch (const std::exception& e)
             {
@@ -448,19 +468,19 @@ namespace rendering_engine
                             state->error.c_str());
                     return;
                 }
-                const uploaded_texture uploaded = upload_decoded(state->decoded, state->space, state->label);
+                const uploaded_texture uploaded = upload_decoded(device(), state->decoded, state->space, state->label);
                 if (!uploaded.texture.valid())
                 {
                     return;
                 }
-                replace(*live, uploaded);
+                replace(device(), *live, uploaded);
                 LOG_INF("asset_cache: hot-reloaded '%s' (%ux%u)", state->label.c_str(), live->width, live->height);
             };
             job->abandon = [this, key] { m_reloading.erase(key); };
         }
         else
         {
-            job->complete = [state, asset]
+            job->complete = [this, state, asset]
             {
                 if (!state->error.empty())
                 {
@@ -470,13 +490,13 @@ namespace rendering_engine
                     asset->state = texture_asset::load_state::failed;
                     return;
                 }
-                const uploaded_texture uploaded = upload_decoded(state->decoded, state->space, state->label);
+                const uploaded_texture uploaded = upload_decoded(device(), state->decoded, state->space, state->label);
                 if (!uploaded.texture.valid())
                 {
                     asset->state = texture_asset::load_state::failed;
                     return;
                 }
-                replace(*asset, uploaded);
+                replace(device(), *asset, uploaded);
                 LOG_DBG("asset_cache: resolved '%s' (%ux%u)", state->label.c_str(), asset->width, asset->height);
             };
             job->abandon = [asset] { asset->state = texture_asset::load_state::failed; };
@@ -485,7 +505,7 @@ namespace rendering_engine
     }
 
     std::shared_ptr<texture_asset> asset_cache::load_texture_async(const std::filesystem::path& path,
-                                                                   gpu::color_space space)
+                                                                   assets::color_space space)
     {
         const std::string key = texture_key(path_key(path), space);
         {
@@ -499,7 +519,7 @@ namespace rendering_engine
         // Miss: hand out an asset that stands in on the placeholder and queue
         // the decode. The upload happens in pump(), on the main thread.
         const std::shared_ptr<texture_asset> placeholder = placeholder_texture();
-        auto asset = std::make_shared<texture_asset>();
+        auto asset = std::make_shared<texture_asset>(device());
         asset->texture = placeholder->texture;
         asset->format = placeholder->format;
         asset->width = placeholder->width;
@@ -597,7 +617,7 @@ namespace rendering_engine
                 continue;
             }
             const std::string identity = path_key(change.path);
-            for (const gpu::color_space space : {gpu::color_space::srgb, gpu::color_space::linear})
+            for (const assets::color_space space : {assets::color_space::srgb, assets::color_space::linear})
             {
                 std::shared_ptr<texture_asset> asset;
                 {
@@ -614,30 +634,25 @@ namespace rendering_engine
         }
     }
 
-    void asset_cache::set_gltf_material_factory(std::shared_ptr<gltf_material_factory> factory)
+    gltf_model asset_cache::load_gltf(const std::filesystem::path& path, const assets::gltf_import_options& options)
     {
-        m_gltf_factory = std::move(factory);
-    }
-
-    std::shared_ptr<gltf_asset> asset_cache::load_gltf_async(const std::filesystem::path& path)
-    {
-        return load_gltf_async(path, gltf_import_options{}, nullptr);
+        if (m_renderer == nullptr)
+        {
+            LOG_FTL("asset_cache::load_gltf called with no renderer installed (before init or after quit)");
+            throw std::logic_error{"asset_cache::load_gltf called with no renderer installed"};
+        }
+        return upload_gltf(assets::import_gltf(path, options), *this, *m_renderer);
     }
 
     std::shared_ptr<gltf_asset> asset_cache::load_gltf_async(const std::filesystem::path& path,
-                                                             const gltf_import_options& options,
-                                                             std::shared_ptr<gltf_material_factory> factory)
+                                                             const assets::gltf_import_options& options)
     {
         auto asset = std::make_shared<gltf_asset>();
         const std::string label = core::os::path_to_utf8(path);
-        if (factory == nullptr)
-        {
-            factory = m_gltf_factory;
-        }
-        if (factory == nullptr)
+        if (m_renderer == nullptr)
         {
             asset->state = gltf_asset::load_state::failed;
-            asset->error = "no glTF material factory is installed";
+            asset->error = "the asset cache is not initialised";
             LOG_ERR("asset_cache: cannot load glTF '%s': %s", label.c_str(), asset->error.c_str());
             return asset;
         }
@@ -647,8 +662,8 @@ namespace rendering_engine
         struct import_state
         {
             std::filesystem::path path;
-            gltf_import_options options;
-            gltf_import_ptr import;
+            assets::gltf_import_options options;
+            std::optional<assets::gltf_document> document;
             std::string error;
         };
         auto state = std::make_shared<import_state>();
@@ -660,7 +675,7 @@ namespace rendering_engine
         {
             try
             {
-                state->import = begin_gltf_import(state->path, state->options, true);
+                state->document = assets::import_gltf(state->path, state->options);
             }
             catch (const std::exception& e)
             {
@@ -671,22 +686,22 @@ namespace rendering_engine
                 state->error = "unknown import failure";
             }
         };
-        job->complete = [this, state, asset, factory, label]
+        job->complete = [this, state, asset, label]
         {
-            if (state->import != nullptr)
+            if (state->document.has_value())
             {
                 try
                 {
-                    asset->model = finish_gltf_import(*state->import, *this, *factory);
+                    asset->model = upload_gltf(std::move(*state->document), *this, *m_renderer);
                     asset->state = gltf_asset::load_state::ready;
                 }
                 catch (const std::exception& e)
                 {
                     state->error = e.what();
                 }
-                // The parsed file, its decoded images and any geometry the
-                // cache already held go now rather than with the handle.
-                state->import.reset();
+                // The decoded images and any geometry the cache already held
+                // go now rather than with the handle.
+                state->document.reset();
             }
             if (asset->state != gltf_asset::load_state::ready)
             {
@@ -724,7 +739,7 @@ namespace rendering_engine
     }
 
     std::shared_ptr<texture_asset>
-    asset_cache::load_texture_from_image(const std::string& key, const image& image, gpu::color_space space)
+    asset_cache::load_texture_from_image(const std::string& key, const assets::image& image, assets::color_space space)
     {
         const std::string full_key = texture_key(key, space);
         {
@@ -735,14 +750,15 @@ namespace rendering_engine
             }
         }
 
-        auto asset = make_asset(upload_image(image, space));
+        auto asset = make_asset(device(), upload_image(device(), image, space));
         std::unique_lock lock{m_mutex};
         m_textures[full_key] = asset;
         return asset;
     }
 
-    std::shared_ptr<texture_asset>
-    asset_cache::adopt_texture_image(const std::filesystem::path& path, const image& image, gpu::color_space space)
+    std::shared_ptr<texture_asset> asset_cache::adopt_texture_image(const std::filesystem::path& path,
+                                                                    const assets::image& image,
+                                                                    assets::color_space space)
     {
         const std::string key = texture_key(path_key(path), space);
         {
@@ -753,7 +769,7 @@ namespace rendering_engine
             }
         }
 
-        auto asset = make_asset(upload_image(image, space));
+        auto asset = make_asset(device(), upload_image(device(), image, space));
         std::unique_lock lock{m_mutex};
         m_textures[key] = asset;
         return asset;
@@ -771,14 +787,14 @@ namespace rendering_engine
             }
         }
 
-        auto asset = std::make_shared<font_asset>(core::os::path_to_utf8(path), size);
+        auto asset = std::make_shared<font_asset>(device(), core::os::path_to_utf8(path), size);
         std::unique_lock lock{m_mutex};
         m_fonts[key] = asset;
         return asset;
     }
 
     std::shared_ptr<mesh_asset> asset_cache::get_or_create_mesh(const std::string& key,
-                                                                const std::function<mesh_data()>& builder)
+                                                                const std::function<assets::mesh_data()>& builder)
     {
         {
             std::shared_lock lock{m_mutex};
@@ -790,7 +806,7 @@ namespace rendering_engine
 
         // Miss: build the geometry (outside the lock — a builder may reach
         // back into the cache) and upload it once.
-        const mesh_data data = builder();
+        const assets::mesh_data data = builder();
         if (data.vertex_stride == 0 || data.vertex_bytes.empty())
         {
             LOG_ERR("asset_cache: mesh builder for '%s' produced no geometry (stride %u, %zu bytes); nothing uploaded",
@@ -804,19 +820,19 @@ namespace rendering_engine
         // that claims one over differently sized records would let a
         // renderable pass the format check and still fetch past the vertex,
         // so demote it to custom (stride-checked only) rather than trust it.
-        vertex_format format = data.format;
-        if (format != vertex_format::custom && vertex_format_stride(format) != data.vertex_stride)
+        assets::vertex_format format = data.format;
+        if (format != assets::vertex_format::custom && assets::vertex_format_stride(format) != data.vertex_stride)
         {
             LOG_WRN("asset_cache: mesh '%s' claims format %s (stride %u) but has stride %u; treating as custom",
                     key.c_str(),
-                    vertex_format_name(format),
-                    vertex_format_stride(format),
+                    assets::vertex_format_name(format),
+                    assets::vertex_format_stride(format),
                     data.vertex_stride);
-            format = vertex_format::custom;
+            format = assets::vertex_format::custom;
         }
 
-        auto& gpu = asset_device();
-        auto asset = std::make_shared<mesh_asset>();
+        auto& gpu = device();
+        auto asset = std::make_shared<mesh_asset>(gpu);
         asset->key = key;
 
         gpu::buffer_descriptor vertex_descriptor{};

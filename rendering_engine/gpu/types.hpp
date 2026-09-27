@@ -74,26 +74,6 @@ namespace rendering_engine::gpu
         astc_4x4_srgb,
     };
 
-    // The colour space an 8-bit RGBA image was authored in. Callers pass
-    // it to @ref asset_cache::load_texture and to the material colour-map
-    // setters, which pick the matching @ref texture_format through
-    // @ref rgba8_format so the GPU decodes sRGB texels on sample and
-    // leaves linear data alone.
-    enum class color_space
-    {
-        linear,
-        srgb,
-    };
-
-    // The 8-bit RGBA texel format that samples an image authored in
-    // @p space as linear values: @c rgba8_srgb for sRGB content (the
-    // hardware decodes on sample), @c rgba8_unorm for linear data. The
-    // one place the RGBA8 upload sites map a colour space to a format.
-    constexpr texture_format rgba8_format(color_space space)
-    {
-        return space == color_space::srgb ? texture_format::rgba8_srgb : texture_format::rgba8_unorm;
-    }
-
     // Index buffer element width.
     enum class index_format
     {

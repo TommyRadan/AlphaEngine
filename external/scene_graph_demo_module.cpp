@@ -36,15 +36,15 @@
 
 #include "api/game_module.hpp"
 
+#include <assets/color.hpp>
+#include <assets/tangent.hpp>
+#include <assets/vertex.hpp>
 #include <core/math/math.hpp>
-#include <rendering_engine/assets/asset_cache.hpp>
-#include <rendering_engine/assets/color.hpp>
-#include <rendering_engine/assets/tangent.hpp>
-#include <rendering_engine/assets/vertex.hpp>
 #include <rendering_engine/lighting/ambient_light.hpp>
 #include <rendering_engine/lighting/point_light.hpp>
 #include <rendering_engine/materials/standard_material.hpp>
 #include <rendering_engine/renderer.hpp>
+#include <rendering_engine/resources/asset_cache.hpp>
 #include <runtime/components/light_component.hpp>
 #include <runtime/components/mesh_component.hpp>
 #include <runtime/engine.hpp>
@@ -66,9 +66,9 @@ namespace
     // carrying tangents — the record standard_material reads. The normal
     // equals the position and bodies are scaled per node. Two triangles per
     // stack/slice cell, wound CCW when seen from outside.
-    rendering_engine::mesh_data make_sphere(int stacks, int slices)
+    assets::mesh_data make_sphere(int stacks, int slices)
     {
-        std::vector<rendering_engine::vertex_position_uv_normal> vertices;
+        std::vector<assets::vertex_position_uv_normal> vertices;
         std::vector<uint32_t> indices;
         const float pi = 3.14159265358979f;
 
@@ -80,7 +80,7 @@ namespace
                 const float theta = 2.0f * pi * (static_cast<float>(slice) / slices);
                 const math::vec3 p{std::sin(phi) * std::cos(theta), std::sin(phi) * std::sin(theta), std::cos(phi)};
                 const math::vec2 uv{static_cast<float>(slice) / slices, static_cast<float>(stack) / stacks};
-                vertices.push_back(rendering_engine::vertex_position_uv_normal{p, uv, p});
+                vertices.push_back(assets::vertex_position_uv_normal{p, uv, p});
             }
         }
 
@@ -97,8 +97,7 @@ namespace
             }
         }
 
-        return rendering_engine::mesh_data::from_vertices(rendering_engine::generate_tangents(vertices, indices),
-                                                          std::move(indices));
+        return assets::mesh_data::from_vertices(assets::generate_tangents(vertices, indices), std::move(indices));
     }
 
     // The one sphere every body draws, built once and shared through the
@@ -124,7 +123,7 @@ namespace
             return m_sphere;
         }
 
-        rendering_engine::standard_material* make_material(const rendering_engine::color& base, float roughness)
+        rendering_engine::standard_material* make_material(const assets::color& base, float roughness)
         {
             auto material = runtime::current_engine().renderer->create_standard_material();
             material->set_base_color(base);
@@ -199,7 +198,7 @@ namespace
                          float distance,
                          float radius,
                          float orbit_rate,
-                         const rendering_engine::color& color,
+                         const assets::color& color,
                          int moons)
         {
             runtime::node& orbit = make_child(parent);
@@ -211,7 +210,7 @@ namespace
 
             make_visual(anchor, math::vec3{0.0f, 0.0f, 0.0f}, radius, system.make_material(color, 0.8f));
 
-            auto* moon_material = system.make_material(rendering_engine::color{170, 170, 180, 255}, 0.9f);
+            auto* moon_material = system.make_material(assets::color{170, 170, 180, 255}, 0.9f);
             for (int i = 0; i < moons; ++i)
             {
                 runtime::node& moon_pivot = make_child(anchor);
@@ -268,8 +267,8 @@ GAME_MODULE()
     // emissive so it reads as the source. cast_shadow turns on the omni
     // (six-face) shadow map, so a moon goes dark behind its planet and casts
     // an eclipse shadow on it.
-    auto* sun_material = system->make_material(rendering_engine::color{255, 220, 120, 255}, 1.0f);
-    sun_material->set_emissive(rendering_engine::color{255, 210, 110, 255});
+    auto* sun_material = system->make_material(assets::color{255, 220, 120, 255}, 1.0f);
+    sun_material->set_emissive(assets::color{255, 210, 110, 255});
     sun_material->set_emissive_intensity(3.0f);
 
     // The sun is a childless leaf, so giving it a scale is safe; its point
@@ -287,8 +286,8 @@ GAME_MODULE()
 
     // Planets: distance, radius, orbit rate (rad/s, all same sign), colour,
     // moon count. Inner planets orbit faster, the classic look.
-    builder.make_planet(root, 1.7f, 0.35f, 0.70f, rendering_engine::color{120, 170, 255, 255}, 0);
-    builder.make_planet(root, 2.7f, 0.50f, 0.50f, rendering_engine::color{220, 110, 80, 255}, 1);
-    builder.make_planet(root, 3.7f, 0.70f, 0.34f, rendering_engine::color{210, 180, 120, 255}, 2);
-    builder.make_planet(root, 4.6f, 0.45f, 0.24f, rendering_engine::color{150, 220, 200, 255}, 1);
+    builder.make_planet(root, 1.7f, 0.35f, 0.70f, assets::color{120, 170, 255, 255}, 0);
+    builder.make_planet(root, 2.7f, 0.50f, 0.50f, assets::color{220, 110, 80, 255}, 1);
+    builder.make_planet(root, 3.7f, 0.70f, 0.34f, assets::color{210, 180, 120, 255}, 2);
+    builder.make_planet(root, 4.6f, 0.45f, 0.24f, assets::color{150, 220, 200, 255}, 1);
 }

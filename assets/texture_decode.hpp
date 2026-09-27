@@ -15,20 +15,60 @@
 #include <string>
 #include <vector>
 
-#include <rendering_engine/assets/image.hpp>
-#include <rendering_engine/gpu/types.hpp>
+#include <assets/color.hpp>
+#include <assets/image.hpp>
 
-namespace rendering_engine
+namespace assets
 {
-    namespace gpu
+    /**
+     * @brief The storage layout of decoded texels: 8-bit RGBA, or one of the
+     *        block-compressed families a KTX2 file can hold or be
+     *        transcoded to.
+     *
+     * The colour space is not part of it: the renderer uploads the same
+     * bytes in the sRGB or the unorm form of the family, as the caller's
+     * @ref color_space asks. BC4 (one channel) and BC5 (two) are data
+     * formats with no sRGB form.
+     */
+    enum class texel_format
     {
-        struct device;
+        rgba8,
+        bc1_rgba,
+        bc3_rgba,
+        bc4_r,
+        bc5_rg,
+        bc7_rgba,
+        astc_4x4,
+    };
+
+    /** @brief True for the block-compressed families: 4x4 texel blocks, every level supplied by the file. */
+    constexpr bool is_block_compressed(texel_format format)
+    {
+        return format != texel_format::rgba8;
     }
 
     /**
-     * @brief The block-compressed families a device can sample, captured on
-     *        the main thread so a worker can choose a KTX2 transcode target
-     *        without touching the device, which is main-thread only.
+     * @brief Bytes of a tightly packed @p width x @p height image of
+     *        @p format: whole 4x4 blocks for a compressed family (8 bytes
+     *        for BC1 / BC4, 16 for the rest; a level smaller than a block
+     *        still occupies one), four bytes per texel for RGBA8.
+     */
+    constexpr std::size_t texel_image_bytes(texel_format format, uint32_t width, uint32_t height)
+    {
+        if (!is_block_compressed(format))
+        {
+            return static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 4u;
+        }
+        const std::size_t blocks_x = (static_cast<std::size_t>(width) + 3u) / 4u;
+        const std::size_t blocks_y = (static_cast<std::size_t>(height) + 3u) / 4u;
+        const std::size_t block_bytes = format == texel_format::bc1_rgba || format == texel_format::bc4_r ? 8u : 16u;
+        return blocks_x * blocks_y * block_bytes;
+    }
+
+    /**
+     * @brief The block-compressed families a device can sample, captured by
+     *        the renderer on the main thread so a worker can choose a KTX2
+     *        transcode target without touching the device.
      *
      * A colour family counts only when both its unorm and its sRGB form
      * sample, so the loader never has to give up on the colour space.
@@ -42,11 +82,8 @@ namespace rendering_engine
         bool bc7{false};
         bool astc_4x4{false};
 
-        /** @brief Asks @p device (through @c format_support) which families it samples. */
-        static compressed_format_support query(const gpu::device& device);
-
-        /** @brief Whether @p format can be sampled; always true for an uncompressed format. */
-        bool supports(gpu::texture_format format) const;
+        /** @brief Whether @p format can be sampled; always true for RGBA8. */
+        bool supports(texel_format format) const;
     };
 
     /**
@@ -60,11 +97,11 @@ namespace rendering_engine
      */
     struct decoded_texture
     {
-        rendering_engine::image image;
+        assets::image image;
 
         // The pre-built levels (base level first, each tightly packed texels
         // or blocks of @ref format); empty for an @ref image.
-        gpu::texture_format format{gpu::texture_format::rgba8_unorm};
+        texel_format format{texel_format::rgba8};
         uint32_t width{0};
         uint32_t height{0};
         std::vector<std::vector<std::byte>> levels;
@@ -88,9 +125,8 @@ namespace rendering_engine
      * @c std::runtime_error (after logging) when the file cannot be read or
      * decoded.
      */
-    decoded_texture decode_texture_file(const std::filesystem::path& path,
-                                        gpu::color_space space,
-                                        const compressed_format_support& support);
+    decoded_texture
+    decode_texture_file(const std::filesystem::path& path, color_space space, const compressed_format_support& support);
 
     /**
      * @brief Decodes the KTX2 container in @p bytes (@p size bytes, named
@@ -106,16 +142,16 @@ namespace rendering_engine
      * ASTC 4x4, or RGBA8) is taken as it is; ASTC the device cannot sample
      * (or in another block size) is decoded to RGBA8, and any other format
      * is an error.
-     * @p space picks the sRGB or unorm form of the result whatever transfer
-     * function the file declares, exactly as it picks the RGBA8 format of a
-     * PNG. Every mip level in the file is kept; a single-level RGBA8 result
-     * comes back as a @ref decoded_texture::image so the device generates its
-     * chain, while a single-level compressed one stays single-level. Throws
+     * @p space is the colour space the result will be sampled in, whatever
+     * transfer function the file declares, exactly as for a PNG. Every mip
+     * level in the file is kept; a single-level RGBA8 result comes back as a
+     * @ref decoded_texture::image so the device generates its chain, while a
+     * single-level compressed one stays single-level. Throws
      * @c std::runtime_error (after logging) on failure.
      */
     decoded_texture decode_ktx2(const std::byte* bytes,
                                 std::size_t size,
-                                gpu::color_space space,
+                                color_space space,
                                 const compressed_format_support& support,
                                 const std::string& label);
-} // namespace rendering_engine
+} // namespace assets

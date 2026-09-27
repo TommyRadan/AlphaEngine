@@ -6,16 +6,17 @@
 #include <cstdint>
 #include <optional>
 
+#include <assets/mesh_data.hpp>
+#include <assets/vertex.hpp>
 #include <core/log.hpp>
 #include <core/math/math.hpp>
-#include <rendering_engine/assets/mesh_asset.hpp>
-#include <rendering_engine/assets/vertex.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/materials/material.hpp>
 #include <rendering_engine/renderables/mesh_bounds.hpp>
 #include <rendering_engine/renderables/per_draw_ubo.hpp>
 #include <rendering_engine/renderables/vertex_format_check.hpp>
+#include <rendering_engine/resources/mesh_asset.hpp>
 #include <runtime/engine.hpp>
 
 rendering_engine::model::model(material* mat) : m_material{mat} {}
@@ -45,7 +46,7 @@ rendering_engine::model::~model()
     }
 }
 
-void rendering_engine::model::upload_mesh(const mesh_data& mesh)
+void rendering_engine::model::upload_mesh(const assets::mesh_data& mesh)
 {
     m_vertex_count = mesh.vertex_stride != 0 ? mesh.vertex_bytes.size() / mesh.vertex_stride : 0;
     m_vertex_stride = mesh.vertex_stride;
@@ -93,7 +94,7 @@ void rendering_engine::model::set_mesh(std::shared_ptr<mesh_asset> mesh)
 {
     m_mesh = std::move(mesh);
     m_vertex_stride = m_mesh ? m_mesh->vertex_stride : 0;
-    m_vertex_format = m_mesh ? m_mesh->format : vertex_format::custom;
+    m_vertex_format = m_mesh ? m_mesh->format : assets::vertex_format::custom;
     m_vertex_format_reported = false;
 }
 

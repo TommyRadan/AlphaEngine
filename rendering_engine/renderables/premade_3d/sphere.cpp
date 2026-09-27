@@ -7,17 +7,17 @@
 #include <string>
 #include <vector>
 
+#include <assets/tangent.hpp>
+#include <assets/vertex.hpp>
 #include <core/log.hpp>
 #include <core/math/math.hpp>
-#include <rendering_engine/assets/asset_cache.hpp>
-#include <rendering_engine/assets/tangent.hpp>
-#include <rendering_engine/assets/vertex.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/materials/material.hpp>
 #include <rendering_engine/renderables/mesh_bounds.hpp>
 #include <rendering_engine/renderables/per_draw_ubo.hpp>
 #include <rendering_engine/renderables/vertex_format_check.hpp>
+#include <rendering_engine/resources/asset_cache.hpp>
 #include <runtime/engine.hpp>
 
 rendering_engine::sphere::sphere(material* mat, unsigned int stacks, unsigned int slices)
@@ -38,13 +38,13 @@ void rendering_engine::sphere::upload()
     // a cache miss.
     m_mesh = runtime::current_engine().assets->get_or_create_mesh(
         "sphere:" + std::to_string(m_stacks) + "x" + std::to_string(m_slices) + ":" +
-            vertex_format_name(vertex_format::position_uv_normal_tangent),
+            assets::vertex_format_name(assets::vertex_format::position_uv_normal_tangent),
         [this]
         {
             const unsigned int rings = m_stacks + 1;
             const unsigned int columns = m_slices + 1;
 
-            std::vector<vertex_position_uv_normal> vertices;
+            std::vector<assets::vertex_position_uv_normal> vertices;
             vertices.reserve(rings * columns);
 
             constexpr float pi = 3.14159265358979323846f;
@@ -63,7 +63,7 @@ void rendering_engine::sphere::upload()
                     const float sin_theta = std::sin(theta);
                     const float cos_theta = std::cos(theta);
 
-                    vertex_position_uv_normal vertex;
+                    assets::vertex_position_uv_normal vertex;
                     vertex.pos = core::math::vec3{sin_phi * cos_theta, sin_phi * sin_theta, cos_phi};
                     vertex.normal = vertex.pos;
                     vertex.uv = core::math::vec2{u, 1.0f - v};
@@ -100,8 +100,8 @@ void rendering_engine::sphere::upload()
             // Tangents complete the record for tangent-aware materials
             // (standard/PBR); the position/uv/normal offsets are unchanged so
             // materials that ignore the tangent still read correctly.
-            const auto tangent_vertices = generate_tangents(vertices, indices);
-            return mesh_data::from_vertices(tangent_vertices, std::move(indices));
+            const auto tangent_vertices = assets::generate_tangents(vertices, indices);
+            return assets::mesh_data::from_vertices(tangent_vertices, std::move(indices));
         });
 
     m_index_count = m_mesh->index_count;

@@ -232,7 +232,7 @@ namespace rendering_engine
         return per_draw_slot() + 1u;
     }
 
-    vertex_format material_template::required_vertex_format(uint32_t keywords) const
+    assets::vertex_format material_template::required_vertex_format(uint32_t keywords) const
     {
         // A skinned record carries the tangent whether or not the variant
         // reads it, so the skin format stands for both.

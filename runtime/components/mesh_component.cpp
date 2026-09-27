@@ -3,16 +3,22 @@
 
 #include <runtime/components/mesh_component.hpp>
 
+#include <assets/mesh_data.hpp>
 #include <core/log.hpp>
-#include <rendering_engine/assets/mesh_asset.hpp>
 #include <rendering_engine/renderer.hpp>
+#include <rendering_engine/resources/mesh_asset.hpp>
 #include <runtime/engine.hpp>
 #include <runtime/node.hpp>
 
-runtime::mesh_component::mesh_component(rendering_engine::material* material, const rendering_engine::mesh_data& mesh)
+runtime::mesh_component::mesh_component(rendering_engine::material* material, const assets::mesh_data& mesh)
     : m_model{std::make_unique<rendering_engine::model>(material)}, m_material{material}
 {
     m_model->upload_mesh(mesh);
+    // Geometry with no complete record uploads nothing, so it has no box.
+    if (mesh.vertex_stride != 0 && mesh.vertex_bytes.size() >= mesh.vertex_stride)
+    {
+        m_bounds = mesh.bounds.has_value() ? mesh.bounds : mesh.compute_bounds();
+    }
 }
 
 runtime::mesh_component::mesh_component(rendering_engine::material* material,
@@ -47,6 +53,19 @@ runtime::mesh_component runtime::mesh_component::clone() const
     mesh_component copy{m_material, m_mesh};
     copy.m_owned_material = m_owned_material;
     return copy;
+}
+
+std::optional<core::math::aabb> runtime::mesh_component::local_bounds() const
+{
+    if (!m_model)
+    {
+        return std::nullopt;
+    }
+    if (m_mesh != nullptr)
+    {
+        return m_mesh->bounds;
+    }
+    return m_bounds;
 }
 
 void runtime::mesh_component::on_attach(node& owner)

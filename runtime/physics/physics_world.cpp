@@ -18,6 +18,7 @@
 #include <cstdio>
 #include <iterator>
 #include <mutex>
+#include <optional>
 #include <stdexcept>
 #include <thread>
 #include <unordered_map>
@@ -49,13 +50,9 @@
 #include <core/event_engine.hpp>
 #include <core/log.hpp>
 #include <core/math/math.hpp>
-#include <rendering_engine/editor/box_edges.hpp>
-#include <rendering_engine/renderables/model.hpp>
-#include <runtime/components/mesh_component.hpp>
-#include <runtime/components/renderable_component.hpp>
+#include <runtime/components/drawn_bounds.hpp>
 #include <runtime/engine.hpp>
 #include <runtime/node.hpp>
-#include <runtime/physics/physics_debug_draw.hpp>
 
 namespace runtime::physics
 {
@@ -394,19 +391,6 @@ namespace runtime::physics
             return corners;
         }
 
-        // The bounds, in @p owner's local space, of what it draws: its
-        // mesh_component's model, else its renderable_component's renderable.
-        bool mesh_bounds(runtime::node& owner, math::aabb& out)
-        {
-            const runtime::mesh_component* mesh = owner.get_component<runtime::mesh_component>();
-            if (mesh != nullptr && mesh->model() != nullptr && mesh->model()->local_bounds(out))
-            {
-                return true;
-            }
-            const runtime::renderable_component* drawn = owner.get_component<runtime::renderable_component>();
-            return drawn != nullptr && drawn->get() != nullptr && drawn->get()->local_bounds(out);
-        }
-
         shape_desc resolve_shape(runtime::node& owner, const collider_state* collider, const math::vec3& scale)
         {
             // A rigidbody without a collider gets the default collider: a box
@@ -421,11 +405,13 @@ namespace runtime::physics
             desc.half_height = settings.half_height;
             desc.center = settings.center;
 
-            math::aabb bounds;
-            if (settings.fit_to_mesh && mesh_bounds(owner, bounds))
+            // The CPU-side bounds of what the node draws, in its local space.
+            const std::optional<math::aabb> bounds =
+                settings.fit_to_mesh ? runtime::drawn_bounds(owner) : std::optional<math::aabb>{};
+            if (bounds.has_value())
             {
-                const math::vec3 extents = bounds.extents();
-                desc.center = bounds.center();
+                const math::vec3 extents = bounds->extents();
+                desc.center = bounds->center();
                 switch (settings.shape)
                 {
                 case collider_shape::box:
@@ -838,6 +824,21 @@ namespace runtime::physics
             colors.push_back(color);
         }
 
+        // The twelve edges of the box whose @p corners are indexed with bit 0
+        // on X, bit 1 on Y and bit 2 on Z (the layout of box_corners).
+        void add_box(std::vector<math::vec3>& positions,
+                     std::vector<math::vec3>& colors,
+                     const std::array<math::vec3, 8>& corners,
+                     const math::vec3& color)
+        {
+            static constexpr std::array<std::array<std::size_t, 2>, 12> edges{
+                {{0, 1}, {1, 3}, {3, 2}, {2, 0}, {4, 5}, {5, 7}, {7, 6}, {6, 4}, {0, 4}, {1, 5}, {2, 6}, {3, 7}}};
+            for (const auto& edge : edges)
+            {
+                add_segment(positions, colors, corners[edge[0]], corners[edge[1]], color);
+            }
+        }
+
         // An arc of @p radius around @p center in the plane of the unit axes
         // @p u and @p v, from angle @p start to @p end (radians from @p u).
         void add_arc(std::vector<math::vec3>& positions,
@@ -908,8 +909,6 @@ namespace runtime::physics
         std::unordered_map<std::uint64_t, contact_pair> pairs;
         std::vector<pending_event> pending;
         std::vector<math::vec3> contact_points;
-
-        std::unique_ptr<debug_draw> debug;
 
         body_record* find(std::uint32_t id) const
         {
@@ -1624,7 +1623,6 @@ namespace runtime::physics
 
         void shut_down()
         {
-            debug.reset();
             for (auto& entry : records)
             {
                 body_record& record = *entry.second;
@@ -1696,12 +1694,6 @@ namespace runtime::physics
         self.system->SetContactListener(&self.contacts);
         self.events = runtime::current_engine().events.get();
         self.initialized = true;
-
-#if _DEBUG
-        // The collider wireframe, drawn by the debug pass; toggled from the
-        // overlay's Helpers panel.
-        self.debug = std::make_unique<debug_draw>(*this);
-#endif
 
         LOG_INF("Physics: Jolt %d.%d.%d up, %d worker thread(s)",
                 JPH_VERSION_MAJOR,
@@ -1820,19 +1812,6 @@ namespace runtime::physics
         return count;
     }
 
-    void world::set_debug_draw(bool enabled)
-    {
-        if (m_impl->debug != nullptr)
-        {
-            m_impl->debug->visible = enabled;
-        }
-    }
-
-    bool world::debug_draw_enabled() const noexcept
-    {
-        return m_impl->debug != nullptr && m_impl->debug->visible;
-    }
-
     std::uint64_t world::revision() const noexcept
     {
         return m_impl->revision;
@@ -1874,7 +1853,7 @@ namespace runtime::physics
                 {
                     corners[i] = origin + rotation * local[i];
                 }
-                rendering_engine::editor::build_box_edges(corners, color, positions, colors);
+                add_box(positions, colors, corners, color);
                 break;
             }
             case collider_shape::sphere:

@@ -9,8 +9,6 @@
 #include <core/settings.hpp>
 #include <core/time.hpp>
 #include <platform/window.hpp>
-#include <rendering_engine/assets/asset_cache.hpp>
-#include <rendering_engine/assets/texture_asset.hpp>
 #include <rendering_engine/camera/camera_registry.hpp>
 #include <rendering_engine/camera/perspective_camera.hpp>
 #include <rendering_engine/editor/axes_helper.hpp>
@@ -44,6 +42,8 @@
 #include <rendering_engine/passes/spot_shadow_pass.hpp>
 #include <rendering_engine/passes/ui_pass.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
+#include <rendering_engine/resources/asset_cache.hpp>
+#include <rendering_engine/resources/texture_asset.hpp>
 #include <runtime/engine.hpp>
 
 #include <algorithm>
@@ -896,7 +896,7 @@ void rendering_engine::renderer::update_grading_lut()
     std::shared_ptr<texture_asset> lut;
     try
     {
-        lut = eng.assets->load_texture(core::os::utf8_path(path), gpu::color_space::linear);
+        lut = eng.assets->load_texture(core::os::utf8_path(path), assets::color_space::linear);
     }
     catch (const std::exception& error)
     {

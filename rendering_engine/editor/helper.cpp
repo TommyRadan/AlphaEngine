@@ -65,7 +65,7 @@ namespace rendering_engine::editor
         return m_name;
     }
 
-    core::math::vec3 helper::to_rgb(const color& c)
+    core::math::vec3 helper::to_rgb(const assets::color& c)
     {
         return core::math::vec3{
             static_cast<float>(c.r) / 255.0f, static_cast<float>(c.g) / 255.0f, static_cast<float>(c.b) / 255.0f};

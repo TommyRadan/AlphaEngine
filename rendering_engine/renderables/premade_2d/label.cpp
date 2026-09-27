@@ -9,7 +9,7 @@
 #include <utility>
 
 #include <core/log.hpp>
-#include <rendering_engine/assets/font_asset.hpp>
+#include <rendering_engine/resources/font_asset.hpp>
 
 namespace
 {
@@ -106,13 +106,13 @@ const std::string& rendering_engine::label::get_text() const
     return m_text;
 }
 
-void rendering_engine::label::set_color(const rendering_engine::color& color)
+void rendering_engine::label::set_color(const assets::color& color)
 {
     m_color = color;
     m_dirty = true;
 }
 
-const rendering_engine::color& rendering_engine::label::get_color() const
+const assets::color& rendering_engine::label::get_color() const
 {
     return m_color;
 }
@@ -172,7 +172,7 @@ void rendering_engine::label::layout()
         return;
     }
 
-    const font& font = m_font->font;
+    const assets::font& font = m_font->font;
     float widest = 0.0f;
     float pen = 0.0f;
     std::size_t line = 0;
@@ -193,7 +193,7 @@ void rendering_engine::label::layout()
             continue;
         }
 
-        const glyph_metrics* glyph = font.glyph(codepoint);
+        const assets::glyph_metrics* glyph = font.glyph(codepoint);
         if (glyph == nullptr)
         {
             if (!m_warned_missing_glyph)

@@ -6,17 +6,17 @@
 #include <string>
 #include <vector>
 
+#include <assets/tangent.hpp>
+#include <assets/vertex.hpp>
 #include <core/log.hpp>
 #include <core/math/math.hpp>
-#include <rendering_engine/assets/asset_cache.hpp>
-#include <rendering_engine/assets/tangent.hpp>
-#include <rendering_engine/assets/vertex.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/materials/material.hpp>
 #include <rendering_engine/renderables/mesh_bounds.hpp>
 #include <rendering_engine/renderables/per_draw_ubo.hpp>
 #include <rendering_engine/renderables/vertex_format_check.hpp>
+#include <rendering_engine/resources/asset_cache.hpp>
 #include <runtime/engine.hpp>
 
 namespace
@@ -80,7 +80,7 @@ void rendering_engine::cubed_sphere::upload()
     // upload. The builder only runs on a cache miss.
     m_mesh = runtime::current_engine().assets->get_or_create_mesh(
         "cubed_sphere:" + std::to_string(m_subdivisions) + ":" +
-            vertex_format_name(vertex_format::position_uv_normal_tangent),
+            assets::vertex_format_name(assets::vertex_format::position_uv_normal_tangent),
         [this]
         {
             const unsigned int n = m_subdivisions;
@@ -88,7 +88,7 @@ void rendering_engine::cubed_sphere::upload()
             const unsigned int verts_per_face = rows * rows;
             const unsigned int quads_per_face = n * n;
 
-            std::vector<vertex_position_uv_normal> vertices;
+            std::vector<assets::vertex_position_uv_normal> vertices;
             vertices.reserve(6 * verts_per_face);
 
             std::vector<uint32_t> indices;
@@ -108,7 +108,7 @@ void rendering_engine::cubed_sphere::upload()
                         const core::math::vec3 cube_pos = f.origin + u * f.u_axis + v * f.v_axis;
                         const core::math::vec3 sphere_pos = core::math::normalize(cube_pos);
 
-                        vertex_position_uv_normal vertex;
+                        assets::vertex_position_uv_normal vertex;
                         vertex.pos = sphere_pos;
                         vertex.normal = sphere_pos;
                         vertex.uv = core::math::vec2{u, v};
@@ -140,8 +140,8 @@ void rendering_engine::cubed_sphere::upload()
             // Tangents complete the record for tangent-aware materials
             // (standard/PBR); the position/uv/normal offsets are unchanged so
             // materials that ignore the tangent still read correctly.
-            const auto tangent_vertices = generate_tangents(vertices, indices);
-            return mesh_data::from_vertices(tangent_vertices, std::move(indices));
+            const auto tangent_vertices = assets::generate_tangents(vertices, indices);
+            return assets::mesh_data::from_vertices(tangent_vertices, std::move(indices));
         });
 
     m_index_count = m_mesh->index_count;

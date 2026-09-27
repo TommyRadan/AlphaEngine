@@ -12,7 +12,8 @@
 
 namespace rendering_engine::editor
 {
-    camera_helper::camera_helper(const camera* cam, color color) : line_helper("Camera"), m_camera(cam), m_color(color)
+    camera_helper::camera_helper(const camera* cam, assets::color color)
+        : line_helper("Camera"), m_camera(cam), m_color(color)
     {
     }
 

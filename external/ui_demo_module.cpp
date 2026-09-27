@@ -7,10 +7,10 @@
 #include <core/log.hpp>
 #include <core/math/vec2.hpp>
 #include <core/subscription.hpp>
-#include <rendering_engine/assets/asset_cache.hpp>
 #include <rendering_engine/renderables/premade_2d/label.hpp>
 #include <rendering_engine/renderables/premade_2d/pane.hpp>
 #include <rendering_engine/renderer.hpp>
+#include <rendering_engine/resources/asset_cache.hpp>
 #include <runtime/engine.hpp>
 
 #include <cstdlib>
@@ -26,8 +26,8 @@ namespace
 
     constexpr math::vec2 button_size{56.0f, 32.0f};
     constexpr math::vec2 button_margin{12.0f, 12.0f};
-    constexpr rendering_engine::color idle_color{20, 20, 24, 160};
-    constexpr rendering_engine::color hover_color{200, 60, 50, 220};
+    constexpr assets::color idle_color{20, 20, 24, 160};
+    constexpr assets::color hover_color{200, 60, 50, 220};
 
     /**
      * The quit button: a pane that recolours under the cursor and quits the

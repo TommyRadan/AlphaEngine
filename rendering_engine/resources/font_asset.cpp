@@ -1,19 +1,19 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2015-2026 Tomislav Radanovic
 
-#include <rendering_engine/assets/font_asset.hpp>
+#include <rendering_engine/resources/font_asset.hpp>
 
 #include <cstddef>
 
-#include <rendering_engine/assets/asset_device.hpp>
-#include <rendering_engine/assets/color.hpp>
+#include <assets/color.hpp>
 #include <rendering_engine/gpu/device.hpp>
 
 namespace rendering_engine
 {
-    font_asset::font_asset(const std::string& filename, float size) : font{filename, size}
+    font_asset::font_asset(gpu::device& device, const std::string& filename, float size)
+        : font{filename, size}, m_device{&device}
     {
-        const image& pixels = font.atlas();
+        const assets::image& pixels = font.atlas();
 
         gpu::texture_descriptor descriptor{};
         descriptor.dimension = gpu::texture_dimension::d2;
@@ -27,21 +27,19 @@ namespace rendering_engine
         descriptor.address_v = gpu::address_mode::clamp_edge;
         descriptor.address_w = gpu::address_mode::clamp_edge;
 
-        auto& gpu = asset_device();
-        atlas = gpu.create_texture(descriptor);
+        atlas = m_device->create_texture(descriptor);
         const std::size_t pixel_bytes = static_cast<std::size_t>(pixels.get_width()) *
-                                        static_cast<std::size_t>(pixels.get_height()) * sizeof(color);
-        gpu.write_texture(atlas, pixels.get_pixels(), pixel_bytes);
+                                        static_cast<std::size_t>(pixels.get_height()) * sizeof(assets::color);
+        m_device->write_texture(atlas, pixels.get_pixels(), pixel_bytes);
     }
 
     font_asset::~font_asset()
     {
-        // The engine tears the asset cache (and the renderables holding
-        // these handles) down ahead of the gpu device, so the device is
-        // installed when this runs.
+        // The engine releases every asset handle (the cache and the
+        // renderables holding these handles) before it destroys the device.
         if (atlas.valid())
         {
-            asset_device().destroy(atlas);
+            m_device->destroy(atlas);
         }
     }
 } // namespace rendering_engine

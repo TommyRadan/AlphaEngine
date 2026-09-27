@@ -5,10 +5,11 @@
 
 #include <utility>
 
-#include <rendering_engine/assets/color.hpp>
+#include <assets/color.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/gpu/texture.hpp>
 #include <rendering_engine/materials/material_template.hpp>
+#include <rendering_engine/resources/texture_formats.hpp>
 
 namespace rendering_engine
 {
@@ -184,7 +185,7 @@ namespace rendering_engine
         return m_per_material_bind_group;
     }
 
-    vertex_format material::required_vertex_format() const
+    assets::vertex_format material::required_vertex_format() const
     {
         return m_template->required_vertex_format(m_key.keywords);
     }
@@ -224,13 +225,14 @@ namespace rendering_engine
         }
     }
 
-    gpu::texture material::upload_map(const image& image, gpu::color_space space, gpu::address_mode address) const
+    gpu::texture
+    material::upload_map(const assets::image& image, assets::color_space space, gpu::address_mode address) const
     {
         auto& gpu = device();
 
         gpu::texture_descriptor descriptor{};
         descriptor.dimension = gpu::texture_dimension::d2;
-        descriptor.format = gpu::rgba8_format(space);
+        descriptor.format = rgba8_format(space);
         descriptor.width = image.get_width();
         descriptor.height = image.get_height();
         descriptor.mipmaps = true;
@@ -242,7 +244,7 @@ namespace rendering_engine
         gpu::texture map = gpu.create_texture(descriptor);
 
         const size_t pixel_bytes =
-            static_cast<size_t>(image.get_width()) * static_cast<size_t>(image.get_height()) * sizeof(color);
+            static_cast<size_t>(image.get_width()) * static_cast<size_t>(image.get_height()) * sizeof(assets::color);
         gpu.write_texture(map, image.get_pixels(), pixel_bytes);
         gpu.generate_mipmaps(map);
         return map;

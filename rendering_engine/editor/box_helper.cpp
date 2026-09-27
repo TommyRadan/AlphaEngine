@@ -11,7 +11,8 @@
 
 namespace rendering_engine::editor
 {
-    box_helper::box_helper(const core::math::aabb& box, color color) : line_helper("Box"), m_box(box), m_color(color)
+    box_helper::box_helper(const core::math::aabb& box, assets::color color)
+        : line_helper("Box"), m_box(box), m_color(color)
     {
         rebuild();
     }

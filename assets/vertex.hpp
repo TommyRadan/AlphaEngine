@@ -9,7 +9,7 @@
 
 #include <core/math/math.hpp>
 
-namespace rendering_engine
+namespace assets
 {
     struct vertex_position
     {
@@ -304,4 +304,4 @@ namespace rendering_engine
     static_assert(vertex_format_stride(vertex_format::position_uv_normal) == 32);
     static_assert(vertex_format_stride(vertex_format::position_uv_normal_tangent) == 48);
     static_assert(vertex_format_stride(vertex_format::position_uv_normal_tangent_skin) == 72);
-} // namespace rendering_engine
+} // namespace assets

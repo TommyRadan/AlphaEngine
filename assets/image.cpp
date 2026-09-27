@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2015-2026 Tomislav Radanovic
 
-#include "image.hpp"
+#include <assets/image.hpp>
 
 #include <algorithm>
 #include <cstddef>
@@ -26,7 +26,7 @@ namespace
     }
 } // namespace
 
-rendering_engine::image::image(const std::string& filename)
+assets::image::image(const std::string& filename)
 {
     // The file comes through the virtual filesystem — a relative name is
     // looked up in the mounted content root — and is decoded from memory, so
@@ -73,7 +73,7 @@ rendering_engine::image::image(const std::string& filename)
     LOG_INF("Loaded image (%s)", filename.c_str());
 }
 
-rendering_engine::image::image(const uint8_t* bytes, std::size_t size)
+assets::image::image(const uint8_t* bytes, std::size_t size)
 {
     // stb takes the length as an int; a buffer past that cannot be an image
     // it can decode, so reject it up front rather than truncate silently.
@@ -104,7 +104,7 @@ rendering_engine::image::image(const uint8_t* bytes, std::size_t size)
     stbi_image_free(decoded);
 }
 
-rendering_engine::image::image(const image& other) : m_width{other.m_width}, m_height{other.m_height}
+assets::image::image(const image& other) : m_width{other.m_width}, m_height{other.m_height}
 {
     if (other.m_image_data == nullptr)
     {
@@ -118,51 +118,51 @@ rendering_engine::image::image(const image& other) : m_width{other.m_width}, m_h
 // Start empty and swap so the moved-from image is left genuinely empty (0x0,
 // no pixels): a defaulted move would null its buffer but keep its dimensions,
 // and get_pixel on that state would dereference null.
-rendering_engine::image::image(image&& other) noexcept : image()
+assets::image::image(image&& other) noexcept : image()
 {
     swap(other);
 }
 
-rendering_engine::image::image(uint32_t width, uint32_t height, const color& background)
+assets::image::image(uint32_t width, uint32_t height, const color& background)
     : m_image_data{new color[pixel_count(width, height)]}, m_width{width}, m_height{height}
 {
     std::fill_n(m_image_data.get(), pixel_count(width, height), background);
 }
 
-rendering_engine::image::image(uint32_t width, uint32_t height, color* data)
+assets::image::image(uint32_t width, uint32_t height, color* data)
     : m_image_data{data}, m_width{width}, m_height{height}
 {
 }
 
-rendering_engine::image& rendering_engine::image::operator=(image other) noexcept
+assets::image& assets::image::operator=(image other) noexcept
 {
     swap(other);
     return *this;
 }
 
-void rendering_engine::image::swap(image& other) noexcept
+void assets::image::swap(image& other) noexcept
 {
     std::swap(m_image_data, other.m_image_data);
     std::swap(m_width, other.m_width);
     std::swap(m_height, other.m_height);
 }
 
-uint32_t rendering_engine::image::get_width() const
+uint32_t assets::image::get_width() const
 {
     return m_width;
 }
 
-uint32_t rendering_engine::image::get_height() const
+uint32_t assets::image::get_height() const
 {
     return m_height;
 }
 
-const rendering_engine::color* rendering_engine::image::get_pixels() const
+const assets::color* assets::image::get_pixels() const
 {
     return m_image_data.get();
 }
 
-rendering_engine::color rendering_engine::image::get_pixel(uint32_t x, uint32_t y) const
+assets::color assets::image::get_pixel(uint32_t x, uint32_t y) const
 {
     if (x >= m_width || y >= m_height)
     {
@@ -171,7 +171,7 @@ rendering_engine::color rendering_engine::image::get_pixel(uint32_t x, uint32_t 
     return m_image_data[x + y * m_width];
 }
 
-void rendering_engine::image::set_pixel(uint32_t x, uint32_t y, const color& color)
+void assets::image::set_pixel(uint32_t x, uint32_t y, const color& color)
 {
     if (x >= m_width || y >= m_height)
     {

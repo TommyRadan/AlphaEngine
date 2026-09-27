@@ -7,18 +7,18 @@
 #include <string>
 #include <vector>
 
+#include <assets/tangent.hpp>
+#include <assets/vertex.hpp>
 #include <core/log.hpp>
 #include <core/math/math.hpp>
-#include <rendering_engine/assets/asset_cache.hpp>
-#include <rendering_engine/assets/cache_key.hpp>
-#include <rendering_engine/assets/tangent.hpp>
-#include <rendering_engine/assets/vertex.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/materials/material.hpp>
 #include <rendering_engine/renderables/mesh_bounds.hpp>
 #include <rendering_engine/renderables/per_draw_ubo.hpp>
 #include <rendering_engine/renderables/vertex_format_check.hpp>
+#include <rendering_engine/resources/asset_cache.hpp>
+#include <rendering_engine/resources/cache_key.hpp>
 #include <runtime/engine.hpp>
 
 rendering_engine::ring::ring(material* mat,
@@ -48,7 +48,7 @@ void rendering_engine::ring::upload()
         "ring:" + cache_key_number(m_inner_radius) + ":" + cache_key_number(m_outer_radius) + ":" +
             cache_key_number(m_theta_segments) + ":" + cache_key_number(m_phi_segments) + ":" +
             cache_key_number(m_theta_start) + ":" + cache_key_number(m_theta_length) + ":" +
-            vertex_format_name(vertex_format::position_uv_normal_tangent),
+            assets::vertex_format_name(assets::vertex_format::position_uv_normal_tangent),
         [this]
         {
             const unsigned int theta_segments = m_theta_segments < 3 ? 3 : m_theta_segments;
@@ -57,7 +57,7 @@ void rendering_engine::ring::upload()
             const unsigned int columns = theta_segments + 1;
             const unsigned int rows = phi_segments + 1;
 
-            std::vector<vertex_position_uv_normal> vertices;
+            std::vector<assets::vertex_position_uv_normal> vertices;
             vertices.reserve(rows * columns);
 
             const core::math::vec3 normal{0.0f, 0.0f, 1.0f};
@@ -76,7 +76,7 @@ void rendering_engine::ring::upload()
                     const float x = radius * std::cos(segment);
                     const float y = radius * std::sin(segment);
 
-                    vertex_position_uv_normal vertex;
+                    assets::vertex_position_uv_normal vertex;
                     vertex.pos = core::math::vec3{x, y, 0.0f};
                     vertex.uv =
                         core::math::vec2{(x / m_outer_radius + 1.0f) / 2.0f, (y / m_outer_radius + 1.0f) / 2.0f};
@@ -114,8 +114,8 @@ void rendering_engine::ring::upload()
             // Tangents complete the record for tangent-aware materials
             // (standard/PBR); the position/uv/normal offsets are unchanged so
             // materials that ignore the tangent still read correctly.
-            const auto tangent_vertices = generate_tangents(vertices, indices);
-            return mesh_data::from_vertices(tangent_vertices, std::move(indices));
+            const auto tangent_vertices = assets::generate_tangents(vertices, indices);
+            return assets::mesh_data::from_vertices(tangent_vertices, std::move(indices));
         });
 
     m_index_count = m_mesh->index_count;

@@ -251,20 +251,20 @@ namespace rendering_engine
         build(face_size, faces);
     }
 
-    environment_probe::environment_probe(const std::array<image, 6>& faces)
+    environment_probe::environment_probe(const std::array<assets::image, 6>& faces)
     {
         const uint32_t size = faces[0].get_width();
         std::array<std::vector<float>, 6> linear_faces{};
         for (size_t f = 0; f < 6; ++f)
         {
-            const image& image = faces[f];
+            const assets::image& image = faces[f];
             std::vector<float>& dst = linear_faces[f];
             dst.resize(static_cast<size_t>(size) * size * 4);
             for (uint32_t y = 0; y < size; ++y)
             {
                 for (uint32_t x = 0; x < size; ++x)
                 {
-                    const color texel = image.get_pixel(x, y);
+                    const assets::color texel = image.get_pixel(x, y);
                     float* out = &dst[(static_cast<size_t>(y) * size + x) * 4];
                     out[0] = srgb_to_linear(texel.r);
                     out[1] = srgb_to_linear(texel.g);

@@ -107,7 +107,7 @@ namespace rendering_engine
 
     void sprite_batch::add(gpu::texture texture,
                            const rect_transform& rect,
-                           const color& color,
+                           const assets::color& color,
                            const core::math::vec2& uv_min,
                            const core::math::vec2& uv_max)
     {

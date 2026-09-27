@@ -3,8 +3,8 @@
 
 #pragma once
 
+#include <assets/color.hpp>
 #include <core/math/aabb.hpp>
-#include <rendering_engine/assets/color.hpp>
 #include <rendering_engine/editor/line_helper.hpp>
 
 namespace rendering_engine::editor
@@ -16,7 +16,7 @@ namespace rendering_engine::editor
     struct box_helper : public line_helper
     {
         explicit box_helper(const core::math::aabb& box = core::math::aabb{},
-                            color color = rendering_engine::color{255, 255, 0, 255});
+                            assets::color color = assets::color{255, 255, 0, 255});
 
         // Replace the box and rebuild the wireframe.
         void set_box(const core::math::aabb& box);
@@ -25,6 +25,6 @@ namespace rendering_engine::editor
         void rebuild();
 
         core::math::aabb m_box;
-        color m_color;
+        assets::color m_color;
     };
 } // namespace rendering_engine::editor

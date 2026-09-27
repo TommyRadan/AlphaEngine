@@ -6,10 +6,9 @@
 #include <cstdint>
 #include <vector>
 
-#include <rendering_engine/assets/vertex.hpp>
-#include <rendering_engine/gpu/shader.hpp>
+#include <assets/vertex.hpp>
 
-namespace rendering_engine
+namespace assets
 {
     // Builds @ref vertex_position_uv_normal_tangent records from an
     // indexed @ref vertex_position_uv_normal mesh by deriving a
@@ -32,9 +31,4 @@ namespace rendering_engine
     // through this helper.
     std::vector<vertex_position_uv_normal_tangent>
     generate_tangents(const std::vector<vertex_position_uv_normal>& vertices, const std::vector<uint32_t>& indices);
-
-    // Vertex-buffer layout matching the memory layout of
-    // @ref vertex_position_uv_normal_tangent, for materials that consume
-    // tangents. Locations: 0 position, 1 uv, 2 normal, 3 tangent.
-    gpu::vertex_buffer_layout vertex_position_uv_normal_tangent_layout();
-} // namespace rendering_engine
+} // namespace assets

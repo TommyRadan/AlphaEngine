@@ -6,7 +6,7 @@
 #include <array>
 #include <utility>
 
-#include <rendering_engine/assets/vertex.hpp>
+#include <assets/vertex.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/gpu/shader_bindings.hpp>
@@ -41,8 +41,8 @@ namespace rendering_engine
         vertex_layout.attributes.push_back({1, 2, gpu::scalar_type::float32, sizeof(float) * 3});
         vertex_layout.attributes.push_back({2, 3, gpu::scalar_type::float32, sizeof(float) * 5});
         descriptor.vertex_layouts.push_back(vertex_layout);
-        descriptor.required_vertex_format = vertex_format::position_uv_normal;
-        descriptor.vertex_format_without_tangents = vertex_format::position_uv_normal;
+        descriptor.required_vertex_format = assets::vertex_format::position_uv_normal;
+        descriptor.vertex_format_without_tangents = assets::vertex_format::position_uv_normal;
 
         // No per-draw bindings: the model + normal matrix are pushed
         // (per_draw_ubo.hpp), so the per-draw layout (slot 1) is empty.
@@ -83,13 +83,13 @@ namespace rendering_engine
         }
     }
 
-    void phong_material::set_diffuse(const color& color)
+    void phong_material::set_diffuse(const assets::color& color)
     {
         m_diffuse = color;
         upload_params();
     }
 
-    void phong_material::set_specular(const color& color)
+    void phong_material::set_specular(const assets::color& color)
     {
         m_specular = color;
         upload_params();
@@ -101,7 +101,7 @@ namespace rendering_engine
         upload_params();
     }
 
-    void phong_material::set_diffuse_map(const image& image, gpu::color_space space)
+    void phong_material::set_diffuse_map(const assets::image& image, assets::color_space space)
     {
         release_map(m_diffuse_map);
         m_diffuse_map = upload_map(image, space);
