@@ -20,6 +20,7 @@
  * SOFTWARE.
  */
 
+#include <cstddef>
 #include <cstdio>
 #include <cstdlib>
 #include <stdexcept>
@@ -159,5 +160,18 @@ int main(int argc, char* argv[])
     LOG_INF("Engine shutting down: tearing down subsystems");
     engine.quit();
     LOG_INF("Engine stopped cleanly");
+
+    // A clean shutdown is not a clean run: [FTL] always fails the process, and with fail_on_error so does any
+    // [ERR], which is where Vulkan validation messages arrive.
+    const std::size_t fatal_count = core::logging::fatal_count();
+    const std::size_t error_count = engine.settings->diagnostics.fail_on_error ? core::logging::error_count() : 0;
+    if (fatal_count > 0 || error_count > 0)
+    {
+        LOG_ERR("Exiting with failure: %zu fatal and %zu error message(s) were logged during the run",
+                fatal_count,
+                error_count);
+        return EXIT_FAILURE;
+    }
+
     return EXIT_SUCCESS;
 }

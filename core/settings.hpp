@@ -321,6 +321,31 @@ namespace core
     };
 
     /**
+     * @brief Bounded / fail-loud run configuration, read once by @ref runtime::engine.
+     *
+     * Exists for headless verification (a CI smoke run under the Vulkan validation layer): a frame limit turns
+     * an otherwise-endless @c while(!is_quit_requested()) loop into one that exits on its own, and fail-on-error
+     * turns a validation message or any other @c LOG_ERR into a non-zero process exit without the caller having
+     * to grep the log.
+     */
+    struct diagnostics_settings
+    {
+        /**
+         * @brief Frames to render before @ref runtime::engine requests a normal quit. 0 (the default) means run
+         * forever. Only rendered frames count: a tick skipped while the window is minimized does not advance this
+         * counter. Set from @c diagnostics.frame_limit in settings.json, @c ALPHAENGINE_FRAMES or @c --frames.
+         */
+        unsigned int frame_limit{0};
+
+        /**
+         * @brief Whether a @c LOG_ERR logged during the run makes the process exit non-zero, same as a @c LOG_FTL
+         * always does. Off by default. Set from @c diagnostics.fail_on_error in settings.json,
+         * @c ALPHAENGINE_FAIL_ON_ERROR or @c --fail-on-error (a presence-only flag on the command line).
+         */
+        bool fail_on_error{false};
+    };
+
+    /**
      * @brief Engine-wide configuration, owned by @ref runtime::engine.
      *
      * Plain data. The default constructor holds the compiled defaults (debug builds: 1600x900 windowed;
@@ -340,6 +365,7 @@ namespace core
         shadow_settings shadows;
         post_process_settings post;
         asset_settings assets;
+        diagnostics_settings diagnostics;
     };
 
     /** @brief The lowercase name of @p mode (`windowed`, `fullscreen`, `borderless`). */

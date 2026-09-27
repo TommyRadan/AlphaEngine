@@ -85,6 +85,10 @@ namespace
 
         std::vector<std::string> arguments;
         bool shutdown_registered = false;
+
+        // Counts of error / fatal messages that actually reached the sinks, for a headless run's exit code.
+        std::atomic<std::size_t> error_count{0};
+        std::atomic<std::size_t> fatal_count{0};
     };
 
     logging_state& state()
@@ -399,8 +403,13 @@ void core::logging::message(
 
     emit(level, category, file != nullptr ? file : "?", line, text.c_str());
 
-    if (level == verbosity::fatal)
+    if (level == verbosity::error)
     {
+        state().error_count.fetch_add(1, std::memory_order_relaxed);
+    }
+    else if (level == verbosity::fatal)
+    {
+        state().fatal_count.fetch_add(1, std::memory_order_relaxed);
         // The caller throws next; make sure the last line is on disk before the stack unwinds.
         flush();
     }
@@ -587,4 +596,14 @@ void core::logging::clear_recent_messages()
 const std::vector<std::string>& core::logging::arguments()
 {
     return state().arguments;
+}
+
+std::size_t core::logging::error_count()
+{
+    return state().error_count.load(std::memory_order_relaxed);
+}
+
+std::size_t core::logging::fatal_count()
+{
+    return state().fatal_count.load(std::memory_order_relaxed);
 }

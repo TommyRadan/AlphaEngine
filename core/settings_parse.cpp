@@ -425,6 +425,25 @@ namespace core
             }
         }
 
+        void apply_diagnostics_section(settings& out, const json& section)
+        {
+            for (const auto& [key, value] : section.items())
+            {
+                if (key == "frame_limit")
+                {
+                    set_from_json(out.diagnostics.frame_limit, "diagnostics.frame_limit", value, 0, k_max_frame_limit);
+                }
+                else if (key == "fail_on_error")
+                {
+                    set_from_json(out.diagnostics.fail_on_error, "diagnostics.fail_on_error", value);
+                }
+                else
+                {
+                    warn_unknown_key("diagnostics", key);
+                }
+            }
+        }
+
         void apply_camera_section(settings& out, const json& section)
         {
             for (const auto& [key, value] : section.items())
@@ -791,7 +810,8 @@ namespace core
             shadow_pcf_kernel,
             log_level,
             settings_path,
-            asset_root
+            asset_root,
+            frame_limit
         };
 
         struct value_option_entry
@@ -816,6 +836,7 @@ namespace core
             {"--log-level", value_option::log_level},
             {"--settings", value_option::settings_path},
             {"--asset-root", value_option::asset_root},
+            {"--frames", value_option::frame_limit},
         };
 
         struct mode_flag_entry
@@ -828,6 +849,18 @@ namespace core
             {"--windowed", window_mode::windowed},
             {"--fullscreen", window_mode::fullscreen},
             {"--borderless", window_mode::borderless},
+        };
+
+        // Presence-only boolean flags: like the mode flags above, these take no value and are simply on when
+        // given, so a repeat is harmless and there is no way to turn one back off from the command line.
+        struct bool_flag_entry
+        {
+            std::string_view name;
+            bool command_line_options::*field;
+        };
+
+        constexpr bool_flag_entry k_bool_flags[] = {
+            {"--fail-on-error", &command_line_options::fail_on_error},
         };
 
         std::optional<value_option> find_value_option(std::string_view name)
@@ -852,6 +885,18 @@ namespace core
                 }
             }
             return std::nullopt;
+        }
+
+        const bool_flag_entry* find_bool_flag(std::string_view name)
+        {
+            for (const auto& entry : k_bool_flags)
+            {
+                if (entry.name == name)
+                {
+                    return &entry;
+                }
+            }
+            return nullptr;
         }
 
         bool looks_like_option(const char* arg)
@@ -882,6 +927,8 @@ Options:
   --log-level <spec>       log level, e.g. warn or info,gpu=trace
   --settings <path>        settings file to read instead of the default
   --asset-root <path>      directory relative asset paths resolve under
+  --frames <n>             quit after rendering n frames (0 = run forever, the default)
+  --fail-on-error          exit non-zero if any [ERR] line is logged, not only [FTL]
   -h, --help               print this text and exit
 
 Post-processing options (settings.json "post" section; each key is also the
@@ -1083,6 +1130,10 @@ the ALPHAENGINE_* environment variables, which override the settings file
             {
                 apply_assets_section(out, section);
             }
+            else if (name == "diagnostics")
+            {
+                apply_diagnostics_section(out, section);
+            }
             else
             {
                 LOG_WRN("settings: ignoring unknown section '%s'", name.c_str());
@@ -1190,6 +1241,15 @@ the ALPHAENGINE_* environment variables, which override the settings file
         {
             out.assets.root = std::string{trim(*text)};
         }
+        if (const auto text = read("ALPHAENGINE_FRAMES"))
+        {
+            assign_if(out.diagnostics.frame_limit,
+                      parse_unsigned_or_warn("ALPHAENGINE_FRAMES", *text, 0, k_max_frame_limit));
+        }
+        if (const auto text = read("ALPHAENGINE_FAIL_ON_ERROR"))
+        {
+            assign_if(out.diagnostics.fail_on_error, parse_bool_or_warn("ALPHAENGINE_FAIL_ON_ERROR", *text));
+        }
     }
 
     command_line_options parse_command_line(std::span<const char* const> args)
@@ -1230,6 +1290,17 @@ the ALPHAENGINE_* environment variables, which override the settings file
                     continue;
                 }
                 out.mode = *mode;
+                continue;
+            }
+
+            if (const bool_flag_entry* flag = find_bool_flag(name); flag != nullptr)
+            {
+                if (value.has_value())
+                {
+                    LOG_WRN("settings: %s takes no value; ignoring it", name.c_str());
+                    continue;
+                }
+                out.*(flag->field) = true;
                 continue;
             }
 
@@ -1320,6 +1391,9 @@ the ALPHAENGINE_* environment variables, which override the settings file
             case value_option::asset_root:
                 out.asset_root = std::string{trim(*value)};
                 break;
+            case value_option::frame_limit:
+                store_if(out.frame_limit, parse_unsigned_or_warn(name.c_str(), *value, 0, k_max_frame_limit));
+                break;
             }
         }
         return out;
@@ -1348,6 +1422,11 @@ the ALPHAENGINE_* environment variables, which override the settings file
             }
         }
         assign_if(out.assets.root, options.asset_root);
+        assign_if(out.diagnostics.frame_limit, options.frame_limit);
+        if (options.fail_on_error)
+        {
+            out.diagnostics.fail_on_error = true;
+        }
     }
 
     const char* command_line_usage() noexcept

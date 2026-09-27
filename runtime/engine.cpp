@@ -335,6 +335,14 @@ namespace runtime
             rendering_engine::editor::begin_frame();
             renderer->render();
             window->swap_buffers();
+
+            // Counts rendered frames only, so a run stuck minimized never reaches its limit.
+            const unsigned int frame_limit = settings->diagnostics.frame_limit;
+            if (frame_limit != 0 && ++m_frames_rendered >= frame_limit)
+            {
+                LOG_INF("Frame limit of %u reached; requesting quit", frame_limit);
+                events->emit<core::quit_requested>();
+            }
         }
     }
 
