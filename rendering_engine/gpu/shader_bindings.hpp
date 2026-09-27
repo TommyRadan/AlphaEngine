@@ -90,4 +90,10 @@ namespace rendering_engine::gpu::shader_bindings
     // occlusion / roughness / metallic (ORM) map. 14-20 are the omni
     // shadow resources above, so this is the next free number.
     constexpr uint32_t material_occlusion_map = 21;
+
+    // Set 0 as well: the spot-light shadow data (the first shadowing
+    // spot light's perspective map). 9-21 are spent by the shadow /
+    // material resources above, so this resumes at 22.
+    constexpr uint32_t spot_shadow = 22;
+    constexpr uint32_t spot_shadow_map = 23;
 } // namespace rendering_engine::gpu::shader_bindings

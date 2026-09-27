@@ -22,11 +22,15 @@
 
 #include <rendering_engine/lighting/lights_ubo.hpp>
 
+#include <algorithm>
+#include <cmath>
+
 #include <core/math/math.hpp>
 #include <rendering_engine/lighting/ambient_light.hpp>
 #include <rendering_engine/lighting/directional_light.hpp>
 #include <rendering_engine/lighting/light.hpp>
 #include <rendering_engine/lighting/point_light.hpp>
+#include <rendering_engine/lighting/spot_light.hpp>
 
 namespace rendering_engine
 {
@@ -48,6 +52,7 @@ namespace rendering_engine
         core::math::vec3 ambient{0.0f, 0.0f, 0.0f};
         uint32_t directional_count = 0;
         uint32_t point_count = 0;
+        uint32_t spot_count = 0;
 
         for (const light* l : lights)
         {
@@ -88,6 +93,32 @@ namespace rendering_engine
                 ++point_count;
                 break;
             }
+            case light_type::spot:
+            {
+                if (spot_count >= max_spot_lights)
+                {
+                    break;
+                }
+                const auto* sl = static_cast<const spot_light*>(l);
+                gpu_spot_light& slot = out.spot[spot_count];
+                write_vec3(slot.position, sl->position, 0.0f);
+                write_vec3(slot.direction, core::math::normalize(sl->direction), 0.0f);
+                write_vec3(slot.color, sl->color * sl->intensity, 0.0f);
+                slot.attenuation[0] = sl->range;
+                slot.attenuation[1] = sl->constant_attenuation;
+                slot.attenuation[2] = sl->linear_attenuation;
+                slot.attenuation[3] = sl->quadratic_attenuation;
+                // The inner cone can never be wider than the outer one, so
+                // the shader's smoothstep always runs in the right order.
+                const float outer = sl->outer_angle;
+                const float inner = std::min(sl->inner_angle, outer);
+                slot.cone[0] = std::cos(outer);
+                slot.cone[1] = std::cos(inner);
+                slot.cone[2] = 0.0f;
+                slot.cone[3] = 0.0f;
+                ++spot_count;
+                break;
+            }
             }
         }
 
@@ -97,5 +128,6 @@ namespace rendering_engine
         out.ambient[3] = 0.0f;
         out.directional_count = static_cast<int32_t>(directional_count);
         out.point_count = static_cast<int32_t>(point_count);
+        out.spot_count = static_cast<int32_t>(spot_count);
     }
 } // namespace rendering_engine

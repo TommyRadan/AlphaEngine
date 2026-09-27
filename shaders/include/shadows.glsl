@@ -1,7 +1,7 @@
-// Shadow lookups against the directional and omni shadow maps the scene
-// pass binds in set 0. Both functions return 1.0 for fully lit and 0.0
-// for fully shadowed, and only the caster light index is ever occluded:
-// every other light returns 1.0.
+// Shadow lookups against the directional, omni and spot shadow maps the
+// scene pass binds in set 0. Every function returns 1.0 for fully lit and
+// 0.0 for fully shadowed, and only the caster light index is ever
+// occluded: every other light returns 1.0.
 #ifndef AE_SHADOWS_GLSL
 #define AE_SHADOWS_GLSL
 
@@ -34,6 +34,17 @@ layout(set = 0, binding = BINDING_POINT_SHADOW, std140) uniform PointShadow
 } u_point_shadow;
 
 layout(set = 0, binding = BINDING_POINT_SHADOW_MAP) uniform samplerCube pointShadowMap;
+
+// Spot-light shadow data, also owned by the scene pass: a single
+// perspective map for the first shadow-casting spot light. params:
+// x enabled, y bias, z caster spot-light index.
+layout(set = 0, binding = BINDING_SPOT_SHADOW, std140) uniform SpotShadow
+{
+    mat4 lightViewProj;
+    vec4 params;
+} u_spot_shadow;
+
+layout(set = 0, binding = BINDING_SPOT_SHADOW_MAP) uniform sampler2D spotShadowMap;
 
 // Directional shadow term for the fragment at worldPosition, lit by
 // directional light lightIndex along L with shading normal N. A 5x5 PCF
@@ -162,6 +173,37 @@ float point_shadow(vec3 worldPosition, int lightIndex, vec3 N, vec3 L)
         }
     }
     return lit / 9.0;
+}
+
+// Spot shadow term for the fragment at worldPosition, lit by spot light
+// lightIndex along L with shading normal N. The perspective projection
+// divides the same way an orthographic one does, so this is the
+// directional path's 5x5 PCF kernel against the spot's own map.
+float spot_shadow(vec3 worldPosition, int lightIndex, vec3 N, vec3 L)
+{
+    if (u_spot_shadow.params.x == 0.0 || lightIndex != int(u_spot_shadow.params.z))
+    {
+        return 1.0;
+    }
+    vec4 lightClip = u_spot_shadow.lightViewProj * vec4(worldPosition, 1.0);
+    vec3 proj = lightClip.xyz / lightClip.w;
+    proj = proj * 0.5 + 0.5;
+    if (proj.z > 1.0 || proj.x < 0.0 || proj.x > 1.0 || proj.y < 0.0 || proj.y > 1.0)
+    {
+        return 1.0;
+    }
+    float bias = max(u_spot_shadow.params.y * (1.0 - dot(N, L)), u_spot_shadow.params.y * 0.1);
+    vec2 texelSize = 1.0 / vec2(textureSize(spotShadowMap, 0));
+    float lit = 0.0;
+    for (int x = -2; x <= 2; ++x)
+    {
+        for (int y = -2; y <= 2; ++y)
+        {
+            float closest = texture(spotShadowMap, proj.xy + vec2(x, y) * texelSize).r;
+            lit += (proj.z - bias > closest) ? 0.0 : 1.0;
+        }
+    }
+    return lit / 25.0;
 }
 
 #endif // AE_SHADOWS_GLSL

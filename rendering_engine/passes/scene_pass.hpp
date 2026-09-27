@@ -35,6 +35,7 @@ namespace rendering_engine
     struct renderable;
     struct shadow_pass;
     struct point_shadow_pass;
+    struct spot_shadow_pass;
 
     /**
      * @brief 3D scene pass. Clears the swapchain colour and depth,
@@ -69,6 +70,9 @@ namespace rendering_engine
         // @p point_shadow is the omni shadow pass for the first shadow-casting
         // point light; its six depth maps are baked into the per-frame bind
         // group and its matrices uploaded each frame. May be null.
+        // @p spot_shadow is the shadow pass for the first shadow-casting spot
+        // light; its depth map is baked into the per-frame bind group and its
+        // matrix uploaded each frame. May be null.
         // @p stats is filled with this frame's draw statistics each record();
         // non-owning, owned by the engine context and surfaced to the debug
         // overlay. May be null to disable stats collection.
@@ -79,6 +83,7 @@ namespace rendering_engine
         scene_pass(std::vector<renderable*>* registry,
                    shadow_pass* shadow,
                    point_shadow_pass* point_shadow,
+                   spot_shadow_pass* spot_shadow,
                    render_stats* stats,
                    bool taa_jitter);
         ~scene_pass() override;
@@ -97,6 +102,7 @@ namespace rendering_engine
         {
             io.read("shadow_map");
             io.read("point_shadow");
+            io.read("spot_shadow");
             io.write("scene_color");
             io.write("scene_depth");
         }
@@ -143,6 +149,7 @@ namespace rendering_engine
         gpu::buffer m_lights_ubo{};
         gpu::buffer m_shadow_ubo{};
         gpu::buffer m_point_shadow_ubo{};
+        gpu::buffer m_spot_shadow_ubo{};
         gpu::bind_group m_frame_bind_group{};
 
         // Unjittered twin of @ref m_frame_bind_group for the debug pass.
@@ -158,6 +165,7 @@ namespace rendering_engine
         // Null disables that kind of shadowing.
         shadow_pass* m_shadow{nullptr};
         point_shadow_pass* m_point_shadow{nullptr};
+        spot_shadow_pass* m_spot_shadow{nullptr};
 
         // Non-owning; filled each record() with this frame's draw stats.
         // Owned by the engine context, which outlives the pass. Null

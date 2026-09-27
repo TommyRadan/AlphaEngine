@@ -1,9 +1,10 @@
 #version 450
 
-// Depth-only stage shared by the directional shadow pass and each face of
-// the omni shadow pass: the caster's world position through the light's
-// view-projection. The per-draw block is the same one every renderable
-// binds for the scene pass, so their bind groups bind here unchanged.
+// Depth-only stage shared by the directional shadow pass, each face of
+// the omni shadow pass and the spot shadow pass: the caster's world
+// position through the light's view-projection. The per-draw block is
+// the same one every renderable binds for the scene pass, so their bind
+// groups bind here unchanged.
 
 #include "include/per_draw.glsl"
 

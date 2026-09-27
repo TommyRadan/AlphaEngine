@@ -1,11 +1,12 @@
 #version 450
 
 // Depth-only stage for instanced casters, shared by the directional shadow
-// pass and each face of the omni shadow pass. The instanced twin of
-// shadow.vert.glsl: the model matrix arrives as four vec4 attributes from
-// the per-instance stream instanced_mesh binds at vertex slot 1 (the same
-// record materials/instanced.vert.glsl reads; the tint that follows the
-// matrix is not declared here), so there is no per-draw block.
+// pass, each face of the omni shadow pass and the spot shadow pass. The
+// instanced twin of shadow.vert.glsl: the model matrix arrives as four
+// vec4 attributes from the per-instance stream instanced_mesh binds at
+// vertex slot 1 (the same record materials/instanced.vert.glsl reads; the
+// tint that follows the matrix is not declared here), so there is no
+// per-draw block.
 
 layout(location = 0) in vec3 position;
 layout(location = 1) in vec4 model0;

@@ -63,6 +63,10 @@ namespace rendering_engine
         // six faces (a caster outside every face counts six times).
         uint32_t point_shadow_culled{0};
 
+        // Shadow casters skipped by the spot shadow pass because their
+        // bounds fell outside the light's perspective frustum.
+        uint32_t spot_shadow_culled{0};
+
         // Draw items submitted this frame (one GPU draw call each). A
         // single renderable may emit more than one.
         uint32_t draw_calls{0};

@@ -25,6 +25,7 @@
 #include <core/math/math.hpp>
 #include <rendering_engine/lighting/directional_light.hpp>
 #include <rendering_engine/lighting/point_light.hpp>
+#include <rendering_engine/lighting/spot_light.hpp>
 #include <runtime/node.hpp>
 
 namespace
@@ -73,6 +74,21 @@ void runtime::light_component::on_update(node& owner)
         if (forward_length > degenerate_length)
         {
             static_cast<rendering_engine::directional_light&>(*m_light).direction = forward / forward_length;
+        }
+        break;
+    }
+    case rendering_engine::light_type::spot:
+    {
+        // A spot light follows both fields: position like a point light,
+        // direction like a directional one (+X, guarded the same way
+        // against a zero-scale node's degenerate forward axis).
+        auto& spot = static_cast<rendering_engine::spot_light&>(*m_light);
+        spot.position = core::math::vec3{world.m[12], world.m[13], world.m[14]};
+        const core::math::vec3 forward{world.m[0], world.m[1], world.m[2]};
+        const float forward_length = core::math::length(forward);
+        if (forward_length > degenerate_length)
+        {
+            spot.direction = forward / forward_length;
         }
         break;
     }

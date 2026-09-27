@@ -1,11 +1,11 @@
 #version 450
 
 // PBR metal/roughness surface: Cook-Torrance direct lighting for the
-// packed directional and point lights (with the directional and omni
-// caster shadows), image-based ambient from the environment tables when
-// one is attached, emissive, and distance fog. The per-frame, lights,
-// shadow, fog and BRDF code is shared with phong_material through the
-// includes.
+// packed directional, point and spot lights (with the directional, omni
+// and spot caster shadows), image-based ambient from the environment
+// tables when one is attached, emissive, and distance fog. The
+// per-frame, lights, shadow, fog and BRDF code is shared with
+// phong_material through the includes.
 //
 // Which maps are sampled is decided at compile time by the keywords
 // standard_material's template injects as defines (docs/shaders.md):
@@ -217,6 +217,21 @@ void main()
         float atten = 1.0 / (constant + linear * dist + quadratic * dist * dist);
         vec3 radiance = u_lights.point[i].color.rgb * atten;
         float shadow = point_shadow(worldPosition, i, N, L);
+        Lo += shadow * brdf(N, V, L, radiance, albedo, metalness, roughness, F0);
+    }
+
+    for (int i = 0; i < u_lights.counts.z; ++i)
+    {
+        vec3 toLight = u_lights.spot[i].position.xyz - worldPosition;
+        float dist = length(toLight);
+        vec3 L = toLight / max(dist, 0.0001);
+        float atten = spot_attenuation(i, L, dist);
+        if (atten <= 0.0)
+        {
+            continue;
+        }
+        vec3 radiance = u_lights.spot[i].color.rgb * atten;
+        float shadow = spot_shadow(worldPosition, i, N, L);
         Lo += shadow * brdf(N, V, L, radiance, albedo, metalness, roughness, F0);
     }
 
