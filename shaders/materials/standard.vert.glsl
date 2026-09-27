@@ -2,7 +2,7 @@
 
 // PBR metal/roughness surface: world-space position, normal and (with
 // HAS_TANGENTS) tangent frame for the fragment stage, plus the camera
-// position derived from the view matrix.
+// position the per-frame block carries.
 //
 // Keywords (injected as defines by standard_material's template, see
 // docs/shaders.md): HAS_TANGENTS declares the tangent attribute at
@@ -67,6 +67,6 @@ void main()
     worldTangent = vec4(mat3(u_draw.modelMatrix) * localTangent, tangent.w);
 #endif
     texCoord = uv;
-    cameraPosition = camera_position();
-    gl_Position = u_frame.projectionMatrix * u_frame.viewMatrix * world;
+    cameraPosition = u_frame.cameraPosition.xyz;
+    gl_Position = u_frame.viewProjectionMatrix * world;
 }

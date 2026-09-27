@@ -18,6 +18,8 @@ target_sources(AlphaEngine PRIVATE
     spot_shadow_pass.hpp
     ui_pass.cpp
     ui_pass.hpp
+    view_globals.cpp
+    view_globals.hpp
 )
 
 add_subdirectory(post)

@@ -1,7 +1,7 @@
 #version 450
 
 // Blinn-Phong lit surface: world-space position and normal for the
-// fragment stage, plus the camera position derived from the view matrix.
+// fragment stage, plus the camera position the per-frame block carries.
 
 #include "include/per_frame.glsl"
 #include "include/per_draw.glsl"
@@ -23,6 +23,6 @@ void main()
     // model's 3x3, so non-uniform scale does not skew the normal.
     worldNormal = mat3(u_draw.normalMatrix) * normal;
     texCoord = uv;
-    cameraPosition = camera_position();
-    gl_Position = u_frame.projectionMatrix * u_frame.viewMatrix * world;
+    cameraPosition = u_frame.cameraPosition.xyz;
+    gl_Position = u_frame.viewProjectionMatrix * world;
 }

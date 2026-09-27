@@ -163,7 +163,7 @@ TEST(shader_library, shared_blocks_are_declared_once)
     for (const std::string_view path : shader_library::embedded_paths())
     {
         const std::string_view source = shader_library::source(path);
-        per_frame_declarations += source.find("uniform PerFrame") != npos ? 1 : 0;
+        per_frame_declarations += source.find("uniform ViewGlobals") != npos ? 1 : 0;
         lights_declarations += source.find("uniform Lights") != npos ? 1 : 0;
         directional_shadow_definitions += source.find("float directional_shadow(") != npos ? 1 : 0;
     }

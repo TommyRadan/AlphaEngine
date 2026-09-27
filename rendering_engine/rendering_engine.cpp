@@ -25,6 +25,7 @@
 #include <core/event_engine.hpp>
 #include <core/log.hpp>
 #include <core/settings.hpp>
+#include <core/time.hpp>
 #include <rendering_engine/camera/camera_registry.hpp>
 #include <rendering_engine/camera/perspective_camera.hpp>
 #include <rendering_engine/debug/axes_helper.hpp>
@@ -431,6 +432,13 @@ void rendering_engine::context::render()
     ctx.viewport_width = m_target_width;
     ctx.viewport_height = m_target_height;
     ctx.frame_index = m_frame_index;
+    // The engine clock ticked at the top of this frame; core::time reports
+    // milliseconds, the shaders see seconds.
+    if (eng.time != nullptr)
+    {
+        ctx.time_seconds = eng.time->total_time() / 1000.0f;
+        ctx.delta_seconds = static_cast<float>(eng.time->delta_time() / 1000.0);
+    }
     // The temporal-AA jitter is computed here from the live target size
     // (so a resize rescales it without any pass being told) and published
     // to every pass: the scene and skybox passes offset their projection

@@ -51,11 +51,11 @@ namespace rendering_engine
      * a renderable that reports no bounds is always collected. The tallies
      * land in @ref render_stats::submitted / @ref render_stats::culled.
      *
-     * Owns the per-frame bind-group layout (camera @c viewMatrix /
-     * @c projectionMatrix at binding 0 and the packed lights block at
-     * binding 2, both in slot 0; plus the directional cascade block and
-     * its depth array with the comparison sampler, and the omni and spot
-     * shadow blocks and maps, at the numbers in gpu/shader_bindings.hpp).
+     * Owns the per-frame bind-group layout (the @ref view_globals block at
+     * binding 0 and the packed lights block at binding 2, both in slot 0;
+     * plus the directional cascade block and its depth array with the
+     * comparison sampler, and the omni and spot shadow blocks and maps, at
+     * the numbers in gpu/shader_bindings.hpp).
      * The matching lit materials read the layout via
      * @ref frame_bind_group_layout so the pipeline and the runtime bind
      * group agree on slot shape.
@@ -142,9 +142,9 @@ namespace rendering_engine
 
         // Per-frame state — owned by the pass; created once and
         // refilled every record(). Released in the destructor before
-        // the device tears its pools down. The camera UBO carries the
-        // {viewMatrix, projectionMatrix} pair packed std140 (two
-        // mat4s = 128 bytes) at binding 0; the lights UBO carries the
+        // the device tears its pools down. The frame UBO carries the
+        // @ref view_globals block (camera matrices, viewport, clock,
+        // jitter and fog) at binding 0; the lights UBO carries the
         // packed @ref gpu_lights block at binding 2. Both live in the
         // single per-frame bind group bound at slot 0.
         gpu::bind_group_layout m_frame_layout{};
@@ -158,8 +158,9 @@ namespace rendering_engine
         // Unjittered twin of @ref m_frame_bind_group for the debug pass.
         // Only created when temporal-AA jitter is active; otherwise the
         // accessor hands back the main group (the matrices are identical).
-        // Shares every other binding with the main group — only its camera
-        // UBO differs, holding the projection without the sub-pixel offset.
+        // Shares every other binding with the main group — only its
+        // view_globals block differs, describing the view without the
+        // sub-pixel offset.
         gpu::buffer m_overlay_frame_ubo{};
         gpu::bind_group m_overlay_frame_bind_group{};
 

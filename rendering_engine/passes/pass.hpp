@@ -75,6 +75,12 @@ namespace rendering_engine
         // Drives the temporal-AA jitter sequence.
         uint64_t frame_index{0};
 
+        // The engine clock (core::time) in seconds: the time since it
+        // started and this frame's delta. The scene pass hands both to
+        // shaders through the @ref view_globals block.
+        float time_seconds{0.0f};
+        float delta_seconds{0.0f};
+
         // Temporal-AA sub-pixel jitter for this frame, in NDC units
         // (see @ref taa_jitter_ndc), and the previous frame's. Zero
         // while temporal AA is off. The scene pass rasterises with the
@@ -156,8 +162,8 @@ namespace rendering_engine
         gpu::texture taa_resolve_texture{};
 
         // Scene-wide atmospheric fog, copied from @ref context::set_fog
-        // each frame. The scene pass packs it into the per-view PerFrame
-        // UBO so the lit materials can blend toward it by camera
+        // each frame. The scene pass packs it into the @ref view_globals
+        // block so the lit materials can blend toward it by camera
         // distance. Defaults to @ref fog_mode::none (no fog).
         fog_settings fog{};
 
