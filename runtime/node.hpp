@@ -27,6 +27,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <string>
@@ -35,6 +36,7 @@
 
 #include <core/log.hpp>
 #include <core/math/math.hpp>
+#include <core/string_id.hpp>
 #include <rendering_engine/util/transform.hpp>
 #include <runtime/component.hpp>
 
@@ -63,23 +65,29 @@ namespace runtime
      * subsystem) owns the *data*. This keeps component data contiguous in its
      * subsystem and lets nodes stay small.
      *
-     * Links are non-owning raw pointers: a node never deletes its parent or
-     * children, and the caller keeps every node alive while it is wired into a
-     * tree. The destructor detaches from the parent, orphans children back to
-     * world space, and frees this node's components. Main-thread-only.
+     * **Ownership.** Nodes are normally owned by a scene: create them with
+     * @c context::create_node, retire them with @c context::destroy_node, and
+     * the scene keeps each one at a stable address until then (and frees
+     * whatever is left when it quits). A node can still be constructed
+     * directly — a stack node in a test, an embedded root — in which case
+     * the caller owns it and must keep it alive while it is wired into a
+     * tree. Links are non-owning raw pointers either way: a node never
+     * deletes its parent or children. The destructor detaches from the
+     * parent, orphans children back to world space, and frees this node's
+     * components. Main-thread-only.
      *
      * **Structural mutation during a traversal.** While the scene is walking
-     * the tree — inside a component's @c on_update (from
-     * @ref update_subtree) or @c on_active_changed (from @ref set_active) —
-     * the node and child lists being iterated must not change. The immediate
-     * APIs (@ref add, @ref remove, @ref set_active, @ref add_component,
-     * @ref remove_component, @ref remove_all_components) detect that case
-     * through the owning @ref runtime::context: in debug builds they assert;
-     * in release builds they log an error and apply the call at the end of
-     * @ref runtime::context::update instead. Code that needs to mutate the
-     * tree from a hook should say so explicitly with the scene's
-     * @c defer_destroy / @c defer_remove_component / @c defer_reparent /
-     * @c defer_set_active, reached via @ref scene.
+     * the tree — inside a component's @c on_update (from the scene's update
+     * or @ref update_subtree) or @c on_active_changed (from @ref set_active)
+     * — the node, child and component lists being iterated must not change.
+     * The immediate APIs (@ref add, @ref remove, @ref set_active,
+     * @ref add_component, @ref remove_component, @ref remove_all_components)
+     * detect that case through the owning @ref runtime::context: in debug
+     * builds they assert; in release builds they log an error and apply the
+     * call at the end of @ref runtime::context::update instead. Code that
+     * needs to mutate the tree from a hook should say so explicitly with the
+     * scene's @c destroy_node / @c defer_remove_component / @c defer_reparent
+     * / @c defer_set_active, reached via @ref scene.
      */
     struct node
     {
@@ -104,15 +112,23 @@ namespace runtime
         rendering_engine::util::transform transform;
 
         /** @brief Optional label, used by @ref find. Not required to be unique. */
-        std::string name;
+        const core::string_id& name() const noexcept;
+
+        /**
+         * @brief Renames the node, keeping its scene's name index (see
+         *        @c context::find) in step.
+         */
+        void set_name(core::string_id name);
 
         /**
          * @brief Returns the first node in this subtree (this node included)
          *        whose @ref name equals @p target, or @c nullptr.
          *
-         * Depth-first, in child insertion order.
+         * Depth-first, in child insertion order; each step is an integer
+         * compare of interned ids. For a scene-wide lookup by name without the
+         * walk, use @c context::find.
          */
-        node* find(const std::string& target);
+        node* find(core::string_id target);
 
         // --- World-space helpers -------------------------------------------
 
@@ -194,12 +210,13 @@ namespace runtime
         /**
          * @brief Updates this node's components, then recurses into children.
          *
-         * Calls each component's @c on_update(node&) (those that define one) so
-         * components can resync from the node's now-settled world transform.
-         * Skipped entirely — this node and its subtree — unless the node is
-         * effectively active. Driven once per frame from
-         * @ref runtime::context::update on the scene root, after game-module
-         * @c on_frame has moved nodes and before the renderer walks the frame.
+         * Calls each component's @c on_update(node&) (those that define one),
+         * node by node, depth-first. Skipped entirely — this node and its
+         * subtree — unless the node is effectively active. The scene's own
+         * per-frame @ref runtime::context::update does not come through here
+         * (it dispatches each component type's pool as a unit); this is for
+         * driving a subtree by hand, e.g. one that is not linked under a
+         * scene root.
          */
         void update_subtree();
 
@@ -233,13 +250,25 @@ namespace runtime
          *        is not owned by a @ref runtime::context (or it has none).
          *
          * This is how a component reaches the scene's deferred command queue
-         * from inside a hook: @c owner.scene()->defer_destroy(owner, ...).
+         * from inside a hook: @c owner.scene()->destroy_node(owner).
          */
         context* scene() const noexcept;
 
         /**
-         * @brief True between a @c context::defer_destroy(*this) call and the
-         *        end of the @c context::update that applies it.
+         * @brief The scene whose node pool holds this node's memory, or
+         *        @c nullptr for a caller-owned node.
+         *
+         * Set by @c context::create_node. It stays the creating scene even if
+         * the node is later re-parented into another scene's tree (that
+         * changes @ref scene, not the owner); @c context::destroy_node routes
+         * to it.
+         */
+        context* owning_scene() const noexcept;
+
+        /**
+         * @brief True between a @c context::destroy_node / @c defer_destroy
+         *        request for this node and the end of the
+         *        @c context::update that applies it.
          *
          * Lets a component's @c on_update skip work on a node that is already
          * on its way out.
@@ -275,7 +304,8 @@ namespace runtime
             }
 
             remove_component<C>();
-            component_handle handle = m_store->add<C>(std::move(value));
+            component_handle handle =
+                m_store->insert<C>(std::move(value), component_store::owner_record{this, &m_visit});
             m_components.push_back(component_entry{std::type_index(typeid(C)), handle});
 
             C* component = m_store->get<C>(handle);
@@ -379,7 +409,8 @@ namespace runtime
         void remove_all_components();
 
     private:
-        // The scene applies deferred commands against these.
+        // The scene applies deferred commands against these and owns the
+        // pool slot, name and visit bookkeeping.
         friend struct context;
 
         struct component_entry
@@ -409,10 +440,29 @@ namespace runtime
         // Queues @p command on the owning scene for the end of its update.
         void defer(std::function<void()> command);
 
+        // Gives this (fresh) node a copy of every component on @p source that
+        // its type can copy, dispatching on_attach as add_component would.
+        void copy_components_from(node& source);
+
+        // Moves this node in or out of its scene's name index; called around
+        // every change of name or of scene.
+        void index_name();
+        void unindex_name();
+
         node* m_parent;
         std::vector<node*> m_children;
         component_store* m_store;
         std::vector<component_entry> m_components;
+        core::string_id m_name;
+
+        // Scene-pool ownership (see owning_scene); m_pool_slot is meaningful
+        // only while m_owning_scene is set.
+        context* m_owning_scene;
+        uint32_t m_pool_slot;
+
+        // Written by the scene's update walk; read by the store's per-type
+        // on_update dispatch through the owner record.
+        visit_mark m_visit;
 
         bool m_active;
         bool m_effective_active;

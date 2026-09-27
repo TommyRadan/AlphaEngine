@@ -22,22 +22,37 @@
 
 #include <runtime/components/mesh_component.hpp>
 
+#include <core/log.hpp>
 #include <rendering_engine/mesh/mesh.hpp>
 #include <rendering_engine/rendering_engine.hpp>
 #include <runtime/engine.hpp>
 #include <runtime/node.hpp>
 
 runtime::mesh_component::mesh_component(rendering_engine::material* material, const rendering_engine::mesh& mesh)
-    : m_model{std::make_unique<rendering_engine::model>(material)}
+    : m_model{std::make_unique<rendering_engine::model>(material)}, m_material{material}
 {
     m_model->upload_mesh(mesh);
 }
 
 runtime::mesh_component::mesh_component(rendering_engine::material* material,
                                         std::shared_ptr<rendering_engine::mesh_asset> mesh)
-    : m_model{std::make_unique<rendering_engine::model>(material)}
+    : m_model{std::make_unique<rendering_engine::model>(material)}, m_material{material}, m_mesh{mesh}
 {
     m_model->set_mesh(std::move(mesh));
+}
+
+runtime::mesh_component runtime::mesh_component::clone() const
+{
+    if (!m_model)
+    {
+        return mesh_component{};
+    }
+    if (m_mesh == nullptr)
+    {
+        LOG_WRN("runtime::mesh_component::clone: a privately uploaded mesh cannot be copied; the clone draws nothing");
+        return mesh_component{};
+    }
+    return mesh_component{m_material, m_mesh};
 }
 
 void runtime::mesh_component::on_attach(node& owner)

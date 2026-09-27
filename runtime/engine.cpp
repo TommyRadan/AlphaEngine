@@ -40,7 +40,7 @@
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/rendering_engine.hpp>
 #include <rendering_engine/window.hpp>
-#include <runtime/scene_graph.hpp>
+#include <runtime/scene_manager.hpp>
 
 // Engine-side view of the game-module API: declares
 // install_pending_game_modules() without the GAME_MODULE()
@@ -122,7 +122,7 @@ namespace runtime
         // until init() because they compile GL shader programs and
         // need the GL context to be live first.
         renderer = std::make_unique<rendering_engine::context>();
-        scenes = std::make_unique<runtime::context>();
+        scenes = std::make_unique<runtime::scene_manager>();
     }
 
     engine::~engine()
@@ -192,6 +192,9 @@ namespace runtime
 
     void engine::quit()
     {
+        // Scenes first: freeing their nodes unwinds every component's
+        // renderer, light and camera registration and releases its GPU
+        // buffers, which needs the renderer and the asset cache still up.
         scenes->quit();
         // Scene teardown is where the bulk of the asset handles drop; reclaim
         // the index slots they leave behind before the cache itself goes.
@@ -253,10 +256,11 @@ namespace runtime
         events->emit<core::render_update>(render_tick);
 
         // Propagate scene-graph component updates (light/camera poses tracking
-        // their nodes) after the fixed updates moved nodes and before the draw
-        // walk. Runs once per rendered frame; render_* events fire per render
-        // inside renderer->render(). The interpolation alpha for smoothing
-        // between fixed states is available via time->interpolation_alpha().
+        // their nodes) in every loaded scene after the fixed updates moved
+        // nodes and before the draw walk. Runs once per rendered frame;
+        // render_* events fire per render inside renderer->render(). The
+        // interpolation alpha for smoothing between fixed states is available
+        // via time->interpolation_alpha().
         scenes->update();
         // A minimized window has no drawable (the Vulkan surface reports a
         // zero extent), so the frame is neither built nor presented until

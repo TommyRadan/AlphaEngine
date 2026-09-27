@@ -46,6 +46,7 @@ set(ALPHAENGINE_TEST_SOURCES_UNDER_TEST
     # tests do not call.
     ${CMAKE_SOURCE_DIR}/core/settings.cpp
     ${CMAKE_SOURCE_DIR}/core/settings_parse.cpp
+    ${CMAKE_SOURCE_DIR}/core/string_id.cpp
     ${CMAKE_SOURCE_DIR}/core/subscription.cpp
     ${CMAKE_SOURCE_DIR}/core/time.cpp
     ${CMAKE_SOURCE_DIR}/core/version.cpp
@@ -60,6 +61,7 @@ set(ALPHAENGINE_TEST_SOURCES_UNDER_TEST
     # leave registered_lights().
     ${CMAKE_SOURCE_DIR}/runtime/components/light_component.cpp
     ${CMAKE_SOURCE_DIR}/rendering_engine/lighting/light.cpp
+    ${CMAKE_SOURCE_DIR}/rendering_engine/lighting/ambient_light.cpp
     ${CMAKE_SOURCE_DIR}/rendering_engine/lighting/directional_light.cpp
     ${CMAKE_SOURCE_DIR}/rendering_engine/lighting/point_light.cpp
     # camera + camera_registry + the two projections, and camera_component

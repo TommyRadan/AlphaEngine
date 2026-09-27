@@ -12,6 +12,8 @@ target_sources(AlphaEngine PRIVATE
     settings.hpp
     settings_parse.cpp
     settings_parse.hpp
+    string_id.cpp
+    string_id.hpp
     subscription.cpp
     subscription.hpp
     time.cpp

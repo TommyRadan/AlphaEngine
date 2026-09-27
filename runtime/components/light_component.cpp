@@ -23,6 +23,7 @@
 #include <runtime/components/light_component.hpp>
 
 #include <core/math/math.hpp>
+#include <rendering_engine/lighting/ambient_light.hpp>
 #include <rendering_engine/lighting/directional_light.hpp>
 #include <rendering_engine/lighting/point_light.hpp>
 #include <runtime/node.hpp>
@@ -35,6 +36,51 @@ namespace
 } // namespace
 
 runtime::light_component::light_component(std::unique_ptr<rendering_engine::light> light) : m_light{std::move(light)} {}
+
+runtime::light_component runtime::light_component::clone() const
+{
+    if (!m_light)
+    {
+        return light_component{};
+    }
+
+    std::unique_ptr<rendering_engine::light> copy;
+    switch (m_light->type())
+    {
+    case rendering_engine::light_type::ambient:
+        copy = std::make_unique<rendering_engine::ambient_light>();
+        break;
+    case rendering_engine::light_type::directional:
+    {
+        const auto& source = static_cast<const rendering_engine::directional_light&>(*m_light);
+        auto directional = std::make_unique<rendering_engine::directional_light>();
+        directional->direction = source.direction;
+        directional->cast_shadow = source.cast_shadow;
+        copy = std::move(directional);
+        break;
+    }
+    case rendering_engine::light_type::point:
+    {
+        const auto& source = static_cast<const rendering_engine::point_light&>(*m_light);
+        auto point = std::make_unique<rendering_engine::point_light>();
+        point->position = source.position;
+        point->range = source.range;
+        point->constant_attenuation = source.constant_attenuation;
+        point->linear_attenuation = source.linear_attenuation;
+        point->quadratic_attenuation = source.quadratic_attenuation;
+        point->cast_shadow = source.cast_shadow;
+        copy = std::move(point);
+        break;
+    }
+    }
+    if (!copy)
+    {
+        return light_component{};
+    }
+    copy->color = m_light->color;
+    copy->intensity = m_light->intensity;
+    return light_component{std::move(copy)};
+}
 
 void runtime::light_component::on_active_changed(node& owner, bool active)
 {

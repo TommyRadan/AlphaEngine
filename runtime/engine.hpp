@@ -71,7 +71,7 @@ namespace rendering_engine
 } // namespace rendering_engine
 namespace runtime
 {
-    struct context;
+    struct scene_manager;
 }
 
 namespace runtime
@@ -136,7 +136,9 @@ namespace runtime
         std::unique_ptr<rendering_engine::gpu::device> gpu;
         std::unique_ptr<rendering_engine::asset_cache> assets;
         std::unique_ptr<rendering_engine::context> renderer;
-        std::unique_ptr<runtime::context> scenes;
+        // Every scene: the persistent one plus whatever is loaded. New
+        // content goes to scenes->active_scene().
+        std::unique_ptr<runtime::scene_manager> scenes;
 
     private:
         bool m_quit_requested{false};

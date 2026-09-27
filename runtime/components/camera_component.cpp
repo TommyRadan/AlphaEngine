@@ -22,11 +22,53 @@
 
 #include <runtime/components/camera_component.hpp>
 
+#include <core/log.hpp>
+#include <rendering_engine/camera/orthographic_camera.hpp>
+#include <rendering_engine/camera/perspective_camera.hpp>
 #include <runtime/node.hpp>
 
 runtime::camera_component::camera_component(std::unique_ptr<rendering_engine::camera> camera)
     : m_camera{std::move(camera)}
 {
+}
+
+runtime::camera_component runtime::camera_component::clone() const
+{
+    if (!m_camera)
+    {
+        return camera_component{};
+    }
+
+    std::unique_ptr<rendering_engine::camera> copy;
+    if (const auto* perspective = dynamic_cast<const rendering_engine::perspective_camera*>(m_camera.get()))
+    {
+        copy = std::make_unique<rendering_engine::perspective_camera>(perspective->get_field_of_view(),
+                                                                      perspective->get_aspect_ratio(),
+                                                                      perspective->get_near_clip(),
+                                                                      perspective->get_far_clip());
+    }
+    else if (const auto* orthographic = dynamic_cast<const rendering_engine::orthographic_camera*>(m_camera.get()))
+    {
+        auto ortho = std::make_unique<rendering_engine::orthographic_camera>();
+        ortho->set_x_magnification(orthographic->get_x_magnification());
+        ortho->set_y_magnification(orthographic->get_y_magnification());
+        ortho->set_near_clip(orthographic->get_near_clip());
+        ortho->set_far_clip(orthographic->get_far_clip());
+        copy = std::move(ortho);
+    }
+    else
+    {
+        LOG_WRN("runtime::camera_component::clone: unknown camera type; the clone owns no camera");
+        return camera_component{};
+    }
+
+    // The camera's own transform is its local offset under the node.
+    copy->transform.set_position(m_camera->transform.get_position());
+    copy->transform.set_quaternion(m_camera->transform.get_quaternion());
+    copy->transform.set_scale(m_camera->transform.get_scale());
+    copy->set_priority(m_camera->get_priority());
+    copy->set_main(m_camera->is_main());
+    return camera_component{std::move(copy)};
 }
 
 void runtime::camera_component::on_attach(node& owner)

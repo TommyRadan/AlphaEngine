@@ -80,6 +80,19 @@ namespace runtime
          */
         void on_active_changed(node& owner, bool active);
 
+        /**
+         * @brief A new component owning a camera of the same kind and
+         *        settings — projection, local offset, priority and main flag —
+         *        for @c context::clone.
+         *
+         * The copy attaches to the registry like any new camera (so, as the
+         * most recently attached of equal rank, it wins a tie) and starts
+         * enabled; the cloned node's active state then applies as usual. A
+         * camera type other than the built-in perspective and orthographic
+         * ones cannot be copied, and its clone is empty (with a warning).
+         */
+        camera_component clone() const;
+
         /** @brief The owned camera, or @c nullptr for an empty component. */
         rendering_engine::camera* get() const noexcept
         {

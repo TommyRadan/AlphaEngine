@@ -51,6 +51,7 @@
 #include <runtime/gltf_instantiate.hpp>
 #include <runtime/node.hpp>
 #include <runtime/scene_graph.hpp>
+#include <runtime/scene_manager.hpp>
 
 #include <algorithm>
 #include <cstdlib>
@@ -62,10 +63,11 @@ namespace
 {
     namespace math = core::math;
 
-    // Owned here: the nodes must go before the model (their mesh components
-    // draw with its materials) and both before the renderer.
+    // The spawned nodes live in the demo's own scene; it must be unloaded
+    // before the model is dropped (their mesh components draw with its
+    // materials), and both before the renderer.
     std::unique_ptr<rendering_engine::gltf_model> g_model;
-    std::vector<std::unique_ptr<runtime::node>> g_nodes;
+    runtime::context* g_scene = nullptr;
     std::unique_ptr<rendering_engine::ambient_light> g_ambient;
     std::unique_ptr<rendering_engine::directional_light> g_sun;
 
@@ -155,7 +157,8 @@ namespace
             return;
         }
 
-        g_nodes = runtime::instantiate_gltf(*g_model, runtime::current_engine().scenes->root);
+        g_scene = &runtime::current_engine().scenes->load("gltf_demo", runtime::load_mode::additive);
+        runtime::instantiate_gltf(*g_model, g_scene->root);
         compute_bounds(*g_model);
 
         g_ambient = std::make_unique<rendering_engine::ambient_light>();
@@ -176,9 +179,14 @@ namespace
         (void)event;
         g_sun.reset();
         g_ambient.reset();
-        // Nodes first (unregistering every mesh component), then the model
-        // whose materials they drew with, before the renderer tears down.
-        g_nodes.clear();
+        // Nodes first (unloading the scene unregisters every mesh component),
+        // then the model whose materials they drew with, before the renderer
+        // tears down.
+        if (g_scene != nullptr)
+        {
+            runtime::current_engine().scenes->unload(*g_scene);
+            g_scene = nullptr;
+        }
         g_model.reset();
     }
 
