@@ -26,7 +26,7 @@ namespace
     // floor resolution for their tail levels.
     constexpr uint32_t bloom_mip_count = 5;
 
-    // The compiled-in threshold, knee and strength defaults now live on
+    // The compiled-in threshold, knee and strength defaults live on
     // bloom_settings (rendering_engine/post_settings.hpp), which
     // bloom_pass::m_settings is seeded from; see that struct's doc comment
     // for what each one does.

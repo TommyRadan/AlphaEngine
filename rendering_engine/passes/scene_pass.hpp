@@ -82,8 +82,7 @@ namespace rendering_engine
      * @ref frame_bind_group_layout so the pipeline and the runtime bind
      * group agree on slot shape.
      *
-     * Skipped when no camera is attached (matches the previous
-     * @c if (camera != nullptr) gate).
+     * Skipped when no camera is attached.
      */
     struct scene_pass : pass
     {
