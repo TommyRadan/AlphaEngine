@@ -5,14 +5,14 @@
 
 #include <assets/color.hpp>
 #include <core/math/math.hpp>
-#include <rendering_engine/editor/line_helper.hpp>
+#include <rendering_engine/debug_draw/line_helper.hpp>
 
 namespace rendering_engine
 {
     struct camera;
 }
 
-namespace rendering_engine::editor
+namespace rendering_engine::debug_draw
 {
     // Wireframe of a camera's view frustum.
     // The eight clip-space corners are unprojected
@@ -39,4 +39,4 @@ namespace rendering_engine::editor
         core::math::mat4 m_last_view_projection{};
         bool m_built{false};
     };
-} // namespace rendering_engine::editor
+} // namespace rendering_engine::debug_draw

@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2015-2026 Tomislav Radanovic
 
-#include <rendering_engine/editor/axes_helper.hpp>
+#include <rendering_engine/debug_draw/axes_helper.hpp>
 
 #include <vector>
 
 #include <core/math/math.hpp>
 
-namespace rendering_engine::editor
+namespace rendering_engine::debug_draw
 {
     axes_helper::axes_helper(float size) : line_helper("Axes")
     {
@@ -28,4 +28,4 @@ namespace rendering_engine::editor
 
         set_segments(positions, colors);
     }
-} // namespace rendering_engine::editor
+} // namespace rendering_engine::debug_draw

@@ -50,7 +50,7 @@ namespace rendering_engine
     struct grid_material;
     struct ui_material;
 
-    namespace editor
+    namespace debug_draw
     {
         struct helper;
     }
@@ -530,7 +530,7 @@ namespace rendering_engine
         // they go (in @ref quit, and by declaration order) before both.
         // Empty in release builds, where the debug pass is dropped
         // entirely.
-        std::vector<std::unique_ptr<editor::helper>> m_debug_helpers;
+        std::vector<std::unique_ptr<debug_draw::helper>> m_debug_helpers;
 
 #if _DEBUG
         // Debug-build shader hot reload over the shader library's

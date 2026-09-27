@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2015-2026 Tomislav Radanovic
 
-#include <rendering_engine/editor/infinite_grid.hpp>
+#include <rendering_engine/debug_draw/infinite_grid.hpp>
 
 #include <array>
 #include <cstdint>
@@ -15,7 +15,7 @@
 #include <rendering_engine/renderer.hpp>
 #include <runtime/engine.hpp>
 
-namespace rendering_engine::editor
+namespace rendering_engine::debug_draw
 {
     infinite_grid::infinite_grid(float fade_distance)
         : helper("Grid (infinite)", helper_layer::scene),
@@ -73,4 +73,4 @@ namespace rendering_engine::editor
         item.vertex_count = 3;
         out.push_back(item);
     }
-} // namespace rendering_engine::editor
+} // namespace rendering_engine::debug_draw

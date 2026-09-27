@@ -5,9 +5,9 @@
 
 #include <assets/color.hpp>
 #include <core/math/aabb.hpp>
-#include <rendering_engine/editor/line_helper.hpp>
+#include <rendering_engine/debug_draw/line_helper.hpp>
 
-namespace rendering_engine::editor
+namespace rendering_engine::debug_draw
 {
     // Wireframe of an axis-aligned bounding box.
     // The twelve edges are baked in world space, so
@@ -27,4 +27,4 @@ namespace rendering_engine::editor
         core::math::aabb m_box;
         assets::color m_color;
     };
-} // namespace rendering_engine::editor
+} // namespace rendering_engine::debug_draw

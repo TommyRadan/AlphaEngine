@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2015-2026 Tomislav Radanovic
 
-#include <rendering_engine/editor/box_helper.hpp>
+#include <rendering_engine/debug_draw/box_helper.hpp>
 
 #include <array>
 #include <vector>
 
 #include <core/math/math.hpp>
-#include <rendering_engine/editor/box_edges.hpp>
+#include <rendering_engine/debug_draw/box_edges.hpp>
 
-namespace rendering_engine::editor
+namespace rendering_engine::debug_draw
 {
     box_helper::box_helper(const core::math::aabb& box, assets::color color)
         : line_helper("Box"), m_box(box), m_color(color)
@@ -43,4 +43,4 @@ namespace rendering_engine::editor
         build_box_edges(corners, to_rgb(m_color), positions, colors);
         set_segments(positions, colors);
     }
-} // namespace rendering_engine::editor
+} // namespace rendering_engine::debug_draw

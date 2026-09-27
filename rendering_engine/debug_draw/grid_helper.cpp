@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2015-2026 Tomislav Radanovic
 
-#include <rendering_engine/editor/grid_helper.hpp>
+#include <rendering_engine/debug_draw/grid_helper.hpp>
 
 #include <vector>
 
 #include <core/math/math.hpp>
-#include <rendering_engine/editor/grid_lines.hpp>
+#include <rendering_engine/debug_draw/grid_lines.hpp>
 
-namespace rendering_engine::editor
+namespace rendering_engine::debug_draw
 {
     grid_helper::grid_helper(float size, int divisions, assets::color color, assets::color center_color)
         : line_helper("Grid")
@@ -50,4 +50,4 @@ namespace rendering_engine::editor
 
         set_segments(positions, colors);
     }
-} // namespace rendering_engine::editor
+} // namespace rendering_engine::debug_draw

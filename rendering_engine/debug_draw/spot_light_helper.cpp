@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2015-2026 Tomislav Radanovic
 
-#include <rendering_engine/editor/spot_light_helper.hpp>
+#include <rendering_engine/debug_draw/spot_light_helper.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -10,7 +10,7 @@
 #include <core/math/math.hpp>
 #include <rendering_engine/lighting/spot_light.hpp>
 
-namespace rendering_engine::editor
+namespace rendering_engine::debug_draw
 {
     namespace
     {
@@ -97,4 +97,4 @@ namespace rendering_engine::editor
         std::vector<math::vec3> colors(positions.size(), rgb);
         set_segments(positions, colors);
     }
-} // namespace rendering_engine::editor
+} // namespace rendering_engine::debug_draw

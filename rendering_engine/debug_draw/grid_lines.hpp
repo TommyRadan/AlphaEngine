@@ -11,7 +11,7 @@
 
 #include <vector>
 
-namespace rendering_engine::editor
+namespace rendering_engine::debug_draw
 {
     // One line of the finite grid along one axis: where it sits (the
     // coordinate along the perpendicular axis) and whether it is the
@@ -59,4 +59,4 @@ namespace rendering_engine::editor
         }
         return lines;
     }
-} // namespace rendering_engine::editor
+} // namespace rendering_engine::debug_draw
