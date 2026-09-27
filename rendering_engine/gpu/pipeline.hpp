@@ -28,6 +28,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <vector>
 
 #include <rendering_engine/gpu/bind_group.hpp>
@@ -109,6 +110,24 @@ namespace rendering_engine::gpu
         polygon_mode polygon{polygon_mode::fill};
     };
 
+    // Push-constant bytes a device with @c device_features::push_constants
+    // takes at least: Vulkan's required minimum of maxPushConstantsSize.
+    constexpr uint32_t min_push_constants_size = 128;
+
+    // A block of push constants a pipeline declares: @c size bytes from
+    // byte @c offset, visible to @c stages. Both must be multiples of 4
+    // and the block must end within @c device_limits::max_push_constants_size.
+    // @c render_pass_encoder::push_constants writes into it, naming the
+    // same stages. Maps to a @c VkPushConstantRange of the pipeline
+    // layout; ignored by a device without @c device_features::push_constants
+    // (OpenGL).
+    struct push_constant_range
+    {
+        shader_stages stages{shader_stages_default};
+        uint32_t offset{0};
+        uint32_t size{0};
+    };
+
     // Pipeline state object: every piece of GPU state that a
     // backend can bake at create time lives here. Bound to a
     // @c render_pass_encoder by handle; binding does not consult any
@@ -161,6 +180,14 @@ namespace rendering_engine::gpu
         // into this vector is the slot number passed to
         // @c render_pass_encoder::set_bind_group.
         std::vector<bind_group_layout> bind_group_layouts;
+
+        // Push-constant blocks the pipeline's stages read. They are part
+        // of the pipeline layout: on Vulkan a bind group bound under one
+        // pipeline stays bound across a switch to another only when both
+        // declare the same bind-group layouts up to that slot *and* the
+        // same ranges, so pipelines a pass switches between under one
+        // bound group should declare identical ranges, used or not.
+        std::vector<push_constant_range> push_constant_ranges;
     };
 
     // Compute-pipeline descriptor. Returned as the same

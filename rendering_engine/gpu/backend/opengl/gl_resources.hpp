@@ -170,6 +170,10 @@ namespace rendering_engine::gpu::backend::opengl
         GLuint element_buffer_shadow{0};
         bool element_buffer_known{false};
         uint64_t shadow_epoch{0};
+
+        // Set once a push_constants call against this pipeline has been
+        // reported (OpenGL has none), so it logs once per pipeline.
+        bool push_constants_reported{false};
     };
 
     struct gl_bind_group

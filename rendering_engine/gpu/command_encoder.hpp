@@ -89,6 +89,20 @@ namespace rendering_engine::gpu
                                     bind_group bind_group_handle,
                                     std::span<const uint32_t> dynamic_offsets = {}) = 0;
 
+        // Write @p size bytes from @p data into the bound pipeline's push
+        // constants at byte @p offset, for the draws recorded after it
+        // (@c vkCmdPushConstants; the bytes are copied at the call).
+        // The bytes must lie in one of the pipeline's
+        // @c pipeline_descriptor::push_constant_ranges, and @p stages
+        // must be exactly that range's stages; @p offset and @p size are
+        // multiples of 4. A push that does not fit the bound pipeline is
+        // reported once per pass and dropped. Pushed values survive a
+        // switch to a pipeline that declares the same ranges. Needs
+        // @c device_features::push_constants: OpenGL has none for SPIR-V
+        // programs, so there the call records nothing (reported once per
+        // pipeline) and the caller keeps such data in a uniform buffer.
+        virtual void push_constants(shader_stages stages, uint32_t offset, uint32_t size, const void* data) = 0;
+
         // Override the pass-default viewport. Most callers can leave
         // this alone — @c command_encoder::begin_render_pass sets the
         // viewport to the target's full extent automatically. @p x /

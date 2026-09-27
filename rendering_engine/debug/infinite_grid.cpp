@@ -87,7 +87,8 @@ namespace rendering_engine::debug
         // Per-draw block (the identity model of the origin grid, see
         // per_draw_ubo.hpp); the shader references the model matrix when
         // reconstructing depth. The grid never moves, so the block is
-        // built once and only copied into the per-draw ring per frame.
+        // built once and then only pushed, or copied into the per-draw
+        // ring, per frame.
         if (!m_per_draw.bind(m_transform, m_material->per_draw_layout(), item))
         {
             return;

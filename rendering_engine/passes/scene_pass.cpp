@@ -41,6 +41,7 @@
 #include <rendering_engine/passes/shadow_pass.hpp>
 #include <rendering_engine/passes/spot_shadow_pass.hpp>
 #include <rendering_engine/passes/view_globals.hpp>
+#include <rendering_engine/renderables/per_draw_ubo.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
 #include <runtime/engine.hpp>
 
@@ -634,7 +635,8 @@ namespace rendering_engine
                 // Per-frame bind group bound once per frame after
                 // the first pipeline change; the binding sticks
                 // across subsequent set_pipeline calls within the
-                // same pass.
+                // same pass, since every template's pipelines share
+                // the per-frame layout and push-constant ranges.
                 if (first_iter)
                 {
                     pass_encoder.set_bind_group(0, m_frame_bind_group);
@@ -659,15 +661,13 @@ namespace rendering_engine
             }
 
             // Instanced renderables keep their per-instance data in a
-            // vertex stream (slot 1), not a per-draw bind group, so the
-            // per-draw group is optional. A rigid renderable's group is
-            // the per-draw ring's shared one; its dynamic offset picks
-            // the renderable's block.
-            if (item.per_draw_bind_group.valid())
-            {
-                pass_encoder.set_bind_group(
-                    item.mat->per_draw_slot(), item.per_draw_bind_group, item.per_draw_offsets());
-            }
+            // vertex stream (slot 1), not a PerDraw block, so the per-draw
+            // data is optional. A rigid renderable's block is pushed where
+            // the device takes push constants, in the pre-pass as in the
+            // shading pass; otherwise its group is the per-draw ring's
+            // shared one and its dynamic offset picks the renderable's
+            // block.
+            bind_per_draw(pass_encoder, item, item.mat->per_draw_slot());
             pass_encoder.set_vertex_buffer(0, item.vertex_buffer, 0, item.vertex_stride);
             if (item.instance_buffer.valid())
             {

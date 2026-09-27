@@ -630,6 +630,24 @@ namespace rendering_engine::gpu::backend::opengl
         apply_bind_group(m_device, *bg, dynamic_offsets);
     }
 
+    void gl_render_pass_encoder::push_constants(shader_stages stages, uint32_t offset, uint32_t size, const void*)
+    {
+        // The device does not advertise push constants, so the renderer
+        // never pushes here: it binds per-draw data from the per-draw
+        // ring instead. A caller that ignores the feature gets its bytes
+        // dropped, told once per pipeline.
+        auto* pipe = m_device.lookup_pipeline(m_pipeline_handle);
+        if (pipe != nullptr && !pipe->push_constants_reported)
+        {
+            pipe->push_constants_reported = true;
+            LOG_WRN("push_constants: OpenGL has no push constants for SPIR-V programs; %u bytes at offset %u for "
+                    "stages 0x%x are dropped",
+                    size,
+                    offset,
+                    stages);
+        }
+    }
+
     void gl_render_pass_encoder::set_viewport(int x, int y, int width, int height)
     {
         auto& cache = m_device.state_cache();

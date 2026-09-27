@@ -253,6 +253,36 @@ namespace rendering_engine::gpu::backend::vulkan
         return VK_SHADER_STAGE_VERTEX_BIT;
     }
 
+    VkShaderStageFlags to_vk_stage_flags(shader_stages stages)
+    {
+        VkShaderStageFlags out = 0;
+        if ((stages & shader_stages_vertex) != 0u)
+        {
+            out |= VK_SHADER_STAGE_VERTEX_BIT;
+        }
+        if ((stages & shader_stages_fragment) != 0u)
+        {
+            out |= VK_SHADER_STAGE_FRAGMENT_BIT;
+        }
+        if ((stages & shader_stages_geometry) != 0u)
+        {
+            out |= VK_SHADER_STAGE_GEOMETRY_BIT;
+        }
+        if ((stages & shader_stages_tessellation_control) != 0u)
+        {
+            out |= VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
+        }
+        if ((stages & shader_stages_tessellation_evaluation) != 0u)
+        {
+            out |= VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
+        }
+        if ((stages & shader_stages_compute) != 0u)
+        {
+            out |= VK_SHADER_STAGE_COMPUTE_BIT;
+        }
+        return out != 0u ? out : (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+    }
+
     VkAttachmentLoadOp to_vk_load_op(load_op op)
     {
         switch (op)

@@ -49,6 +49,11 @@ namespace rendering_engine::gpu::backend::vulkan
         void set_bind_group(uint32_t group,
                             bind_group bind_group_handle,
                             std::span<const uint32_t> dynamic_offsets) override;
+        // vkCmdPushConstants against the bound pipeline's layout, once
+        // the bytes are found inside one of its declared ranges with the
+        // same stages (the validation layer's rule, checked here so a
+        // bad push is reported once instead of failing validation).
+        void push_constants(shader_stages stages, uint32_t offset, uint32_t size, const void* data) override;
         // @p x / @p y are the rectangle's bottom-left corner in
         // window (OpenGL) convention, matching the GL backend's
         // glViewport / glScissor. A swapchain pass renders through a
@@ -117,6 +122,9 @@ namespace rendering_engine::gpu::backend::vulkan
         // not live, so a broken handle logs once per pass rather than
         // once per draw.
         std::vector<uint64_t> m_reported_bind_groups;
+        // Set once push_constants has reported a push the bound
+        // pipeline does not declare, so it logs once per pass.
+        bool m_push_constants_reported{false};
     };
 
     struct vk_compute_pass_encoder : public compute_pass_encoder

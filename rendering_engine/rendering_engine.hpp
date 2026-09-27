@@ -298,7 +298,8 @@ namespace rendering_engine
 
         /**
          * @brief The per-frame allocator the 3D renderables write their
-         *        PerDraw block into (see @ref per_draw_ring). Created in
+         *        PerDraw block into on a device without push constants
+         *        (see @ref per_draw_ring). Created in
          *        @ref init right after the device, rewound by @ref render
          *        at the top of every frame and released in @ref quit
          *        before the device.

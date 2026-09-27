@@ -33,6 +33,11 @@
  * slot's byte offset as a dynamic offset (@ref draw_item::per_draw_offset).
  * The descriptor sets are written once, when a group is first asked for,
  * and never updated per draw.
+ *
+ * That is the path of a device without push constants (OpenGL). On one
+ * with them (Vulkan) the renderables push their block instead (see
+ * per_draw_ubo.hpp) and nothing is written into the ring; it stays for
+ * blocks the push range cannot take.
  */
 
 #pragma once
@@ -156,6 +161,15 @@ namespace rendering_engine
             return m_frames_in_flight;
         }
 
+        // Whether the device takes the PerDraw block as push constants
+        // (@ref per_draw_push_constants), read once at construction.
+        // Rigid draws then push their block rather than take a slot, and
+        // the main buffer is only created if something allocates anyway.
+        bool uses_push_constants() const noexcept
+        {
+            return m_push_constants;
+        }
+
     private:
         // A buffer blocks are written into, with the groups built over it
         // (one per per-draw layout that has drawn from it).
@@ -184,6 +198,7 @@ namespace rendering_engine
         uint32_t m_stride{0};
         uint32_t m_slots_per_frame{0};
         uint32_t m_frames_in_flight{1};
+        bool m_push_constants{false};
 
         // The main buffer: m_frames_in_flight regions of m_slots_per_frame.
         // m_region is the device's frame slot, taken at begin_frame.
@@ -210,7 +225,13 @@ namespace rendering_engine
      *
      * Holds the block built from the renderable's transform, recomputed —
      * model matrix, normal matrix, mirror test — only when the transform's
-     * world version moves, and this frame's slot in the @ref per_draw_ring.
+     * world version moves.
+     *
+     * On a device with push constants @ref bind points the draw item at
+     * the cached block and the pass pushes it, so a static object costs
+     * no matrix work and no buffer write at all.
+     *
+     * Otherwise it also holds this frame's slot in the @ref per_draw_ring.
      * The first @ref bind of a frame copies the block into a fresh slot;
      * every later pass the renderable draws in that frame (the shadow
      * passes collect before the scene pass) binds the same slot, so they
@@ -225,13 +246,16 @@ namespace rendering_engine
         // changed since the last call. Returns true when it did.
         bool refresh(const util::transform& transform);
 
-        // Refresh, then point @p item at this frame's copy of the block:
-        // the shared group for @p layout, the dynamic offset and the
-        // mirror flag. False when no slot could be had; the caller skips
-        // the draw.
+        // Refresh, then point @p item at the block and set its mirror
+        // flag: on a device with push constants at the cached block the
+        // pass pushes (@ref draw_item::per_draw_push), otherwise at this
+        // frame's copy of it, the shared group for @p layout plus the
+        // dynamic offset. False when no slot could be had; the caller
+        // skips the draw.
         bool bind(const util::transform& transform, gpu::bind_group_layout layout, draw_item& item);
 
         // The cached block and its mirror flag, as of the last refresh.
+        // The block keeps its address for the binding's lifetime.
         const per_draw_payload& payload() const noexcept
         {
             return m_payload;

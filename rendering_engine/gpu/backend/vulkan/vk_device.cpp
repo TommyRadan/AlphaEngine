@@ -1340,6 +1340,7 @@ namespace rendering_engine::gpu::backend::vulkan
             m_limits.max_compute_workgroup_count[axis] = limits.maxComputeWorkGroupCount[axis];
         }
         m_limits.max_compute_workgroup_invocations = limits.maxComputeWorkGroupInvocations;
+        m_limits.max_push_constants_size = limits.maxPushConstantsSize;
 
         // The grants recorded by create_logical_device stay; the rest
         // is what every Vulkan device has, plus the two extension-
@@ -1352,9 +1353,23 @@ namespace rendering_engine::gpu::backend::vulkan
         // transitions the IBL convolution needs are implemented, so
         // the GPU prefilter path is taken just like OpenGL.
         m_features.compute_prefilter = true;
+        // The spec guarantees min_push_constants_size (128) bytes; a
+        // device that reports less would fail every pipeline declaring
+        // the per-draw range, so it runs without push constants and the
+        // renderer keeps its per-draw blocks in uniform buffers.
+        m_features.push_constants = limits.maxPushConstantsSize >= min_push_constants_size;
+        if (!m_features.push_constants)
+        {
+            LOG_WRN("Vulkan maxPushConstantsSize is %u, below the required %u bytes: push constants are disabled "
+                    "and per-draw data stays in uniform buffers",
+                    limits.maxPushConstantsSize,
+                    min_push_constants_size);
+            m_limits.max_push_constants_size = 0;
+        }
 
         LOG_INF("Vulkan limits: texture %u / 3d %u / cube %u, %u array layers, %u colour attachments, "
-                "anisotropy %.0f, msaa colour 0x%x depth 0x%x, timestamps %s (%.2f ns/tick), debug labels %s",
+                "anisotropy %.0f, msaa colour 0x%x depth 0x%x, timestamps %s (%.2f ns/tick), debug labels %s, "
+                "push constants %u bytes",
                 m_limits.max_texture_size_2d,
                 m_limits.max_texture_size_3d,
                 m_limits.max_texture_size_cube,
@@ -1365,7 +1380,8 @@ namespace rendering_engine::gpu::backend::vulkan
                 m_limits.depth_sample_counts,
                 m_features.timestamp_queries ? "on" : "off",
                 static_cast<double>(m_limits.timestamp_period_ns),
-                m_features.debug_labels ? "on" : "off");
+                m_features.debug_labels ? "on" : "off",
+                m_limits.max_push_constants_size);
     }
 
     texture_usage vk_device::format_support(texture_format format) const

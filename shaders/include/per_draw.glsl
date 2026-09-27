@@ -1,8 +1,19 @@
-// The per-draw block every 3D renderable binds in set 1, binding
-// BINDING_PER_DRAW_MODEL: the model matrix and its normal matrix, std140,
-// 128 bytes (rendering_engine::per_draw_payload). The depth-only shadow
-// pipelines read the same block, which is what lets the renderables'
-// per-draw bind groups bind there unchanged.
+// The per-draw block of every 3D renderable: the model matrix and its
+// normal matrix, 128 bytes (rendering_engine::per_draw_payload). The
+// depth-only shadow pipelines read the same block, so a renderable's
+// per-draw data serves them unchanged.
+//
+// Where it lives depends on the backend define AE_PUSH_CONSTANTS, which
+// create_library_shader_module sets for a device with push constants
+// (Vulkan):
+//   - with it, the block is the pipeline's push constants (the renderer's
+//     per-draw push range, vertex + fragment, offset 0), pushed by the pass
+//     before each draw;
+//   - without it (OpenGL, whose ARB_gl_spirv has no push constants), it is
+//     a uniform block in set 1, binding BINDING_PER_DRAW_MODEL, bound from
+//     the per-draw ring at a dynamic offset.
+// Two mat4s sit at the same offsets (0 and 64) under std430, the push-
+// constant default, as under std140, so both read the same bytes.
 //
 // normalMatrix is the inverse-transpose of the model's upper-left 3x3,
 // computed once per draw on the CPU (renderables/per_draw_ubo.hpp) and
@@ -21,11 +32,19 @@
 
 #include "include/bindings.glsl"
 
+#ifdef AE_PUSH_CONSTANTS
+layout(push_constant) uniform PerDraw
+{
+    mat4 modelMatrix;
+    mat4 normalMatrix;
+} u_draw;
+#else
 layout(set = 1, binding = BINDING_PER_DRAW_MODEL, std140) uniform PerDraw
 {
     mat4 modelMatrix;
     mat4 normalMatrix;
 } u_draw;
+#endif
 
 #ifdef SKINNED
 // Read-only, so the vertex stage needs no store / atomic support.

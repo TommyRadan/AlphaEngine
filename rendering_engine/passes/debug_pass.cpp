@@ -28,6 +28,7 @@
 #include <rendering_engine/debug_ui/imgui_layer.hpp>
 #include <rendering_engine/gpu/render_target.hpp>
 #include <rendering_engine/materials/material.hpp>
+#include <rendering_engine/renderables/per_draw_ubo.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
 
 namespace rendering_engine
@@ -101,13 +102,9 @@ namespace rendering_engine
                 last_material = item.mat;
             }
 
-            // A renderable without per-draw resources binds nothing, as
-            // in the scene pass.
-            if (item.per_draw_bind_group.valid())
-            {
-                pass_encoder->set_bind_group(
-                    item.mat->per_draw_slot(), item.per_draw_bind_group, item.per_draw_offsets());
-            }
+            // The PerDraw block pushed or bound, as in the scene pass; a
+            // renderable without per-draw resources records nothing.
+            bind_per_draw(*pass_encoder, item, item.mat->per_draw_slot());
             pass_encoder->set_vertex_buffer(0, item.vertex_buffer, 0, item.vertex_stride);
             if (item.index_buffer.valid())
             {

@@ -32,6 +32,7 @@
 namespace rendering_engine
 {
     struct material;
+    struct per_draw_payload;
 
     // The render queue a draw item's @ref draw_item::sort_key buckets it
     // into: opaque draws sort front-to-back so the depth test rejects
@@ -101,14 +102,24 @@ namespace rendering_engine
     // is its record size. Used together with @ref indirect_buffer by
     // @ref instanced_mesh.
     //
+    // @ref per_draw_push, when set, is the draw's PerDraw block (see
+    // per_draw_ubo.hpp) on a device that takes it as push constants: the
+    // pass pushes it right before the draw. It points at the block the
+    // renderable caches, which stays put until the renderable collects
+    // again, so it stays valid while the frame records from the list it
+    // was collected into (the depth pre-pass and the scene pass share
+    // one); the bytes are copied when pushed.
+    //
     // @ref per_draw_bind_group is bound at the material's per-draw slot.
-    // For a rigid 3D renderable it is the per-draw ring's group shared by
-    // every draw under that layout, and @ref per_draw_offset selects the
-    // renderable's block within it: the pass hands
-    // @ref per_draw_offsets to @c set_bind_group, which carries the offset
-    // only while @ref per_draw_dynamic says the group's layout takes one
-    // (a sprite batch's texture group or a skinned draw's private group
-    // does not).
+    // Without push constants a rigid 3D renderable's group is the per-
+    // draw ring's group shared by every draw under that layout, and
+    // @ref per_draw_offset selects the renderable's block within it: the
+    // pass hands @ref per_draw_offsets to @c set_bind_group, which carries
+    // the offset only while @ref per_draw_dynamic says the group's layout
+    // takes one (a sprite batch's texture group or a skinned draw's
+    // private group does not). A rigid draw that pushes its block has no
+    // group; a skinned one pushes its block and binds its private group
+    // for the joint palette. @ref bind_per_draw records both.
     //
     // @ref first_index and @ref vertex_offset address a sub-range of the
     // bound geometry, so several meshes can live in one vertex / index
@@ -125,6 +136,8 @@ namespace rendering_engine
         gpu::buffer indirect_buffer{};
         gpu::buffer instance_buffer{};
         gpu::bind_group per_draw_bind_group{};
+        // The PerDraw block the pass pushes, or null; see above.
+        const per_draw_payload* per_draw_push{nullptr};
         uint32_t vertex_count{0};
         uint32_t index_count{0};
         uint32_t vertex_stride{0};

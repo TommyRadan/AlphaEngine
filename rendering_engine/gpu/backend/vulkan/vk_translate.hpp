@@ -47,6 +47,14 @@ namespace rendering_engine::gpu::backend::vulkan
     VkIndexType to_vk_index_type(index_format format);
     VkFormat to_vk_vertex_format(scalar_type type, uint32_t components, bool normalized);
     VkShaderStageFlagBits to_vk_shader_stage(shader_stage stage);
+    // The stageFlags of a descriptor binding or a push-constant range:
+    // the stages @p stages names rather than every stage Vulkan knows. A
+    // binding flagged for a geometry or tessellation stage whose feature
+    // was never granted is what the validation layer objects to, and a
+    // narrower mask is also what lets a driver place the data. An empty
+    // mask falls back to the vertex + fragment pair rather than producing
+    // an unusable layout.
+    VkShaderStageFlags to_vk_stage_flags(shader_stages stages);
     VkAttachmentLoadOp to_vk_load_op(load_op op);
     VkAttachmentStoreOp to_vk_store_op(store_op op);
     VkFormat to_vk_format(texture_format format);

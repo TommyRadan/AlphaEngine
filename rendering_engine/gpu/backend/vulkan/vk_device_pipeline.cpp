@@ -65,44 +65,6 @@ namespace rendering_engine::gpu::backend::vulkan
 {
     namespace
     {
-        // The descriptor's stageFlags come from the stages the layout
-        // entry declares (vertex + fragment by default, compute for the
-        // IBL layouts) rather than every stage Vulkan knows: a binding
-        // flagged for a geometry or tessellation stage whose feature
-        // was never granted is what the validation layer objects to,
-        // and a narrower mask is also what lets a driver place the
-        // descriptor. An entry that declares nothing at all falls back
-        // to the default pair rather than producing an unusable layout.
-        VkShaderStageFlags to_vk_stage_flags(shader_stages stages)
-        {
-            VkShaderStageFlags out = 0;
-            if ((stages & shader_stages_vertex) != 0u)
-            {
-                out |= VK_SHADER_STAGE_VERTEX_BIT;
-            }
-            if ((stages & shader_stages_fragment) != 0u)
-            {
-                out |= VK_SHADER_STAGE_FRAGMENT_BIT;
-            }
-            if ((stages & shader_stages_geometry) != 0u)
-            {
-                out |= VK_SHADER_STAGE_GEOMETRY_BIT;
-            }
-            if ((stages & shader_stages_tessellation_control) != 0u)
-            {
-                out |= VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
-            }
-            if ((stages & shader_stages_tessellation_evaluation) != 0u)
-            {
-                out |= VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
-            }
-            if ((stages & shader_stages_compute) != 0u)
-            {
-                out |= VK_SHADER_STAGE_COMPUTE_BIT;
-            }
-            return out != 0u ? out : (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
-        }
-
         VkDescriptorType to_descriptor_type(binding_kind kind, bool dynamic_offset)
         {
             switch (kind)
@@ -185,8 +147,35 @@ namespace rendering_engine::gpu::backend::vulkan
 
     namespace
     {
-        VkPipelineLayout
-        build_pipeline_layout(VkDevice dev, vk_device& device, const std::vector<bind_group_layout>& layouts)
+        // True when every range of @p ranges is one Vulkan accepts on
+        // @p device: a non-empty stage mask, a non-zero size, offset and
+        // size in whole words, and an end within maxPushConstantsSize.
+        // Logs the first bad range; the pipeline is then refused rather
+        // than handed to vkCreatePipelineLayout, which would reject it.
+        bool push_constant_ranges_valid(const vk_device& device, const std::vector<push_constant_range>& ranges)
+        {
+            for (const auto& range : ranges)
+            {
+                const uint64_t end = static_cast<uint64_t>(range.offset) + range.size;
+                if (range.stages == 0u || range.size == 0u || range.offset % 4u != 0u || range.size % 4u != 0u ||
+                    end > device.limits().max_push_constants_size)
+                {
+                    LOG_ERR("push-constant range (stages 0x%x, offset %u, size %u) is not valid on this device "
+                            "(maxPushConstantsSize %u); the pipeline is not created",
+                            range.stages,
+                            range.offset,
+                            range.size,
+                            device.limits().max_push_constants_size);
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        VkPipelineLayout build_pipeline_layout(VkDevice dev,
+                                               vk_device& device,
+                                               const std::vector<bind_group_layout>& layouts,
+                                               const std::vector<push_constant_range>& ranges)
         {
             std::vector<VkDescriptorSetLayout> set_layouts;
             set_layouts.reserve(layouts.size());
@@ -197,17 +186,26 @@ namespace rendering_engine::gpu::backend::vulkan
                     set_layouts.push_back(layout_record->object);
                 }
             }
+            std::vector<VkPushConstantRange> push_ranges;
+            push_ranges.reserve(ranges.size());
+            for (const auto& range : ranges)
+            {
+                push_ranges.push_back({to_vk_stage_flags(range.stages), range.offset, range.size});
+            }
             VkPipelineLayoutCreateInfo pli{};
             pli.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
             pli.setLayoutCount = static_cast<uint32_t>(set_layouts.size());
             pli.pSetLayouts = set_layouts.data();
+            pli.pushConstantRangeCount = static_cast<uint32_t>(push_ranges.size());
+            pli.pPushConstantRanges = push_ranges.data();
             VkPipelineLayout layout = VK_NULL_HANDLE;
             const VkResult r = vkCreatePipelineLayout(dev, &pli, nullptr, &layout);
             if (r != VK_SUCCESS)
             {
-                LOG_ERR("vkCreatePipelineLayout failed: %s (sets=%u)",
+                LOG_ERR("vkCreatePipelineLayout failed: %s (sets=%u, push-constant ranges=%u)",
                         vk_result_to_string(r),
-                        static_cast<unsigned>(set_layouts.size()));
+                        static_cast<unsigned>(set_layouts.size()),
+                        static_cast<unsigned>(push_ranges.size()));
             }
             return layout;
         }
@@ -518,7 +516,12 @@ namespace rendering_engine::gpu::backend::vulkan
         vk_pipeline record{};
         record.descriptor = descriptor;
 
-        record.layout = build_pipeline_layout(m_device, *this, descriptor.bind_group_layouts);
+        if (!push_constant_ranges_valid(*this, descriptor.push_constant_ranges))
+        {
+            return {};
+        }
+        record.layout =
+            build_pipeline_layout(m_device, *this, descriptor.bind_group_layouts, descriptor.push_constant_ranges);
         if (record.layout == VK_NULL_HANDLE)
         {
             return {};
@@ -573,7 +576,7 @@ namespace rendering_engine::gpu::backend::vulkan
     {
         vk_pipeline record{};
         record.is_compute = true;
-        record.layout = build_pipeline_layout(m_device, *this, descriptor.bind_group_layouts);
+        record.layout = build_pipeline_layout(m_device, *this, descriptor.bind_group_layouts, {});
         if (record.layout == VK_NULL_HANDLE)
         {
             return {};
