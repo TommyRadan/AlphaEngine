@@ -24,29 +24,11 @@
 
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/passes/pass.hpp>
+#include <rendering_engine/post_settings.hpp>
 #include <rendering_engine/render_graph/frame_graph.hpp>
 
 namespace rendering_engine
 {
-    /**
-     * @brief Tonemap operator the @ref tonemap_pass applies to the
-     *        HDR scene colour.
-     *
-     * The enumerator values are the contract with the fragment
-     * shader's @c Tonemap UBO — they are uploaded verbatim and
-     * branched on at draw time, so they must not be reordered.
-     */
-    enum class tonemap_operator : int
-    {
-        /// No curve: the exposed colour is only clamped and gamma
-        /// encoded.
-        none = 0,
-        /// Reinhard's x / (1 + x) shoulder.
-        reinhard = 1,
-        /// Krzysztof Narkowicz's ACES filmic approximation. The default.
-        aces = 2,
-    };
-
     /**
      * @brief Maps the HDR scene-colour target into LDR for the
      *        swapchain via a selectable tonemap curve and gamma encode.

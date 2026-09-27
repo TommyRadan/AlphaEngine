@@ -37,18 +37,13 @@
 
 namespace
 {
-    // Steady-state weight of the reprojected history in the blend. 0.9
-    // keeps ten frames of accumulation in flight — enough to resolve the
-    // 16-sample Halton jitter into a smooth, supersampled image while
-    // still responding to change within a few frames. The neighbourhood
-    // clamp below is what stops that long tail from ghosting under motion.
-    constexpr float taa_feedback = 0.9f;
-
     // The resolve is shaders/passes/taa_resolve.frag.glsl, drawn over the
     // shared fullscreen triangle. u_taa.params.xy is (1/width, 1/height),
     // the per-texel step the neighbourhood taps walk by, and params.z is
-    // the history feedback weight, baked to 0 while the history is
-    // unusable and to taa_feedback thereafter.
+    // the history feedback weight — baked to 0 while the history is
+    // unusable and to frame_context::post.taa.feedback thereafter (see
+    // rendering_engine/post_settings.hpp's taa_settings::feedback for what
+    // the steady-state weight trades off).
 
     // std140 rounds the single vec4 block up to a 16-byte allocation.
     constexpr size_t taa_ubo_size = 16;
@@ -90,8 +85,8 @@ namespace rendering_engine
 
         // -- Resolve params UBO: texel step + history feedback --------
         // The feedback starts at 0 so the first frame ignores the still
-        // undefined history; record() bumps it to taa_feedback once a
-        // frame of the same camera has been resolved.
+        // undefined history; record() bumps it to frame_context::post's
+        // taa.feedback once a frame of the same camera has been resolved.
         m_inv_width = 1.0f / static_cast<float>(width);
         m_inv_height = 1.0f / static_cast<float>(height);
         const std::array<float, 4> initial_params = {m_inv_width, m_inv_height, 0.0f, 0.0f};
@@ -365,11 +360,12 @@ namespace rendering_engine
 
         // While the history is unusable the feedback is pinned to 0
         // (current frame only); every later frame accumulates with the
-        // steady-state weight. Written here, before the draw and after
-        // begin_frame waited for the previous frame, so the value the GPU
-        // reads for this frame is the one this frame needs — a mismatch
-        // also covers the texel step a resize changed.
-        const float feedback = m_first_frame ? 0.0f : taa_feedback;
+        // runtime-tunable steady-state weight from frame_context::post.
+        // Written here, before the draw and after begin_frame waited for
+        // the previous frame, so the value the GPU reads for this frame is
+        // the one this frame needs — a mismatch also covers the texel step
+        // a resize changed and a live change to the feedback weight.
+        const float feedback = m_first_frame ? 0.0f : ctx.post.taa.feedback;
         if (feedback != m_uploaded_feedback)
         {
             write_params(feedback);

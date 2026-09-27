@@ -33,6 +33,7 @@
 #include <rendering_engine/fog.hpp>
 #include <rendering_engine/gpu/command_encoder.hpp>
 #include <rendering_engine/gpu/handle.hpp>
+#include <rendering_engine/post_settings.hpp>
 
 namespace rendering_engine
 {
@@ -159,6 +160,17 @@ namespace rendering_engine
         // UBO so the lit materials can blend toward it by camera
         // distance. Defaults to @ref fog_mode::none (no fog).
         fog_settings fog{};
+
+        // Runtime-tunable post-processing chain parameters, copied from
+        // @ref context::set_post_settings each frame. @ref bloom_pass,
+        // @ref taa_pass and @ref fxaa_pass read the fields they own here in
+        // @c record and rewrite their own UBO only when a value differs
+        // from what they last uploaded; @ref tonemap_pass is the exception
+        // — its exposure and operator are applied immediately by
+        // @ref context::set_post_settings through its own live-tunable
+        // setters, so it does not need to read this back. See
+        // @ref post_settings for why scene-wide fog is not part of it.
+        post_settings post{};
     };
 
     /**

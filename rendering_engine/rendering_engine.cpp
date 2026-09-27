@@ -170,6 +170,11 @@ void rendering_engine::context::init()
         m_velocity = velocity.get();
         m_taa = taa.get();
     }
+    // post_settings::taa.enabled mirrors the pass's real presence rather
+    // than being requestable: temporal AA is only ever decided here, at
+    // init, so set_post_settings overwrites whatever it is given with
+    // this instead of trusting the caller.
+    m_post_settings.taa.enabled = taa_enabled;
     // FXAA closes the post chain: it samples the TAA resolve when one is
     // published (else the LDR target) and writes the anti-aliased image to
     // the swapchain. It declares whichever of the two it will actually
@@ -441,6 +446,7 @@ void rendering_engine::context::render()
     ctx.velocity_texture = (m_velocity != nullptr) ? m_velocity->velocity_texture() : gpu::texture{};
     ctx.taa_resolve_texture = (m_taa != nullptr) ? m_taa->output_texture() : gpu::texture{};
     ctx.fog = m_fog;
+    ctx.post = m_post_settings;
 
     // One encoder records the frame graph's passes in order — each in a
     // debug group and between the profiler's timestamps — then submits.
@@ -691,6 +697,32 @@ rendering_engine::tonemap_pass& rendering_engine::context::tonemap()
 {
     assert(m_tonemap != nullptr && "context::tonemap is only valid between init and quit");
     return *m_tonemap;
+}
+
+void rendering_engine::context::set_post_settings(const post_settings& settings)
+{
+    m_post_settings = settings;
+
+    // Temporal AA's presence is fixed at init (see context::init): a
+    // caller cannot flip it from here, so the stored value always mirrors
+    // reality rather than whatever was requested.
+    m_post_settings.taa.enabled = (m_taa != nullptr);
+
+    // The tonemap pass already exposes live-tunable exposure / operator
+    // setters that rewrite its UBO immediately and only on change; forward
+    // to them now rather than waiting for the pass to read frame_context
+    // on the next record(), so a caller reading context::tonemap() right
+    // after this call sees the new values.
+    if (m_tonemap != nullptr)
+    {
+        m_tonemap->set_exposure(settings.exposure);
+        m_tonemap->set_operator(settings.tonemap_op);
+    }
+}
+
+const rendering_engine::post_settings& rendering_engine::context::get_post_settings() const
+{
+    return m_post_settings;
 }
 
 const rendering_engine::render_stats& rendering_engine::context::get_render_stats() const
