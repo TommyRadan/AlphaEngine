@@ -29,8 +29,8 @@ namespace rendering_engine
 
         // When true this light renders an omni (six-face) shadow map from its
         // position and the lit materials sample it to occlude its contribution.
-        // Only the first shadow-casting point light is honoured today; the rest
-        // light without casting. Defaults to false so existing scenes keep their look.
+        // Only the first shadow-casting point light is honoured; the rest
+        // light without casting.
         bool cast_shadow{false};
     };
 } // namespace rendering_engine

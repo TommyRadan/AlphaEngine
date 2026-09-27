@@ -237,11 +237,9 @@ namespace
         return c <= 0.04045f ? c / 12.92f : std::pow((c + 0.055f) / 1.055f, 2.4f);
     }
 
-    // ---- GPU compute path -------------------------------------------------
-    //
-    // Three compute kernels (shaders/passes/ibl_*.comp.glsl) convolve the
-    // derived tables directly into storage images. Their shared
-    // dir_for_face (shaders/include/ibl_common.glsl) mirrors the CPU
+    // The GPU compute path's three kernels (shaders/passes/ibl_*.comp.glsl)
+    // convolve the derived tables directly into storage images. Their
+    // shared dir_for_face (shaders/include/ibl_common.glsl) mirrors the CPU
     // @ref dir_for_face_uv so the hardware samplerCube and the written
     // cube agree on orientation.
 } // namespace
@@ -537,7 +535,6 @@ namespace rendering_engine
             return e;
         };
 
-        // ---- pipelines --------------------------------------------------
         gpu::bind_group_layout_descriptor irr_layout{};
         irr_layout.entries.push_back(sampler_entry(0));
         irr_layout.entries.push_back(image_entry(1));
@@ -553,7 +550,6 @@ namespace rendering_engine
         brdf_layout.entries.push_back(image_entry(0));
         const auto [brdf_pipe, brdf_bgl] = make_compute("passes/ibl_brdf_lut.comp.glsl", brdf_layout);
 
-        // ---- output textures -------------------------------------------
         m_irradiance = storage_texture(gpu::texture_dimension::cube, irradiance_size, false);
         m_prefiltered = storage_texture(gpu::texture_dimension::cube, face_size, true);
         m_brdf_lut = storage_texture(gpu::texture_dimension::d2, brdf_size, false);
@@ -564,7 +560,6 @@ namespace rendering_engine
         const uint32_t prefilter_mips =
             1u + static_cast<uint32_t>(std::floor(std::log2(static_cast<float>(face_size))));
 
-        // ---- bind groups ------------------------------------------------
         const auto sampler_binding = [](uint32_t binding, gpu::texture tex)
         {
             gpu::binding_value v{};
@@ -632,7 +627,6 @@ namespace rendering_engine
             prefilter_sizes.push_back(std::max(1u, face_size >> mip));
         }
 
-        // ---- dispatch ---------------------------------------------------
         constexpr uint32_t local = 8;
         const auto groups_for = [](uint32_t extent) { return (extent + local - 1) / local; };
 

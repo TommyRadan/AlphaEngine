@@ -27,13 +27,13 @@ namespace rendering_engine
     /**
      * @brief Runtime-tunable bloom parameters (@ref post_settings::bloom).
      *
-     * Mirrors the fixed values @ref bloom_pass used to bake once at
-     * construction: a threshold of 1.0 HDR luminance, a soft knee half the
-     * threshold wide, and an overall glow strength of 0.6 spread across the
-     * blur pyramid's mips. @ref bloom_pass::record rewrites its UBOs only
-     * when a field here differs from what it last uploaded, and a resize
-     * (which rebuilds the whole pyramid) rebakes from whatever was last
-     * applied rather than these compiled-in defaults.
+     * The defaults match @ref bloom_pass's compiled-in values: a threshold
+     * of 1.0 HDR luminance, a soft knee half the threshold wide, and an
+     * overall glow strength of 0.6 spread across the blur pyramid's mips.
+     * @ref bloom_pass::record rewrites its UBOs only when a field here
+     * differs from what it last uploaded, and a resize (which rebuilds the
+     * whole pyramid) rebakes from whatever was last applied rather than
+     * these defaults.
      */
     struct bloom_settings
     {

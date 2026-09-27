@@ -130,7 +130,7 @@ namespace rendering_engine::editor
         // it was selected is never read.
         runtime::node* g_selected_node = nullptr;
 
-        // Transform gizmo (#220) state, shared between the Inspector's mode
+        // Transform gizmo state, shared between the Inspector's mode
         // toggle, the W/E/R shortcuts and the gizmo drawn over the viewport
         // so all three agree on what is currently shown.
         ImGuizmo::OPERATION g_gizmo_operation = ImGuizmo::TRANSLATE;
@@ -433,7 +433,7 @@ namespace rendering_engine::editor
             return buffer;
         }
 
-        // The log ring buffer (#195) with a minimum-level and a
+        // The log ring buffer with a minimum-level and a
         // category-substring filter, auto-scroll and a clear button.
         void draw_console_window()
         {
@@ -825,7 +825,7 @@ namespace rendering_engine::editor
             }
         }
 
-        // Mode toggle and optional snapping for the transform gizmo (#220)
+        // Mode toggle and optional snapping for the transform gizmo
         // drawn over the viewport by draw_gizmo. The W/E/R shortcuts
         // (handle_gizmo_shortcuts) change the same g_gizmo_operation, so
         // the radio buttons here always reflect whichever one fired last.
@@ -1003,7 +1003,7 @@ namespace rendering_engine::editor
             return dockspace_id;
         }
 
-        // -- Transform gizmo (#220) -------------------------------------------
+        // -- Transform gizmo ---------------------------------------------
 
         // Splits a world (or local) matrix back into position, orientation
         // and scale, so a gizmo edit — which only ever produces a matrix —

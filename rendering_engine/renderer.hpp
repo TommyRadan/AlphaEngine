@@ -570,8 +570,8 @@ namespace rendering_engine
         // @ref set_post_settings and copied into
         // @ref frame_context::post each @ref render so the post passes
         // can read the fields they own. Seeded by @ref init from
-        // @c core::settings::post, whose defaults match what each pass
-        // baked in before either existed.
+        // @c core::settings::post, whose defaults match each pass's
+        // compiled-in values.
         post_settings m_post_settings{};
 
         // Whether the depth pre-pass runs, set via @ref set_depth_prepass

@@ -15,9 +15,8 @@
  *
  * The engine installs the live device via @ref set_asset_device once the
  * renderer has brought the device up, and clears it as the device is torn
- * down. The pointer the asset layer reads is therefore exactly the engine's
- * device in a normal run, but a test can install a lightweight fake device and
- * exercise the cache with no engine, window, or backend present.
+ * down, so the pointer the asset layer reads is exactly the engine's device
+ * for as long as the engine runs.
  */
 
 #pragma once
@@ -42,8 +41,7 @@ namespace rendering_engine
 
     /**
      * @brief Installs (or clears, with @c nullptr) the device the asset layer
-     *        uses. Called by the engine around the device lifetime; tests may
-     *        install a fake device.
+     *        uses. Called by the engine around the device lifetime.
      */
     void set_asset_device(gpu::device* device);
 } // namespace rendering_engine

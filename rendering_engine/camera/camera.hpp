@@ -82,8 +82,6 @@ namespace rendering_engine
 
         const core::math::frustum get_frustum() const;
 
-        // --- Arbitration -------------------------------------------------
-
         /**
          * @brief Adds the camera to the registry as a candidate for the active
          *        camera. Attaching an already attached camera moves it to the

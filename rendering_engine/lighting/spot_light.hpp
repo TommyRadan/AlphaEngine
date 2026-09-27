@@ -45,9 +45,8 @@ namespace rendering_engine
 
         // When true this light renders a shadow map from its point of view
         // and the lit materials sample it to occlude its contribution. Only
-        // the first shadow-casting spot light is honoured today; the rest
-        // light without casting. Defaults to false so existing scenes keep
-        // their look.
+        // the first shadow-casting spot light is honoured; the rest
+        // light without casting.
         bool cast_shadow{false};
     };
 } // namespace rendering_engine
