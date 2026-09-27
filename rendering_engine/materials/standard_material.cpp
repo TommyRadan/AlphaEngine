@@ -9,13 +9,12 @@
 #include <initializer_list>
 #include <utility>
 
-#include <rendering_engine/assets/tangent.hpp>
-#include <rendering_engine/assets/texture_asset.hpp>
-#include <rendering_engine/assets/vertex.hpp>
+#include <assets/vertex.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/gpu/shader_bindings.hpp>
 #include <rendering_engine/lighting/environment_probe.hpp>
+#include <rendering_engine/resources/texture_asset.hpp>
 
 namespace
 {
@@ -29,7 +28,7 @@ namespace
     constexpr size_t material_ubo_size = 64;
 
     // Attribute location of the tangent in the position+uv+normal+tangent
-    // stream (see vertex_position_uv_normal_tangent_layout).
+    // stream (see tangent_vertex_layout).
     constexpr uint32_t tangent_location = 3;
 
     // Attribute locations of the skinned record's joint indices and
@@ -40,6 +39,23 @@ namespace
     // Every keyword the map set can turn on; the tangent flag joins them.
     constexpr uint32_t keywords_default =
         rendering_engine::keyword_bit(rendering_engine::material_keyword::has_tangents);
+
+    // Vertex-buffer layout matching the memory layout of
+    // assets::vertex_position_uv_normal_tangent. Locations: 0 position,
+    // 1 uv, 2 normal, 3 tangent.
+    rendering_engine::gpu::vertex_buffer_layout tangent_vertex_layout()
+    {
+        namespace gpu = rendering_engine::gpu;
+        using tangent_vertex = assets::vertex_position_uv_normal_tangent;
+        gpu::vertex_buffer_layout layout{};
+        layout.stride = sizeof(tangent_vertex);
+        layout.attributes.push_back({0, 3, gpu::scalar_type::float32, offsetof(tangent_vertex, pos)});
+        layout.attributes.push_back({1, 2, gpu::scalar_type::float32, offsetof(tangent_vertex, uv)});
+        layout.attributes.push_back({2, 3, gpu::scalar_type::float32, offsetof(tangent_vertex, normal)});
+        layout.attributes.push_back(
+            {tangent_location, 4, gpu::scalar_type::float32, offsetof(tangent_vertex, tangent)});
+        return layout;
+    }
 } // namespace
 
 namespace rendering_engine
@@ -55,11 +71,11 @@ namespace rendering_engine
         // attribute offsets that match vertex_position_uv_normal_tangent.
         // A variant without HAS_TANGENTS drops the tangent attribute and
         // reads the position+uv+normal prefix instead.
-        gpu::vertex_buffer_layout vertex_layout = vertex_position_uv_normal_tangent_layout();
+        gpu::vertex_buffer_layout vertex_layout = tangent_vertex_layout();
         vertex_layout.stride = 0;
         descriptor.vertex_layouts.push_back(vertex_layout);
-        descriptor.required_vertex_format = vertex_format::position_uv_normal_tangent;
-        descriptor.vertex_format_without_tangents = vertex_format::position_uv_normal;
+        descriptor.required_vertex_format = assets::vertex_format::position_uv_normal_tangent;
+        descriptor.vertex_format_without_tangents = assets::vertex_format::position_uv_normal;
         descriptor.tangent_location = tangent_location;
 
         // No per-draw bindings for a rigid draw: the model + normal matrix
@@ -74,14 +90,14 @@ namespace rendering_engine
         // vertex stage reads. Only the vertex stage declares it. Each
         // skinned draw binds a group of its own over its palette (see
         // model::collect_draw_items).
-        using skin_vertex = vertex_position_uv_normal_tangent_skin;
+        using skin_vertex = assets::vertex_position_uv_normal_tangent_skin;
         gpu::vertex_attribute joints_attribute{
             joints_location, 4, gpu::scalar_type::uint16, static_cast<uint32_t>(offsetof(skin_vertex, joints))};
         joints_attribute.normalized = false;
         descriptor.skin_attributes.push_back(joints_attribute);
         descriptor.skin_attributes.push_back(
             {weights_location, 4, gpu::scalar_type::float32, static_cast<uint32_t>(offsetof(skin_vertex, weights))});
-        descriptor.skinned_vertex_format = vertex_format::position_uv_normal_tangent_skin;
+        descriptor.skinned_vertex_format = assets::vertex_format::position_uv_normal_tangent_skin;
         gpu::bind_group_layout_entry joints_entry{gpu::shader_bindings::per_draw_joints,
                                                   gpu::binding_kind::storage_buffer};
         joints_entry.stages = gpu::shader_stages_vertex;
@@ -155,7 +171,7 @@ namespace rendering_engine
         }
     }
 
-    void standard_material::set_base_color(const color& color)
+    void standard_material::set_base_color(const assets::color& color)
     {
         m_base_color = color;
         upload_params();
@@ -173,7 +189,7 @@ namespace rendering_engine
         upload_params();
     }
 
-    void standard_material::set_emissive(const color& color)
+    void standard_material::set_emissive(const assets::color& color)
     {
         m_emissive = color;
         upload_params();
@@ -185,7 +201,7 @@ namespace rendering_engine
         upload_params();
     }
 
-    void standard_material::set_albedo_map(const image& image, gpu::color_space space)
+    void standard_material::set_albedo_map(const assets::image& image, assets::color_space space)
     {
         set_slot_image(m_albedo_map, image, space);
     }
@@ -200,7 +216,7 @@ namespace rendering_engine
         clear_slot(m_albedo_map);
     }
 
-    void standard_material::set_normal_map(const image& image, gpu::color_space space)
+    void standard_material::set_normal_map(const assets::image& image, assets::color_space space)
     {
         set_slot_image(m_normal_map, image, space);
     }
@@ -215,7 +231,7 @@ namespace rendering_engine
         clear_slot(m_normal_map);
     }
 
-    void standard_material::set_metalness_map(const image& image, gpu::color_space space)
+    void standard_material::set_metalness_map(const assets::image& image, assets::color_space space)
     {
         set_slot_image(m_metalness_map, image, space);
     }
@@ -230,7 +246,7 @@ namespace rendering_engine
         clear_slot(m_metalness_map);
     }
 
-    void standard_material::set_roughness_map(const image& image, gpu::color_space space)
+    void standard_material::set_roughness_map(const assets::image& image, assets::color_space space)
     {
         set_slot_image(m_roughness_map, image, space);
     }
@@ -245,7 +261,7 @@ namespace rendering_engine
         clear_slot(m_roughness_map);
     }
 
-    void standard_material::set_occlusion_map(const image& image, gpu::color_space space)
+    void standard_material::set_occlusion_map(const assets::image& image, assets::color_space space)
     {
         set_slot_image(m_occlusion_map, image, space);
     }
@@ -260,7 +276,7 @@ namespace rendering_engine
         clear_slot(m_occlusion_map);
     }
 
-    void standard_material::set_orm_map(const image& image, gpu::color_space space)
+    void standard_material::set_orm_map(const assets::image& image, assets::color_space space)
     {
         set_slot_image(m_orm_map, image, space);
     }
@@ -281,7 +297,7 @@ namespace rendering_engine
         upload_params();
     }
 
-    void standard_material::set_emissive_map(const image& image, gpu::color_space space)
+    void standard_material::set_emissive_map(const assets::image& image, assets::color_space space)
     {
         set_slot_image(m_emissive_map, image, space);
     }
@@ -313,7 +329,7 @@ namespace rendering_engine
         slot.generation = 0;
     }
 
-    void standard_material::set_slot_image(map_slot& slot, const image& image, gpu::color_space space)
+    void standard_material::set_slot_image(map_slot& slot, const assets::image& image, assets::color_space space)
     {
         release_slot(slot);
         slot.owned = upload_map(image, space);

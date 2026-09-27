@@ -7,18 +7,18 @@
 #include <string>
 #include <vector>
 
+#include <assets/tangent.hpp>
+#include <assets/vertex.hpp>
 #include <core/log.hpp>
 #include <core/math/math.hpp>
-#include <rendering_engine/assets/asset_cache.hpp>
-#include <rendering_engine/assets/cache_key.hpp>
-#include <rendering_engine/assets/tangent.hpp>
-#include <rendering_engine/assets/vertex.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/materials/material.hpp>
 #include <rendering_engine/renderables/mesh_bounds.hpp>
 #include <rendering_engine/renderables/per_draw_ubo.hpp>
 #include <rendering_engine/renderables/vertex_format_check.hpp>
+#include <rendering_engine/resources/asset_cache.hpp>
+#include <rendering_engine/resources/cache_key.hpp>
 #include <runtime/engine.hpp>
 
 rendering_engine::circle::circle(
@@ -41,18 +41,18 @@ void rendering_engine::circle::upload()
     m_mesh = runtime::current_engine().assets->get_or_create_mesh(
         "circle:" + cache_key_number(m_radius) + ":" + cache_key_number(m_segments) + ":" +
             cache_key_number(m_theta_start) + ":" + cache_key_number(m_theta_length) + ":" +
-            vertex_format_name(vertex_format::position_uv_normal_tangent),
+            assets::vertex_format_name(assets::vertex_format::position_uv_normal_tangent),
         [this]
         {
             const unsigned int segments = m_segments < 3 ? 3 : m_segments;
 
-            std::vector<vertex_position_uv_normal> vertices;
+            std::vector<assets::vertex_position_uv_normal> vertices;
             vertices.reserve(segments + 2);
 
             const core::math::vec3 normal{0.0f, 0.0f, 1.0f};
 
             // Centre vertex.
-            vertex_position_uv_normal centre;
+            assets::vertex_position_uv_normal centre;
             centre.pos = core::math::vec3{0.0f, 0.0f, 0.0f};
             centre.uv = core::math::vec2{0.5f, 0.5f};
             centre.normal = normal;
@@ -67,7 +67,7 @@ void rendering_engine::circle::upload()
                 const float x = m_radius * std::cos(segment);
                 const float y = m_radius * std::sin(segment);
 
-                vertex_position_uv_normal vertex;
+                assets::vertex_position_uv_normal vertex;
                 vertex.pos = core::math::vec3{x, y, 0.0f};
                 vertex.uv = core::math::vec2{x / (2.0f * m_radius) + 0.5f, y / (2.0f * m_radius) + 0.5f};
                 vertex.normal = normal;
@@ -89,8 +89,8 @@ void rendering_engine::circle::upload()
             // Tangents complete the record for tangent-aware materials
             // (standard/PBR); the position/uv/normal offsets are unchanged so
             // materials that ignore the tangent still read correctly.
-            const auto tangent_vertices = generate_tangents(vertices, indices);
-            return mesh_data::from_vertices(tangent_vertices, std::move(indices));
+            const auto tangent_vertices = assets::generate_tangents(vertices, indices);
+            return assets::mesh_data::from_vertices(tangent_vertices, std::move(indices));
         });
 
     m_index_count = m_mesh->index_count;

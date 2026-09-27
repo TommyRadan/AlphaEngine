@@ -10,17 +10,17 @@
 #include <utility>
 #include <vector>
 
+#include <assets/tangent.hpp>
+#include <assets/vertex.hpp>
 #include <core/log.hpp>
 #include <core/math/math.hpp>
-#include <rendering_engine/assets/asset_cache.hpp>
-#include <rendering_engine/assets/tangent.hpp>
-#include <rendering_engine/assets/vertex.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/materials/material.hpp>
 #include <rendering_engine/renderables/mesh_bounds.hpp>
 #include <rendering_engine/renderables/per_draw_ubo.hpp>
 #include <rendering_engine/renderables/vertex_format_check.hpp>
+#include <rendering_engine/resources/asset_cache.hpp>
 #include <runtime/engine.hpp>
 
 namespace
@@ -76,7 +76,7 @@ namespace rendering_engine
         mix(m_base_indices.data(), m_base_indices.size() * sizeof(uint32_t));
         const std::string key = "polyhedron:" + std::to_string(digest) + ":r" + std::to_string(m_radius) + ":d" +
                                 std::to_string(m_detail) + ":" +
-                                vertex_format_name(vertex_format::position_uv_normal_tangent);
+                                assets::vertex_format_name(assets::vertex_format::position_uv_normal_tangent);
 
         // Build and upload through the asset cache. The builder only runs on a
         // cache miss; matching keys share one upload.
@@ -97,7 +97,7 @@ namespace rendering_engine
                 // Subdivision count per edge: 2^detail segments.
                 const unsigned int cols = 1u << m_detail;
 
-                std::vector<vertex_position_uv_normal> vertices;
+                std::vector<assets::vertex_position_uv_normal> vertices;
                 std::vector<uint32_t> indices;
 
                 // Each base triangle is subdivided into a triangular grid. We build a
@@ -141,7 +141,7 @@ namespace rendering_engine
                     // so the outward normal faces away from the centre.
                     const auto push_vertex = [&](const vec3& dir)
                     {
-                        vertex_position_uv_normal vertex;
+                        assets::vertex_position_uv_normal vertex;
                         vertex.pos = dir * m_radius;
                         vertex.normal = dir;
                         vertex.uv = spherical_uv(dir);
@@ -218,8 +218,8 @@ namespace rendering_engine
                 // Tangents complete the record for tangent-aware materials
                 // (standard/PBR); the position/uv/normal offsets are unchanged so
                 // materials that ignore the tangent still read correctly.
-                const auto tangent_vertices = generate_tangents(vertices, indices);
-                return mesh_data::from_vertices(tangent_vertices, std::move(indices));
+                const auto tangent_vertices = assets::generate_tangents(vertices, indices);
+                return assets::mesh_data::from_vertices(tangent_vertices, std::move(indices));
             });
 
         m_index_count = m_mesh->index_count;

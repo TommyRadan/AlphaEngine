@@ -4,7 +4,7 @@
 #include <rendering_engine/renderables/mesh_bounds.hpp>
 
 #include <core/math/transform.hpp>
-#include <rendering_engine/assets/mesh_asset.hpp>
+#include <rendering_engine/resources/mesh_asset.hpp>
 
 namespace rendering_engine
 {

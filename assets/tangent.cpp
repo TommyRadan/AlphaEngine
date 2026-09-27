@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2015-2026 Tomislav Radanovic
 
-#include <rendering_engine/assets/tangent.hpp>
+#include <assets/tangent.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -36,7 +36,7 @@ namespace
     }
 } // namespace
 
-namespace rendering_engine
+namespace assets
 {
     std::vector<vertex_position_uv_normal_tangent>
     generate_tangents(const std::vector<vertex_position_uv_normal>& vertices, const std::vector<uint32_t>& indices)
@@ -137,18 +137,4 @@ namespace rendering_engine
 
         return out;
     }
-
-    gpu::vertex_buffer_layout vertex_position_uv_normal_tangent_layout()
-    {
-        gpu::vertex_buffer_layout layout{};
-        layout.stride = sizeof(vertex_position_uv_normal_tangent);
-        layout.attributes.push_back(
-            {0, 3, gpu::scalar_type::float32, offsetof(vertex_position_uv_normal_tangent, pos)});
-        layout.attributes.push_back({1, 2, gpu::scalar_type::float32, offsetof(vertex_position_uv_normal_tangent, uv)});
-        layout.attributes.push_back(
-            {2, 3, gpu::scalar_type::float32, offsetof(vertex_position_uv_normal_tangent, normal)});
-        layout.attributes.push_back(
-            {3, 4, gpu::scalar_type::float32, offsetof(vertex_position_uv_normal_tangent, tangent)});
-        return layout;
-    }
-} // namespace rendering_engine
+} // namespace assets

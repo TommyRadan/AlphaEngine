@@ -5,9 +5,9 @@
 
 #include <vector>
 
+#include <assets/vertex.hpp>
 #include <core/math/math.hpp>
 #include <core/math/transform.hpp>
-#include <rendering_engine/assets/vertex.hpp>
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/renderables/per_draw_ubo.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
@@ -56,7 +56,7 @@ namespace rendering_engine
 
     private:
         material* m_material{nullptr};
-        std::vector<vertex_position_color> m_vertices;
+        std::vector<assets::vertex_position_color> m_vertices;
 
         // Object-space box over the points at the last @ref upload.
         core::math::aabb m_local_bounds{};

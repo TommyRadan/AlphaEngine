@@ -10,7 +10,7 @@
 
 namespace rendering_engine::editor
 {
-    grid_helper::grid_helper(float size, int divisions, color color, rendering_engine::color center_color)
+    grid_helper::grid_helper(float size, int divisions, assets::color color, assets::color center_color)
         : line_helper("Grid")
     {
         namespace math = core::math;

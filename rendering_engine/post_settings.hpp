@@ -167,7 +167,7 @@ namespace rendering_engine
      * tool at 16 or 32 texels per axis) reproduces that grade here.
      *
      * @ref renderer loads @ref lut through the asset cache as a
-     * @c gpu::color_space::linear texture (the stored values are already
+     * @c assets::color_space::linear texture (the stored values are already
      * the encoded output colours and must reach the shader unchanged) the
      * first frame after the path changes. An empty path, a table that
      * failed to load or is not N^2 x N, or an @ref intensity of 0 selects

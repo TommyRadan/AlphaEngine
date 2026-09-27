@@ -5,8 +5,8 @@
 
 #include <memory>
 
-#include <rendering_engine/assets/color.hpp>
-#include <rendering_engine/assets/image.hpp>
+#include <assets/color.hpp>
+#include <assets/image.hpp>
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/gpu/types.hpp>
 #include <rendering_engine/materials/material.hpp>
@@ -42,11 +42,11 @@ namespace rendering_engine
         // Base diffuse (Lambertian) colour. When a diffuse map is set
         // the sampled texel modulates this tint (white leaves it
         // unchanged). The alpha channel carries through to the output.
-        void set_diffuse(const color& color);
+        void set_diffuse(const assets::color& color);
 
         // Specular highlight colour. White gives a neutral highlight;
         // tint it to colour the reflection.
-        void set_specular(const color& color);
+        void set_specular(const assets::color& color);
 
         // Blinn-Phong specular exponent. Larger values yield a tighter,
         // sharper highlight.
@@ -58,7 +58,7 @@ namespace rendering_engine
         // was authored in: diffuse art is sRGB (the default), uploaded as
         // @c rgba8_srgb so the sampler decodes it to linear before the
         // lighting math; pass @c linear only for already-linear data.
-        void set_diffuse_map(const image& image, gpu::color_space space = gpu::color_space::srgb);
+        void set_diffuse_map(const assets::image& image, assets::color_space space = assets::color_space::srgb);
 
         // Drop the diffuse texture; the material falls back to the flat
         // diffuse tint. No-op when no map is set.
@@ -73,8 +73,8 @@ namespace rendering_engine
         // per-material UBO.
         void upload_params();
 
-        color m_diffuse{255, 255, 255, 255};
-        color m_specular{255, 255, 255, 255};
+        assets::color m_diffuse{255, 255, 255, 255};
+        assets::color m_specular{255, 255, 255, 255};
         float m_shininess{32.0f};
         gpu::buffer m_material_ubo{};
         gpu::texture m_diffuse_map{};

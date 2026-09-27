@@ -37,8 +37,8 @@ namespace rendering_engine
         vertex_layout.attributes.push_back({0, 3, gpu::scalar_type::float32, 0});
         vertex_layout.attributes.push_back({1, 3, gpu::scalar_type::float32, sizeof(float) * 3});
         descriptor.vertex_layouts.push_back(vertex_layout);
-        descriptor.required_vertex_format = vertex_format::position_color;
-        descriptor.vertex_format_without_tangents = vertex_format::position_color;
+        descriptor.required_vertex_format = assets::vertex_format::position_color;
+        descriptor.vertex_format_without_tangents = assets::vertex_format::position_color;
 
         // No per-draw bindings: the model + normal matrix are pushed
         // (per_draw_ubo.hpp), so the per-draw layout (slot 1) is empty.
@@ -82,7 +82,7 @@ namespace rendering_engine
         }
     }
 
-    void points_material::set_color(const color& color)
+    void points_material::set_color(const assets::color& color)
     {
         m_color = color;
         upload_params();
@@ -100,7 +100,7 @@ namespace rendering_engine
         upload_params();
     }
 
-    void points_material::set_sprite(const image& image, gpu::color_space space)
+    void points_material::set_sprite(const assets::image& image, assets::color_space space)
     {
         release_map(m_sprite);
         m_sprite = upload_map(image, space, gpu::address_mode::clamp_edge);

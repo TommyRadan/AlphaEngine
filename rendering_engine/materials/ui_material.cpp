@@ -62,8 +62,8 @@ namespace rendering_engine
         vertex_layout.attributes.push_back(color_attribute);
         descriptor.vertex_layouts.push_back(vertex_layout);
         // The record has no named vertex_format; the stride check covers it.
-        descriptor.required_vertex_format = vertex_format::custom;
-        descriptor.vertex_format_without_tangents = vertex_format::custom;
+        descriptor.required_vertex_format = assets::vertex_format::custom;
+        descriptor.vertex_format_without_tangents = assets::vertex_format::custom;
 
         // Slot 0 is the ui pass's per-frame group (the UiFrame block at
         // binding 0); the per-draw group at slot 1 carries the texture at
@@ -90,7 +90,7 @@ namespace rendering_engine
         descriptor.address_v = gpu::address_mode::clamp_edge;
         descriptor.address_w = gpu::address_mode::clamp_edge;
         m_white_texture = device().create_texture(descriptor);
-        const color white{255, 255, 255, 255};
+        const assets::color white{255, 255, 255, 255};
         device().write_texture(m_white_texture, &white, sizeof(white));
     }
 

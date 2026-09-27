@@ -7,7 +7,7 @@ WarningsAsErrors: ''
 # Only lint first-party subsystem headers. Vendored code (stb, cgltf)
 # and system/toolchain headers use their own naming conventions and would
 # otherwise flood diagnostics.
-HeaderFilterRegex: '[\\/](runtime|core|platform|rendering_engine|external)[\\/]'
+HeaderFilterRegex: '[\\/](runtime|core|platform|assets|rendering_engine|external)[\\/]'
 
 CheckOptions:
   # Types

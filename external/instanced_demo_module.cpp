@@ -3,14 +3,14 @@
 
 #include "api/game_module.hpp"
 
+#include <assets/color.hpp>
+#include <assets/vertex.hpp>
 #include <core/log.hpp>
 #include <core/math/math.hpp>
-#include <rendering_engine/assets/asset_cache.hpp>
-#include <rendering_engine/assets/color.hpp>
-#include <rendering_engine/assets/vertex.hpp>
 #include <rendering_engine/materials/instanced_material.hpp>
 #include <rendering_engine/renderables/instanced_mesh.hpp>
 #include <rendering_engine/renderer.hpp>
+#include <rendering_engine/resources/asset_cache.hpp>
 #include <runtime/components/renderable_component.hpp>
 #include <runtime/engine.hpp>
 
@@ -34,8 +34,7 @@ namespace
 
     // Builds a unit cube (six single-quad faces, CCW-from-outside winding)
     // in the position+uv+normal vertex format the instanced material draws.
-    void build_unit_cube(std::vector<rendering_engine::vertex_position_uv_normal>& vertices,
-                         std::vector<uint32_t>& indices)
+    void build_unit_cube(std::vector<assets::vertex_position_uv_normal>& vertices, std::vector<uint32_t>& indices)
     {
         using core::math::vec2;
         using core::math::vec3;
@@ -47,7 +46,7 @@ namespace
             {
                 for (int ix = 0; ix <= 1; ++ix)
                 {
-                    rendering_engine::vertex_position_uv_normal vertex;
+                    assets::vertex_position_uv_normal vertex;
                     vertex.pos = u_axis * (static_cast<float>(ix) - 0.5f) + v_axis * (static_cast<float>(iy) - 0.5f) +
                                  w_dir * 0.5f;
                     vertex.normal = w_dir;
@@ -127,7 +126,7 @@ namespace
 GAME_MODULE()
 {
     auto& material = runtime::current_engine().renderer->get_instanced_material();
-    material.set_color(rendering_engine::color{255, 255, 255, 255});
+    material.set_color(assets::color{255, 255, 255, 255});
 
     // Fetch the cube geometry through the asset cache so the upload is
     // shared and deduplicated by key rather than baked into this renderable.
@@ -135,10 +134,10 @@ GAME_MODULE()
         "instanced_demo:unit_cube",
         []
         {
-            std::vector<rendering_engine::vertex_position_uv_normal> vertices;
+            std::vector<assets::vertex_position_uv_normal> vertices;
             std::vector<uint32_t> indices;
             build_unit_cube(vertices, indices);
-            return rendering_engine::mesh_data::from_vertices(vertices, std::move(indices));
+            return assets::mesh_data::from_vertices(vertices, std::move(indices));
         });
 
     auto cubes = std::make_unique<rendering_engine::instanced_mesh>(&material, instance_count);
@@ -163,7 +162,7 @@ GAME_MODULE()
                 const auto r = static_cast<uint8_t>(40 + (215 * i) / (grid_side - 1));
                 const auto g = static_cast<uint8_t>(40 + (215 * j) / (grid_side - 1));
                 const auto b = static_cast<uint8_t>(40 + (215 * k) / (grid_side - 1));
-                cubes->set_instance_color(index, rendering_engine::color{r, g, b, 255});
+                cubes->set_instance_color(index, assets::color{r, g, b, 255});
             }
         }
     }

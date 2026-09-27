@@ -9,14 +9,20 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 
+#include <core/math/aabb.hpp>
 #include <rendering_engine/renderables/model.hpp>
+
+namespace assets
+{
+    struct mesh_data;
+}
 
 namespace rendering_engine
 {
     struct material;
     struct mesh_asset;
-    struct mesh_data;
 } // namespace rendering_engine
 
 namespace runtime
@@ -51,7 +57,7 @@ namespace runtime
          * Uploads the mesh immediately; the model is registered for drawing
          * later, in @ref on_attach, once the owning node is known.
          */
-        mesh_component(rendering_engine::material* material, const rendering_engine::mesh_data& mesh);
+        mesh_component(rendering_engine::material* material, const assets::mesh_data& mesh);
 
         /**
          * @brief Builds a model drawing a cached @p mesh with @p material.
@@ -127,6 +133,15 @@ namespace runtime
         }
 
         /**
+         * @brief The object-space box of the geometry the model draws, from
+         *        CPU-side data: the cached mesh's bounds, or those of the
+         *        mesh data a private upload was built from. @c std::nullopt
+         *        for a component that draws nothing, or geometry with no
+         *        vertices.
+         */
+        std::optional<core::math::aabb> local_bounds() const;
+
+        /**
          * @brief The cached mesh the model draws, or @c nullptr for an empty
          *        component or one built from a private upload.
          */
@@ -152,6 +167,9 @@ namespace runtime
         // for the cached-mesh constructor, the shared asset.
         rendering_engine::material* m_material{nullptr};
         std::shared_ptr<rendering_engine::mesh_asset> m_mesh;
+        // The bounds of a private upload's mesh data; the cached mesh
+        // carries its own.
+        std::optional<core::math::aabb> m_bounds;
         bool m_registered{false};
     };
 } // namespace runtime

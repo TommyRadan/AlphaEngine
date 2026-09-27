@@ -13,7 +13,7 @@
 #include <vector>
 
 #include <core/subscription.hpp>
-#include <rendering_engine/assets/gltf_importer.hpp>
+#include <rendering_engine/resources/gltf_model.hpp>
 
 namespace runtime
 {
@@ -28,8 +28,9 @@ namespace runtime
      * primitive carries the @ref mesh_component itself; a node with several
      * gets one child node per primitive (named @c "<node>/primitive<k>"),
      * since a node holds at most one component of a type. Primitives draw
-     * with @ref gltf_model::materials[material_index], or the model's
-     * @ref gltf_model::default_material when they name none.
+     * their uploaded mesh (@c gltf_model::meshes) with
+     * @c gltf_model::materials of their material, or the model's
+     * @c gltf_model::default_material when they name none.
      *
      * glTF is +Y up and the engine +Z up, so every root node's pose is
      * pre-rotated +90 degrees about X (glTF +Y becomes +Z, glTF +Z — the
@@ -48,21 +49,22 @@ namespace runtime
      * A skinned primitive of a node with a skin draws with the model's
      * skinned material twin. When the model has animations or skinned
      * meshes, the first spawned root also gets an @ref animator_component
-     * over @ref rendering_engine::gltf_model::node_skeleton: every spawned
-     * node is bound to its joint (a root through the same +90 degree turn),
+     * over a @c runtime::animation::skeleton built from the document: one
+     * joint per glTF node (its bind pose the node's TRS) carrying one skin
+     * per glTF skin, with one clip per glTF animation. Every spawned node
+     * is bound to its joint (a root through the same +90 degree turn),
      * every skinned mesh node to its skin, and the first clip, if any, is
      * started looping — call @c stop() or @c play() on the component to
      * change that. The animator is disabled along with that root node.
      *
      * The nodes are owned by @p parent's scene (made with
      * @c scene::create_node), and the returned vector names the spawned
-     * root nodes. The mesh and animator components draw with @p model's
-     * materials and skeleton, so the nodes must be gone before @p model is
-     * destroyed: @c destroy_node the roots (a subtree goes with its root, and
-     * frees the animator's node bindings along with it) or unload the scene
-     * first. @p parent must belong to a scene, and that scene must not be
-     * mid-traversal (the components could not be attached); otherwise
-     * nothing is spawned.
+     * root nodes. The mesh components draw with @p model's materials, so
+     * the nodes must be gone before @p model is destroyed: @c destroy_node
+     * the roots (a subtree goes with its root, and frees the animator's node
+     * bindings along with it) or unload the scene first. @p parent must
+     * belong to a scene, and that scene must not be mid-traversal (the
+     * components could not be attached); otherwise nothing is spawned.
      */
     std::vector<node*> instantiate_gltf(const rendering_engine::gltf_model& model, node& parent);
 

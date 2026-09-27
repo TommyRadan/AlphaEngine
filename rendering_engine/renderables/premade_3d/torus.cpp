@@ -7,18 +7,18 @@
 #include <string>
 #include <vector>
 
+#include <assets/tangent.hpp>
+#include <assets/vertex.hpp>
 #include <core/log.hpp>
 #include <core/math/math.hpp>
-#include <rendering_engine/assets/asset_cache.hpp>
-#include <rendering_engine/assets/cache_key.hpp>
-#include <rendering_engine/assets/tangent.hpp>
-#include <rendering_engine/assets/vertex.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/materials/material.hpp>
 #include <rendering_engine/renderables/mesh_bounds.hpp>
 #include <rendering_engine/renderables/per_draw_ubo.hpp>
 #include <rendering_engine/renderables/vertex_format_check.hpp>
+#include <rendering_engine/resources/asset_cache.hpp>
+#include <rendering_engine/resources/cache_key.hpp>
 #include <runtime/engine.hpp>
 
 rendering_engine::torus::torus(
@@ -42,14 +42,15 @@ void rendering_engine::torus::upload()
     m_mesh = runtime::current_engine().assets->get_or_create_mesh(
         "torus:" + cache_key_number(m_radius) + ":" + cache_key_number(m_tube) + ":" +
             cache_key_number(m_radial_segments) + "x" + cache_key_number(m_tubular_segments) + ":" +
-            cache_key_number(m_arc) + ":" + vertex_format_name(vertex_format::position_uv_normal_tangent),
+            cache_key_number(m_arc) + ":" +
+            assets::vertex_format_name(assets::vertex_format::position_uv_normal_tangent),
         [this]
         {
             // One extra ring/column of vertices so UVs and the seam wrap cleanly.
             const unsigned int rings = m_radial_segments + 1;
             const unsigned int columns = m_tubular_segments + 1;
 
-            std::vector<vertex_position_uv_normal> vertices;
+            std::vector<assets::vertex_position_uv_normal> vertices;
             vertices.reserve(rings * columns);
 
             constexpr float pi = 3.14159265358979323846f;
@@ -66,7 +67,7 @@ void rendering_engine::torus::upload()
                     const float sin_u = std::sin(u);
                     const float cos_u = std::cos(u);
 
-                    vertex_position_uv_normal vertex;
+                    assets::vertex_position_uv_normal vertex;
                     vertex.pos = core::math::vec3{
                         (m_radius + m_tube * cos_v) * cos_u, (m_radius + m_tube * cos_v) * sin_u, m_tube * sin_v};
 
@@ -110,8 +111,8 @@ void rendering_engine::torus::upload()
             // Tangents complete the record for tangent-aware materials
             // (standard/PBR); the position/uv/normal offsets are unchanged so
             // materials that ignore the tangent still read correctly.
-            const auto tangent_vertices = generate_tangents(vertices, indices);
-            return mesh_data::from_vertices(tangent_vertices, std::move(indices));
+            const auto tangent_vertices = assets::generate_tangents(vertices, indices);
+            return assets::mesh_data::from_vertices(tangent_vertices, std::move(indices));
         });
 
     m_index_count = m_mesh->index_count;

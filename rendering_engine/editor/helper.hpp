@@ -5,8 +5,8 @@
 
 #include <vector>
 
+#include <assets/color.hpp>
 #include <core/math/math.hpp>
-#include <rendering_engine/assets/color.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
 
 namespace rendering_engine::editor
@@ -68,7 +68,7 @@ namespace rendering_engine::editor
     protected:
         // Linear-RGB triple in [0, 1] from a 0..255 @ref color,
         // ignoring alpha.
-        static core::math::vec3 to_rgb(const color& c);
+        static core::math::vec3 to_rgb(const assets::color& c);
 
     private:
         const char* m_name;

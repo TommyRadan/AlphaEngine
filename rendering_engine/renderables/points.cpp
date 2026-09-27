@@ -3,13 +3,14 @@
 
 #include <rendering_engine/renderables/points.hpp>
 
+#include <assets/mesh_data.hpp>
 #include <core/log.hpp>
 #include <core/math/math.hpp>
-#include <rendering_engine/assets/mesh_asset.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/materials/material.hpp>
 #include <rendering_engine/renderables/per_draw_ubo.hpp>
+#include <rendering_engine/resources/mesh_asset.hpp>
 #include <runtime/engine.hpp>
 
 rendering_engine::points::points(material* mat) : m_material{mat} {}
@@ -56,12 +57,12 @@ void rendering_engine::points::set_positions(const std::vector<core::math::vec3>
 void rendering_engine::points::upload()
 {
     m_vertex_count = m_vertices.size();
-    m_vertex_stride = sizeof(vertex_position_color);
+    m_vertex_stride = sizeof(assets::vertex_position_color);
 
     // Box the staged points once per upload so world_bounds is a matrix
     // transform per frame; an empty upload leaves the cloud unbounded.
-    const auto bounds =
-        compute_position_bounds(m_vertices.data(), m_vertices.size() * sizeof(vertex_position_color), m_vertex_stride);
+    const auto bounds = assets::compute_position_bounds(
+        m_vertices.data(), m_vertices.size() * sizeof(assets::vertex_position_color), m_vertex_stride);
     m_has_local_bounds = bounds.has_value();
     m_local_bounds = bounds.value_or(core::math::aabb{});
 
@@ -80,7 +81,7 @@ void rendering_engine::points::upload()
     }
 
     gpu::buffer_descriptor vertex_descriptor{};
-    vertex_descriptor.size = m_vertices.size() * sizeof(vertex_position_color);
+    vertex_descriptor.size = m_vertices.size() * sizeof(assets::vertex_position_color);
     vertex_descriptor.usage = gpu::buffer_usage_vertex;
     vertex_descriptor.hint = gpu::buffer_usage_hint::static_data;
     vertex_descriptor.initial_data = m_vertices.data();

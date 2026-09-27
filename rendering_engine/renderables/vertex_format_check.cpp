@@ -6,20 +6,23 @@
 #include <cassert>
 
 #include <core/log.hpp>
-#include <rendering_engine/assets/mesh_asset.hpp>
 #include <rendering_engine/materials/material.hpp>
+#include <rendering_engine/resources/mesh_asset.hpp>
 
 namespace rendering_engine
 {
-    bool validate_vertex_format(
-        const material& mat, vertex_format format, uint32_t vertex_stride, const char* renderable_name, bool& reported)
+    bool validate_vertex_format(const material& mat,
+                                assets::vertex_format format,
+                                uint32_t vertex_stride,
+                                const char* renderable_name,
+                                bool& reported)
     {
-        const vertex_format required = mat.required_vertex_format();
+        const assets::vertex_format required = mat.required_vertex_format();
         const uint32_t min_stride = mat.min_vertex_stride();
 
         const bool stride_ok = vertex_stride >= min_stride;
-        const bool format_ok = format == vertex_format::custom || required == vertex_format::custom ||
-                               vertex_format_compatible(format, required);
+        const bool format_ok = format == assets::vertex_format::custom || required == assets::vertex_format::custom ||
+                               assets::vertex_format_compatible(format, required);
         if (stride_ok && format_ok)
         {
             return true;
@@ -31,9 +34,9 @@ namespace rendering_engine
             LOG_ERR("%s: vertex format %s (stride %u) cannot feed a material reading %s (needs stride >= %u); "
                     "skipping draw",
                     renderable_name,
-                    vertex_format_name(format),
+                    assets::vertex_format_name(format),
                     vertex_stride,
-                    vertex_format_name(required),
+                    assets::vertex_format_name(required),
                     min_stride);
         }
         assert(false && "mesh vertex format does not match the material's vertex layout");

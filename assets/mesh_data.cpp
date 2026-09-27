@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2015-2026 Tomislav Radanovic
 
-#include <rendering_engine/assets/mesh_asset.hpp>
+#include <assets/mesh_data.hpp>
 
 #include <cstring>
 
-#include <rendering_engine/assets/asset_device.hpp>
-#include <rendering_engine/gpu/device.hpp>
+#include <core/math/vec3.hpp>
 
-namespace rendering_engine
+namespace assets
 {
     std::optional<core::math::aabb>
     compute_position_bounds(const void* vertices, std::size_t byte_count, uint32_t vertex_stride)
@@ -39,20 +38,4 @@ namespace rendering_engine
     {
         return compute_position_bounds(vertex_bytes.data(), vertex_bytes.size(), vertex_stride);
     }
-
-    mesh_asset::~mesh_asset()
-    {
-        // Free in the reverse of the create order used by the cache, matching
-        // the premade renderables' teardown. The device outlives the cache, so
-        // it is always installed here.
-        auto& gpu = asset_device();
-        if (index_buffer.valid())
-        {
-            gpu.destroy(index_buffer);
-        }
-        if (vertex_buffer.valid())
-        {
-            gpu.destroy(vertex_buffer);
-        }
-    }
-} // namespace rendering_engine
+} // namespace assets

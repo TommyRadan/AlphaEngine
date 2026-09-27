@@ -13,7 +13,7 @@
 #include <cstdint>
 #include <vector>
 
-#include <rendering_engine/assets/image.hpp>
+#include <assets/image.hpp>
 #include <rendering_engine/gpu/handle.hpp>
 
 namespace rendering_engine
@@ -54,7 +54,7 @@ namespace rendering_engine
         // Build from six LDR face images in the same order. Each image's
         // sRGB texels are decoded to linear radiance before convolution,
         // so ordinary 8-bit skybox PNGs drop straight in.
-        explicit environment_probe(const std::array<image, 6>& faces);
+        explicit environment_probe(const std::array<assets::image, 6>& faces);
 
         ~environment_probe();
 

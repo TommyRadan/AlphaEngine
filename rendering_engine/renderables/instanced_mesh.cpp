@@ -6,13 +6,14 @@
 #include <array>
 #include <cstdint>
 
+#include <assets/mesh_data.hpp>
 #include <core/log.hpp>
-#include <rendering_engine/assets/mesh_asset.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/materials/instanced_material.hpp>
 #include <rendering_engine/materials/material.hpp>
 #include <rendering_engine/renderables/vertex_format_check.hpp>
+#include <rendering_engine/resources/mesh_asset.hpp>
 #include <runtime/engine.hpp>
 
 namespace
@@ -59,7 +60,7 @@ rendering_engine::instanced_mesh::~instanced_mesh()
     }
 }
 
-void rendering_engine::instanced_mesh::upload_geometry(const std::vector<vertex_position_uv_normal>& vertices,
+void rendering_engine::instanced_mesh::upload_geometry(const std::vector<assets::vertex_position_uv_normal>& vertices,
                                                        const std::vector<uint32_t>& indices)
 {
     if (vertices.empty() || indices.empty())
@@ -69,13 +70,13 @@ void rendering_engine::instanced_mesh::upload_geometry(const std::vector<vertex_
     }
 
     m_index_count = static_cast<uint32_t>(indices.size());
-    m_vertex_stride = sizeof(vertex_position_uv_normal);
-    m_vertex_format = vertex_format::position_uv_normal;
+    m_vertex_stride = sizeof(assets::vertex_position_uv_normal);
+    m_vertex_format = assets::vertex_format::position_uv_normal;
     m_vertex_format_reported = false;
     m_indirect_dirty = true;
 
-    const auto bounds =
-        compute_position_bounds(vertices.data(), vertices.size() * sizeof(vertex_position_uv_normal), m_vertex_stride);
+    const auto bounds = assets::compute_position_bounds(
+        vertices.data(), vertices.size() * sizeof(assets::vertex_position_uv_normal), m_vertex_stride);
     m_has_local_bounds = bounds.has_value();
     m_local_bounds = bounds.value_or(core::math::aabb{});
     m_world_bounds_dirty = true;
@@ -83,7 +84,7 @@ void rendering_engine::instanced_mesh::upload_geometry(const std::vector<vertex_
     auto& gpu = *runtime::current_engine().gpu;
 
     gpu::buffer_descriptor vertex_descriptor{};
-    vertex_descriptor.size = vertices.size() * sizeof(vertex_position_uv_normal);
+    vertex_descriptor.size = vertices.size() * sizeof(assets::vertex_position_uv_normal);
     vertex_descriptor.usage = gpu::buffer_usage_vertex;
     vertex_descriptor.hint = gpu::buffer_usage_hint::static_data;
     vertex_descriptor.initial_data = vertices.data();
@@ -172,7 +173,7 @@ void rendering_engine::instanced_mesh::set_instance_transform(uint32_t index, co
     m_world_bounds_dirty = true;
 }
 
-void rendering_engine::instanced_mesh::set_instance_color(uint32_t index, const color& color)
+void rendering_engine::instanced_mesh::set_instance_color(uint32_t index, const assets::color& color)
 {
     if (index >= m_capacity)
     {

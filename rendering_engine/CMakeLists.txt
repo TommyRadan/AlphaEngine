@@ -14,7 +14,6 @@ target_sources(AlphaEngine PRIVATE
     renderer.hpp
 )
 
-add_subdirectory(assets)
 add_subdirectory(camera)
 add_subdirectory(editor)
 add_subdirectory(gpu)
@@ -22,3 +21,4 @@ add_subdirectory(lighting)
 add_subdirectory(materials)
 add_subdirectory(passes)
 add_subdirectory(renderables)
+add_subdirectory(resources)

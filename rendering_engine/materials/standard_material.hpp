@@ -7,8 +7,8 @@
 
 #include <cstdint>
 
-#include <rendering_engine/assets/color.hpp>
-#include <rendering_engine/assets/image.hpp>
+#include <assets/color.hpp>
+#include <assets/image.hpp>
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/gpu/types.hpp>
 #include <rendering_engine/materials/material.hpp>
@@ -71,7 +71,7 @@ namespace rendering_engine
         // texel modulates this tint (white leaves it unchanged). The
         // alpha channel, times @ref material_params::opacity, is the
         // output alpha.
-        void set_base_color(const color& color);
+        void set_base_color(const assets::color& color);
 
         // Metalness in [0, 1]. 0 is a dielectric (plastic, wood), 1 is a
         // raw metal whose diffuse term vanishes and whose specular tints
@@ -84,13 +84,13 @@ namespace rendering_engine
 
         // Emissive colour added after shading (unaffected by lights).
         // Black (the default) emits nothing.
-        void set_emissive(const color& color);
+        void set_emissive(const assets::color& color);
 
         // Scalar multiplier on the emissive colour.
         void set_emissive_intensity(float intensity);
 
         // Each set_*_map takes the colour space the image was authored
-        // in and uploads the matching RGBA8 format (@ref gpu::rgba8_format):
+        // in and uploads the matching RGBA8 format (@ref rgba8_format):
         // colour maps default to sRGB so the sampler decodes them to
         // linear before the PBR math, data maps default to linear so their
         // bytes are read as-is. Override only when an asset breaks the
@@ -110,7 +110,7 @@ namespace rendering_engine
         // base colour and its alpha the output alpha. Replaces any
         // previous map and rebuilds the per-material bind group. Colour
         // data: sRGB by default.
-        void set_albedo_map(const image& image, gpu::color_space space = gpu::color_space::srgb);
+        void set_albedo_map(const assets::image& image, assets::color_space space = assets::color_space::srgb);
         void set_albedo_map(std::shared_ptr<texture_asset> texture);
         void clear_albedo_map();
 
@@ -118,21 +118,21 @@ namespace rendering_engine
         // through the per-vertex TBN basis. Sampled only while
         // @ref set_tangents is on (the default). Vector data: linear by
         // default (an sRGB decode would bend the normals).
-        void set_normal_map(const image& image, gpu::color_space space = gpu::color_space::linear);
+        void set_normal_map(const assets::image& image, assets::color_space space = assets::color_space::linear);
         void set_normal_map(std::shared_ptr<texture_asset> texture);
         void clear_normal_map();
 
         // Bind a metalness map; its red channel multiplies the metalness
         // scalar. Scalar data: linear by default. Ignored while an ORM
         // map is bound.
-        void set_metalness_map(const image& image, gpu::color_space space = gpu::color_space::linear);
+        void set_metalness_map(const assets::image& image, assets::color_space space = assets::color_space::linear);
         void set_metalness_map(std::shared_ptr<texture_asset> texture);
         void clear_metalness_map();
 
         // Bind a roughness map; its red channel multiplies the roughness
         // scalar. Scalar data: linear by default. Ignored while an ORM
         // map is bound.
-        void set_roughness_map(const image& image, gpu::color_space space = gpu::color_space::linear);
+        void set_roughness_map(const assets::image& image, assets::color_space space = assets::color_space::linear);
         void set_roughness_map(std::shared_ptr<texture_asset> texture);
         void clear_roughness_map();
 
@@ -140,7 +140,7 @@ namespace rendering_engine
         // ambient (indirect) term, weighted by @ref set_occlusion_strength.
         // Scalar data: linear by default. Overrides the packed ORM map's
         // R channel while both are bound.
-        void set_occlusion_map(const image& image, gpu::color_space space = gpu::color_space::linear);
+        void set_occlusion_map(const assets::image& image, assets::color_space space = assets::color_space::linear);
         void set_occlusion_map(std::shared_ptr<texture_asset> texture);
         void clear_occlusion_map();
 
@@ -151,7 +151,7 @@ namespace rendering_engine
         // source unless a separate occlusion map is bound; a packed map
         // whose R carries no occlusion is muted with
         // @ref set_occlusion_strength(0). Data: linear by default.
-        void set_orm_map(const image& image, gpu::color_space space = gpu::color_space::linear);
+        void set_orm_map(const assets::image& image, assets::color_space space = assets::color_space::linear);
         void set_orm_map(std::shared_ptr<texture_asset> texture);
         void clear_orm_map();
 
@@ -162,7 +162,7 @@ namespace rendering_engine
 
         // Bind an emissive map; multiplied into the emissive term. Colour
         // data: sRGB by default.
-        void set_emissive_map(const image& image, gpu::color_space space = gpu::color_space::srgb);
+        void set_emissive_map(const assets::image& image, assets::color_space space = assets::color_space::srgb);
         void set_emissive_map(std::shared_ptr<texture_asset> texture);
         void clear_emissive_map();
 
@@ -226,8 +226,8 @@ namespace rendering_engine
         // material UBO.
         void upload_params();
 
-        color m_base_color{255, 255, 255, 255};
-        color m_emissive{0, 0, 0, 255};
+        assets::color m_base_color{255, 255, 255, 255};
+        assets::color m_emissive{0, 0, 0, 255};
         float m_metalness{0.0f};
         float m_roughness{1.0f};
         float m_emissive_intensity{1.0f};
@@ -251,7 +251,7 @@ namespace rendering_engine
 
         // Drop whatever @p slot holds (freeing a private upload).
         void release_slot(map_slot& slot);
-        void set_slot_image(map_slot& slot, const image& image, gpu::color_space space);
+        void set_slot_image(map_slot& slot, const assets::image& image, assets::color_space space);
         void set_slot_asset(map_slot& slot, std::shared_ptr<texture_asset> texture);
         void clear_slot(map_slot& slot);
 

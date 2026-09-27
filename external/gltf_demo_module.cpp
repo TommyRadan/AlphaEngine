@@ -8,8 +8,8 @@
  *        own and frames it with the camera.
  *
  * Set ALPHAENGINE_GLTF to a model path before launching. The model is loaded
- * in the background through rendering_engine::load_gltf_async (parsed and
- * decoded on the worker pool; meshes and textures through the asset cache,
+ * in the background through the asset cache's load_gltf_async (parsed and
+ * decoded on the worker pool; meshes and textures uploaded through the cache,
  * one standard_material per glTF material) and, once it is ready,
  * instantiated with runtime::instantiate_gltf_when_ready, which rotates the
  * +Y-up file into the engine's +Z-up world. A directional key light plus a
@@ -23,11 +23,13 @@
 
 #include <core/log.hpp>
 #include <core/math/math.hpp>
-#include <rendering_engine/assets/gltf_importer.hpp>
 #include <rendering_engine/camera/camera.hpp>
 #include <rendering_engine/camera/camera_registry.hpp>
 #include <rendering_engine/lighting/ambient_light.hpp>
 #include <rendering_engine/lighting/directional_light.hpp>
+#include <rendering_engine/resources/asset_cache.hpp>
+#include <rendering_engine/resources/gltf_model.hpp>
+#include <rendering_engine/resources/mesh_asset.hpp>
 #include <runtime/components/camera_component.hpp>
 #include <runtime/components/light_component.hpp>
 #include <runtime/engine.hpp>
@@ -51,21 +53,21 @@ namespace
     constexpr float k_half_sqrt2 = 0.70710678118f;
     constexpr math::quat k_gltf_to_engine{k_half_sqrt2, k_half_sqrt2, 0.0f, 0.0f};
 
-    math::mat4 local_matrix(const rendering_engine::gltf_node& node)
+    math::mat4 local_matrix(const assets::gltf_node& node)
     {
         return math::translate(node.translation) * math::to_mat4(node.rotation) * math::scale(node.scale);
     }
 
     // The node's matrix in the file's own (+Y up) space, composed up the
     // parent chain.
-    math::mat4 file_space_matrix(const rendering_engine::gltf_model& model, std::size_t index)
+    math::mat4 file_space_matrix(const assets::gltf_document& document, std::size_t index)
     {
-        math::mat4 result = local_matrix(model.nodes[index]);
-        std::size_t parent = model.nodes[index].parent;
-        while (parent != rendering_engine::gltf_npos)
+        math::mat4 result = local_matrix(document.nodes[index]);
+        std::size_t parent = document.nodes[index].parent;
+        while (parent != assets::gltf_npos)
         {
-            result = local_matrix(model.nodes[parent]) * result;
-            parent = model.nodes[parent].parent;
+            result = local_matrix(document.nodes[parent]) * result;
+            parent = document.nodes[parent].parent;
         }
         return result;
     }
@@ -76,21 +78,22 @@ namespace
     // primitive with bounds.
     bool compute_bounds(const rendering_engine::gltf_model& model, math::aabb& bounds)
     {
+        const assets::gltf_document& document = model.document;
         bool has_bounds = false;
-        for (std::size_t n = 0; n < model.nodes.size(); ++n)
+        for (std::size_t n = 0; n < document.nodes.size(); ++n)
         {
-            if (model.nodes[n].primitives.empty())
+            if (document.nodes[n].primitives.empty())
             {
                 continue;
             }
-            const math::mat4 world = file_space_matrix(model, n);
-            for (const std::size_t p : model.nodes[n].primitives)
+            const math::mat4 world = file_space_matrix(document, n);
+            for (const std::size_t p : document.nodes[n].primitives)
             {
-                if (model.primitives[p].mesh == nullptr)
+                if (p >= model.meshes.size() || model.meshes[p] == nullptr)
                 {
                     continue;
                 }
-                const math::aabb& box = model.primitives[p].mesh->bounds;
+                const math::aabb& box = model.meshes[p]->bounds;
                 for (int corner = 0; corner < 8; ++corner)
                 {
                     const math::vec3 local{(corner & 1) != 0 ? box.max.x : box.min.x,
@@ -205,7 +208,7 @@ GAME_MODULE()
     // materials follow on the main thread in the asset cache's pump, and the
     // showcase spawns the nodes on the first tick after that. A load that
     // fails is logged by the cache and spawns nothing.
-    std::shared_ptr<rendering_engine::gltf_asset> model = rendering_engine::load_gltf_async(path);
+    std::shared_ptr<rendering_engine::gltf_asset> model = runtime::current_engine().assets->load_gltf_async(path);
 
     // The model goes into a scene of its own, which the engine unloads on
     // shutdown: the spawned nodes first, then the showcase holding the model

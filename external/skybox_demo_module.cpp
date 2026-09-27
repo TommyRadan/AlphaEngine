@@ -10,9 +10,9 @@
 #include <utility>
 #include <vector>
 
+#include <assets/color.hpp>
 #include <core/log.hpp>
 #include <core/math/math.hpp>
-#include <rendering_engine/assets/color.hpp>
 #include <rendering_engine/lighting/directional_light.hpp>
 #include <rendering_engine/lighting/environment_probe.hpp>
 #include <rendering_engine/materials/standard_material.hpp>
@@ -202,8 +202,7 @@ GAME_MODULE()
             // Crisp mirror at the left, fully rough at the right.
             const float roughness = 0.05f + 0.95f * static_cast<float>(col) / static_cast<float>(grid_columns - 1);
             material->set_roughness(roughness);
-            material->set_base_color(metal ? rendering_engine::color{245, 245, 245, 255}
-                                           : rendering_engine::color{220, 70, 50, 255});
+            material->set_base_color(metal ? assets::color{245, 245, 245, 255} : assets::color{220, 70, 50, 255});
 
             const float y = (static_cast<float>(col) - static_cast<float>(grid_columns - 1) * 0.5f) * grid_spacing;
             const float z = (static_cast<float>(grid_rows - 1) * 0.5f - static_cast<float>(row)) * grid_row_height;
@@ -220,7 +219,7 @@ GAME_MODULE()
     rendering_engine::standard_material* ground_material = sky->make_material();
     ground_material->set_metalness(0.0f);
     ground_material->set_roughness(0.9f);
-    ground_material->set_base_color(rendering_engine::color{180, 180, 185, 255});
+    ground_material->set_base_color(assets::color{180, 180, 185, 255});
     spawn_prop(scene,
                demo,
                math::vec3{0.0f, 0.0f, ground_z},

@@ -2,9 +2,9 @@
 // Copyright (c) 2015-2026 Tomislav Radanovic
 
 /**
- * @file mesh_asset.hpp
- * @brief Shared GPU geometry: a vertex (and optional index) buffer pair owned
- *        through a reference-counted asset handle.
+ * @file mesh_data.hpp
+ * @brief CPU-side geometry: interleaved vertex records of any layout, their
+ *        optional indices and object-space bounds.
  */
 
 #pragma once
@@ -13,15 +13,14 @@
 #include <cstdint>
 #include <cstring>
 #include <optional>
-#include <string>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
+#include <assets/vertex.hpp>
 #include <core/math/aabb.hpp>
-#include <rendering_engine/assets/vertex.hpp>
-#include <rendering_engine/gpu/handle.hpp>
 
-namespace rendering_engine
+namespace assets
 {
     /**
      * @brief Object-space box enclosing the positions of an interleaved
@@ -37,17 +36,18 @@ namespace rendering_engine
     compute_position_bounds(const void* vertices, std::size_t byte_count, uint32_t vertex_stride);
 
     /**
-     * @brief CPU-side geometry handed to @ref asset_cache::get_or_create_mesh.
+     * @brief CPU-side geometry, as built by a procedural builder or an
+     *        importer and uploaded by the renderer's asset cache.
      *
      * Layout-agnostic: vertices are stored as raw interleaved bytes plus a
-     * @ref vertex_stride, so a cached mesh is not tied to one vertex format
+     * @ref vertex_stride, so the geometry is not tied to one vertex format
      * (position+uv+normal, +tangent, or a custom importer's record all work).
      * @ref format names the record layout when it is one of the engine's
      * vertex structs so renderables can check it against the material that
-     * draws it; raw importer records leave it @c custom. The builder fills
-     * this and the cache uploads it once. @ref indices may be left empty for
-     * non-indexed geometry, in which case the resulting @ref mesh_asset
-     * carries only a vertex buffer.
+     * draws it; raw importer records leave it @c custom. @ref indices may be
+     * left empty for non-indexed geometry. @ref bounds, or the box
+     * @ref compute_bounds derives, is the CPU-side extent world systems such
+     * as physics size themselves to.
      */
     struct mesh_data
     {
@@ -71,12 +71,11 @@ namespace rendering_engine
         vertex_format format{vertex_format::custom};
 
         // Optional object-space bounds supplied by the builder. When unset
-        // the cache derives them via @ref compute_bounds, which assumes a
+        // they are derived via @ref compute_bounds, which assumes a
         // @c vec3 position at offset 0 of every record — true of every
         // named format. A @c custom record that does not lead with its
         // position must fill this in (an importer already knows its
-        // extents) or the cached box, and any culling based on it, is
-        // wrong.
+        // extents) or the box, and any culling based on it, is wrong.
         std::optional<core::math::aabb> bounds;
 
         /**
@@ -115,58 +114,4 @@ namespace rendering_engine
             return data;
         }
     };
-
-    /**
-     * @brief A vertex/index buffer pair uploaded to the GPU exactly once and
-     *        shared between every renderable that references the same key.
-     *
-     * Produced by @ref asset_cache::get_or_create_mesh and handed out as a
-     * @c std::shared_ptr. The destructor releases both GPU buffers, so the
-     * geometry lives exactly as long as the last live handle. This is what lets
-     * many instances of identical procedural geometry (the cube lattice, the
-     * premade sphere/box renderables) share one upload rather than each
-     * uploading its own copy.
-     *
-     * Non-copyable and non-movable: each GPU buffer has a single owner and is
-     * freed exactly once in the destructor.
-     */
-    struct mesh_asset
-    {
-        mesh_asset() = default;
-        ~mesh_asset();
-
-        mesh_asset(const mesh_asset&) = delete;
-        mesh_asset& operator=(const mesh_asset&) = delete;
-        mesh_asset(mesh_asset&&) = delete;
-        mesh_asset& operator=(mesh_asset&&) = delete;
-
-        gpu::buffer vertex_buffer{};
-        gpu::buffer index_buffer{};
-        uint32_t vertex_count{0};
-        uint32_t index_count{0};
-
-        // Bytes per vertex in @ref vertex_buffer; carried so consumers set their
-        // draw-item vertex stride without assuming a fixed vertex format.
-        uint32_t vertex_stride{0};
-
-        // Record layout of @ref vertex_buffer, copied from the
-        // @ref mesh_data that built it. Renderables compare it against the
-        // material's @c required_vertex_format before emitting a draw so a
-        // pipeline never fetches attributes the record does not carry.
-        vertex_format format{vertex_format::custom};
-
-        // Object-space bounds of @ref vertex_buffer: the builder-supplied
-        // @ref mesh_data::bounds when present, otherwise derived from the
-        // positions at upload. Renderables transform it by their world
-        // matrix to answer @ref renderable::world_bounds, so the passes can
-        // frustum-cull them. A zero box for empty geometry (which draws
-        // nothing anyway).
-        core::math::aabb bounds{};
-
-        // The structural key @ref asset_cache::get_or_create_mesh cached the
-        // asset under, or empty for one made outside the cache. It names the
-        // geometry beyond this process: a scene file stores it as the
-        // mesh's reference and resolves it through the cache on load.
-        std::string key;
-    };
-} // namespace rendering_engine
+} // namespace assets

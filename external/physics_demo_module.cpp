@@ -3,8 +3,8 @@
 
 #include "api/game_module.hpp"
 
+#include <assets/color.hpp>
 #include <core/math/math.hpp>
-#include <rendering_engine/assets/color.hpp>
 #include <rendering_engine/materials/standard_material.hpp>
 #include <rendering_engine/renderables/premade_3d/box.hpp>
 #include <rendering_engine/renderer.hpp>
@@ -59,7 +59,7 @@ namespace
     // Owns the materials and drops the crates, now and every drop_period.
     struct box_drop final : runtime::behavior
     {
-        rendering_engine::standard_material* make_material(const rendering_engine::color& base)
+        rendering_engine::standard_material* make_material(const assets::color& base)
         {
             auto material = runtime::current_engine().renderer->create_standard_material();
             material->set_base_color(base);
@@ -119,15 +119,14 @@ GAME_MODULE()
     }
 
     auto pedestal_box = std::make_unique<rendering_engine::box>(
-        dropper->make_material(rendering_engine::color{150, 150, 160, 255}), 3.0f, 3.0f, pedestal_height);
+        dropper->make_material(assets::color{150, 150, 160, 255}), 3.0f, 3.0f, pedestal_height);
     pedestal_box->upload();
     runtime::node& pedestal = scene.create_node("pedestal", &demo);
     pedestal.transform.set_position(pedestal_center);
     pedestal.add_component(runtime::renderable_component{std::move(pedestal_box)});
     pedestal.add_component(runtime::collider_component{});
 
-    rendering_engine::standard_material* crate_material =
-        dropper->make_material(rendering_engine::color{230, 126, 34, 255});
+    rendering_engine::standard_material* crate_material = dropper->make_material(assets::color{230, 126, 34, 255});
     for (std::size_t i = 0; i < drop_offsets.size(); ++i)
     {
         auto crate_box = std::make_unique<rendering_engine::box>(crate_material, crate_size, crate_size, crate_size);

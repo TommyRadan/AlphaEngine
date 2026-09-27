@@ -7,18 +7,18 @@
 #include <string>
 #include <vector>
 
+#include <assets/tangent.hpp>
+#include <assets/vertex.hpp>
 #include <core/log.hpp>
 #include <core/math/math.hpp>
-#include <rendering_engine/assets/asset_cache.hpp>
-#include <rendering_engine/assets/cache_key.hpp>
-#include <rendering_engine/assets/tangent.hpp>
-#include <rendering_engine/assets/vertex.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/materials/material.hpp>
 #include <rendering_engine/renderables/mesh_bounds.hpp>
 #include <rendering_engine/renderables/per_draw_ubo.hpp>
 #include <rendering_engine/renderables/vertex_format_check.hpp>
+#include <rendering_engine/resources/asset_cache.hpp>
+#include <rendering_engine/resources/cache_key.hpp>
 #include <runtime/engine.hpp>
 
 rendering_engine::box::box(material* mat,
@@ -49,13 +49,14 @@ void rendering_engine::box::upload()
     m_mesh = runtime::current_engine().assets->get_or_create_mesh(
         "box:" + cache_key_number(m_width) + "x" + cache_key_number(m_height) + "x" + cache_key_number(m_depth) + ":" +
             cache_key_number(m_width_segments) + "x" + cache_key_number(m_height_segments) + "x" +
-            cache_key_number(m_depth_segments) + ":" + vertex_format_name(vertex_format::position_uv_normal_tangent),
+            cache_key_number(m_depth_segments) + ":" +
+            assets::vertex_format_name(assets::vertex_format::position_uv_normal_tangent),
         [this]
         {
             using core::math::vec2;
             using core::math::vec3;
 
-            std::vector<vertex_position_uv_normal> vertices;
+            std::vector<assets::vertex_position_uv_normal> vertices;
             std::vector<uint32_t> indices;
 
             // Builds one tessellated, axis-aligned face as a grid of
@@ -90,7 +91,7 @@ void rendering_engine::box::upload()
                         const float tx = static_cast<float>(ix) / static_cast<float>(grid_u);
                         const float u_pos = tx * u_len - half_u;
 
-                        vertex_position_uv_normal vertex;
+                        assets::vertex_position_uv_normal vertex;
                         vertex.pos = u_axis * u_pos + v_axis * v_pos + w_dir * w_off;
                         vertex.normal = w_dir;
                         vertex.uv = vec2{tx, 1.0f - ty};
@@ -147,8 +148,8 @@ void rendering_engine::box::upload()
             // Tangents complete the record for tangent-aware materials
             // (standard/PBR); the position/uv/normal offsets are unchanged so
             // materials that ignore the tangent still read correctly.
-            const auto tangent_vertices = generate_tangents(vertices, indices);
-            return mesh_data::from_vertices(tangent_vertices, std::move(indices));
+            const auto tangent_vertices = assets::generate_tangents(vertices, indices);
+            return assets::mesh_data::from_vertices(tangent_vertices, std::move(indices));
         });
 
     m_index_count = m_mesh->index_count;

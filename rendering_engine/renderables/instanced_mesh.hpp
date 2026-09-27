@@ -7,9 +7,9 @@
 #include <memory>
 #include <vector>
 
+#include <assets/color.hpp>
+#include <assets/vertex.hpp>
 #include <core/math/math.hpp>
-#include <rendering_engine/assets/color.hpp>
-#include <rendering_engine/assets/vertex.hpp>
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
 
@@ -47,7 +47,7 @@ namespace rendering_engine
         // before the first frame. Allocates buffers owned by this renderable;
         // prefer @ref set_geometry to share a cached upload between several
         // instanced meshes.
-        void upload_geometry(const std::vector<vertex_position_uv_normal>& vertices,
+        void upload_geometry(const std::vector<assets::vertex_position_uv_normal>& vertices,
                              const std::vector<uint32_t>& indices);
 
         // Draw a mesh cached by @ref asset_cache instead of uploading a private
@@ -90,7 +90,7 @@ namespace rendering_engine
 
         // Per-instance tint, multiplied by the material's flat colour.
         // Defaults to opaque white. @p index must be < the capacity.
-        void set_instance_color(uint32_t index, const color& color);
+        void set_instance_color(uint32_t index, const assets::color& color);
 
     private:
         // Per-instance record mirrored on the CPU and uploaded into the
@@ -155,7 +155,7 @@ namespace rendering_engine
 
         // Record layout of whichever vertex buffer is drawn, checked against
         // the material before every draw (see @ref validate_vertex_format).
-        vertex_format m_vertex_format{vertex_format::custom};
+        assets::vertex_format m_vertex_format{assets::vertex_format::custom};
         bool m_vertex_format_reported{false};
     };
 } // namespace rendering_engine

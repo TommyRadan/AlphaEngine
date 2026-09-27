@@ -22,12 +22,14 @@
 #include <unordered_set>
 #include <vector>
 
-#include <rendering_engine/assets/font_asset.hpp>
-#include <rendering_engine/assets/image.hpp>
-#include <rendering_engine/assets/mesh_asset.hpp>
-#include <rendering_engine/assets/texture_asset.hpp>
-#include <rendering_engine/assets/texture_decode.hpp>
-#include <rendering_engine/gpu/types.hpp>
+#include <assets/color.hpp>
+#include <assets/gltf_importer.hpp>
+#include <assets/image.hpp>
+#include <assets/mesh_data.hpp>
+#include <assets/texture_decode.hpp>
+#include <rendering_engine/resources/font_asset.hpp>
+#include <rendering_engine/resources/mesh_asset.hpp>
+#include <rendering_engine/resources/texture_asset.hpp>
 
 namespace core
 {
@@ -42,14 +44,23 @@ namespace core
 namespace rendering_engine
 {
     struct gltf_asset;
-    struct gltf_import_options;
-    struct gltf_material_factory;
+    struct gltf_model;
+    struct renderer;
+
+    namespace gpu
+    {
+        struct device;
+    }
 
     /**
-     * @brief Owns the engine's shared asset registry.
+     * @brief Owns the engine's shared asset registry: the renderer-side
+     *        half of asset loading, which turns what the CPU asset module
+     *        (@c assets) decodes into GPU resources.
      *
      * Owned by @ref runtime::engine and brought up with the same
-     * @ref init / @ref quit shape as the other subsystems. Each loader returns
+     * @ref init / @ref quit shape as the other subsystems; @ref init hands
+     * it the gpu device every upload (and every asset's release) goes to,
+     * and the renderer glTF materials are built through. Each loader returns
      * a @c std::shared_ptr to the asset; the cache itself keeps only a matching
      * @c std::weak_ptr keyed by a normalized identity (file path, or a
      * caller-supplied structural key for procedural meshes). A second request
@@ -68,8 +79,8 @@ namespace rendering_engine
      * locale-independent and distinguishes every distinct value.
      *
      * Meshes are cached by structural key via @ref get_or_create_mesh rather
-     * than by path: procedural builders key on their parameters, and the glTF
-     * importer (@ref load_gltf) keys each primitive on the file's canonical
+     * than by path: procedural builders key on their parameters, and a glTF
+     * model (@ref load_gltf) keys each primitive on the file's canonical
      * identity plus its mesh / primitive index, so a model loaded twice shares
      * its uploads through the same @c shared_ptr / @c weak_ptr machinery.
      *
@@ -79,13 +90,14 @@ namespace rendering_engine
      * @ref pump, called once per frame from the main thread, performs the
      * device upload. A decode failure is logged and leaves the placeholder in
      * place — nothing on that path throws into the frame. glTF models load the
-     * same way (@ref load_gltf_async): the parse, image decodes and geometry
-     * build run on a worker, the uploads and materials in @ref pump.
+     * same way (@ref load_gltf_async): @c assets::import_gltf (the parse,
+     * image decodes and geometry build) runs on a worker, the uploads and
+     * materials (@ref upload_gltf) in @ref pump.
      *
      * Besides PNG / JPEG / ... (stb_image), @ref load_texture reads KTX2
      * containers through libktx, uploading their block-compressed levels as
      * they are or transcoding Basis Universal content to the best format the
-     * device samples (see @ref decode_ktx2).
+     * device samples (see @c assets::decode_ktx2).
      *
      * With @ref enable_hot_reload (the engine turns it on in debug builds for
      * the content root) @ref pump also polls a directory watcher: a texture
@@ -94,11 +106,13 @@ namespace rendering_engine
      * @c generation then moves so bound materials rebuild.
      *
      * Depends on the gpu device being live, so it is initialised after the
-     * renderer (which brings the device up) and torn down before it. The
-     * loaders and @ref pump are main-thread calls; the indices are guarded by
-     * a shared mutex so the counters and sweeps are safe from any thread,
-     * and the worker side of an asynchronous load (or reload) touches only
-     * the state its own job carries.
+     * renderer (which brings the device up) and torn down before it; every
+     * asset it hands out keeps the device it was created on and releases
+     * its resources there, so the engine drops every handle before it
+     * destroys the device. The loaders and @ref pump are main-thread calls;
+     * the indices are guarded by a shared mutex so the counters and sweeps
+     * are safe from any thread, and the worker side of an asynchronous load
+     * (or reload) touches only the state its own job carries.
      */
     struct asset_cache
     {
@@ -110,16 +124,20 @@ namespace rendering_engine
         asset_cache(const asset_cache&) = delete;
         asset_cache& operator=(const asset_cache&) = delete;
 
-        /** @brief Initializes the asset cache subsystem. */
-        void init();
+        /**
+         * @brief Initializes the asset cache subsystem against the live
+         *        @p device (every upload and every asset's release) and
+         *        @p renderer (the standard materials glTF models are drawn
+         *        with). Both must outlive every asset handed out.
+         */
+        void init(gpu::device& device, renderer& renderer);
 
         /**
          * @brief Shuts the subsystem down: stops the hot-reload watch,
          *        finishes (and discards) any in-flight asynchronous load or
          *        reload — a texture keeps the placeholder, a glTF load is
-         *        marked failed — drops the installed glTF material factory,
-         *        releases the placeholder texture and clears the cache's weak
-         *        indices.
+         *        marked failed — releases the placeholder texture, clears the
+         *        cache's weak indices and forgets the device and renderer.
          *
          * The assets themselves are owned by the @c shared_ptr handles handed
          * out to callers, not by the cache, so clearing the maps only drops
@@ -142,14 +160,14 @@ namespace rendering_engine
          * @brief Returns the texture decoded from @p path, loading it on a miss.
          *
          * On a cache miss the image is read through the VFS and decoded (via
-         * @ref image), a 2D RGBA8 texture with a full mip chain is
+         * @c assets::image), a 2D RGBA8 texture with a full mip chain is
          * uploaded, and the result is cached. A @c .ktx2 file is decoded by
-         * @ref decode_ktx2 instead and uploaded with the levels it carries,
-         * in the block-compressed format it holds or was transcoded to (the
-         * colour space then picks that format's sRGB or unorm form, where it
-         * has one). @p space names the colour space the file was authored
-         * in and selects the texel format through
-         * @ref gpu::rgba8_format: @c srgb (the default, right for albedo /
+         * @c assets::decode_ktx2 instead and uploaded with the levels it
+         * carries, in the block-compressed format it holds or was transcoded
+         * to (the colour space then picks that format's sRGB or unorm form,
+         * where it has one). @p space names the colour space the file was
+         * authored in and selects the texel format through
+         * @ref rgba8_format: @c srgb (the default, right for albedo /
          * base-colour / emissive images and anything else meant for the eye)
          * uploads @c rgba8_srgb so the GPU decodes to linear on sample;
          * @c linear uploads @c rgba8_unorm for data maps (normals, metalness,
@@ -157,13 +175,13 @@ namespace rendering_engine
          * part of the cache key — like a font's size — so the same file
          * requested in both spaces is two assets, never one mis-decoded one.
          * Throws @c std::runtime_error if the file cannot be decoded
-         * (propagated from @ref image or @ref decode_ktx2) or the
-         * device refuses the upload. A request for a key whose
+         * (propagated from @c assets::image or @c assets::decode_ktx2) or
+         * the device refuses the upload. A request for a key whose
          * asynchronous load is still in flight returns that asset, still
          * resolving.
          */
         std::shared_ptr<texture_asset> load_texture(const std::filesystem::path& path,
-                                                    gpu::color_space space = gpu::color_space::srgb);
+                                                    assets::color_space space = assets::color_space::srgb);
 
         /**
          * @brief Like @ref load_texture, but reads and decodes on the worker
@@ -180,7 +198,7 @@ namespace rendering_engine
          * on a live entry returns that asset whatever its state.
          */
         std::shared_ptr<texture_asset> load_texture_async(const std::filesystem::path& path,
-                                                          gpu::color_space space = gpu::color_space::srgb);
+                                                          assets::color_space space = assets::color_space::srgb);
 
         /**
          * @brief Completes the asynchronous work whose worker half has
@@ -224,32 +242,31 @@ namespace rendering_engine
         static constexpr uint64_t k_hot_reload_interval_ms = 1000;
 
         /**
-         * @brief Installs the material factory @ref load_gltf_async builds
-         *        materials with when the caller passes none. The engine
-         *        installs a @c gltf_standard_material_factory at start-up;
-         *        @ref quit drops it.
+         * @brief Loads the .gltf / .glb at @p path on the calling thread:
+         *        @c assets::import_gltf, then @ref upload_gltf through this
+         *        cache and the renderer @ref init was given.
+         *
+         * Throws @c std::runtime_error (after logging) when the file cannot
+         * be parsed, its buffers cannot be loaded, or it fails validation.
          */
-        void set_gltf_material_factory(std::shared_ptr<gltf_material_factory> factory);
+        gltf_model load_gltf(const std::filesystem::path& path, const assets::gltf_import_options& options = {});
 
         /**
          * @brief Starts loading the .gltf / .glb at @p path in the
          *        background and returns its handle at once.
          *
-         * The worker pool runs @c begin_gltf_import (parse and validate
+         * The worker pool runs @c assets::import_gltf (parse and validate
          * through the VFS, decode every texture image, build every
-         * primitive's geometry, the nodes, skeleton and clips); once it has
-         * finished, @ref pump runs @c finish_gltf_import on the main thread
+         * primitive's geometry, the nodes, skins and animations); once it
+         * has finished, @ref pump runs @ref upload_gltf on the main thread
          * (the geometry and texture uploads through this cache, the
-         * materials through @p factory, or the installed one when null) and
-         * marks the handle @c ready, or @c failed with the reason logged. It
-         * never throws. The model shares its meshes and textures with the
-         * cache exactly as one from @c load_gltf does, and each call returns
-         * a model of its own.
+         * materials through the renderer) and marks the handle @c ready, or
+         * @c failed with the reason logged. It never throws. The model
+         * shares its meshes and textures with the cache exactly as one from
+         * @ref load_gltf does, and each call returns a model of its own.
          */
-        std::shared_ptr<gltf_asset> load_gltf_async(const std::filesystem::path& path);
         std::shared_ptr<gltf_asset> load_gltf_async(const std::filesystem::path& path,
-                                                    const gltf_import_options& options,
-                                                    std::shared_ptr<gltf_material_factory> factory = nullptr);
+                                                    const assets::gltf_import_options& options = {});
 
         /** @brief Blocks until every in-flight decode has finished (they still resolve through @ref pump). */
         void wait_pending();
@@ -280,8 +297,8 @@ namespace rendering_engine
          * @ref load_texture.
          */
         std::shared_ptr<texture_asset> load_texture_from_image(const std::string& key,
-                                                               const image& image,
-                                                               gpu::color_space space = gpu::color_space::srgb);
+                                                               const assets::image& image,
+                                                               assets::color_space space = assets::color_space::srgb);
 
         /**
          * @brief Returns the texture for the file @p path, taking the
@@ -296,8 +313,8 @@ namespace rendering_engine
          * the model's image files on a worker.
          */
         std::shared_ptr<texture_asset> adopt_texture_image(const std::filesystem::path& path,
-                                                           const image& image,
-                                                           gpu::color_space space = gpu::color_space::srgb);
+                                                           const assets::image& image,
+                                                           assets::color_space space = assets::color_space::srgb);
 
         /**
          * @brief Returns the font for @p path at @p size, loading it on a miss.
@@ -320,7 +337,7 @@ namespace rendering_engine
          * uploaded or cached, and @c nullptr is returned.
          */
         std::shared_ptr<mesh_asset> get_or_create_mesh(const std::string& key,
-                                                       const std::function<mesh_data()>& builder);
+                                                       const std::function<assets::mesh_data()>& builder);
 
         /**
          * @brief The live mesh cached under @p key, or @c nullptr; never
@@ -398,16 +415,25 @@ namespace rendering_engine
         // a hot-reloaded texture in.
         void queue_texture_decode(const std::shared_ptr<texture_asset>& asset,
                                   const std::filesystem::path& path,
-                                  gpu::color_space space,
+                                  assets::color_space space,
                                   bool reload);
 
         // Scans the watched directory (rate-limited) and queues a reload of
         // every live texture whose file changed.
         void poll_hot_reload();
 
+        // The device @ref init installed; fails loudly (a fatal log and a
+        // throw) before init or after quit, where an upload is a lifetime
+        // bug.
+        gpu::device& device();
+
         // The block-compressed families the live device samples, queried on
         // first use (main thread) and kept until quit().
-        const compressed_format_support& compressed_support();
+        const assets::compressed_format_support& compressed_support();
+
+        // Installed by init(), cleared by quit().
+        gpu::device* m_device{nullptr};
+        renderer* m_renderer{nullptr};
 
         // Guards the three indices.
         mutable std::shared_mutex m_mutex;
@@ -422,8 +448,7 @@ namespace rendering_engine
         std::condition_variable m_pending_changed;
         std::vector<std::shared_ptr<pending_job>> m_pending;
         std::size_t m_pump_count{0};
-        std::optional<compressed_format_support> m_compressed_support;
-        std::shared_ptr<gltf_material_factory> m_gltf_factory;
+        std::optional<assets::compressed_format_support> m_compressed_support;
 
         // Hot reload (main thread only): the watcher, when enabled, the time
         // of its last scan, and the assets with a reload in flight.

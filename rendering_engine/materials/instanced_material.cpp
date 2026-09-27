@@ -43,8 +43,8 @@ namespace rendering_engine
         geometry_layout.stride = 0;
         geometry_layout.step_mode = gpu::vertex_step_mode::vertex;
         geometry_layout.attributes.push_back({position_location, 3, gpu::scalar_type::float32, 0});
-        descriptor.required_vertex_format = vertex_format::position;
-        descriptor.vertex_format_without_tangents = vertex_format::position;
+        descriptor.required_vertex_format = assets::vertex_format::position;
+        descriptor.vertex_format_without_tangents = assets::vertex_format::position;
 
         // Slot 1: the per-instance stream (divisor 1). A mat4 model as four
         // vec4 columns followed by a vec4 tint, matching the record
@@ -105,7 +105,7 @@ namespace rendering_engine
         }
     }
 
-    void instanced_material::set_color(const color& color)
+    void instanced_material::set_color(const assets::color& color)
     {
         m_color = color;
         upload_params();

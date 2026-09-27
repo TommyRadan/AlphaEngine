@@ -86,6 +86,7 @@ add_executable(AlphaEngine runtime/main_loop.cpp)
 add_subdirectory(runtime)
 add_subdirectory(core)
 add_subdirectory(platform)
+add_subdirectory(assets)
 add_subdirectory(rendering_engine)
 add_subdirectory(external)
 
@@ -377,8 +378,8 @@ set_source_files_properties(
         INCLUDE_DIRECTORIES "$<TARGET_PROPERTY:Jolt,INTERFACE_INCLUDE_DIRECTORIES>")
 
 # KTX-Software — libktx's read-only library (ktx_read), fetched and built
-# statically behind the asset cache's KTX2 loader
-# (rendering_engine/assets/texture_decode): the KTX2 container, its zstd /
+# statically behind the KTX2 decoder of the CPU asset module
+# (assets/texture_decode): the KTX2 container, its zstd /
 # zlib supercompression, the Basis Universal transcoder (ETC1S / UASTC to
 # BC1-7, ASTC 4x4 or RGBA8) and the ASTC decoder it links. The tools, tests,
 # docs, bindings, ETC unpacking and the GL / Vulkan upload helpers are

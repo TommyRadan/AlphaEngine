@@ -7,8 +7,8 @@
 #include <string>
 #include <vector>
 
+#include <assets/color.hpp>
 #include <core/math/vec2.hpp>
-#include <rendering_engine/assets/color.hpp>
 #include <rendering_engine/renderables/premade_2d/rect_transform.hpp>
 #include <rendering_engine/renderables/premade_2d/sprite_batch.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
@@ -55,8 +55,8 @@ namespace rendering_engine
         const std::string& get_text() const;
 
         /** @brief The text colour: the atlas coverage becomes its alpha. */
-        void set_color(const rendering_engine::color& color);
-        const rendering_engine::color& get_color() const;
+        void set_color(const assets::color& color);
+        const assets::color& get_color() const;
 
         // Placement; see @ref rect_transform. @ref set_anchor pins both
         // anchors to @p anchor (text does not stretch).
@@ -104,7 +104,7 @@ namespace rendering_engine
         sprite_batch m_batch;
         std::string m_text;
         rect_transform m_rect;
-        rendering_engine::color m_color{255, 255, 255, 255};
+        assets::color m_color{255, 255, 255, 255};
         std::vector<glyph_quad> m_glyphs;
         // Whether the batch's quads are out of date.
         bool m_dirty{true};

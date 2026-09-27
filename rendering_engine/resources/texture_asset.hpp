@@ -15,17 +15,21 @@
 
 namespace rendering_engine
 {
+    namespace gpu
+    {
+        struct device;
+    }
+
     /**
      * @brief A GPU texture decoded from an image file and uploaded once.
      *
      * Produced by @ref asset_cache::load_texture (or, resolving in the
      * background, @ref asset_cache::load_texture_async) and handed out as a
      * @c std::shared_ptr. The destructor releases the underlying
-     * @c gpu::texture, so the GPU resource lives exactly as long as the last
-     * live handle — this is the RAII the bare @c gpu::texture handle does not
-     * have on its own. The cache itself keeps only a @c std::weak_ptr, so an
-     * asset is freed as soon as every consumer drops it. An asynchronous
-     * asset carries the cache's placeholder texture until its decode lands
+     * @c gpu::texture on the device the cache created it on, so the GPU
+     * resource lives exactly as long as the last live handle — this is the RAII the bare @c gpu::texture handle does
+     * not have on its own. The cache itself keeps only a @c std::weak_ptr, so an asset is freed as soon as every
+     * consumer drops it. An asynchronous asset carries the cache's placeholder texture until its decode lands
      * (@ref state), and a debug build's hot reload swaps in a fresh upload
      * when the file changes on disk. Either way @ref generation moves:
      * consumers that baked @ref texture into a bind group compare it with
@@ -37,7 +41,8 @@ namespace rendering_engine
      */
     struct texture_asset
     {
-        texture_asset() = default;
+        /** @brief An empty asset whose texture, once set and owned, belongs to @p device. */
+        explicit texture_asset(gpu::device& device);
         ~texture_asset();
 
         texture_asset(const texture_asset&) = delete;
@@ -49,7 +54,7 @@ namespace rendering_engine
         gpu::texture texture{};
 
         // The texel format the image was uploaded as: @c rgba8_srgb when
-        // it was loaded as @ref gpu::color_space::srgb (the sampler decodes
+        // it was loaded as @c assets::color_space::srgb (the sampler decodes
         // to linear), @c rgba8_unorm for linear data, or the block-
         // compressed format (again in the matching sRGB / unorm form where
         // it has one) a KTX2 file was uploaded or transcoded to. Consumers
@@ -90,5 +95,8 @@ namespace rendering_engine
         {
             return state == load_state::ready;
         }
+
+    private:
+        gpu::device* m_device;
     };
 } // namespace rendering_engine

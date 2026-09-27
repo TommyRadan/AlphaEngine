@@ -7,18 +7,18 @@
 #include <string>
 #include <vector>
 
+#include <assets/tangent.hpp>
+#include <assets/vertex.hpp>
 #include <core/log.hpp>
 #include <core/math/math.hpp>
-#include <rendering_engine/assets/asset_cache.hpp>
-#include <rendering_engine/assets/cache_key.hpp>
-#include <rendering_engine/assets/tangent.hpp>
-#include <rendering_engine/assets/vertex.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/materials/material.hpp>
 #include <rendering_engine/renderables/mesh_bounds.hpp>
 #include <rendering_engine/renderables/per_draw_ubo.hpp>
 #include <rendering_engine/renderables/vertex_format_check.hpp>
+#include <rendering_engine/resources/asset_cache.hpp>
+#include <rendering_engine/resources/cache_key.hpp>
 #include <runtime/engine.hpp>
 
 rendering_engine::cylinder::cylinder(material* mat,
@@ -48,12 +48,12 @@ void rendering_engine::cylinder::upload()
         "cylinder:" + cache_key_number(m_radius_top) + ":" + cache_key_number(m_radius_bottom) + ":" +
             cache_key_number(m_height) + ":" + cache_key_number(m_radial_segments) + ":" +
             cache_key_number(m_height_segments) + ":" + cache_key_number(m_open_ended) + ":" +
-            vertex_format_name(vertex_format::position_uv_normal_tangent),
+            assets::vertex_format_name(assets::vertex_format::position_uv_normal_tangent),
         [this]
         {
             constexpr float pi = 3.14159265358979323846f;
 
-            std::vector<vertex_position_uv_normal> vertices;
+            std::vector<assets::vertex_position_uv_normal> vertices;
             std::vector<uint32_t> indices;
 
             const float half_height = m_height * 0.5f;
@@ -77,7 +77,7 @@ void rendering_engine::cylinder::upload()
                     const float sin_theta = std::sin(theta);
                     const float cos_theta = std::cos(theta);
 
-                    vertex_position_uv_normal vertex;
+                    assets::vertex_position_uv_normal vertex;
                     vertex.pos = core::math::vec3{radius * sin_theta, -v * m_height + half_height, radius * cos_theta};
                     vertex.normal = core::math::normalize(core::math::vec3{sin_theta, slope, cos_theta});
                     vertex.uv = core::math::vec2{u, 1.0f - v};
@@ -127,7 +127,7 @@ void rendering_engine::cylinder::upload()
                 // with the rim vertices.
                 for (unsigned int x = 0; x < m_radial_segments; ++x)
                 {
-                    vertex_position_uv_normal vertex;
+                    assets::vertex_position_uv_normal vertex;
                     vertex.pos = core::math::vec3{0.0f, cap_y, 0.0f};
                     vertex.normal = normal;
                     vertex.uv = core::math::vec2{0.5f, 0.5f};
@@ -142,7 +142,7 @@ void rendering_engine::cylinder::upload()
                     const float sin_theta = std::sin(theta);
                     const float cos_theta = std::cos(theta);
 
-                    vertex_position_uv_normal vertex;
+                    assets::vertex_position_uv_normal vertex;
                     vertex.pos = core::math::vec3{radius * sin_theta, cap_y, radius * cos_theta};
                     vertex.normal = normal;
                     vertex.uv = core::math::vec2{cos_theta * 0.5f + 0.5f, sin_theta * 0.5f * sign + 0.5f};
@@ -180,8 +180,8 @@ void rendering_engine::cylinder::upload()
             // Tangents complete the record for tangent-aware materials
             // (standard/PBR); the position/uv/normal offsets are unchanged so
             // materials that ignore the tangent still read correctly.
-            const auto tangent_vertices = generate_tangents(vertices, indices);
-            return mesh_data::from_vertices(tangent_vertices, std::move(indices));
+            const auto tangent_vertices = assets::generate_tangents(vertices, indices);
+            return assets::mesh_data::from_vertices(tangent_vertices, std::move(indices));
         });
 
     m_index_count = m_mesh->index_count;

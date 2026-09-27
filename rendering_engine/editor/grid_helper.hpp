@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <rendering_engine/assets/color.hpp>
+#include <assets/color.hpp>
 #include <rendering_engine/editor/line_helper.hpp>
 
 namespace rendering_engine::editor
@@ -23,7 +23,7 @@ namespace rendering_engine::editor
         // construction.
         explicit grid_helper(float size = 10.0f,
                              int divisions = 10,
-                             color color = rendering_engine::color{120, 120, 120, 255},
-                             rendering_engine::color center_color = rendering_engine::color{70, 70, 70, 255});
+                             assets::color color = assets::color{120, 120, 120, 255},
+                             assets::color center_color = assets::color{70, 70, 70, 255});
     };
 } // namespace rendering_engine::editor

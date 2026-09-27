@@ -3,14 +3,14 @@
 
 #pragma once
 
-#include <rendering_engine/assets/color.hpp>
+#include <assets/color.hpp>
 
 #include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <string>
 
-namespace rendering_engine
+namespace assets
 {
     /**
      * @brief An RGBA8 pixel buffer, decoded from an image file or built in memory.
@@ -80,4 +80,4 @@ namespace rendering_engine
     {
         lhs.swap(rhs);
     }
-} // namespace rendering_engine
+} // namespace assets

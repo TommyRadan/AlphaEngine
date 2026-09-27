@@ -87,11 +87,13 @@ namespace runtime::physics
      * threads (half the hardware threads, between one and four) plus the
      * calling thread; every member function is main-thread only.
      *
-     * **Debug draw.** Debug builds register a line helper ("Physics") that
-     * draws every collider — green dynamic (dim when asleep), blue
-     * kinematic, grey static, yellow trigger — and the last step's contact
-     * points in red, on top of the scene. It is toggled from the debug
-     * overlay's Helpers panel or with @ref set_debug_draw.
+     * **Debug draw.** @ref debug_lines describes every collider — green
+     * dynamic (dim when asleep), blue kinematic, grey static, yellow
+     * trigger — and the last step's contact points in red. Debug builds
+     * draw it on top of the scene through a line helper ("Physics", see
+     * physics_debug_draw.hpp) the engine creates once the world is up; it
+     * is toggled from the debug overlay's Helpers panel. The world itself
+     * does not depend on the renderer.
      */
     struct world
     {
@@ -106,8 +108,7 @@ namespace runtime::physics
         /**
          * @brief Brings the physics library and the simulation up.
          *
-         * Needs the event bus and, in debug builds, the renderer (for the
-         * debug-draw helper) to be up already.
+         * Needs the event bus to be up already.
          */
         void init();
 
@@ -154,10 +155,6 @@ namespace runtime::physics
 
         /** @brief Number of bodies currently in the simulation. */
         std::size_t body_count() const noexcept;
-
-        /** @brief Shows or hides the debug-draw helper (debug builds only). */
-        void set_debug_draw(bool enabled);
-        bool debug_draw_enabled() const noexcept;
 
         /**
          * @brief Appends the debug wireframe — every collider plus the last

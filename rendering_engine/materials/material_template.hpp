@@ -39,7 +39,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include <rendering_engine/assets/vertex.hpp>
+#include <assets/vertex.hpp>
 #include <rendering_engine/gpu/bind_group.hpp>
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/gpu/pipeline.hpp>
@@ -82,8 +82,8 @@ namespace rendering_engine
         // @ref vertex_format), and the layout a variant without the
         // @c has_tangents keyword reads instead. Both @c custom when the
         // material declares none.
-        vertex_format required_vertex_format{vertex_format::custom};
-        vertex_format vertex_format_without_tangents{vertex_format::custom};
+        assets::vertex_format required_vertex_format{assets::vertex_format::custom};
+        assets::vertex_format vertex_format_without_tangents{assets::vertex_format::custom};
 
         // Attribute location of the optional tangent channel in slot 0.
         // A variant built without @ref material_keyword::has_tangents
@@ -105,7 +105,7 @@ namespace rendering_engine
         // @ref skin_attributes empty for a template that cannot skin: the
         // keyword then changes nothing but the shader defines.
         std::vector<gpu::vertex_attribute> skin_attributes;
-        vertex_format skinned_vertex_format{vertex_format::custom};
+        assets::vertex_format skinned_vertex_format{assets::vertex_format::custom};
         gpu::bind_group_layout_descriptor skinned_draw_layout;
 
         // The pass-owned per-frame layout bound at slot 0, or an invalid
@@ -184,7 +184,7 @@ namespace rendering_engine
         // and the narrowest stride it can be bound with (the byte extent
         // of its furthest-reaching slot-0 attribute). A skinning variant
         // reads @ref material_template_descriptor::skinned_vertex_format.
-        vertex_format required_vertex_format(uint32_t keywords) const;
+        assets::vertex_format required_vertex_format(uint32_t keywords) const;
         uint32_t min_vertex_stride(uint32_t keywords) const;
 
         // Every live instance bound to this template, in creation order.

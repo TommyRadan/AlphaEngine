@@ -7,19 +7,23 @@
 #include <span>
 #include <vector>
 
+#include <assets/vertex.hpp>
 #include <core/math/aabb.hpp>
 #include <core/math/mat4.hpp>
 #include <core/math/transform.hpp>
-#include <rendering_engine/assets/vertex.hpp>
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/renderables/per_draw_ubo.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
+
+namespace assets
+{
+    struct mesh_data;
+}
 
 namespace rendering_engine
 {
     struct material;
     struct mesh_asset;
-    struct mesh_data;
 
     struct model : public renderable
     {
@@ -36,7 +40,7 @@ namespace rendering_engine
         // carries any, its indices, which the model then draws indexed.
         // Prefer @ref set_mesh to share a cached upload between models
         // drawing the same geometry.
-        void upload_mesh(const mesh_data& mesh);
+        void upload_mesh(const assets::mesh_data& mesh);
 
         // Draws geometry cached by @ref asset_cache instead of uploading a
         // private copy. The model holds a reference for as long as it draws the
@@ -141,7 +145,7 @@ namespace rendering_engine
 
         // Record layout of whichever vertex buffer is drawn, checked against
         // the material before every draw (see @ref validate_vertex_format).
-        vertex_format m_vertex_format{vertex_format::custom};
+        assets::vertex_format m_vertex_format{assets::vertex_format::custom};
         bool m_vertex_format_reported{false};
     };
 } // namespace rendering_engine

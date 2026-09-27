@@ -4,13 +4,20 @@
 #include <runtime/gltf_instantiate.hpp>
 
 #include <algorithm>
+#include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
+#include <assets/vertex.hpp>
 #include <core/event.hpp>
 #include <core/event_engine.hpp>
 #include <core/log.hpp>
 #include <core/math/math.hpp>
+#include <rendering_engine/materials/standard_material.hpp>
+#include <rendering_engine/resources/mesh_asset.hpp>
+#include <runtime/animation/animation_clip.hpp>
+#include <runtime/animation/skeleton.hpp>
 #include <runtime/components/animator_component.hpp>
 #include <runtime/components/mesh_component.hpp>
 #include <runtime/engine.hpp>
@@ -34,8 +41,7 @@ namespace runtime
 
         rendering_engine::material* material_for(const rendering_engine::gltf_model& model, std::size_t index)
         {
-            if (index != rendering_engine::gltf_npos && index < model.materials.size() &&
-                model.materials[index] != nullptr)
+            if (index != assets::gltf_npos && index < model.materials.size() && model.materials[index] != nullptr)
             {
                 return model.materials[index].get();
             }
@@ -45,11 +51,67 @@ namespace runtime
         // The skinning twin of material_for, or null when the model has none.
         rendering_engine::material* skinned_material_for(const rendering_engine::gltf_model& model, std::size_t index)
         {
-            if (index == rendering_engine::gltf_npos)
+            if (index == assets::gltf_npos)
             {
                 return model.skinned_default_material.get();
             }
             return index < model.skinned_materials.size() ? model.skinned_materials[index].get() : nullptr;
+        }
+
+        // The skeleton over every node of @p document (joint k is node k,
+        // its bind pose the node's TRS) with one skin per glTF skin, or null
+        // when the file has neither skins nor animations, so nothing would
+        // pose it.
+        std::shared_ptr<const animation::skeleton> make_skeleton(const assets::gltf_document& document)
+        {
+            if (document.skins.empty() && document.animations.empty())
+            {
+                return nullptr;
+            }
+
+            std::vector<animation::skeleton_joint> joints(document.nodes.size());
+            for (std::size_t k = 0; k < document.nodes.size(); ++k)
+            {
+                const assets::gltf_node& node = document.nodes[k];
+                joints[k].name = node.name;
+                joints[k].parent = node.parent == assets::gltf_npos ? animation::no_joint : node.parent;
+                joints[k].bind_pose = math::trs{node.translation, node.rotation, node.scale};
+            }
+
+            // The skeleton pads absent inverse bind matrices with identity.
+            std::vector<animation::skeleton_skin> skins(document.skins.size());
+            for (std::size_t s = 0; s < document.skins.size(); ++s)
+            {
+                const assets::gltf_skin& source = document.skins[s];
+                skins[s].name = source.name;
+                skins[s].joints.reserve(source.joints.size());
+                for (const std::size_t joint : source.joints)
+                {
+                    skins[s].joints.push_back(joint == assets::gltf_npos ? animation::no_joint : joint);
+                }
+                skins[s].inverse_bind_matrices = source.inverse_bind_matrices;
+            }
+            return std::make_shared<const animation::skeleton>(std::move(joints), std::move(skins));
+        }
+
+        // One clip per glTF animation, whose tracks drive the skeleton
+        // joints of make_skeleton (so node indices).
+        std::vector<std::shared_ptr<const animation::animation_clip>> make_clips(const assets::gltf_document& document)
+        {
+            std::vector<std::shared_ptr<const animation::animation_clip>> clips;
+            clips.reserve(document.animations.size());
+            for (const assets::gltf_animation& source : document.animations)
+            {
+                std::vector<animation::joint_track> tracks;
+                tracks.reserve(source.tracks.size());
+                for (const assets::gltf_node_track& track : source.tracks)
+                {
+                    tracks.push_back(
+                        animation::joint_track{track.node, track.translation, track.rotation, track.scale});
+                }
+                clips.push_back(std::make_shared<const animation::animation_clip>(source.name, std::move(tracks)));
+            }
+            return clips;
         }
 
         // What the spawn walk records for the animator: the node spawned for
@@ -58,6 +120,8 @@ namespace runtime
         struct spawn_context
         {
             const rendering_engine::gltf_model& model;
+            const assets::gltf_document& document;
+            std::shared_ptr<const animation::skeleton> skeleton;
             runtime::scene& scene;
             std::vector<node*>& roots;
             std::vector<bool> visited;
@@ -68,9 +132,10 @@ namespace runtime
             spawn_context(const rendering_engine::gltf_model& in_model,
                           runtime::scene& in_scene,
                           std::vector<node*>& in_roots)
-                : model{in_model}, scene{in_scene}, roots{in_roots}, visited(in_model.nodes.size(), false),
-                  spawned(in_model.nodes.size(), nullptr), is_root(in_model.nodes.size(), false),
-                  skinned_meshes(in_model.nodes.size())
+                : model{in_model}, document{in_model.document}, skeleton{make_skeleton(in_model.document)},
+                  scene{in_scene}, roots{in_roots}, visited(in_model.document.nodes.size(), false),
+                  spawned(in_model.document.nodes.size(), nullptr), is_root(in_model.document.nodes.size(), false),
+                  skinned_meshes(in_model.document.nodes.size())
             {
             }
         };
@@ -81,19 +146,20 @@ namespace runtime
         void attach_primitive(spawn_context& ctx, std::size_t source_index, std::size_t index, node& target)
         {
             const rendering_engine::gltf_model& model = ctx.model;
-            const rendering_engine::gltf_mesh_primitive& primitive = model.primitives[index];
-            if (primitive.mesh == nullptr)
+            if (index >= model.meshes.size() || model.meshes[index] == nullptr)
             {
                 return;
             }
-            const bool skinned = primitive.skinned && model.nodes[source_index].skin != rendering_engine::gltf_npos &&
-                                 model.node_skeleton != nullptr &&
-                                 model.nodes[source_index].skin < model.node_skeleton->skins().size();
-            rendering_engine::material* material =
-                skinned ? skinned_material_for(model, primitive.material_index) : nullptr;
+            const std::shared_ptr<rendering_engine::mesh_asset>& mesh = model.meshes[index];
+            const std::size_t material_index = ctx.document.primitives[index].material;
+            const std::size_t skin = ctx.document.nodes[source_index].skin;
+            const bool skinned = mesh->format == assets::vertex_format::position_uv_normal_tangent_skin &&
+                                 skin != assets::gltf_npos && ctx.skeleton != nullptr &&
+                                 skin < ctx.skeleton->skins().size();
+            rendering_engine::material* material = skinned ? skinned_material_for(model, material_index) : nullptr;
             if (material == nullptr)
             {
-                material = material_for(model, primitive.material_index);
+                material = material_for(model, material_index);
             }
             else
             {
@@ -106,13 +172,13 @@ namespace runtime
                         index);
                 return;
             }
-            target.add_component<mesh_component>(mesh_component{material, primitive.mesh});
+            target.add_component<mesh_component>(mesh_component{material, mesh});
         }
 
         void spawn(spawn_context& ctx, std::size_t index, node& parent, bool is_root)
         {
-            const rendering_engine::gltf_model& model = ctx.model;
-            if (index >= model.nodes.size())
+            const assets::gltf_document& document = ctx.document;
+            if (index >= document.nodes.size())
             {
                 LOG_WRN("gltf: node index %zu is out of range; skipped", index);
                 return;
@@ -120,12 +186,12 @@ namespace runtime
             if (ctx.visited[index])
             {
                 LOG_WRN("gltf: node '%s' is reachable twice (a cycle or a shared child); skipped",
-                        model.nodes[index].name.c_str());
+                        document.nodes[index].name.c_str());
                 return;
             }
             ctx.visited[index] = true;
 
-            const rendering_engine::gltf_node& source = model.nodes[index];
+            const assets::gltf_node& source = document.nodes[index];
             // Created linked under the parent, so the node carries the
             // scene's component store before any mesh component is attached.
             node& current = ctx.scene.create_node(source.name, &parent);
@@ -171,16 +237,16 @@ namespace runtime
         // palette, and the first clip starts looping.
         void attach_animator(spawn_context& ctx)
         {
-            const rendering_engine::gltf_model& model = ctx.model;
+            const assets::gltf_document& document = ctx.document;
             const bool has_skinned_mesh = std::any_of(ctx.skinned_meshes.begin(),
                                                       ctx.skinned_meshes.end(),
                                                       [](const std::vector<node*>& meshes) { return !meshes.empty(); });
-            if (model.node_skeleton == nullptr || ctx.roots.empty() || (model.animations.empty() && !has_skinned_mesh))
+            if (ctx.skeleton == nullptr || ctx.roots.empty() || (document.animations.empty() && !has_skinned_mesh))
             {
                 return;
             }
 
-            animator_component animator{model.node_skeleton, model.animations};
+            animator_component animator{ctx.skeleton, make_clips(document)};
             for (std::size_t k = 0; k < ctx.spawned.size(); ++k)
             {
                 if (ctx.spawned[k] != nullptr)
@@ -189,10 +255,10 @@ namespace runtime
                 }
                 for (node* mesh : ctx.skinned_meshes[k])
                 {
-                    animator.bind_skin(model.nodes[k].skin, k, *mesh);
+                    animator.bind_skin(document.nodes[k].skin, k, *mesh);
                 }
             }
-            if (!model.animations.empty())
+            if (!document.animations.empty())
             {
                 animator.play(std::size_t{0});
             }
@@ -216,7 +282,7 @@ namespace runtime
         }
 
         spawn_context ctx{model, *scene, roots};
-        for (const std::size_t root : model.root_nodes)
+        for (const std::size_t root : model.document.root_nodes)
         {
             spawn(ctx, root, parent, true);
         }

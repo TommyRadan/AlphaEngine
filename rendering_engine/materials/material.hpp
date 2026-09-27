@@ -7,8 +7,8 @@
 #include <cstdint>
 #include <memory>
 
-#include <rendering_engine/assets/image.hpp>
-#include <rendering_engine/assets/vertex.hpp>
+#include <assets/image.hpp>
+#include <assets/vertex.hpp>
 #include <rendering_engine/gpu/bind_group.hpp>
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/gpu/types.hpp>
@@ -143,7 +143,7 @@ namespace rendering_engine
         // @ref vertex_format_compatible) before emitting a @c draw_item;
         // @c custom means the template declared none and only the
         // stride can be checked.
-        vertex_format required_vertex_format() const;
+        assets::vertex_format required_vertex_format() const;
 
         // Smallest vertex stride slot 0 can be bound with: the byte
         // extent of the bound variant's furthest-reaching slot-0
@@ -174,8 +174,8 @@ namespace rendering_engine
         // Upload an RGBA8 image to a fresh mipmapped, linearly filtered
         // 2D texture in the RGBA8 format for @p space, addressed with
         // @p address on every axis. Shared by every set_*_map.
-        gpu::texture upload_map(const image& image,
-                                gpu::color_space space,
+        gpu::texture upload_map(const assets::image& image,
+                                assets::color_space space,
                                 gpu::address_mode address = gpu::address_mode::repeat) const;
 
         // Destroy @p map if valid and null it. Shared by every

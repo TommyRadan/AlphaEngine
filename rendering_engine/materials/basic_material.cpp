@@ -6,7 +6,7 @@
 #include <array>
 #include <utility>
 
-#include <rendering_engine/assets/vertex.hpp>
+#include <assets/vertex.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/gpu/shader_bindings.hpp>
@@ -38,8 +38,8 @@ namespace rendering_engine
         vertex_layout.attributes.push_back({0, 3, gpu::scalar_type::float32, 0});
         vertex_layout.attributes.push_back({1, 2, gpu::scalar_type::float32, sizeof(float) * 3});
         descriptor.vertex_layouts.push_back(vertex_layout);
-        descriptor.required_vertex_format = vertex_format::position_uv;
-        descriptor.vertex_format_without_tangents = vertex_format::position_uv;
+        descriptor.required_vertex_format = assets::vertex_format::position_uv;
+        descriptor.vertex_format_without_tangents = assets::vertex_format::position_uv;
 
         // No per-draw bindings: the model + normal matrix are pushed
         // (per_draw_ubo.hpp), so the per-draw layout (slot 1) is empty.
@@ -80,13 +80,13 @@ namespace rendering_engine
         }
     }
 
-    void basic_material::set_color(const color& color)
+    void basic_material::set_color(const assets::color& color)
     {
         m_color = color;
         upload_params();
     }
 
-    void basic_material::set_albedo(const image& image, gpu::color_space space)
+    void basic_material::set_albedo(const assets::image& image, assets::color_space space)
     {
         release_map(m_albedo);
         m_albedo = upload_map(image, space);

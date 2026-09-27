@@ -6,6 +6,7 @@
 #include <cstddef>
 
 #include <rendering_engine/gpu/device.hpp>
+#include <rendering_engine/resources/texture_formats.hpp>
 #include <runtime/engine.hpp>
 
 rendering_engine::pane::pane(ui_material* mat, const core::math::vec2& size)
@@ -29,18 +30,18 @@ void rendering_engine::pane::release_owned_texture()
     m_owns_texture = false;
 }
 
-void rendering_engine::pane::set_color(const rendering_engine::color& color)
+void rendering_engine::pane::set_color(const assets::color& color)
 {
     m_color = color;
     m_dirty = true;
 }
 
-const rendering_engine::color& rendering_engine::pane::get_color() const
+const assets::color& rendering_engine::pane::get_color() const
 {
     return m_color;
 }
 
-void rendering_engine::pane::set_image(const rendering_engine::image& image, gpu::color_space space)
+void rendering_engine::pane::set_image(const assets::image& image, assets::color_space space)
 {
     // The batch still names the old texture until the next collect
     // rebuilds the quad; it draws nothing with it in between, and the
@@ -49,7 +50,7 @@ void rendering_engine::pane::set_image(const rendering_engine::image& image, gpu
 
     gpu::texture_descriptor descriptor{};
     descriptor.dimension = gpu::texture_dimension::d2;
-    descriptor.format = gpu::rgba8_format(space);
+    descriptor.format = rgba8_format(space);
     descriptor.width = image.get_width();
     descriptor.height = image.get_height();
     descriptor.mipmaps = true;
@@ -61,8 +62,8 @@ void rendering_engine::pane::set_image(const rendering_engine::image& image, gpu
 
     auto& gpu = *runtime::current_engine().gpu;
     m_texture = gpu.create_texture(descriptor);
-    const std::size_t pixel_bytes =
-        static_cast<std::size_t>(image.get_width()) * static_cast<std::size_t>(image.get_height()) * sizeof(color);
+    const std::size_t pixel_bytes = static_cast<std::size_t>(image.get_width()) *
+                                    static_cast<std::size_t>(image.get_height()) * sizeof(assets::color);
     gpu.write_texture(m_texture, image.get_pixels(), pixel_bytes);
     gpu.generate_mipmaps(m_texture);
     m_owns_texture = true;

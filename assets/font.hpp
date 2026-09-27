@@ -7,10 +7,10 @@
 #include <string>
 #include <unordered_map>
 
+#include <assets/image.hpp>
 #include <core/math/vec2.hpp>
-#include <rendering_engine/assets/image.hpp>
 
-namespace rendering_engine
+namespace assets
 {
     /**
      * @brief Where one glyph sits in its font's atlas and how it moves the pen.
@@ -95,4 +95,4 @@ namespace rendering_engine
         float m_descent{0.0f};
         float m_line_height{0.0f};
     };
-} // namespace rendering_engine
+} // namespace assets
