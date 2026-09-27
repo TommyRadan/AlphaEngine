@@ -137,27 +137,6 @@ namespace rendering_engine::gpu
         virtual void
         multi_draw_indexed_indirect(buffer indirect_buffer, size_t offset, uint32_t draw_count, uint32_t stride) = 0;
 
-        // Escape hatch returning the backend-native command buffer
-        // (a @c VkCommandBuffer on Vulkan) as an opaque pointer so a
-        // debug overlay can record draws straight into the open render
-        // pass — Dear ImGui's @c ImGui_ImplVulkan_RenderDrawData wants
-        // the raw command buffer. Returns @c nullptr while the pass is
-        // not open (it failed to begin, e.g. no swapchain image this
-        // frame), so nothing is recorded outside a render pass.
-        virtual void* native_command_buffer() const noexcept = 0;
-
-        // Escape hatch returning the backend-native render pass (a
-        // @c VkRenderPass on Vulkan) this encoder is currently recording
-        // into, as an opaque pointer, alongside
-        // @ref native_command_buffer. Lets a debug overlay that records
-        // into this same open pass (Dear ImGui's Vulkan backend) rebuild
-        // its own pipeline exactly when the pass it draws into changes,
-        // by comparing against the pass it last built for, rather than
-        // re-deriving the pass's load/store arguments itself and hoping
-        // they still match what the owning pass begins. Returns
-        // @c nullptr while the pass is not open.
-        virtual void* native_render_pass() const noexcept = 0;
-
         // Parallel recording. On a pass begun with
         // @c render_pass_descriptor::parallel, opens one secondary
         // encoder that records draws for this pass into a command

@@ -297,6 +297,7 @@ void rendering_engine::renderer::init()
     // TAA resolve, so the projection jitter would otherwise show up as a
     // sub-pixel wobble on the gizmos rather than being averaged away.
     auto debug = std::make_unique<debug_draw::debug_pass>(&m_world.debug_renderables());
+    m_debug = debug.get();
 #endif
 
     // Build the material library: one template per built-in type against
@@ -455,6 +456,7 @@ void rendering_engine::renderer::quit()
     m_shadow = nullptr;
     m_point_shadow = nullptr;
     m_spot_shadow = nullptr;
+    m_debug = nullptr;
     m_prev_camera = nullptr;
     m_has_prev_view_projection = false;
 
@@ -782,6 +784,14 @@ void rendering_engine::renderer::register_debug_renderable(renderable* r)
 void rendering_engine::renderer::unregister_debug_renderable(renderable* r)
 {
     m_world.unregister_debug_renderable(r);
+}
+
+void rendering_engine::renderer::set_overlay(gpu::overlay_renderer* overlay)
+{
+    if (m_debug != nullptr)
+    {
+        m_debug->set_overlay(overlay);
+    }
 }
 
 rendering_engine::basic_material& rendering_engine::renderer::get_basic_material()

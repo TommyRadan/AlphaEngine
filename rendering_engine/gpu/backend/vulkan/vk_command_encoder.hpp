@@ -71,21 +71,29 @@ namespace rendering_engine::gpu::backend::vulkan
                                          size_t offset,
                                          uint32_t draw_count,
                                          uint32_t stride) override;
-        // Null unless a render pass is open: a pass that failed to
-        // open (no swapchain image this frame — minimised, or the
-        // acquire failed) must not hand out the command buffer, or an
-        // overlay would record draws outside any render pass. A primary
-        // whose pass takes secondaries hands out nothing either: nothing
-        // may be recorded inline into it.
-        void* native_command_buffer() const noexcept override
+        // The command buffer an overlay records its own draws into,
+        // inside the open pass (Dear ImGui's
+        // ImGui_ImplVulkan_RenderDrawData wants the raw buffer). Null
+        // unless a render pass is open: a pass that failed to open (no
+        // swapchain image this frame — minimised, or the acquire failed)
+        // must not hand out the command buffer, or an overlay would
+        // record draws outside any render pass. A primary whose pass
+        // takes secondaries hands out nothing either: nothing may be
+        // recorded inline into it.
+        VkCommandBuffer open_command_buffer() const noexcept
         {
-            return m_in_pass && !m_secondary_contents ? static_cast<void*>(m_cmd) : nullptr;
+            return m_in_pass && !m_secondary_contents ? m_cmd : VK_NULL_HANDLE;
         }
-        // Null unless a render pass is open; see
-        // @c render_pass_encoder::native_render_pass.
-        void* native_render_pass() const noexcept override
+        // The render pass this encoder is recording into, or null unless
+        // one is open. Lets an overlay that records into this same pass
+        // (Dear ImGui's Vulkan backend) rebuild its own pipeline exactly
+        // when the pass it draws into changes, by comparing against the
+        // pass it last built for, rather than re-deriving the pass's
+        // load/store arguments itself and hoping they still match what
+        // the owning pass begins.
+        VkRenderPass open_render_pass() const noexcept
         {
-            return m_in_pass ? static_cast<void*>(m_render_pass) : nullptr;
+            return m_in_pass ? m_render_pass : VK_NULL_HANDLE;
         }
         std::unique_ptr<render_pass_encoder> begin_secondary(uint32_t lane) override;
         void execute_secondary(render_pass_encoder& secondary) override;

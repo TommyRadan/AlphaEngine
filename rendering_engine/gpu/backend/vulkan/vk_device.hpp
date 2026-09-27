@@ -180,6 +180,11 @@ namespace rendering_engine::gpu::backend::vulkan
         void begin_frame() override;
         void end_frame() override;
 
+        // Dear ImGui's Vulkan renderer backend behind the overlay
+        // interface, drawing into the debug pass's swapchain render
+        // pass (vk_overlay_renderer.cpp); null in a build without ImGui.
+        std::unique_ptr<overlay_renderer> create_overlay_renderer() override;
+
         // The slot ring: see gpu::device. The count init was given,
         // clamped to k_max_frames_in_flight.
         uint32_t frames_in_flight() const noexcept override;
@@ -242,11 +247,9 @@ namespace rendering_engine::gpu::backend::vulkan
         // Number of images the swapchain was created with — surfaced so
         // the Dear ImGui Vulkan backend can size its frame resources.
         uint32_t swapchain_image_count() const noexcept;
-        // Bumped on every successful swapchain (re)build. Anything that
-        // baked a swapchain render pass into its own objects — the
-        // Dear ImGui Vulkan backend builds its pipeline against one —
-        // compares this before recording and rebuilds when it moved;
-        // the render passes it knew are retired by then.
+        // Counter bumped on every successful swapchain (re)build: 1 after
+        // the first build, one more after each rebuild. The swapchain
+        // log line reports it.
         uint64_t swapchain_generation() const noexcept;
         uint32_t current_swapchain_image_index() const noexcept;
         bool have_current_swapchain_image() const noexcept;
@@ -507,11 +510,12 @@ namespace rendering_engine::gpu::backend::vulkan
         // open command buffer already references it); under
         // vkDeviceWaitIdle in @c quit; and under @c flush_pending_destroys
         // for a caller with the same problem outside this queue (the
-        // ImGui Vulkan backend's own descriptor sets — see its use in
-        // the editor overlay). A transfer batch may reference the resource as well
-        // — a copy into a buffer or image destroyed before the batch ran
-        // — so each entry also records the newest batch id at enqueue
-        // time and runs only once every batch up to that id has retired.
+        // ImGui Vulkan backend's own descriptor sets — see
+        // vk_overlay_renderer.cpp). A transfer batch may reference the
+        // resource as well — a copy into a buffer or image destroyed
+        // before the batch ran — so each entry also records the newest
+        // batch id at enqueue time and runs only once every batch up to
+        // that id has retired.
         void enqueue_destroy(std::function<void()> fn);
         void drain_pending_destroys();
 

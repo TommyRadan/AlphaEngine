@@ -333,9 +333,9 @@ namespace runtime
         {
             // Build the ImGui debug overlay before the passes run; its draw
             // data is recorded inside the swapchain-targeted debug pass
-            // (editor::record_draw_data) so it composites on top of the
-            // frame. No-op in release builds. The device presents the
-            // frame at the end of renderer->render().
+            // (through the GPU device's overlay renderer) so it composites
+            // on top of the frame. No-op in release builds. The device
+            // presents the frame at the end of renderer->render().
             rendering_engine::editor::begin_frame();
             renderer->render();
 

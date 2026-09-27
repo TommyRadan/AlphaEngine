@@ -21,6 +21,7 @@
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/command_encoder.hpp>
 #include <rendering_engine/gpu/handle.hpp>
+#include <rendering_engine/gpu/overlay_renderer.hpp>
 #include <rendering_engine/gpu/pipeline.hpp>
 #include <rendering_engine/gpu/render_target.hpp>
 #include <rendering_engine/gpu/shader.hpp>
@@ -394,6 +395,13 @@ namespace rendering_engine::gpu
         // Submit the encoder's recorded work for execution. After
         // this call the encoder is consumed.
         virtual void submit(std::unique_ptr<command_encoder> encoder) = 0;
+
+        // -- Overlay ------------------------------------------------------
+
+        // A new, not yet initialised renderer for a Dear ImGui overlay on
+        // this device (see @ref overlay_renderer). Null by default and in
+        // a build that does not link ImGui.
+        virtual std::unique_ptr<overlay_renderer> create_overlay_renderer();
 
 #if defined(_DEBUG)
         // -- Shader hot reload (debug builds) ------------------------------

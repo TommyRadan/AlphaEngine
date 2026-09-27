@@ -15,6 +15,7 @@ target_sources(AlphaEngine PRIVATE
     vk_factory.cpp
     vk_negotiate.cpp
     vk_negotiate.hpp
+    vk_overlay_renderer.cpp
     vk_pipeline_cache.cpp
     vk_pipeline_cache.hpp
     vk_resources.hpp

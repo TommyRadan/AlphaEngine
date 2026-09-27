@@ -13,6 +13,11 @@ namespace rendering_engine
     struct renderable;
 }
 
+namespace rendering_engine::gpu
+{
+    struct overlay_renderer;
+}
+
 namespace rendering_engine::debug_draw
 {
     /**
@@ -20,7 +25,7 @@ namespace rendering_engine::debug_draw
      *        depth, collects draw items from the debug-renderable
      *        registry, sorts them by pipeline, and dispatches them;
      *        then records the Dear ImGui overlay's draw data into the
-     *        same open pass through @ref editor::record_draw_data.
+     *        same open pass through its @ref gpu::overlay_renderer.
      *
      * Everything the pass records is either a registered renderable's
      * @ref draw_item or ImGui draw data built earlier in the frame, so
@@ -75,6 +80,14 @@ namespace rendering_engine::debug_draw
             io.write("swapchain");
         }
 
+        /**
+         * @brief The overlay whose frame @ref record draws after the
+         *        debug geometry, or null for none (the default).
+         *        Non-owning: the caller clears it before the overlay
+         *        renderer goes.
+         */
+        void set_overlay(gpu::overlay_renderer* overlay);
+
     private:
         // Non-owning back-pointer to the render world's
         // debug-renderable registry. Same lifetime guarantee as
@@ -84,5 +97,8 @@ namespace rendering_engine::debug_draw
         // Reused across frames so the underlying allocation persists.
         // Collected and sorted by prepare(), drawn by record().
         std::vector<draw_item> m_items;
+
+        // See set_overlay.
+        gpu::overlay_renderer* m_overlay{nullptr};
     };
 } // namespace rendering_engine::debug_draw
