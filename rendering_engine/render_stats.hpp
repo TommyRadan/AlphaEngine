@@ -32,15 +32,17 @@ namespace rendering_engine
     // each frame and surfaced read-only through
     // @ref context::get_render_stats (consumed by the debug overlay).
     //
-    // The scene pass frustum-culls every renderable that reports
-    // @ref renderable::world_bounds against the camera before collecting
-    // its draw items, so @ref submitted + @ref culled equals
-    // @ref scene_renderables and @ref draw_calls counts only what the
-    // survivors emitted. The primitive / vertex counts are the geometry
-    // actually submitted to the pipeline this frame, multiplied through
-    // instancing, with each draw tallied under its own topology (see
-    // @ref tally_primitives). The shadow-pass counters are copied from the
-    // shadow passes that ran ahead of the scene pass in the same frame.
+    // The scene pass skips a renderable whose @ref renderable::layer_mask
+    // shares no bit with the camera's culling mask, and frustum-culls
+    // every renderable that reports @ref renderable::world_bounds against
+    // the camera, before collecting its draw items, so @ref submitted +
+    // @ref culled equals @ref scene_renderables and @ref draw_calls
+    // counts only what the survivors emitted. The primitive / vertex
+    // counts are the geometry actually submitted to the pipeline this
+    // frame, multiplied through instancing, with each draw tallied under
+    // its own topology (see @ref tally_primitives). The shadow-pass
+    // counters are copied from the shadow passes that ran ahead of the
+    // scene pass in the same frame.
     struct render_stats
     {
         // Renderables registered with the scene-renderable registry.
@@ -51,8 +53,9 @@ namespace rendering_engine
         // drawn).
         uint32_t submitted{0};
 
-        // Renderables skipped this frame because their world bounds fell
-        // entirely outside the camera frustum.
+        // Renderables skipped this frame because their layer_mask shared
+        // no bit with the camera's culling mask, or their world bounds
+        // fell entirely outside the camera frustum.
         uint32_t culled{0};
 
         // Caster / cascade pairs skipped by the directional shadow pass

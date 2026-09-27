@@ -34,6 +34,7 @@
 #include <rendering_engine/passes/shadow_casters.hpp>
 #include <rendering_engine/render_graph/frame_graph.hpp>
 #include <rendering_engine/renderables/draw_item.hpp>
+#include <rendering_engine/renderables/renderable.hpp>
 
 namespace rendering_engine
 {
@@ -79,7 +80,10 @@ namespace rendering_engine
      * pipeline (vertex stage only, rasteriser depth bias against acne)
      * and the light-space matrices differ. Instanced batches cast
      * through the instanced twin of that pipeline, which reads their
-     * per-instance transform stream (see @ref shadow_caster_dispatch).
+     * per-instance transform stream (see @ref shadow_caster_dispatch). A
+     * renderable also needs @ref renderable::casts_shadow and a
+     * @ref renderable::layer_mask that overlaps @ref caster_mask to reach
+     * the map; both default to "every renderable casts".
      */
     struct shadow_pass : pass
     {
@@ -159,6 +163,14 @@ namespace rendering_engine
         // no-caster frames.
         uint32_t culled_count() const;
 
+        // Layer bits this pass accepts casters from, on top of the
+        // existing @ref renderable::casts_shadow filter: a renderable
+        // whose layer_mask shares no bit with this mask casts no shadow
+        // through it. Defaults to @ref layer_all, so nothing changes until
+        // a caller narrows it.
+        void set_caster_mask(uint32_t mask) noexcept;
+        uint32_t caster_mask() const noexcept;
+
     private:
         // One shadow caster's slice of @ref m_items and the cascades its
         // bounds reach (bit n for cascade n), recorded once per frame so
@@ -220,5 +232,6 @@ namespace rendering_engine
         bool m_has_shadow{false};
         int m_shadow_light_index{-1};
         uint32_t m_culled{0};
+        uint32_t m_caster_mask{layer_all};
     };
 } // namespace rendering_engine

@@ -39,17 +39,25 @@ namespace rendering_engine
 
     /**
      * @brief 3D scene pass. Clears the swapchain colour and depth,
-     *        frustum-culls the scene-renderable registry against the
-     *        camera, collects draw items from the survivors, sorts them
-     *        by pipeline, and dispatches them. Every draw reaches the
-     *        pass as a registered renderable's @ref draw_item;
-     *        @ref record runs no event listener.
+     *        layer-filters and frustum-culls the scene-renderable
+     *        registry against the camera, collects draw items from the
+     *        survivors, sorts them by render queue / depth / pipeline via
+     *        @ref draw_item::sort_key, and dispatches them. Every draw
+     *        reaches the pass as a registered renderable's
+     *        @ref draw_item; @ref record runs no event listener.
      *
-     * Culling asks each renderable for its @ref renderable::world_bounds
+     * A renderable whose @ref renderable::layer_mask shares no bit with
+     * the camera's @ref camera::culling_mask is skipped outright. Culling
+     * then asks each survivor for its @ref renderable::world_bounds
      * before @ref renderable::collect_draw_items and skips those that
      * lie wholly outside the camera frustum, so they never build an item;
      * a renderable that reports no bounds is always collected. The tallies
      * land in @ref render_stats::submitted / @ref render_stats::culled.
+     * Each survivor's items are then keyed by @ref make_sort_key from the
+     * item's material queue (opaque or transparent), the view-space depth
+     * to the renderable's bounds centre, and the item's pipeline, so the
+     * final sort draws opaque geometry front-to-back and transparent
+     * geometry back-to-front.
      *
      * Owns the per-frame bind-group layout (the @ref view_globals block at
      * binding 0 and the packed lights block at binding 2, both in slot 0;
