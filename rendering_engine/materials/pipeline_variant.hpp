@@ -81,11 +81,10 @@ namespace rendering_engine
         // gets correct back-to-front blending.
         bool depth_write{true};
 
-        // Whether the scene fog blends over the surface (three.js
-        // Material.fog). Off, the lit materials compile a variant with
-        // no fog code at all (@c NO_FOG) — for skyboxes, in-world UI,
-        // emissive markers. The unlit materials never apply fog, so the
-        // flag has no effect on them.
+        // Whether the scene fog blends over the surface. Off, the lit
+        // materials compile a variant with no fog code at all (@c NO_FOG)
+        // — for skyboxes, in-world UI, emissive markers. The unlit
+        // materials never apply fog, so the flag has no effect on them.
         bool fog{true};
     };
 

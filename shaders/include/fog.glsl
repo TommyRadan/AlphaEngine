@@ -9,10 +9,10 @@
 
 // Blend color toward the scene fog colour by the camera distance of the
 // fragment at worldPosition. Mode 0 disables the distance term; 1 is a
-// linear near/far ramp; 2 is exponential-squared (THREE.FogExp2). An
-// analytic exponential height-fog term (Unreal's Exponential Height
-// Fog) then layers on top whenever u_frame.fogParams.w (height
-// density) is nonzero — including with mode 0, where it runs
+// linear near/far ramp; 2 is exponential-squared (factor = exp(-(density
+// * distance)^2)). An analytic exponential height-fog term (Unreal's
+// Exponential Height Fog) then layers on top whenever u_frame.fogParams.w
+// (height density) is nonzero — including with mode 0, where it runs
 // standalone instead of on top of a distance term, matching Unreal's
 // height fog being independent of any distance fog. Applied in
 // linear/HDR space before the tonemap pass.
