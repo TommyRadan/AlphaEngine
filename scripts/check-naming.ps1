@@ -90,7 +90,7 @@ if (-not (Test-Path $compileDb)) { throw "compile_commands.json was not generate
 Write-Ok "compile_commands.json: $compileDb"
 
 # --- Enumerate project source files ---
-$sourceDirs = @('runtime', 'core', 'platform', 'assets', 'rendering_engine', 'external')
+$sourceDirs = @('runtime', 'core', 'platform', 'assets', 'rendering_engine', 'editor', 'external')
 $files = foreach ($d in $sourceDirs) {
     $path = Join-Path $repoRoot $d
     if (Test-Path $path) {

@@ -14,7 +14,6 @@
 #include <rendering_engine/debug_draw/debug_pass.hpp>
 #include <rendering_engine/debug_draw/helper.hpp>
 #include <rendering_engine/debug_draw/infinite_grid.hpp>
-#include <rendering_engine/editor/imgui_layer.hpp>
 #include <rendering_engine/gpu/command_encoder.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/gpu/shader_compiler.hpp>
@@ -392,10 +391,6 @@ void rendering_engine::renderer::init()
     // without timestamp queries.
     m_gpu_profiler.init(*eng.gpu, m_passes.pass_names());
 
-    // Bring the ImGui debug overlay up now that the window, the device
-    // and the passes are live. No-op in release builds.
-    editor::init();
-
 #if _DEBUG
     // Provide a couple of always-available reference gizmos (the infinite
     // ground grid + world axes) so a fresh debug build has something to
@@ -428,10 +423,6 @@ void rendering_engine::renderer::quit()
     // their owners below.
     m_shader_hot_reload.reset();
 #endif
-
-    // Tear the ImGui overlay down first, while the window and the device
-    // it bound to are still alive. No-op in release builds.
-    editor::shutdown();
 
     // Release the built-in debug helpers before the line material and the
     // GPU device they reference; their destructors unregister from the

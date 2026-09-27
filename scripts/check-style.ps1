@@ -58,7 +58,7 @@ if (-not $ClangFormat) {
 Write-Step "Using $ClangFormat"
 
 # --- Enumerate source files ---
-$sourceDirs = @('runtime', 'core', 'platform', 'assets', 'rendering_engine', 'external')
+$sourceDirs = @('runtime', 'core', 'platform', 'assets', 'rendering_engine', 'editor', 'external')
 $files = foreach ($d in $sourceDirs) {
     $path = Join-Path $repoRoot $d
     if (Test-Path $path) {

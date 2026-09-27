@@ -19,13 +19,13 @@
 #include <platform/audio_device.hpp>
 #include <platform/platform.hpp>
 #include <platform/window.hpp>
-#include <rendering_engine/editor/imgui_layer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/gpu/surface.hpp>
 #include <rendering_engine/renderer.hpp>
 #include <rendering_engine/resources/asset_cache.hpp>
 #include <runtime/engine_settings.hpp>
 #include <runtime/game_module.hpp>
+#include <runtime/overlay.hpp>
 #include <runtime/physics/physics_debug_draw.hpp>
 #include <runtime/physics/physics_world.hpp>
 #include <runtime/scene_manager.hpp>
@@ -137,7 +137,9 @@ namespace runtime
     {
         // Tear down in reverse construction order, then clear the
         // current-engine pointer last so any destructor side effects
-        // that reach for current_engine() still see a valid engine.
+        // that reach for current_engine() still see a valid engine. The
+        // overlay sits on top of every subsystem, so it goes first.
+        m_overlay.reset();
         scenes.reset();
         scripts.reset();
         m_physics_debug.reset();
@@ -187,6 +189,12 @@ namespace runtime
         window->init(settings->window);
         gpu->init(surface_for(*window, *settings), settings->graphics.frames_in_flight);
         renderer->init();
+        // The overlay draws through the window, the device and the
+        // renderer's debug pass, all live from here on.
+        if (m_overlay != nullptr)
+        {
+            m_overlay->init(*this);
+        }
         // The asset cache's loaders need a live device, so it is initialised
         // right after the renderer, handed the device its uploads (and every
         // asset's release) go to and the renderer its glTF materials are
@@ -242,6 +250,12 @@ namespace runtime
             LOG_INF("Asset cache: swept %zu expired entries at scene teardown", swept);
         }
         assets->quit();
+        // The overlay goes while the window, the device and the renderer
+        // it draws through are still up.
+        if (m_overlay != nullptr)
+        {
+            m_overlay->shutdown();
+        }
         renderer->quit();
         // Reverse of init: the device goes before the window its surface
         // was created on.
@@ -331,12 +345,13 @@ namespace runtime
         // the window is restored; the updates above keep running.
         if (!window->is_minimized())
         {
-            // Build the ImGui debug overlay before the passes run; its draw
-            // data is recorded inside the swapchain-targeted debug pass
-            // (through the GPU device's overlay renderer) so it composites
-            // on top of the frame. No-op in release builds. The device
-            // presents the frame at the end of renderer->render().
-            rendering_engine::editor::begin_frame();
+            // Build the overlay before the passes run; the debug pass
+            // records it on top of the frame. The device presents the
+            // frame at the end of renderer->render().
+            if (m_overlay != nullptr)
+            {
+                m_overlay->begin_frame();
+            }
             renderer->render();
 
             // Counts rendered frames only, so a run stuck minimized never reaches its limit.
@@ -362,5 +377,10 @@ namespace runtime
     bool engine::is_quit_requested() const noexcept
     {
         return m_quit_requested;
+    }
+
+    void engine::set_overlay(std::unique_ptr<overlay> value)
+    {
+        m_overlay = std::move(value);
     }
 } // namespace runtime
