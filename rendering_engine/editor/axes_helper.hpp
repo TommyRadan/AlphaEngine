@@ -22,36 +22,17 @@
 
 #pragma once
 
-#include <core/math/math.hpp>
-#include <rendering_engine/debug/line_helper.hpp>
+#include <rendering_engine/editor/line_helper.hpp>
 
-namespace rendering_engine
+namespace rendering_engine::editor
 {
-    struct directional_light;
-}
-
-namespace rendering_engine::debug
-{
-    // Gizmo for a directional light. Draws a small square facing the
-    // light's travel direction at the world origin plus a ray along that
-    // direction, both tinted with the light's colour. The geometry tracks
-    // the light's direction / colour every frame, so the helper must not
-    // outlive the light it points at.
-    struct directional_light_helper : public line_helper
+    // The three world axes drawn from the origin.
+    // +X is red, +Y green, +Z blue. Reposition or
+    // orient it through the inherited @ref transform.
+    struct axes_helper : public line_helper
     {
-        explicit directional_light_helper(const directional_light* light, float size = 1.0f);
-
-    protected:
-        void refresh() override;
-
-    private:
-        const directional_light* m_light;
-        float m_size;
-
-        // Last state the geometry was built from, so refresh() only
-        // rebuilds when the light actually moves or changes colour.
-        core::math::vec3 m_last_direction{0.0f, 0.0f, 0.0f};
-        core::math::vec3 m_last_color{0.0f, 0.0f, 0.0f};
-        bool m_built{false};
+        // @p size is the length of each axis line. Geometry is baked once
+        // at construction.
+        explicit axes_helper(float size = 1.0f);
     };
-} // namespace rendering_engine::debug
+} // namespace rendering_engine::editor

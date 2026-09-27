@@ -7,7 +7,7 @@ target_sources(AlphaEngine PRIVATE
 )
 
 # The FPS counter used to live here as a label-rendering game module; it
-# now ships as a built-in ImGui debug panel (rendering_engine/debug_ui),
+# now ships as a built-in ImGui debug panel (rendering_engine/editor),
 # so the standalone fps_overlay_module was removed.
 
 # Only one scene-owning demo module is compiled at a time because each

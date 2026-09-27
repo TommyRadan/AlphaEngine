@@ -25,7 +25,7 @@
 #include <memory>
 
 #include <core/math/transform.hpp>
-#include <rendering_engine/debug/helper.hpp>
+#include <rendering_engine/editor/helper.hpp>
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/renderables/per_draw_ring.hpp>
 
@@ -34,7 +34,7 @@ namespace rendering_engine
     struct grid_material;
 }
 
-namespace rendering_engine::debug
+namespace rendering_engine::editor
 {
     // The CAD-style infinite ground grid — an unbounded grid.
     // Unlike the line-based @ref grid_helper it is a
@@ -72,4 +72,4 @@ namespace rendering_engine::debug
         core::transform m_transform;
         per_draw_binding m_per_draw;
     };
-} // namespace rendering_engine::debug
+} // namespace rendering_engine::editor

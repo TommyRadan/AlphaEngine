@@ -20,19 +20,31 @@
  * SOFTWARE.
  */
 
-#pragma once
+#include <rendering_engine/editor/axes_helper.hpp>
 
-#include <rendering_engine/debug/line_helper.hpp>
+#include <vector>
 
-namespace rendering_engine::debug
+#include <core/math/math.hpp>
+
+namespace rendering_engine::editor
 {
-    // The three world axes drawn from the origin.
-    // +X is red, +Y green, +Z blue. Reposition or
-    // orient it through the inherited @ref transform.
-    struct axes_helper : public line_helper
+    axes_helper::axes_helper(float size) : line_helper("Axes")
     {
-        // @p size is the length of each axis line. Geometry is baked once
-        // at construction.
-        explicit axes_helper(float size = 1.0f);
-    };
-} // namespace rendering_engine::debug
+        namespace math = core::math;
+
+        const math::vec3 origin{0.0f, 0.0f, 0.0f};
+        const math::vec3 red{1.0f, 0.0f, 0.0f};
+        const math::vec3 green{0.0f, 1.0f, 0.0f};
+        const math::vec3 blue{0.0f, 0.0f, 1.0f};
+
+        const std::vector<math::vec3> positions{origin,
+                                                math::vec3{size, 0.0f, 0.0f},
+                                                origin,
+                                                math::vec3{0.0f, size, 0.0f},
+                                                origin,
+                                                math::vec3{0.0f, 0.0f, size}};
+        const std::vector<math::vec3> colors{red, red, green, green, blue, blue};
+
+        set_segments(positions, colors);
+    }
+} // namespace rendering_engine::editor

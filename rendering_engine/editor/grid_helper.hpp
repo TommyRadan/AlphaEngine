@@ -23,9 +23,9 @@
 #pragma once
 
 #include <rendering_engine/assets/color.hpp>
-#include <rendering_engine/debug/line_helper.hpp>
+#include <rendering_engine/editor/line_helper.hpp>
 
-namespace rendering_engine::debug
+namespace rendering_engine::editor
 {
     // A finite square reference grid on the X/Y ground plane (the engine
     // is Z-up) centred at the origin — a bounded line-based grid.
@@ -45,4 +45,4 @@ namespace rendering_engine::debug
                              color color = rendering_engine::color{120, 120, 120, 255},
                              rendering_engine::color center_color = rendering_engine::color{70, 70, 70, 255});
     };
-} // namespace rendering_engine::debug
+} // namespace rendering_engine::editor

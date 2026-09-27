@@ -20,7 +20,7 @@
  * SOFTWARE.
  */
 
-#include <rendering_engine/debug_ui/imgui_layer.hpp>
+#include <rendering_engine/editor/imgui_layer.hpp>
 
 #ifdef ALPHAENGINE_HAS_IMGUI
 
@@ -51,7 +51,7 @@
 #include <rendering_engine/camera/camera_registry.hpp>
 #include <rendering_engine/camera/orthographic_camera.hpp>
 #include <rendering_engine/camera/perspective_camera.hpp>
-#include <rendering_engine/debug/helper.hpp>
+#include <rendering_engine/editor/helper.hpp>
 #include <rendering_engine/gpu/backend/opengl/gl_device.hpp>
 #include <rendering_engine/gpu/backend/opengl/gl_resources.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_device.hpp>
@@ -78,7 +78,7 @@
 #include <runtime/scene_manager.hpp>
 #include <SDL3/SDL.h>
 
-namespace rendering_engine::debug_ui
+namespace rendering_engine::editor
 {
     namespace
     {
@@ -163,7 +163,7 @@ namespace rendering_engine::debug_ui
         {
             if (result != VK_SUCCESS)
             {
-                LOG_ERR("debug_ui: Vulkan error in ImGui backend (VkResult=%d)", static_cast<int>(result));
+                LOG_ERR("editor: Vulkan error in ImGui backend (VkResult=%d)", static_cast<int>(result));
             }
         }
 
@@ -225,7 +225,7 @@ namespace rendering_engine::debug_ui
         }
 
         // Called once, at shutdown, after the queue has already been
-        // waited idle (see debug_ui::shutdown): nothing can still be
+        // waited idle (see editor::shutdown): nothing can still be
         // reading the descriptor sets, so releasing them immediately —
         // ahead of ImGui_ImplVulkan_Shutdown reclaiming the pool they
         // came from — is safe.
@@ -896,7 +896,7 @@ namespace rendering_engine::debug_ui
 
         // The selected node's name, active flag and transform, plus a
         // hand-written section per built-in component it carries. Kept
-        // here in debug_ui rather than on the components so release
+        // here in the editor layer rather than on the components so release
         // builds carry none of this.
         void draw_inspector_window()
         {
@@ -1527,7 +1527,7 @@ namespace rendering_engine::debug_ui
                 return;
             }
 
-            const auto& helpers = rendering_engine::debug::registered_helpers();
+            const auto& helpers = rendering_engine::editor::registered_helpers();
 
             ImGui::SetNextWindowSize(ImVec2{260.0f, 0.0f}, ImGuiCond_FirstUseEver);
             if (ImGui::Begin("Helpers", &g_show_helpers))
@@ -1612,7 +1612,7 @@ namespace rendering_engine::debug_ui
             auto* target = device.lookup_render_target(swapchain);
             if (target == nullptr)
             {
-                LOG_ERR("debug_ui: no swapchain render target for the ImGui Vulkan pipeline");
+                LOG_ERR("editor: no swapchain render target for the ImGui Vulkan pipeline");
                 return VK_NULL_HANDLE;
             }
             return device.acquire_render_pass(
@@ -1647,7 +1647,7 @@ namespace rendering_engine::debug_ui
             pipeline_info.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
             ImGui_ImplVulkan_CreateMainPipeline(&pipeline_info);
             g_vulkan_render_pass = native_pass;
-            LOG_INF("debug_ui: ImGui Vulkan pipeline rebuilt for a new debug-pass render pass");
+            LOG_INF("editor: ImGui Vulkan pipeline rebuilt for a new debug-pass render pass");
             return true;
         }
 
@@ -1662,14 +1662,14 @@ namespace rendering_engine::debug_ui
             VkRenderPass ui_render_pass = acquire_ui_render_pass(*device);
             if (ui_render_pass == VK_NULL_HANDLE)
             {
-                LOG_ERR("debug_ui: acquire_render_pass returned null for ImGui Vulkan init");
+                LOG_ERR("editor: acquire_render_pass returned null for ImGui Vulkan init");
                 return false;
             }
             g_vulkan_render_pass = ui_render_pass;
 
             if (!ImGui_ImplSDL3_InitForVulkan(eng.window->sdl_window()))
             {
-                LOG_ERR("debug_ui: ImGui_ImplSDL3_InitForVulkan failed");
+                LOG_ERR("editor: ImGui_ImplSDL3_InitForVulkan failed");
                 return false;
             }
 
@@ -1707,7 +1707,7 @@ namespace rendering_engine::debug_ui
             init_info.CheckVkResultFn = check_vk_result;
             if (!ImGui_ImplVulkan_Init(&init_info))
             {
-                LOG_ERR("debug_ui: ImGui_ImplVulkan_Init failed");
+                LOG_ERR("editor: ImGui_ImplVulkan_Init failed");
                 ImGui_ImplSDL3_Shutdown();
                 return false;
             }
@@ -1720,12 +1720,12 @@ namespace rendering_engine::debug_ui
         {
             if (!ImGui_ImplSDL3_InitForOpenGL(eng.window->sdl_window(), eng.window->gl_context()))
             {
-                LOG_ERR("debug_ui: ImGui_ImplSDL3_InitForOpenGL failed");
+                LOG_ERR("editor: ImGui_ImplSDL3_InitForOpenGL failed");
                 return false;
             }
             if (!ImGui_ImplOpenGL3_Init("#version 460"))
             {
-                LOG_ERR("debug_ui: ImGui_ImplOpenGL3_Init failed");
+                LOG_ERR("editor: ImGui_ImplOpenGL3_Init failed");
                 ImGui_ImplSDL3_Shutdown();
                 return false;
             }
@@ -1778,7 +1778,7 @@ namespace rendering_engine::debug_ui
             return;
         }
 
-        LOG_INF("debug_ui: ImGui overlay initialised (SDL3 + %s)", core::graphics_backend_name(backend));
+        LOG_INF("editor: ImGui overlay initialised (SDL3 + %s)", core::graphics_backend_name(backend));
     }
 
     void shutdown()
@@ -1814,7 +1814,7 @@ namespace rendering_engine::debug_ui
         g_frame_ready = false;
         g_vulkan_render_pass = VK_NULL_HANDLE;
         g_selected_node = nullptr;
-        LOG_INF("debug_ui: ImGui overlay shut down");
+        LOG_INF("editor: ImGui overlay shut down");
     }
 
     void process_event(const void* sdl_event)
@@ -1892,13 +1892,13 @@ namespace rendering_engine::debug_ui
     {
         return g_backend != backend_mode::none && ImGui::GetIO().WantCaptureMouse;
     }
-} // namespace rendering_engine::debug_ui
+} // namespace rendering_engine::editor
 
 #else // ALPHAENGINE_HAS_IMGUI
 
 // Release builds (and any configuration without ImGui) get inert stubs so
 // the always-compiled engine core can call the layer unconditionally.
-namespace rendering_engine::debug_ui
+namespace rendering_engine::editor
 {
     void init() {}
     void shutdown() {}
@@ -1915,6 +1915,6 @@ namespace rendering_engine::debug_ui
     {
         return false;
     }
-} // namespace rendering_engine::debug_ui
+} // namespace rendering_engine::editor
 
 #endif // ALPHAENGINE_HAS_IMGUI

@@ -28,7 +28,7 @@
 #include <rendering_engine/assets/color.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
 
-namespace rendering_engine::debug
+namespace rendering_engine::editor
 {
     // Which pass a helper draws in.
     enum class helper_layer
@@ -98,4 +98,4 @@ namespace rendering_engine::debug
     // helpers themselves (the vector holds non-owning back-pointers); the
     // debug UI walks it to list every gizmo and toggle its visibility.
     const std::vector<helper*>& registered_helpers();
-} // namespace rendering_engine::debug
+} // namespace rendering_engine::editor

@@ -39,7 +39,7 @@
 #include <rendering_engine/assets/asset_cache.hpp>
 #include <rendering_engine/assets/asset_device.hpp>
 #include <rendering_engine/assets/gltf_material_factory.hpp>
-#include <rendering_engine/debug_ui/imgui_layer.hpp>
+#include <rendering_engine/editor/imgui_layer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/renderer.hpp>
 #include <rendering_engine/window.hpp>
@@ -329,10 +329,10 @@ namespace runtime
         {
             // Build the ImGui debug overlay before the passes run; its draw
             // data is recorded inside the swapchain-targeted debug pass
-            // (debug_ui::record_draw_data) so it composites on top of the
+            // (editor::record_draw_data) so it composites on top of the
             // frame on both the OpenGL and Vulkan backends. No-op in release
             // builds.
-            rendering_engine::debug_ui::begin_frame();
+            rendering_engine::editor::begin_frame();
             renderer->render();
             window->swap_buffers();
         }

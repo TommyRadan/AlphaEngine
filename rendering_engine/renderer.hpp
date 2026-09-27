@@ -67,7 +67,7 @@ namespace rendering_engine
     struct ui_material;
     class per_draw_ring;
 
-    namespace debug
+    namespace editor
     {
         struct helper;
     }
@@ -263,7 +263,7 @@ namespace rendering_engine
          * @ref get_line_material, but draws depth-less so the debug
          * helpers always read on top in the
          * depth-less debug pass. Constructed in @ref init; used by the
-         * @ref debug::helper family.
+         * @ref editor::helper family.
          */
         line_material& get_debug_line_material();
 
@@ -273,7 +273,7 @@ namespace rendering_engine
          *        in @ref init.
          *
          * Shares the scene per-frame layout (camera at slot 0). The
-         * @ref debug::infinite_grid renderable builds its own material
+         * @ref editor::infinite_grid renderable builds its own material
          * through @ref create_grid_material so its fade distance is
          * honoured; this shared one serves callers that want the default.
          */
@@ -485,7 +485,7 @@ namespace rendering_engine
         // this list owns their lifetime and must be cleared in @ref quit
         // before the line material and GPU device they reference. Empty in
         // release builds, where the debug pass is dropped entirely.
-        std::vector<std::unique_ptr<debug::helper>> m_debug_helpers;
+        std::vector<std::unique_ptr<editor::helper>> m_debug_helpers;
 
         // Ordered pass list walked once per frame in @ref render.
         // Populated by @ref init with the built-in scene + UI passes
@@ -617,7 +617,7 @@ namespace rendering_engine
         // Depth-disabled line material the debug gizmos draw through.
         std::unique_ptr<line_material> m_debug_line_material;
         // Analytic infinite-grid material at the default fade distance.
-        // debug::infinite_grid builds its own through
+        // editor::infinite_grid builds its own through
         // create_grid_material, on a template made like this one's.
         std::unique_ptr<grid_material> m_grid_material;
         std::unique_ptr<ui_material> m_ui_material;

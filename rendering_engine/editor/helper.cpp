@@ -20,14 +20,14 @@
  * SOFTWARE.
  */
 
-#include <rendering_engine/debug/helper.hpp>
+#include <rendering_engine/editor/helper.hpp>
 
 #include <algorithm>
 
 #include <rendering_engine/renderer.hpp>
 #include <runtime/engine.hpp>
 
-namespace rendering_engine::debug
+namespace rendering_engine::editor
 {
     namespace
     {
@@ -94,4 +94,4 @@ namespace rendering_engine::debug
     {
         return helper_registry();
     }
-} // namespace rendering_engine::debug
+} // namespace rendering_engine::editor

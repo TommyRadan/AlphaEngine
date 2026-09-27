@@ -20,7 +20,7 @@
  * SOFTWARE.
  */
 
-#include <rendering_engine/debug/spot_light_helper.hpp>
+#include <rendering_engine/editor/spot_light_helper.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -29,7 +29,7 @@
 #include <core/math/math.hpp>
 #include <rendering_engine/lighting/spot_light.hpp>
 
-namespace rendering_engine::debug
+namespace rendering_engine::editor
 {
     namespace
     {
@@ -116,4 +116,4 @@ namespace rendering_engine::debug
         std::vector<math::vec3> colors(positions.size(), rgb);
         set_segments(positions, colors);
     }
-} // namespace rendering_engine::debug
+} // namespace rendering_engine::editor

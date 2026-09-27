@@ -51,7 +51,7 @@ namespace rendering_engine::gpu
     struct render_pass_encoder;
 }
 
-namespace rendering_engine::debug_ui
+namespace rendering_engine::editor
 {
     /**
      * @brief Brings ImGui and its SDL3 + OpenGL3 / Vulkan backends up
@@ -105,4 +105,4 @@ namespace rendering_engine::debug_ui
 
     /** @brief True when a hovered / focused panel is capturing the mouse. */
     bool wants_mouse();
-} // namespace rendering_engine::debug_ui
+} // namespace rendering_engine::editor

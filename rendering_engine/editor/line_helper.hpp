@@ -26,10 +26,10 @@
 
 #include <core/math/math.hpp>
 #include <core/math/transform.hpp>
-#include <rendering_engine/debug/helper.hpp>
+#include <rendering_engine/editor/helper.hpp>
 #include <rendering_engine/renderables/line.hpp>
 
-namespace rendering_engine::debug
+namespace rendering_engine::editor
 {
     // A helper whose geometry is a list of independent line segments
     // (vertex pairs) drawn through the shared depth-disabled debug line
@@ -65,4 +65,4 @@ namespace rendering_engine::debug
     private:
         line m_line;
     };
-} // namespace rendering_engine::debug
+} // namespace rendering_engine::editor

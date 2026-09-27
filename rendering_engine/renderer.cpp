@@ -31,10 +31,11 @@
 #include <rendering_engine/assets/texture_asset.hpp>
 #include <rendering_engine/camera/camera_registry.hpp>
 #include <rendering_engine/camera/perspective_camera.hpp>
-#include <rendering_engine/debug/axes_helper.hpp>
-#include <rendering_engine/debug/helper.hpp>
-#include <rendering_engine/debug/infinite_grid.hpp>
-#include <rendering_engine/debug_ui/imgui_layer.hpp>
+#include <rendering_engine/editor/axes_helper.hpp>
+#include <rendering_engine/editor/debug_pass.hpp>
+#include <rendering_engine/editor/helper.hpp>
+#include <rendering_engine/editor/imgui_layer.hpp>
+#include <rendering_engine/editor/infinite_grid.hpp>
 #include <rendering_engine/gpu/command_encoder.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/gpu/shader_compiler.hpp>
@@ -50,7 +51,6 @@
 #include <rendering_engine/materials/points_material.hpp>
 #include <rendering_engine/materials/standard_material.hpp>
 #include <rendering_engine/materials/ui_material.hpp>
-#include <rendering_engine/passes/debug_pass.hpp>
 #include <rendering_engine/passes/depth_prepass.hpp>
 #include <rendering_engine/passes/pass.hpp>
 #include <rendering_engine/passes/point_shadow_pass.hpp>
@@ -318,7 +318,7 @@ void rendering_engine::renderer::init()
     // It uses the unjittered overlay group: the debug pass paints after the
     // TAA resolve, so the projection jitter would otherwise show up as a
     // sub-pixel wobble on the gizmos rather than being averaged away.
-    auto debug = std::make_unique<debug_pass>(&m_debug_renderables, scene->overlay_frame_bind_group());
+    auto debug = std::make_unique<editor::debug_pass>(&m_debug_renderables, scene->overlay_frame_bind_group());
 #endif
 
     // Construct the built-in materials: one template per type (shaders,
@@ -446,7 +446,7 @@ void rendering_engine::renderer::init()
 
     // Bring the ImGui debug overlay up now that the window, GL context
     // and passes are live. No-op in release builds.
-    debug_ui::init();
+    editor::init();
 
 #if _DEBUG
     // Provide a couple of always-available reference gizmos (the infinite
@@ -458,8 +458,8 @@ void rendering_engine::renderer::init()
     // box / light / camera helpers against its own objects the same way.
     // The debug pass is dropped in release, so this whole block compiles
     // out there.
-    m_debug_helpers.push_back(std::make_unique<debug::infinite_grid>());
-    m_debug_helpers.push_back(std::make_unique<debug::axes_helper>());
+    m_debug_helpers.push_back(std::make_unique<editor::infinite_grid>());
+    m_debug_helpers.push_back(std::make_unique<editor::axes_helper>());
 #endif
 }
 
@@ -481,7 +481,7 @@ void rendering_engine::renderer::quit()
 
     // Tear the ImGui overlay down first, while the window and GL context
     // it bound to are still alive. No-op in release builds.
-    debug_ui::shutdown();
+    editor::shutdown();
 
     // Release the built-in debug helpers before the line material and the
     // GPU device they reference; their destructors unregister from the
