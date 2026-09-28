@@ -30,7 +30,7 @@ namespace rendering_engine::gpu::backend::vulkan
     // (sync objects, command pools, swapchain depth images, the copies
     // of a dynamic buffer, a bind group's descriptor sets) are sized by
     // it and the runtime count device::init is given is clamped to it.
-    // Equal to gpu::max_frames_in_flight (checked in vk_device.cpp).
+    // Equal to gpu::max_frames_in_flight (checked in vk_frame.cpp).
     inline constexpr uint32_t k_max_frames_in_flight = 2;
 
     struct vk_buffer
