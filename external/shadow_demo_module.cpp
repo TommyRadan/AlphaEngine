@@ -4,12 +4,11 @@
 #include "api/game_module.hpp"
 
 #include <assets/color.hpp>
-#include <core/log.hpp>
 #include <core/math/math.hpp>
+#include <core/math/transform.hpp>
 #include <rendering_engine/lighting/ambient_light.hpp>
 #include <rendering_engine/lighting/directional_light.hpp>
 #include <rendering_engine/materials/standard_material.hpp>
-#include <rendering_engine/render_world.hpp>
 #include <rendering_engine/renderables/premade_3d/box.hpp>
 #include <rendering_engine/renderables/premade_3d/plane.hpp>
 #include <rendering_engine/renderables/premade_3d/sphere.hpp>
@@ -50,7 +49,7 @@
 //   ├── 15 spheres  (sphere each)
 //   ├── 3 pillars   (box each; the first also runs scripts/bob.lua, a Lua
 //   │                script under the content root, so it rises, sinks and turns)
-//   └── sun         (orbiting_sun: the shadow-casting directional light)
+//   └── sun         (the shadow-casting directional light; orbiting_sun turns it)
 
 namespace
 {
@@ -82,49 +81,16 @@ namespace
         std::vector<std::unique_ptr<rendering_engine::standard_material>> m_materials;
     };
 
-    // The single shadow-casting directional light, orbiting. Its frustum is
-    // auto-fitted to the camera view every frame (see shadow_pass). It lights
-    // the scene only while its node is enabled.
+    // Orbits its node, which carries the single shadow-casting directional
+    // light: the light travels along the node's forward (+X) axis, so turning
+    // the node turns the sun. Its frustum is auto-fitted to the camera view
+    // every frame (see shadow_pass).
     struct orbiting_sun final : runtime::behavior
     {
         // Saved with the scene: the orbit's rate and where along it the sun is.
         static void reflect(runtime::type_builder<orbiting_sun>& type)
         {
             type.field("speed", &orbiting_sun::m_speed).field("angle", &orbiting_sun::m_angle);
-        }
-
-        orbiting_sun() : m_light{std::make_unique<rendering_engine::directional_light>()}
-        {
-            m_light->color = math::vec3{1.0f, 0.97f, 0.9f};
-            m_light->intensity = 1.0f;
-            m_light->cast_shadow = true;
-            m_light->set_enabled(false);
-            aim();
-        }
-
-        // Attaches the light to the node's world the first time the
-        // behaviour becomes active — there is no earlier hook with access
-        // to @ref owner — and enables it every time, mirroring
-        // light_component's on_attach / set_enabled split.
-        void on_enable() override
-        {
-            if (!m_light->is_attached())
-            {
-                runtime::scene* scene = owner().scene();
-                rendering_engine::render_world* world = scene != nullptr ? scene->world() : nullptr;
-                if (world == nullptr)
-                {
-                    LOG_WRN("orbiting_sun: node has no scene render_world; the sun stays unattached");
-                    return;
-                }
-                m_light->attach(*world);
-            }
-            m_light->set_enabled(true);
-        }
-
-        void on_disable() override
-        {
-            m_light->set_enabled(false);
         }
 
         void on_update(float delta_time) override
@@ -136,10 +102,11 @@ namespace
     private:
         void aim()
         {
-            m_light->direction = math::vec3{std::cos(m_angle) * 0.7f, std::sin(m_angle) * 0.7f, sun_tilt};
+            core::transform& pose = owner().transform;
+            pose.look_at(pose.get_position() +
+                         math::vec3{std::cos(m_angle) * 0.7f, std::sin(m_angle) * 0.7f, sun_tilt});
         }
 
-        std::unique_ptr<rendering_engine::directional_light> m_light;
         float m_speed{sun_orbit_speed}; // radians / second
         float m_angle{0.0f};
     };
@@ -242,6 +209,13 @@ GAME_MODULE()
     // The first pillar's logic is a Lua script (runtime/scripting).
     runtime::add_behavior<runtime::lua_behavior>(*scripted_pillar, "scripts/bob.lua");
 
+    // The sun: a shadow-casting directional light on a node that
+    // orbiting_sun turns.
+    auto sun_light = std::make_unique<rendering_engine::directional_light>();
+    sun_light->color = math::vec3{1.0f, 0.97f, 0.9f};
+    sun_light->intensity = 1.0f;
+    sun_light->cast_shadow = true;
     runtime::node& sun = scene.create_node("sun", &demo);
+    sun.add_component(runtime::light_component{std::move(sun_light)});
     runtime::add_behavior<orbiting_sun>(sun);
 }

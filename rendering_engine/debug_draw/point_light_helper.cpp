@@ -8,7 +8,7 @@
 #include <vector>
 
 #include <core/math/math.hpp>
-#include <rendering_engine/lighting/point_light.hpp>
+#include <rendering_engine/render_world.hpp>
 
 namespace rendering_engine::debug_draw
 {
@@ -22,20 +22,21 @@ namespace rendering_engine::debug_draw
         }
     } // namespace
 
-    point_light_helper::point_light_helper(renderer& owner, const point_light* light, float size)
+    point_light_helper::point_light_helper(renderer& owner, light_proxy_handle light, float size)
         : line_helper(owner, "Point light"), m_light(light), m_size(size)
     {
     }
 
     void point_light_helper::refresh()
     {
-        if (m_light == nullptr)
+        const light_proxy* proxy = renderer_world().light(m_light);
+        if (proxy == nullptr)
         {
             return;
         }
 
-        const math::vec3 position = m_light->position;
-        const math::vec3 color = m_light->color;
+        const math::vec3 position = proxy->position;
+        const math::vec3 color = proxy->color;
         if (m_built && position == m_last_position && color == m_last_color)
         {
             return;

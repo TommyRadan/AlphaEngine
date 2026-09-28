@@ -3,22 +3,24 @@
 
 /**
  * @file render_world.hpp
- * @brief What the renderer draws: renderables, lights, cameras, the
+ * @brief What the renderer draws: renderables, light and camera proxies, the
  *        environment probe and the scene-wide fog.
  */
 
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
 #include <vector>
 
+#include <core/dense_pool.hpp>
 #include <rendering_engine/fog.hpp>
 #include <rendering_engine/gpu/handle.hpp>
+#include <rendering_engine/render_proxies.hpp>
 
 namespace rendering_engine
 {
-    struct camera;
     struct environment_probe;
-    struct light;
     struct renderable;
 
     namespace debug_draw
@@ -35,35 +37,51 @@ namespace rendering_engine
      *
      * - the scene, UI and debug renderable registries — non-owning, in
      *   registration order, which is the dispatch order within a pass;
-     * - the lights, in attach order (@ref lights), packed into the lights
-     *   UBO in that order by the scene pass;
-     * - the cameras (@ref cameras) and the arbitration that picks the
-     *   camera a frame renders with (@ref active_camera);
+     * - the light proxies (@ref light_proxy), and the order the enabled ones
+     *   are packed into the lights UBO in (@ref enabled_lights);
+     * - the camera proxies (@ref camera_proxy) and the arbitration that picks
+     *   the camera a frame renders with (@ref active_camera);
      * - the debug-draw helper list the debug UI walks to toggle visibility
      *   (@ref helpers);
      * - the environment probe the skybox and the standard materials use;
      * - the scene-wide atmospheric fog.
      *
-     * Every entry is a non-owning back-pointer: a light or camera joins
-     * through its own @ref light::attach / @ref camera::attach (whoever
-     * constructs it — a component bridge, a game module — registers it with
-     * a specific world) and a helper through its constructor, and each
-     * leaves through the matching @c detach / destructor. Passes read
-     * lights and cameras only through the world a frame's
-     * @ref frame_context carries, never through a global, so more than one
-     * world can exist in a process (an editor's preview viewport, a
-     * render-to-texture scene) without them interfering. Main-thread only,
-     * like the renderer.
+     * A proxy is a plain copy the world owns, addressed by a handle: its
+     * creator (a runtime light or camera component) creates it, enables it,
+     * writes it once per frame, before the renderer reads it, and destroys
+     * it. The renderer and its passes read only the proxies, never the
+     * objects they were copied from, so everything a frame draws with is
+     * fixed before the frame starts. Proxies are created and destroyed
+     * between frames only (see @ref begin_frame). The renderable and helper
+     * entries are non-owning back-pointers: a renderable joins through the
+     * register calls and a helper through its constructor, and each leaves
+     * through the matching unregister call / destructor. Passes read the
+     * world only through the one a frame's @ref frame_context carries,
+     * never through a global, so more than one world can exist in a process
+     * (an editor's preview viewport, a render-to-texture scene) without them
+     * interfering. Main-thread only, like the renderer.
      */
     struct render_world
     {
         /**
-         * @brief Withdraws the drawable aspect handed to attaching cameras:
-         *        the renderer is going down, so there is no drawable to
-         *        match. The registries are left as they are — every
-         *        renderable, light, camera and helper unregisters itself.
+         * @brief Withdraws the drawable aspect reported to cameras: the
+         *        renderer is going down, so there is no drawable to match.
+         *        The registries and proxies are left as they are — every
+         *        renderable and helper unregisters itself, and every proxy's
+         *        creator destroys it.
          */
         void quit();
+
+        /**
+         * @brief Marks the frame the renderer is recording: until
+         *        @ref end_frame, the passes hold pointers into the proxy
+         *        storage, so creating or destroying a proxy asserts in
+         *        debug builds.
+         */
+        void begin_frame() noexcept;
+
+        /** @brief Ends the frame @ref begin_frame opened. */
+        void end_frame() noexcept;
 
         /**
          * @brief Adds @p r to the scene-pass registry.
@@ -116,68 +134,101 @@ namespace rendering_engine
         }
 
         /**
-         * @brief Appends @p l to the light list. The primitive behind
-         *        @ref light::attach / @ref light::set_enabled; call those
-         *        instead.
+         * @brief Adds a light proxy holding @p proxy and returns its handle.
+         *        An @p enabled one is appended to @ref enabled_lights.
          */
-        void add_light(light& l);
+        light_proxy_handle create_light(const light_proxy& proxy, bool enabled);
 
-        /** @brief Removes @p l from the light list. No-op if absent. */
-        void remove_light(light& l);
+        /** @brief Removes the light proxy @p light names. No-op for a stale handle. */
+        void destroy_light(light_proxy_handle light);
 
-        /** @brief Every attached, enabled light, in attach order; the scene pass packs these into the lights UBO. */
-        const std::vector<light*>& lights() const noexcept
+        /**
+         * @brief Adds @p light to, or takes it out of, the enabled list.
+         *
+         * Disabling removes it from the list; enabling appends it at the
+         * end, so a light enabled again packs after every light that stayed
+         * enabled. A no-op when the light is already in the requested state
+         * or @p light is stale.
+         */
+        void set_light_enabled(light_proxy_handle light, bool enabled);
+
+        /** @brief Whether @p light is in the enabled list. */
+        bool is_light_enabled(light_proxy_handle light) const noexcept;
+
+        /** @brief The proxy @p light names, or @c nullptr for a stale handle. */
+        light_proxy* light(light_proxy_handle light) noexcept;
+
+        /** @copydoc light(light_proxy_handle) */
+        const light_proxy* light(light_proxy_handle light) const noexcept;
+
+        /**
+         * @brief The enabled lights, in the order they were enabled; the
+         *        scene pass packs them into the lights UBO in this order and
+         *        the shadow passes take the first caster of each kind.
+         */
+        const std::vector<light_proxy_handle>& enabled_lights() const noexcept
         {
-            return m_lights;
+            return m_enabled_lights;
         }
 
         /**
-         * @brief Appends @p cam to the camera list, moving it to the back
-         *        first if it is already listed, and applies the current
-         *        drawable aspect to it. The primitive behind
-         *        @ref camera::attach; call that instead.
+         * @brief Replaces @p out with the enabled lights' proxies, in
+         *        @ref enabled_lights order. The pointers stay valid until a
+         *        light proxy is created or destroyed.
          */
-        void add_camera(camera& cam);
+        void collect_enabled_lights(std::vector<const light_proxy*>& out) const;
 
-        /** @brief Removes @p cam from the camera list. No-op if absent. */
-        void remove_camera(camera& cam);
+        /**
+         * @brief Adds a camera proxy holding @p proxy and returns its handle.
+         *        It is the newest camera, so it wins arbitration ties against
+         *        every camera created before it.
+         */
+        camera_proxy_handle create_camera(const camera_proxy& proxy);
 
-        /** @brief Every attached camera, in attach order. */
-        const std::vector<camera*>& cameras() const noexcept
+        /** @brief Removes the camera proxy @p camera names. No-op for a stale handle. */
+        void destroy_camera(camera_proxy_handle camera);
+
+        /** @brief The proxy @p camera names, or @c nullptr for a stale handle. */
+        camera_proxy* camera(camera_proxy_handle camera) noexcept;
+
+        /** @copydoc camera(camera_proxy_handle) */
+        const camera_proxy* camera(camera_proxy_handle camera) const noexcept;
+
+        /** @brief Number of camera proxies. */
+        std::size_t camera_count() const noexcept
         {
-            return m_cameras;
+            return m_cameras.size();
         }
 
         /**
          * @brief The camera this frame renders with: the highest-priority
-         *        attached, enabled camera (a priority tie goes to the
-         *        camera tagged main, then to the most recently attached),
-         *        or @c nullptr when none is attached and enabled.
+         *        enabled camera proxy (a priority tie goes to the camera
+         *        tagged main, then to the most recently created), or an
+         *        invalid handle when none is enabled.
          *
          * @ref renderer::render evaluates this once per frame into
          * @c frame_context::active_camera, so destroying or disabling the
          * winner promotes the runner-up on the next frame with no
          * bookkeeping by the owner.
          */
-        camera* active_camera() const;
+        camera_proxy_handle active_camera() const;
 
         /**
-         * @brief The attached, enabled camera tagged main with the highest
-         *        priority (the most recently attached on a tie), or
-         *        @c nullptr.
+         * @brief The enabled camera tagged main with the highest priority
+         *        (the most recently created on a tie), or an invalid handle.
          *
          * A way for game code to find "the player's camera" while a
          * higher-priority camera (a cutscene, a debug fly-cam) is
          * rendering.
          */
-        camera* main_camera() const;
+        camera_proxy_handle main_camera() const;
 
         /**
-         * @brief Reports the drawable's width / height to every attached
-         *        camera and to cameras attached later.
+         * @brief Records the drawable's width / height, the aspect cameras
+         *        follow, and advances @ref aspect_revision.
          *
-         * A value of zero or less clears the recorded aspect (nothing is
-         * forwarded, later attaches leave the camera's aspect alone).
+         * A value of zero or less clears the recorded aspect and leaves the
+         * revision alone: there is no drawable for a camera to follow.
          */
         void set_drawable_aspect(float aspect_ratio);
 
@@ -185,6 +236,16 @@ namespace rendering_engine
         float drawable_aspect() const noexcept
         {
             return m_drawable_aspect;
+        }
+
+        /**
+         * @brief Advances whenever @ref set_drawable_aspect reports a
+         *        drawable, so a camera's owner hands the aspect to the
+         *        camera (@ref camera::set_aspect_ratio) once per report.
+         */
+        uint64_t aspect_revision() const noexcept
+        {
+            return m_aspect_revision;
         }
 
         /**
@@ -242,13 +303,18 @@ namespace rendering_engine
         std::vector<renderable*> m_ui_renderables;
         std::vector<renderable*> m_debug_renderables;
 
-        std::vector<light*> m_lights;
-        std::vector<camera*> m_cameras;
+        core::dense_pool<light_proxy, light_proxy_tag> m_lights;
+        std::vector<light_proxy_handle> m_enabled_lights;
+        core::dense_pool<camera_proxy, camera_proxy_tag> m_cameras;
         std::vector<debug_draw::helper*> m_helpers;
 
         // The last value handed to set_drawable_aspect; 0 when none is
         // known yet (see drawable_aspect).
         float m_drawable_aspect{0.0f};
+        uint64_t m_aspect_revision{0};
+
+        // Set between begin_frame and end_frame.
+        bool m_in_frame{false};
 
         // The active environment probe, or null. Non-owning.
         const environment_probe* m_environment{nullptr};

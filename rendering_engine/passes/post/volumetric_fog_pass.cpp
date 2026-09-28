@@ -10,7 +10,6 @@
 #include <initializer_list>
 
 #include <core/math/math.hpp>
-#include <rendering_engine/camera/camera.hpp>
 #include <rendering_engine/gpu/bind_group.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
@@ -399,7 +398,7 @@ namespace rendering_engine
         // upsample only reads its depth rows, which the jitter leaves alone.
         const float frame_offset =
             ctx.post.taa.enabled ? static_cast<float>(ctx.frame_index % noise_frame_period) : 0.0f;
-        const core::math::mat4 inverse_projection = core::math::inverse(ctx.active_camera->get_projection_matrix());
+        const core::math::mat4 inverse_projection = core::math::inverse(ctx.active_camera->projection);
         const std::array<float, params_floats> params =
             pack_params(ctx.post.volumetric, frame_offset, inverse_projection);
         gpu.write_buffer(m_params_ubo, params.data(), params_ubo_size, 0);

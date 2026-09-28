@@ -13,13 +13,6 @@
 #include <runtime/node.hpp>
 #include <runtime/scene.hpp>
 
-namespace
-{
-    // A forward axis shorter than this carries no direction (a zero-scale
-    // node); the light keeps the direction it already has.
-    constexpr float degenerate_length = 1e-6f;
-} // namespace
-
 runtime::light_component::light_component(std::unique_ptr<rendering_engine::light> light) : m_light{std::move(light)} {}
 
 runtime::light_component runtime::light_component::clone() const
@@ -39,7 +32,6 @@ runtime::light_component runtime::light_component::clone() const
     {
         const auto& source = static_cast<const rendering_engine::directional_light&>(*m_light);
         auto directional = std::make_unique<rendering_engine::directional_light>();
-        directional->direction = source.direction;
         directional->cast_shadow = source.cast_shadow;
         copy = std::move(directional);
         break;
@@ -48,7 +40,6 @@ runtime::light_component runtime::light_component::clone() const
     {
         const auto& source = static_cast<const rendering_engine::point_light&>(*m_light);
         auto point = std::make_unique<rendering_engine::point_light>();
-        point->position = source.position;
         point->range = source.range;
         point->constant_attenuation = source.constant_attenuation;
         point->linear_attenuation = source.linear_attenuation;
@@ -61,8 +52,6 @@ runtime::light_component runtime::light_component::clone() const
     {
         const auto& source = static_cast<const rendering_engine::spot_light&>(*m_light);
         auto spot = std::make_unique<rendering_engine::spot_light>();
-        spot->position = source.position;
-        spot->direction = source.direction;
         spot->range = source.range;
         spot->constant_attenuation = source.constant_attenuation;
         spot->linear_attenuation = source.linear_attenuation;
@@ -95,18 +84,31 @@ void runtime::light_component::on_attach(node& owner)
     rendering_engine::render_world* world = scene != nullptr ? scene->world() : nullptr;
     if (world == nullptr)
     {
-        LOG_WRN("runtime::light_component::on_attach: node has no scene render_world; the light stays unattached");
+        LOG_WRN("runtime::light_component::on_attach: node has no scene render_world; the light has no proxy");
         return;
     }
-    m_light->attach(*world);
+
+    rendering_engine::light_proxy proxy{};
+    rendering_engine::copy_light_settings(*m_light, proxy);
+    // Where a node whose scale collapses its forward axis leaves the
+    // direction: a spot light shines along +X, anything else straight down.
+    proxy.direction = m_light->type() == rendering_engine::light_type::spot ? core::math::vec3{1.0f, 0.0f, 0.0f}
+                                                                            : core::math::vec3{0.0f, 0.0f, -1.0f};
+    m_placed_version = owner.transform.get_world_version();
+    rendering_engine::place_light(owner.transform.get_world_matrix(), proxy);
+
+    m_world = world;
+    m_proxy = world->create_light(proxy, m_light->is_enabled());
 }
 
 void runtime::light_component::on_destroy()
 {
-    if (m_light)
+    if (m_world != nullptr)
     {
-        m_light->detach();
+        m_world->destroy_light(m_proxy);
     }
+    m_world = nullptr;
+    m_proxy = {};
 }
 
 void runtime::light_component::on_active_changed(node& owner, bool active)
@@ -116,56 +118,36 @@ void runtime::light_component::on_active_changed(node& owner, bool active)
     {
         m_light->set_enabled(active);
     }
+    // The enabled list is the packing order, so the change reaches the
+    // world now rather than at the next extraction: lights toggled in one
+    // frame keep the order they were toggled in.
+    if (m_world != nullptr)
+    {
+        m_world->set_light_enabled(m_proxy, active);
+    }
 }
 
-void runtime::light_component::on_update(node& owner)
+void runtime::light_component::extract(const node& owner)
 {
-    if (!m_light)
+    if (m_world == nullptr || !m_light)
+    {
+        return;
+    }
+    rendering_engine::light_proxy* proxy = m_world->light(m_proxy);
+    if (proxy == nullptr)
     {
         return;
     }
 
-    const core::math::mat4 world = owner.world_matrix();
+    rendering_engine::copy_light_settings(*m_light, *proxy);
+    // An enabled flag toggled on the settings themselves (the inspector)
+    // rather than through the node.
+    m_world->set_light_enabled(m_proxy, m_light->is_enabled());
 
-    switch (m_light->type())
+    const uint64_t version = owner.transform.get_world_version();
+    if (version != m_placed_version)
     {
-    case rendering_engine::light_type::point:
-        // Column 3 of the world matrix is the node's world translation.
-        static_cast<rendering_engine::point_light&>(*m_light).position =
-            core::math::vec3{world.m[12], world.m[13], world.m[14]};
-        break;
-    case rendering_engine::light_type::directional:
-    {
-        // Travel along the node's world forward: +X in the engine convention
-        // (core/math/math.hpp), matching core::transform::get_forward. Column
-        // 0 is the node's world +X axis; its length is the node's x scale, so
-        // a zero-scale node yields no direction and the light keeps its last
-        // one instead of taking a NaN into the lights UBO.
-        const core::math::vec3 forward{world.m[0], world.m[1], world.m[2]};
-        const float forward_length = core::math::length(forward);
-        if (forward_length > degenerate_length)
-        {
-            static_cast<rendering_engine::directional_light&>(*m_light).direction = forward / forward_length;
-        }
-        break;
-    }
-    case rendering_engine::light_type::spot:
-    {
-        // A spot light follows both fields: position like a point light,
-        // direction like a directional one (+X, guarded the same way
-        // against a zero-scale node's degenerate forward axis).
-        auto& spot = static_cast<rendering_engine::spot_light&>(*m_light);
-        spot.position = core::math::vec3{world.m[12], world.m[13], world.m[14]};
-        const core::math::vec3 forward{world.m[0], world.m[1], world.m[2]};
-        const float forward_length = core::math::length(forward);
-        if (forward_length > degenerate_length)
-        {
-            spot.direction = forward / forward_length;
-        }
-        break;
-    }
-    case rendering_engine::light_type::ambient:
-        // No spatial term to track.
-        break;
+        rendering_engine::place_light(owner.transform.get_world_matrix(), *proxy);
+        m_placed_version = version;
     }
 }

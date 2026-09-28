@@ -27,10 +27,8 @@ namespace runtime
      * (@ref on_destroy / @ref on_active_changed) promotes whichever
      * candidate attached before it, with no bookkeeping of its own.
      *
-     * Holds only an opaque token (no heap payload), so unlike
-     * @c camera_component / @c light_component it needs no @c unique_ptr for
-     * address stability — the token stays valid across the component being
-     * relocated within its pool.
+     * Holds only an opaque token (no heap payload), which stays valid across
+     * the component being relocated within its pool.
      */
     struct audio_listener_component
     {

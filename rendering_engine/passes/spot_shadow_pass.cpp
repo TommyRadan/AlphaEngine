@@ -12,10 +12,7 @@
 #include <rendering_engine/gpu/render_target.hpp>
 #include <rendering_engine/gpu/shader.hpp>
 #include <rendering_engine/gpu/shader_hot_reload.hpp>
-#include <rendering_engine/lighting/light.hpp>
 #include <rendering_engine/lighting/lights_ubo.hpp>
-#include <rendering_engine/lighting/spot_light.hpp>
-#include <rendering_engine/render_world.hpp>
 #include <rendering_engine/renderables/per_draw_ubo.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
 
@@ -46,7 +43,7 @@ namespace
     // The far plane for a caster: its range, or the default when it has
     // no cutoff. Never closer than the near plane. Mirrors
     // point_shadow_pass::face_far_plane.
-    float far_plane(const rendering_engine::spot_light& caster)
+    float far_plane(const rendering_engine::light_proxy& caster)
     {
         const float far = caster.range > 0.0f ? caster.range : default_light_far;
         return far > light_near ? far : default_light_far;
@@ -244,12 +241,12 @@ namespace rendering_engine
 
         // Locate the first shadow-casting spot light, tracking its index
         // within the packed spot array so the lit shader can match it.
-        const spot_light* caster = nullptr;
+        const light_proxy* caster = nullptr;
         m_shadow_spot_index = -1;
         int spot_index = 0;
-        for (const light* l : ctx.world->lights())
+        for (const light_proxy* l : ctx.lights)
         {
-            if (l->type() != light_type::spot)
+            if (l->type != light_type::spot)
             {
                 continue;
             }
@@ -257,10 +254,9 @@ namespace rendering_engine
             {
                 break;
             }
-            const auto* sl = static_cast<const spot_light*>(l);
-            if (sl->cast_shadow)
+            if (l->cast_shadow)
             {
-                caster = sl;
+                caster = l;
                 m_shadow_spot_index = spot_index;
                 break;
             }

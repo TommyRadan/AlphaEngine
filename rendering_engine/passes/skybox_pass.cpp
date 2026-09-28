@@ -6,7 +6,6 @@
 #include <string>
 
 #include <core/math/math.hpp>
-#include <rendering_engine/camera/camera.hpp>
 #include <rendering_engine/gpu/bind_group.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
@@ -184,11 +183,11 @@ namespace rendering_engine
         // sampled a sub-pixel apart each frame like the geometry, so the
         // TAA accumulation supersamples it too and silhouettes against it
         // line up. A zero jitter (TAA off) leaves the matrix untouched.
-        core::math::mat4 view = ctx.active_camera->get_view_matrix();
+        core::math::mat4 view = ctx.active_camera->view;
         view.data()[12] = 0.0f;
         view.data()[13] = 0.0f;
         view.data()[14] = 0.0f;
-        const core::math::mat4 projection = jitter_projection(ctx.active_camera->get_projection_matrix(), ctx.jitter);
+        const core::math::mat4 projection = jitter_projection(ctx.active_camera->projection, ctx.jitter);
         const core::math::mat4 inv_view_proj = core::math::inverse(projection * view);
         gpu.write_buffer(m_sky_ubo, inv_view_proj.data(), sky_ubo_size, 0);
     }

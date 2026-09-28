@@ -316,11 +316,11 @@ namespace rendering_engine
         // frame with no camera, or with a different one (attach / detach,
         // a switch, a teleport by reattaching), restarts the accumulation
         // so nothing ghosts against a stale image.
-        if (ctx.active_camera == nullptr || ctx.active_camera != m_history_camera)
+        if (ctx.active_camera == nullptr || ctx.active_camera_handle != m_history_camera)
         {
             m_first_frame = true;
         }
-        m_history_camera = ctx.active_camera;
+        m_history_camera = ctx.active_camera != nullptr ? ctx.active_camera_handle : camera_proxy_handle{};
 
         // Bind this frame's LDR image and motion vectors. Both handles are
         // stable from frame to frame, but a resize recreates the targets

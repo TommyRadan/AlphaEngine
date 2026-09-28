@@ -16,17 +16,54 @@
 #include <imgui_internal.h>
 #include <ImGuizmo.h>
 
+#include <cstddef>
+
 #include <core/math/math.hpp>
 #include <rendering_engine/camera/camera.hpp>
 #include <rendering_engine/camera/orthographic_camera.hpp>
 #include <rendering_engine/renderer.hpp>
+#include <runtime/components/camera_component.hpp>
 #include <runtime/engine.hpp>
 #include <runtime/node.hpp>
+#include <runtime/scene.hpp>
+#include <runtime/scene_manager.hpp>
 
 namespace editor
 {
     namespace
     {
+        // The camera component behind the camera the renderer's world
+        // arbitrated, and the node carrying it, or nulls when no camera
+        // renders.
+        struct camera_rig
+        {
+            runtime::node* owner{nullptr};
+            const runtime::camera_component* camera{nullptr};
+        };
+
+        camera_rig find_active_camera(runtime::engine& engine)
+        {
+            camera_rig found;
+            const rendering_engine::camera_proxy_handle active = engine.renderer->world().active_camera();
+            if (!active.valid())
+            {
+                return found;
+            }
+            runtime::scene_manager& scenes = *engine.scenes;
+            for (std::size_t i = 0; i < scenes.scene_count() && found.camera == nullptr; ++i)
+            {
+                scenes.scene_at(i).each<runtime::camera_component>(
+                    [&found, active](runtime::node& owner, const runtime::camera_component& camera)
+                    {
+                        if (camera.proxy() == active)
+                        {
+                            found = camera_rig{&owner, &camera};
+                        }
+                    });
+            }
+            return found;
+        }
+
         // Splits a world (or local) matrix back into position, orientation
         // and scale, so a gizmo edit — which only ever produces a matrix —
         // can be written back onto a core::transform. Mirrors
@@ -168,19 +205,23 @@ namespace editor
             return;
         }
         const ImGuiDockNode* central = ImGui::DockBuilderGetCentralNode(dockspace_id);
-        rendering_engine::camera* cam = m_engine->renderer->world().active_camera();
+        // The gizmo is built before this frame's render extraction, so it
+        // takes the rendering camera's pose from its node rather than from
+        // the proxy the last frame left.
+        const camera_rig rig = find_active_camera(*m_engine);
+        const rendering_engine::camera* cam = rig.camera != nullptr ? rig.camera->get() : nullptr;
         if (central == nullptr || cam == nullptr)
         {
             return;
         }
 
-        ImGuizmo::SetOrthographic(dynamic_cast<rendering_engine::orthographic_camera*>(cam) != nullptr);
+        ImGuizmo::SetOrthographic(dynamic_cast<const rendering_engine::orthographic_camera*>(cam) != nullptr);
         ImGuizmo::SetDrawlist(ImGui::GetForegroundDrawList());
         ImGuizmo::SetRect(central->Pos.x, central->Pos.y, central->Size.x, central->Size.y);
 
         runtime::node& node = *m_selected_node;
         core::math::mat4 world = node.world_matrix();
-        const core::math::mat4 view = cam->get_view_matrix();
+        const core::math::mat4 view = rendering_engine::view_matrix_from_world(rig.camera->world_matrix(*rig.owner));
         const core::math::mat4 projection = cam->get_projection_matrix();
 
         float snap[3] = {m_gizmo.snap_translate, m_gizmo.snap_translate, m_gizmo.snap_translate};

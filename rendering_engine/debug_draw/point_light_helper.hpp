@@ -5,28 +5,24 @@
 
 #include <core/math/math.hpp>
 #include <rendering_engine/debug_draw/line_helper.hpp>
-
-namespace rendering_engine
-{
-    struct point_light;
-}
+#include <rendering_engine/render_proxies.hpp>
 
 namespace rendering_engine::debug_draw
 {
     // Gizmo for a point light.
     // Draws a small octahedron wireframe at the light's world position,
-    // tinted with the light's colour. The geometry tracks the light's
-    // position / colour every frame, so the helper must not outlive the
-    // light it points at.
+    // tinted with the light's colour. The geometry tracks the position /
+    // colour of the light proxy it names in its renderer's world every
+    // frame, and draws nothing once that proxy is gone.
     struct point_light_helper : public line_helper
     {
-        point_light_helper(renderer& owner, const point_light* light, float size = 0.25f);
+        point_light_helper(renderer& owner, light_proxy_handle light, float size = 0.25f);
 
     protected:
         void refresh() override;
 
     private:
-        const point_light* m_light;
+        light_proxy_handle m_light;
         float m_size;
 
         // Last state the geometry was built from, so refresh() only

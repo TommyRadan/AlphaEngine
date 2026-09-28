@@ -3,7 +3,6 @@
 
 #include <core/math/math.hpp>
 #include <rendering_engine/camera/camera.hpp>
-#include <rendering_engine/render_world.hpp>
 
 namespace
 {
@@ -14,38 +13,13 @@ namespace
 
 rendering_engine::camera::camera() : m_is_projection_matrix_dirty{true} {}
 
-rendering_engine::camera::~camera()
-{
-    // A no-op for a camera that was never attached, or already detached.
-    detach();
-}
-
-void rendering_engine::camera::look_at(const core::math::vec3& target, const core::math::vec3& up)
-{
-    const core::transform* parent = transform.get_parent();
-    if (parent == nullptr)
-    {
-        transform.look_at(target, up);
-        return;
-    }
-
-    // The transform's look_at works in its parent's frame: re-express the
-    // world-space target (a point) and up (a direction) there first.
-    const core::math::mat4 parent_inverse = core::math::inverse(parent->get_world_matrix());
-    const core::math::vec4 local_target = parent_inverse * core::math::vec4{target, 1.0f};
-    const core::math::vec4 local_up = parent_inverse * core::math::vec4{up, 0.0f};
-    transform.look_at(core::math::vec3{local_target.x, local_target.y, local_target.z},
-                      core::math::vec3{local_up.x, local_up.y, local_up.z});
-}
-
-core::math::mat4 rendering_engine::camera::get_view_matrix() const
+core::math::mat4 rendering_engine::view_matrix_from_world(const core::math::mat4& world)
 {
     // Column-major: columns 0 / 2 are the world-space images of the local
     // +X (forward) and +Z (up) axes, column 3 the translation. Each axis is
     // normalised so a scaled transform (say a camera under a scaled node)
     // does not scale the view. core::math::look_at builds the view-space
     // frame (-Z forward, +Y up) from this world-space frame.
-    const core::math::mat4 world = transform.get_world_matrix();
     const core::math::vec3 position{world.m[12], world.m[13], world.m[14]};
     core::math::vec3 forward{world.m[0], world.m[1], world.m[2]};
     core::math::vec3 up{world.m[8], world.m[9], world.m[10]};
@@ -69,31 +43,6 @@ core::math::mat4 rendering_engine::camera::get_view_matrix() const
 void rendering_engine::camera::invalidate_projection_matrix()
 {
     m_is_projection_matrix_dirty = true;
-}
-
-const core::math::frustum rendering_engine::camera::get_frustum() const
-{
-    return core::math::frustum::from_view_projection(get_projection_matrix() * get_view_matrix());
-}
-
-void rendering_engine::camera::attach(render_world& world)
-{
-    m_world = &world;
-    world.add_camera(*this);
-}
-
-void rendering_engine::camera::detach()
-{
-    if (m_world != nullptr)
-    {
-        m_world->remove_camera(*this);
-        m_world = nullptr;
-    }
-}
-
-bool rendering_engine::camera::is_attached() const noexcept
-{
-    return m_world != nullptr;
 }
 
 void rendering_engine::camera::set_enabled(bool enabled) noexcept

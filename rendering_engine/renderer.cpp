@@ -51,6 +51,28 @@
 
 namespace
 {
+    // Brackets the frame the renderer records on its world (see
+    // render_world::begin_frame).
+    class world_frame_scope
+    {
+    public:
+        explicit world_frame_scope(rendering_engine::render_world& world) : m_world{world}
+        {
+            m_world.begin_frame();
+        }
+
+        world_frame_scope(const world_frame_scope&) = delete;
+        world_frame_scope& operator=(const world_frame_scope&) = delete;
+
+        ~world_frame_scope()
+        {
+            m_world.end_frame();
+        }
+
+    private:
+        rendering_engine::render_world& m_world;
+    };
+
     // The renderer's post settings for the values core::load_settings resolved
     // at startup (settings.json, the ALPHAENGINE_* variables, the command
     // line). The two structs mirror each other field for field; post_settings
@@ -142,10 +164,10 @@ void rendering_engine::renderer::init(const render_services& services)
     const uint32_t height = services.drawable_height;
     device.resize_swapchain(width, height);
 
-    // Report the drawable's aspect to the world's cameras: every attached
-    // camera takes it now and any camera attached later takes it on
-    // attach, so the projection always matches the drawable. The fallback
-    // aspect stands in while the drawable is empty.
+    // Report the drawable's aspect to the world, whose camera owners hand
+    // it to their cameras — the ones already there and any added later —
+    // so the projection always matches the drawable. The fallback aspect
+    // stands in while the drawable is empty.
     m_world.set_drawable_aspect(drawable_aspect_ratio(width, height, services.fallback_aspect));
 
     // Keep the swapchain extent, the off-screen targets and the passes in
@@ -446,8 +468,9 @@ void rendering_engine::renderer::quit()
     m_point_shadow = nullptr;
     m_spot_shadow = nullptr;
     m_debug = nullptr;
-    m_prev_camera = nullptr;
+    m_prev_camera = {};
     m_has_prev_view_projection = false;
+    m_frame_lights.clear();
 
     // The grading LUT is a cached asset whose texture this handle keeps
     // alive; drop it while the device it is freed through is still up.
@@ -512,6 +535,9 @@ void rendering_engine::renderer::render()
     // in flight.
     gpu.begin_frame();
     m_in_frame = true;
+    // The passes hold pointers into the world's proxies until render()
+    // returns, however it returns.
+    const world_frame_scope world_frame{m_world};
 
     // Standard materials sampling shared texture assets rebuild their
     // bind group when an asset's texture was replaced since (an
@@ -529,10 +555,14 @@ void rendering_engine::renderer::render()
     // which camera or backbuffer is active mid-frame, and so they
     // do not have to re-run the camera arbitration on every entry.
     // The world's active_camera() is the arbitration's pick for this
-    // frame: the highest-priority attached, enabled camera.
+    // frame: the highest-priority enabled camera proxy. The enabled
+    // lights are gathered once, in the order the scene pass packs them.
     frame_context ctx{};
     ctx.swapchain_target = gpu.swapchain_target();
-    ctx.active_camera = m_world.active_camera();
+    ctx.active_camera_handle = m_world.active_camera();
+    ctx.active_camera = m_world.camera(ctx.active_camera_handle);
+    m_world.collect_enabled_lights(m_frame_lights);
+    ctx.lights = m_frame_lights;
     ctx.world = &m_world;
     ctx.viewport_width = m_target_width;
     ctx.viewport_height = m_target_height;
@@ -554,7 +584,7 @@ void rendering_engine::renderer::render()
     // The previous frame's unjittered view-projection is only meaningful
     // if that frame was drawn by this same camera.
     ctx.has_prev_view_projection =
-        m_has_prev_view_projection && ctx.active_camera != nullptr && ctx.active_camera == m_prev_camera;
+        m_has_prev_view_projection && ctx.active_camera != nullptr && ctx.active_camera_handle == m_prev_camera;
     ctx.prev_view_projection = ctx.has_prev_view_projection ? m_prev_view_projection : core::math::mat4{};
     ctx.scene_color_target = m_scene_color_target;
     ctx.scene_color_texture = m_scene_color_texture;
@@ -621,14 +651,14 @@ void rendering_engine::renderer::render()
     // came from. A no-camera frame leaves nothing to reproject against.
     if (ctx.active_camera != nullptr)
     {
-        m_prev_view_projection = ctx.active_camera->get_projection_matrix() * ctx.active_camera->get_view_matrix();
+        m_prev_view_projection = ctx.active_camera->projection * ctx.active_camera->view;
         m_has_prev_view_projection = true;
     }
     else
     {
         m_has_prev_view_projection = false;
     }
-    m_prev_camera = ctx.active_camera;
+    m_prev_camera = ctx.active_camera != nullptr ? ctx.active_camera_handle : camera_proxy_handle{};
     m_prev_jitter = ctx.jitter;
     ++m_frame_index;
 
@@ -687,9 +717,9 @@ void rendering_engine::renderer::on_resize(uint32_t pixel_width, uint32_t pixel_
     m_passes.resize(pixel_width, pixel_height);
 
     // The projection follows the drawable so the image is not stretched:
-    // the world forwards the aspect to every attached camera and hands it
-    // to any camera attached later. Both dimensions are non-zero here, so
-    // the fallback is never used.
+    // the world's camera owners hand the new aspect to their cameras before
+    // the next frame. Both dimensions are non-zero here, so the fallback is
+    // never used.
     m_world.set_drawable_aspect(drawable_aspect_ratio(pixel_width, pixel_height, 1.0f));
 
     LOG_INF("Rendering Engine: render targets resized to %ux%u", pixel_width, pixel_height);

@@ -4,32 +4,42 @@
 #include <rendering_engine/render_world.hpp>
 
 #include <algorithm>
+#include <cassert>
 
-#include <rendering_engine/camera/camera.hpp>
 #include <rendering_engine/lighting/environment_probe.hpp>
 
 namespace
 {
     // True when @p candidate beats @p incumbent under the arbitration
     // rule: higher priority, else a main tag the incumbent lacks, else
-    // (walking the list in attach order) simply being the later entry.
-    bool outranks(const rendering_engine::camera& candidate, const rendering_engine::camera* incumbent)
+    // (walking the proxies in creation order) simply being the later entry.
+    bool outranks(const rendering_engine::camera_proxy& candidate, const rendering_engine::camera_proxy* incumbent)
     {
         if (incumbent == nullptr)
         {
             return true;
         }
-        if (candidate.get_priority() != incumbent->get_priority())
+        if (candidate.priority != incumbent->priority)
         {
-            return candidate.get_priority() > incumbent->get_priority();
+            return candidate.priority > incumbent->priority;
         }
-        return candidate.is_main() || !incumbent->is_main();
+        return candidate.main || !incumbent->main;
     }
 } // namespace
 
 void rendering_engine::render_world::quit()
 {
     set_drawable_aspect(0.0f);
+}
+
+void rendering_engine::render_world::begin_frame() noexcept
+{
+    m_in_frame = true;
+}
+
+void rendering_engine::render_world::end_frame() noexcept
+{
+    m_in_frame = false;
 }
 
 void rendering_engine::render_world::register_scene_renderable(renderable* r)
@@ -73,67 +83,131 @@ void rendering_engine::render_world::unregister_debug_renderable(renderable* r)
                               m_debug_renderables.end());
 }
 
-void rendering_engine::render_world::add_light(light& l)
+rendering_engine::light_proxy_handle rendering_engine::render_world::create_light(const light_proxy& proxy,
+                                                                                  bool enabled)
 {
-    m_lights.push_back(&l);
-}
-
-void rendering_engine::render_world::remove_light(light& l)
-{
-    m_lights.erase(std::remove(m_lights.begin(), m_lights.end(), &l), m_lights.end());
-}
-
-void rendering_engine::render_world::add_camera(camera& cam)
-{
-    remove_camera(cam);
-    m_cameras.push_back(&cam);
-    if (m_drawable_aspect > 0.0f)
+    assert(!m_in_frame && "light proxies are created between frames");
+    const light_proxy_handle created = m_lights.insert(proxy);
+    if (enabled)
     {
-        cam.set_aspect_ratio(m_drawable_aspect);
+        m_enabled_lights.push_back(created);
+    }
+    return created;
+}
+
+void rendering_engine::render_world::destroy_light(light_proxy_handle light)
+{
+    assert(!m_in_frame && "light proxies are destroyed between frames");
+    m_enabled_lights.erase(std::remove(m_enabled_lights.begin(), m_enabled_lights.end(), light),
+                           m_enabled_lights.end());
+    m_lights.erase(light);
+}
+
+void rendering_engine::render_world::set_light_enabled(light_proxy_handle light, bool enabled)
+{
+    if (!m_lights.contains(light) || is_light_enabled(light) == enabled)
+    {
+        return;
+    }
+    if (enabled)
+    {
+        m_enabled_lights.push_back(light);
+    }
+    else
+    {
+        m_enabled_lights.erase(std::remove(m_enabled_lights.begin(), m_enabled_lights.end(), light),
+                               m_enabled_lights.end());
     }
 }
 
-void rendering_engine::render_world::remove_camera(camera& cam)
+bool rendering_engine::render_world::is_light_enabled(light_proxy_handle light) const noexcept
 {
-    m_cameras.erase(std::remove(m_cameras.begin(), m_cameras.end(), &cam), m_cameras.end());
+    return std::find(m_enabled_lights.begin(), m_enabled_lights.end(), light) != m_enabled_lights.end();
 }
 
-rendering_engine::camera* rendering_engine::render_world::active_camera() const
+rendering_engine::light_proxy* rendering_engine::render_world::light(light_proxy_handle light) noexcept
 {
-    camera* best = nullptr;
-    for (camera* cam : m_cameras)
+    return m_lights.get(light);
+}
+
+const rendering_engine::light_proxy* rendering_engine::render_world::light(light_proxy_handle light) const noexcept
+{
+    return m_lights.get(light);
+}
+
+void rendering_engine::render_world::collect_enabled_lights(std::vector<const light_proxy*>& out) const
+{
+    out.clear();
+    out.reserve(m_enabled_lights.size());
+    for (const light_proxy_handle handle : m_enabled_lights)
     {
-        if (cam->is_enabled() && outranks(*cam, best))
+        if (const light_proxy* proxy = m_lights.get(handle))
         {
-            best = cam;
+            out.push_back(proxy);
         }
     }
-    return best;
 }
 
-rendering_engine::camera* rendering_engine::render_world::main_camera() const
+rendering_engine::camera_proxy_handle rendering_engine::render_world::create_camera(const camera_proxy& proxy)
 {
-    camera* best = nullptr;
-    for (camera* cam : m_cameras)
+    assert(!m_in_frame && "camera proxies are created between frames");
+    return m_cameras.insert(proxy);
+}
+
+void rendering_engine::render_world::destroy_camera(camera_proxy_handle camera)
+{
+    assert(!m_in_frame && "camera proxies are destroyed between frames");
+    m_cameras.erase(camera);
+}
+
+rendering_engine::camera_proxy* rendering_engine::render_world::camera(camera_proxy_handle camera) noexcept
+{
+    return m_cameras.get(camera);
+}
+
+const rendering_engine::camera_proxy* rendering_engine::render_world::camera(camera_proxy_handle camera) const noexcept
+{
+    return m_cameras.get(camera);
+}
+
+rendering_engine::camera_proxy_handle rendering_engine::render_world::active_camera() const
+{
+    const std::span<const camera_proxy> cameras = m_cameras.values();
+    const camera_proxy* best = nullptr;
+    camera_proxy_handle winner{};
+    for (std::size_t i = 0; i < cameras.size(); ++i)
     {
-        if (cam->is_enabled() && cam->is_main() && outranks(*cam, best))
+        if (cameras[i].enabled && outranks(cameras[i], best))
         {
-            best = cam;
+            best = &cameras[i];
+            winner = m_cameras.handle_at(i);
         }
     }
-    return best;
+    return winner;
+}
+
+rendering_engine::camera_proxy_handle rendering_engine::render_world::main_camera() const
+{
+    const std::span<const camera_proxy> cameras = m_cameras.values();
+    const camera_proxy* best = nullptr;
+    camera_proxy_handle winner{};
+    for (std::size_t i = 0; i < cameras.size(); ++i)
+    {
+        if (cameras[i].enabled && cameras[i].main && outranks(cameras[i], best))
+        {
+            best = &cameras[i];
+            winner = m_cameras.handle_at(i);
+        }
+    }
+    return winner;
 }
 
 void rendering_engine::render_world::set_drawable_aspect(float aspect_ratio)
 {
     m_drawable_aspect = aspect_ratio > 0.0f ? aspect_ratio : 0.0f;
-    if (aspect_ratio <= 0.0f)
+    if (aspect_ratio > 0.0f)
     {
-        return;
-    }
-    for (camera* cam : m_cameras)
-    {
-        cam->set_aspect_ratio(aspect_ratio);
+        ++m_aspect_revision;
     }
 }
 

@@ -15,7 +15,7 @@
 
 #include <imgui.h>
 
-#include <rendering_engine/lighting/light.hpp>
+#include <rendering_engine/render_proxies.hpp>
 #include <rendering_engine/render_stats.hpp>
 #include <rendering_engine/renderer.hpp>
 #include <runtime/engine.hpp>
@@ -40,10 +40,15 @@ namespace editor
         uint32_t directional = 0;
         uint32_t point = 0;
         uint32_t spot = 0;
-        const auto& lights = m_engine->renderer->world().lights();
-        for (const auto* source : lights)
+        const rendering_engine::render_world& world = m_engine->renderer->world();
+        for (const rendering_engine::light_proxy_handle handle : world.enabled_lights())
         {
-            switch (source->type())
+            const rendering_engine::light_proxy* source = world.light(handle);
+            if (source == nullptr)
+            {
+                continue;
+            }
+            switch (source->type)
             {
             case rendering_engine::light_type::ambient:
                 ++ambient;
@@ -91,7 +96,7 @@ namespace editor
             ImGui::Text("Vertices: %llu", static_cast<unsigned long long>(stats.vertices));
 
             ImGui::SeparatorText("Lights");
-            ImGui::Text("Total: %zu", lights.size());
+            ImGui::Text("Total: %zu", world.enabled_lights().size());
             ImGui::Text("Ambient: %u", ambient);
             ImGui::Text("Directional: %u", directional);
             ImGui::Text("Point: %u", point);

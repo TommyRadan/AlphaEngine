@@ -8,7 +8,6 @@
 #include <cmath>
 #include <string>
 
-#include <rendering_engine/camera/camera.hpp>
 #include <rendering_engine/gpu/bind_group.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
@@ -17,10 +16,7 @@
 #include <rendering_engine/gpu/shader.hpp>
 #include <rendering_engine/gpu/shader_hot_reload.hpp>
 #include <rendering_engine/gpu/texture.hpp>
-#include <rendering_engine/lighting/directional_light.hpp>
-#include <rendering_engine/lighting/light.hpp>
 #include <rendering_engine/lighting/lights_ubo.hpp>
-#include <rendering_engine/render_world.hpp>
 #include <rendering_engine/renderables/per_draw_ubo.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
 
@@ -539,12 +535,12 @@ namespace rendering_engine
         // its index within the packed directional array so the lit
         // shader can match it. Lights past the UBO capacity never reach
         // the shader, so they cannot cast.
-        const directional_light* caster = nullptr;
+        const light_proxy* caster = nullptr;
         m_shadow_light_index = -1;
         int directional_index = 0;
-        for (const light* l : ctx.world->lights())
+        for (const light_proxy* l : ctx.lights)
         {
-            if (l->type() != light_type::directional)
+            if (l->type != light_type::directional)
             {
                 continue;
             }
@@ -552,10 +548,9 @@ namespace rendering_engine
             {
                 break;
             }
-            const auto* dl = static_cast<const directional_light*>(l);
-            if (dl->cast_shadow)
+            if (l->cast_shadow)
             {
-                caster = dl;
+                caster = l;
                 m_shadow_light_index = directional_index;
                 break;
             }
@@ -585,15 +580,10 @@ namespace rendering_engine
             // matches what the scene pass renders even if the arbitration
             // changes mid-frame.
             std::array<cascade_sphere, max_shadow_cascades> spheres{};
-            if (const camera* cam = ctx.active_camera; cam != nullptr)
+            if (const camera_proxy* cam = ctx.active_camera; cam != nullptr)
             {
                 m_active_cascades = m_cascade_count;
-                fit_cascades(cam->get_view_matrix(),
-                             cam->get_projection_matrix(),
-                             m_active_cascades,
-                             m_distance,
-                             m_split_depths,
-                             spheres);
+                fit_cascades(cam->view, cam->projection, m_active_cascades, m_distance, m_split_depths, spheres);
             }
             else
             {
