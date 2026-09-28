@@ -70,6 +70,7 @@
 #include <rendering_engine/gpu/backend/vulkan/vk_pipeline_cache.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_query_pool.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_resources.hpp>
+#include <rendering_engine/gpu/backend/vulkan/vk_swapchain.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_transfer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 
@@ -323,25 +324,12 @@ namespace rendering_engine::gpu::backend::vulkan
         // resting layout back afterwards.
         void record_layout_transition(VkCommandBuffer cmd, vk_texture& tex, VkImageLayout new_layout);
 
-        // Acquire the next swapchain image for the current frame.
-        // Called lazily by the render-pass encoder when the first
-        // swapchain-targeted pass opens, so a frame that never reaches
-        // the swapchain does not acquire one. One attempt per frame:
-        // the frame's later swapchain passes see the same outcome, so
-        // a frame either reaches the swapchain in every pass or in
-        // none. Must run inside a begin_frame / end_frame bracket.
-        // An out-of-date acquire rebuilds the swapchain against the
-        // surface's current extent and retries once, so the frame
-        // lands in the new swapchain; a rebuild that finds no usable
-        // extent (minimised) suspends instead and the frame skips the
-        // swapchain. Because a rebuild retires the swapchain target's
-        // render-pass variants, callers read nothing from that target
-        // until this returns. The slot's fence is not touched here —
-        // submit resets it right before the queue submission that
-        // signals it, so a failed acquire never leaves it unsignaled
-        // for the next begin_frame to block on. An image handed back
-        // while the frame that last drew it is still in flight waits
-        // that frame's fence (see m_image_last_slot).
+        // Acquire the next swapchain image for the current frame, once
+        // per frame, when the first swapchain-targeted pass opens (see
+        // vk_swapchain::acquire_swapchain_image). Because an
+        // out-of-date acquire rebuilds the swapchain and so retires the
+        // swapchain target's render-pass variants, callers read nothing
+        // from that target until this returns.
         void acquire_swapchain_image();
 
         // A primary command buffer for a command encoder, from the
@@ -436,16 +424,6 @@ namespace rendering_engine::gpu::backend::vulkan
         // failed to create, so a null sampler never reaches a
         // combined-image-sampler descriptor.
         void create_fallback_sampler();
-        // Build the swapchain for @p extent plus everything hanging off
-        // it (image views, one depth buffer per frame slot, the
-        // per-image render-finished semaphores). The previous swapchain, if any,
-        // is handed over as oldSwapchain — which retires it whether or
-        // not the call succeeds — and released here. Returns false,
-        // with nothing left half-built, when any step fails; the caller
-        // decides whether that is fatal (init) or a suspension (the
-        // render loop).
-        bool create_swapchain(const VkSurfaceCapabilitiesKHR& caps, VkExtent2D extent);
-        void destroy_swapchain();
         // Forced rebuild used by every recovery site: re-queries the
         // surface capabilities (never the cached window size — an
         // OS-driven out-of-date arrives without a resize), waits the
@@ -455,9 +433,6 @@ namespace rendering_engine::gpu::backend::vulkan
         // suspended instead of throwing; a later call resumes it.
         // Returns true when a new swapchain is live.
         bool recreate_swapchain();
-        // Enter the suspended state, logging @p reason once per
-        // suspension (at error level when @p is_error).
-        void suspend_swapchain(const char* reason, bool is_error);
         // Retire every render-pass variant of @p target: its
         // VkRenderPass objects, the framebuffers built on them and —
         // by generation, walking the pipeline pool — every graphics
@@ -496,10 +471,8 @@ namespace rendering_engine::gpu::backend::vulkan
         vk_frame m_frame{m_physical_device, m_device, m_transfer};
         vk_descriptor_allocator m_descriptors{m_device};
         vk_query_pool m_queries{m_device, m_frame};
-
-        // Whether presentation waits for vertical sync
-        // (surface_desc::vsync), read at every swapchain build.
-        bool m_vsync{false};
+        vk_swapchain m_swapchain{
+            m_instance, m_physical_device, m_device, m_frame, [this] { return recreate_swapchain(); }};
 
         // Serialise the two device paths the secondary encoders of a
         // parallel render pass reach from several threads at once (see
@@ -516,62 +489,8 @@ namespace rendering_engine::gpu::backend::vulkan
         // loop, so it is thrown exactly once.
         bool m_device_lost_thrown{false};
 
-        VkSwapchainKHR m_swapchain{VK_NULL_HANDLE};
-        VkSurfaceFormatKHR m_surface_format{};
-        VkPresentModeKHR m_present_mode{VK_PRESENT_MODE_FIFO_KHR};
-        VkExtent2D m_swapchain_extent{};
-        std::vector<VkImage> m_swapchain_images;
-        std::vector<VkImageView> m_swapchain_image_views;
-        // One depth buffer per frame slot: the swapchain passes of two
-        // frames in flight would otherwise write one image with no
-        // dependency between them. A swapchain framebuffer pairs an
-        // image with a slot's depth (see swapchain_framebuffer_index).
-        std::array<VkImage, k_max_frames_in_flight> m_swapchain_depth_images{};
-        std::array<VmaAllocation, k_max_frames_in_flight> m_swapchain_depth_allocations{};
-        std::array<VkImageView, k_max_frames_in_flight> m_swapchain_depth_views{};
-        // The engine-side format of the swapchain depth buffer; the
-        // VkFormat backing it is vk_format_for(m_swapchain_depth_format)
-        // once resolve_depth_formats has run.
-        texture_format m_swapchain_depth_format{texture_format::depth32_float};
         render_target m_swapchain_target{};
 
-        // One render-finished semaphore per swapchain image, indexed by the
-        // acquired image index. A semaphore tied to a specific image is not
-        // re-signaled until that image is re-acquired, which the acquire/fence
-        // flow already gates, so the present operation never races a later
-        // frame's submit (VUID-vkQueueSubmit-pSignalSemaphores-00067). Created
-        // and destroyed alongside the swapchain so it tracks image-count
-        // changes on resize.
-        std::vector<VkSemaphore> m_render_finished;
-        // The frame slot that last rendered into each swapchain image
-        // (k_no_slot for none): the images-in-flight guard. An acquire
-        // that hands an image back while the frame that last drew it is
-        // still in flight waits that frame's fence first, so the image's
-        // render-finished semaphore is never re-signaled while pending.
-        static constexpr uint32_t k_no_slot = UINT32_MAX;
-        std::vector<uint32_t> m_image_last_slot;
-        uint32_t m_current_image_index{0};
-        bool m_have_current_image{false};
-        // Set by the first acquire_swapchain_image of a frame, whatever
-        // its outcome, and cleared in end_frame: a frame gets exactly
-        // one attempt, so a pass that opens after a failed acquire
-        // does not acquire an image the earlier passes never drew to.
-        bool m_acquire_attempted{false};
-        // Set by submit once this frame's command buffer has been
-        // queued against the acquired image; end_frame presents only
-        // then, so a frame whose encoder failed to record does not
-        // present an image whose render-finished semaphore will never
-        // be signaled.
-        bool m_present_pending{false};
-        // True while there is nothing to present into: the surface
-        // reported a 0x0 extent (minimised) or the last rebuild
-        // failed. acquire_swapchain_image hands out no image, submit
-        // takes the no-image path, end_frame has nothing to present,
-        // and begin_frame polls the surface every frame until a rebuild
-        // succeeds. Never set by init, which throws instead.
-        bool m_swapchain_suspended{false};
-        // See swapchain_generation().
-        uint64_t m_swapchain_generation{0};
         // Source of vk_render_target::variant::render_pass_generation;
         // starts at 1 so 0 can mean "no render pass".
         uint64_t m_next_render_pass_generation{1};
@@ -582,15 +501,5 @@ namespace rendering_engine::gpu::backend::vulkan
         // default_texture().
         texture m_default_texture_2d{};
         texture m_default_texture_cube{};
-
-        // Last drawable size the engine reported through
-        // resize_swapchain, in pixels (seeded from the surface_desc
-        // size at init). Only
-        // consulted when the surface leaves the extent to the
-        // application (currentExtent == UINT32_MAX); everywhere else
-        // the surface capabilities decide, so a rebuild never trusts
-        // a stale cached size.
-        uint32_t m_window_width{0};
-        uint32_t m_window_height{0};
     };
 } // namespace rendering_engine::gpu::backend::vulkan

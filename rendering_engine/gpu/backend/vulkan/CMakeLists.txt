@@ -35,6 +35,8 @@ target_sources(alpha_rhi PRIVATE
     vk_resources.hpp
     vk_staging_ring.cpp
     vk_staging_ring.hpp
+    vk_swapchain.cpp
+    vk_swapchain.hpp
     vk_transfer.cpp
     vk_transfer.hpp
     vk_translate.cpp
