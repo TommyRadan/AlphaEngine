@@ -15,6 +15,7 @@
 #include <rendering_engine/lighting/light.hpp>
 #include <rendering_engine/lighting/lights_ubo.hpp>
 #include <rendering_engine/lighting/spot_light.hpp>
+#include <rendering_engine/render_world.hpp>
 #include <rendering_engine/renderables/per_draw_ubo.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
 
@@ -231,11 +232,11 @@ namespace rendering_engine
         return m_caster_mask;
     }
 
-    void spot_shadow_pass::prepare(const frame_context& /*ctx*/)
+    void spot_shadow_pass::prepare(const frame_context& ctx)
     {
-        // Nothing in the frame context shapes a spot map: it is a fixed
+        // Nothing but the light list shapes a spot map: it is a fixed
         // perspective view from the light, independent of the camera, so
-        // the pass reads only the light registry and the renderable
+        // the pass reads only the world's lights and the renderable
         // registry, like point_shadow_pass.
         auto& gpu = *m_device;
         m_culled = 0;
@@ -246,7 +247,7 @@ namespace rendering_engine
         const spot_light* caster = nullptr;
         m_shadow_spot_index = -1;
         int spot_index = 0;
-        for (const light* l : registered_lights())
+        for (const light* l : ctx.world->lights())
         {
             if (l->type() != light_type::spot)
             {

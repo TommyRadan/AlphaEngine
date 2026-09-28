@@ -38,7 +38,6 @@
 #include <core/audio/audio_clip.hpp>
 #include <core/math/math.hpp>
 #include <core/os/os.hpp>
-#include <rendering_engine/camera/camera_registry.hpp>
 #include <rendering_engine/camera/orthographic_camera.hpp>
 #include <rendering_engine/camera/perspective_camera.hpp>
 #include <rendering_engine/lighting/ambient_light.hpp>
@@ -137,7 +136,7 @@ namespace
     }
 
     // A camera of @p kind with the engine's configured field of view; the
-    // registry keeps its aspect in step with the drawable once it attaches.
+    // world it attaches to keeps its aspect in step with the drawable.
     std::unique_ptr<rendering_engine::camera> make_camera(projection kind)
     {
         switch (kind)
@@ -145,7 +144,7 @@ namespace
         case projection::perspective:
         {
             const runtime::engine_settings& settings = *runtime::current_engine().settings;
-            const float reported = rendering_engine::drawable_aspect();
+            const float reported = runtime::current_engine().renderer->world().drawable_aspect();
             return std::make_unique<rendering_engine::perspective_camera>(
                 settings.camera.field_of_view, reported > 0.0f ? reported : settings.window.aspect_ratio());
         }
@@ -273,8 +272,10 @@ namespace
         {
             return true;
         }
-        // A light registers itself as it is built and unregisters as it is
-        // destroyed, so replacing it keeps the registry right.
+        // construct_only (below): this field is only ever set before the
+        // component attaches, so the fresh light built here is unattached
+        // like the one it replaces, and on_attach registers whichever one
+        // is left when the component is actually added to a node.
         std::unique_ptr<rendering_engine::light> fresh = make_light(kind);
         if (fresh != nullptr && component.get() != nullptr)
         {

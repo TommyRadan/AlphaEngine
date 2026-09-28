@@ -3,7 +3,7 @@
 
 #include <core/math/math.hpp>
 #include <rendering_engine/camera/camera.hpp>
-#include <rendering_engine/camera/camera_registry.hpp>
+#include <rendering_engine/render_world.hpp>
 
 namespace
 {
@@ -76,19 +76,24 @@ const core::math::frustum rendering_engine::camera::get_frustum() const
     return core::math::frustum::from_view_projection(get_projection_matrix() * get_view_matrix());
 }
 
-void rendering_engine::camera::attach()
+void rendering_engine::camera::attach(render_world& world)
 {
-    register_camera(*this);
+    m_world = &world;
+    world.add_camera(*this);
 }
 
 void rendering_engine::camera::detach()
 {
-    unregister_camera(*this);
+    if (m_world != nullptr)
+    {
+        m_world->remove_camera(*this);
+        m_world = nullptr;
+    }
 }
 
-bool rendering_engine::camera::is_attached() const
+bool rendering_engine::camera::is_attached() const noexcept
 {
-    return is_registered(*this);
+    return m_world != nullptr;
 }
 
 void rendering_engine::camera::set_enabled(bool enabled) noexcept

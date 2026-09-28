@@ -24,8 +24,8 @@ namespace runtime
      * the camera's world pose, position and orientation alike, is the node's
      * composed with the camera's own local offset, with no per-frame glue: a
      * camera under an animated node (a turntable rig, a chase cam) follows it
-     * through the transform parent chain — and attaches the camera to the
-     * renderer's camera registry as a candidate for the active camera.
+     * through the transform parent chain — and attaches the camera to
+     * @c owner.scene()->world() as a candidate for the active camera.
      * Orient it with @c node::look_at (or @c camera::look_at, which accounts
      * for the parent), and rank it against other cameras with
      * @c camera::set_priority / @c set_main.
@@ -36,7 +36,8 @@ namespace runtime
      * (or removing the component) promotes the runner-up automatically.
      *
      * The camera lives behind a @c unique_ptr so its address — held by the
-     * registry — survives the component being relocated within its pool.
+     * world while attached — survives the component being relocated within
+     * its pool.
      */
     struct camera_component
     {

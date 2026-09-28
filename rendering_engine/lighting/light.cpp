@@ -3,69 +3,68 @@
 
 #include <rendering_engine/lighting/light.hpp>
 
-#include <algorithm>
+#include <rendering_engine/render_world.hpp>
 
-namespace rendering_engine
+rendering_engine::light::light(light_type type) : m_type(type) {}
+
+rendering_engine::light::~light()
 {
-    namespace
-    {
-        // Function-local static so the registry is alive before any
-        // light's static/global constructor runs and survives until the
-        // last light is destroyed — game modules may create lights at
-        // static-init time through the module pattern.
-        std::vector<light*>& light_registry()
-        {
-            static std::vector<light*> lights;
-            return lights;
-        }
+    detach();
+}
 
-        void unregister_light(light* l)
-        {
-            auto& lights = light_registry();
-            lights.erase(std::remove(lights.begin(), lights.end(), l), lights.end());
-        }
-    } // namespace
+rendering_engine::light_type rendering_engine::light::type() const noexcept
+{
+    return m_type;
+}
 
-    light::light(light_type type) : m_type(type)
+void rendering_engine::light::attach(render_world& world)
+{
+    detach();
+    m_world = &world;
+    if (m_enabled)
     {
-        light_registry().push_back(this);
+        m_world->add_light(*this);
     }
+}
 
-    light::~light()
+void rendering_engine::light::detach()
+{
+    if (m_world == nullptr)
     {
-        // A no-op for a light that was disabled at the time.
-        unregister_light(this);
+        return;
     }
+    // A no-op for a light that was disabled at the time.
+    m_world->remove_light(*this);
+    m_world = nullptr;
+}
 
-    light_type light::type() const noexcept
-    {
-        return m_type;
-    }
+bool rendering_engine::light::is_attached() const noexcept
+{
+    return m_world != nullptr;
+}
 
-    void light::set_enabled(bool enabled)
+void rendering_engine::light::set_enabled(bool enabled)
+{
+    if (enabled == m_enabled)
     {
-        if (enabled == m_enabled)
-        {
-            return;
-        }
-        m_enabled = enabled;
-        if (enabled)
-        {
-            light_registry().push_back(this);
-        }
-        else
-        {
-            unregister_light(this);
-        }
+        return;
     }
+    m_enabled = enabled;
+    if (m_world == nullptr)
+    {
+        return;
+    }
+    if (enabled)
+    {
+        m_world->add_light(*this);
+    }
+    else
+    {
+        m_world->remove_light(*this);
+    }
+}
 
-    bool light::is_enabled() const noexcept
-    {
-        return m_enabled;
-    }
-
-    const std::vector<light*>& registered_lights()
-    {
-        return light_registry();
-    }
-} // namespace rendering_engine
+bool rendering_engine::light::is_enabled() const noexcept
+{
+    return m_enabled;
+}

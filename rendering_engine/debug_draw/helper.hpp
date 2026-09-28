@@ -3,8 +3,6 @@
 
 #pragma once
 
-#include <vector>
-
 #include <assets/color.hpp>
 #include <core/math/math.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
@@ -31,12 +29,13 @@ namespace rendering_engine::debug_draw
 
     // Base for the debug gizmo family of @c *Helper objects.
     // A helper carries a display name and a
-    // visibility flag, and on construction registers itself twice: into
-    // the process-wide helper registry the debug UI walks to toggle
-    // visibility, and into one of the renderable registries of the
-    // @ref renderer it is constructed with (chosen by @ref helper_layer)
-    // so the matching pass draws it. Destroying it unregisters from both,
-    // so it must go before that renderer's @ref renderer::quit. Every
+    // visibility flag, and on construction registers itself twice, both
+    // with the @ref renderer it is constructed with: into its
+    // @ref render_world's helper list the debug UI walks to toggle
+    // visibility, and into one of its renderable registries (chosen by
+    // @ref helper_layer) so the matching pass draws it. Destroying it
+    // unregisters from both, so it must go before that renderer's
+    // @ref renderer::quit. Every
     // helper's @ref renderable::layer_mask is set to @ref layer_editor, so
     // a scene-layer helper (@ref infinite_grid) can be hidden from a
     // gameplay camera by clearing that bit from its culling mask, without
@@ -81,9 +80,4 @@ namespace rendering_engine::debug_draw
         const char* m_name;
         helper_layer m_layer;
     };
-
-    // The helpers alive right now, in construction order. Owned by the
-    // helpers themselves (the vector holds non-owning back-pointers); the
-    // debug UI walks it to list every gizmo and toggle its visibility.
-    const std::vector<helper*>& registered_helpers();
 } // namespace rendering_engine::debug_draw

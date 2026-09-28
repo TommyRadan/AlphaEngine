@@ -25,6 +25,7 @@
 #include <rendering_engine/passes/shadow_pass.hpp>
 #include <rendering_engine/passes/spot_shadow_pass.hpp>
 #include <rendering_engine/passes/view_globals.hpp>
+#include <rendering_engine/render_world.hpp>
 #include <rendering_engine/renderables/per_draw_ubo.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
 
@@ -422,7 +423,7 @@ namespace rendering_engine
         // from the per-frame group; the scene pass owns it so light objects
         // never touch the GPU directly.
         gpu_lights lights_payload{};
-        pack_lights(registered_lights(), lights_payload);
+        pack_lights(ctx.world->lights(), lights_payload);
         gpu.write_buffer(m_lights_ubo, &lights_payload, sizeof(gpu_lights), 0);
 
         // Upload the directional shadow block: each cascade's light-space

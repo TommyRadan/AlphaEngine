@@ -19,12 +19,12 @@ namespace runtime
     /**
      * @brief Gives a node a light source.
      *
-     * Owns a @ref rendering_engine::light (any kind) on the heap. A light adds
-     * itself to the renderer's light registry in its own constructor and
-     * removes itself in its destructor, so this component needs no attach /
-     * detach plumbing — building it registers the light, destroying the node
-     * (or removing the component) frees and unregisters it. The light lives
-     * behind a @c unique_ptr so the registry's back-pointer stays valid as the
+     * Owns a @ref rendering_engine::light (any kind) on the heap, built
+     * unattached. @ref on_attach attaches it to @c owner.scene()->world()
+     * (see @ref rendering_engine::light::attach), and @ref on_destroy —
+     * called before the light is freed with the node (or the component
+     * removed) — detaches it. The light lives behind a @c unique_ptr so its
+     * address, which the world holds while attached, stays valid as the
      * component is relocated within its pool.
      *
      * @ref on_update keeps the light's spatial fields in step with the node: a
@@ -47,15 +47,27 @@ namespace runtime
         /** @brief Empty component — owns no light. */
         light_component() = default;
 
-        /** @brief Takes ownership of @p light (already registered on construction). */
+        /** @brief Takes ownership of @p light, unattached. */
         explicit light_component(std::unique_ptr<rendering_engine::light> light);
+
+        /**
+         * @brief Attaches the light to @c owner.scene()->world(), if the
+         *        component owns one and the node has a scene.
+         *
+         * Called by @ref node::add_component, once, right after the
+         * component is attached.
+         */
+        void on_attach(node& owner);
+
+        /** @brief Detaches the light. Called before the component is freed. */
+        void on_destroy();
 
         /** @brief Syncs the light's position / direction from @p owner's world transform. */
         void on_update(node& owner);
 
         /**
-         * @brief Takes the light out of the renderer's registry when the
-         *        owning node is disabled, and puts it back when re-enabled.
+         * @brief Takes the light out of its world when the owning node is
+         *        disabled, and puts it back when re-enabled.
          *
          * Called by @ref node::set_active. The light object and its settings
          * are untouched; see @ref rendering_engine::light::set_enabled.
@@ -67,8 +79,9 @@ namespace runtime
          *        (colour, intensity, direction or position and attenuation,
          *        shadow casting), for @c scene::clone.
          *
-         * The copy registers itself like any new light and starts enabled;
-         * the cloned node's active state then applies as usual.
+         * The copy is unattached, same as a fresh light_component; @ref
+         * on_attach registers it when the copy's node gets one, and the
+         * cloned node's active state then applies as usual.
          */
         light_component clone() const;
 

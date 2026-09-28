@@ -14,6 +14,11 @@
 
 #include <core/string_id.hpp>
 
+namespace rendering_engine
+{
+    struct render_world;
+}
+
 namespace runtime
 {
     struct scene;
@@ -62,7 +67,17 @@ namespace runtime
      */
     struct scene_manager
     {
-        scene_manager();
+        /**
+         * @brief Constructs the persistent scene, wired to feed @p world.
+         *
+         * @p world is handed to every scene this manager creates (here and
+         * in @ref load), so their components' @c on_attach can reach it
+         * through @c scene::world(). Today there is one @ref renderer, so
+         * every scene feeds the same world; a future editor preview or
+         * render-to-texture scene would construct its own render_world and
+         * scene_manager pair instead.
+         */
+        explicit scene_manager(rendering_engine::render_world& world);
         ~scene_manager();
 
         scene_manager(const scene_manager&) = delete;
@@ -172,5 +187,8 @@ namespace runtime
         std::vector<entry> m_scenes;
         scene* m_active{nullptr};
         bool m_updating{false};
+
+        // The render_world every scene this manager creates is wired to feed.
+        rendering_engine::render_world* m_world;
     };
 } // namespace runtime

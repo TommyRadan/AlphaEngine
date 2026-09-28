@@ -15,7 +15,7 @@ namespace rendering_engine
      *        dimension is zero (no window yet, or a minimised one).
      *
      * Pure helper the renderer uses to turn the drawable's pixel size into
-     * the aspect it reports to the camera registry at init and on resize.
+     * the aspect it reports to the render_world at init and on resize.
      */
     constexpr float drawable_aspect_ratio(std::uint32_t width, std::uint32_t height, float fallback) noexcept
     {
@@ -32,9 +32,9 @@ namespace rendering_engine
      *        projection; nothing about the projection can go stale.
      *
      * The camera itself reads no engine state: the creator supplies the
-     * vertical field of view (radians) and the aspect, and the camera
-     * registry keeps the aspect of an attached camera in step with the
-     * drawable through @ref set_aspect_ratio.
+     * vertical field of view (radians) and the aspect, and the render_world
+     * it attaches to keeps the aspect in step with the drawable through
+     * @ref set_aspect_ratio.
      */
     struct perspective_camera : public camera
     {

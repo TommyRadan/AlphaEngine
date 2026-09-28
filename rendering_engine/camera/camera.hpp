@@ -11,6 +11,8 @@
 
 namespace rendering_engine
 {
+    struct render_world;
+
     /**
      * @brief A viewpoint: a transform plus a projection, and a candidate for
      *        the camera a frame renders with.
@@ -26,13 +28,13 @@ namespace rendering_engine
      * the projection is cached until one of the subclass setters invalidates
      * it.
      *
-     * Arbitration: a camera only renders while attached to the camera
-     * registry (camera_registry.hpp). Among the attached, enabled cameras the
+     * Arbitration: a camera only renders while attached to a @ref
+     * render_world (@ref attach). Among the attached, enabled cameras the
      * highest priority wins; a priority tie goes to the camera tagged main,
      * then to the most recently attached. The renderer picks the winner once
      * per frame, so destroying or disabling it promotes the next. A camera
-     * is non-copyable because the registry holds its address; the destructor
-     * detaches it.
+     * is non-copyable because the world it attaches to holds its address;
+     * the destructor detaches it.
      */
     struct camera
     {
@@ -70,7 +72,7 @@ namespace rendering_engine
         void invalidate_projection_matrix();
         virtual const core::math::mat4 get_projection_matrix() const = 0;
 
-        // Follows the drawable's width / height. The camera registry calls
+        // Follows the drawable's width / height. The attached world calls
         // this on every attached camera whenever the renderer reports a new
         // drawable size (init, resize) and on a camera as it attaches, so a
         // resize does not stretch the image. Cameras whose projection has no
@@ -83,16 +85,17 @@ namespace rendering_engine
         const core::math::frustum get_frustum() const;
 
         /**
-         * @brief Adds the camera to the registry as a candidate for the active
-         *        camera. Attaching an already attached camera moves it to the
-         *        back, so it wins ties against its peers.
+         * @brief Adds the camera to @p world's camera list as a candidate for
+         *        the active camera. Attaching an already attached camera —
+         *        to the same or a different world — moves it to the back, so
+         *        it wins ties against its peers.
          */
-        void attach();
+        void attach(render_world& world);
 
-        /** @brief Removes the camera from the registry. No-op when not attached. */
+        /** @brief Removes the camera from the world it is attached to. No-op when not attached. */
         void detach();
 
-        bool is_attached() const;
+        bool is_attached() const noexcept;
 
         /**
          * @brief An attached but disabled camera stays registered but never
@@ -130,6 +133,7 @@ namespace rendering_engine
         mutable bool m_is_projection_matrix_dirty;
 
     private:
+        render_world* m_world{nullptr};
         bool m_enabled{true};
         bool m_main{false};
         int m_priority{0};

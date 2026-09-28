@@ -342,9 +342,8 @@ namespace core
     const audio::listener_record* audio::active_listener() const noexcept
     {
         // "Most recently attached wins": walk back to front and take the
-        // first enabled one, mirroring the camera registry's arbitration in
-        // spirit (rendering_engine/camera/camera_registry.cpp) without its
-        // priority ranking.
+        // first enabled one, mirroring camera arbitration's spirit
+        // (rendering_engine/render_world.cpp) without its priority ranking.
         for (auto it = m_listeners.rbegin(); it != m_listeners.rend(); ++it)
         {
             if (it->enabled)

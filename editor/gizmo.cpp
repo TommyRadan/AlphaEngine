@@ -18,8 +18,9 @@
 
 #include <core/math/math.hpp>
 #include <rendering_engine/camera/camera.hpp>
-#include <rendering_engine/camera/camera_registry.hpp>
 #include <rendering_engine/camera/orthographic_camera.hpp>
+#include <rendering_engine/renderer.hpp>
+#include <runtime/engine.hpp>
 #include <runtime/node.hpp>
 
 namespace editor
@@ -167,7 +168,7 @@ namespace editor
             return;
         }
         const ImGuiDockNode* central = ImGui::DockBuilderGetCentralNode(dockspace_id);
-        rendering_engine::camera* cam = rendering_engine::active_camera();
+        rendering_engine::camera* cam = m_engine->renderer->world().active_camera();
         if (central == nullptr || cam == nullptr)
         {
             return;

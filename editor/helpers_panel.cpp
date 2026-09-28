@@ -14,12 +14,14 @@
 #include <imgui.h>
 
 #include <rendering_engine/debug_draw/helper.hpp>
+#include <rendering_engine/renderer.hpp>
+#include <runtime/engine.hpp>
 
 namespace editor
 {
     // Lists every live debug gizmo with
     // a checkbox bound to its visibility, plus master show / hide
-    // shortcuts. The helper registry is shared with the renderer, so
+    // shortcuts. The helper list comes from the renderer's world, so
     // the toggles take effect on the next debug-pass draw.
     void editor_layer::draw_helpers_window()
     {
@@ -28,7 +30,7 @@ namespace editor
             return;
         }
 
-        const auto& helpers = rendering_engine::debug_draw::registered_helpers();
+        const auto& helpers = m_engine->renderer->world().helpers();
 
         ImGui::SetNextWindowSize(ImVec2{260.0f, 0.0f}, ImGuiCond_FirstUseEver);
         if (ImGui::Begin("Helpers", &m_show.helpers))

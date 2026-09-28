@@ -24,9 +24,9 @@
 #include <core/log.hpp>
 #include <core/math/math.hpp>
 #include <rendering_engine/camera/camera.hpp>
-#include <rendering_engine/camera/camera_registry.hpp>
 #include <rendering_engine/lighting/ambient_light.hpp>
 #include <rendering_engine/lighting/directional_light.hpp>
+#include <rendering_engine/render_world.hpp>
 #include <rendering_engine/resources/asset_cache.hpp>
 #include <rendering_engine/resources/gltf_model.hpp>
 #include <rendering_engine/resources/mesh_asset.hpp>
@@ -34,6 +34,7 @@
 #include <runtime/components/light_component.hpp>
 #include <runtime/engine.hpp>
 #include <runtime/gltf_instantiate.hpp>
+#include <runtime/scene.hpp>
 #include <runtime/scene_manager.hpp>
 
 #include <algorithm>
@@ -152,7 +153,9 @@ namespace
             }
             // The camera comes from another module (camera_module); until
             // one is rendering there is nothing to place.
-            rendering_engine::camera* camera = rendering_engine::active_camera();
+            runtime::scene* scene = owner().scene();
+            rendering_engine::render_world* world = scene != nullptr ? scene->world() : nullptr;
+            rendering_engine::camera* camera = world != nullptr ? world->active_camera() : nullptr;
             if (camera == nullptr)
             {
                 return;

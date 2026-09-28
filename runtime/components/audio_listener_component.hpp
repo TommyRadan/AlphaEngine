@@ -22,11 +22,10 @@ namespace runtime
      * world-space position and right axis in step with the node
      * (@ref on_update). Arbitration is the audio subsystem's: among the
      * attached, enabled listeners the most recently attached wins, mirroring
-     * the camera registry's arbitration in spirit
-     * (rendering_engine/camera/camera_registry.hpp) but without a priority
-     * ranking — so destroying or disabling the winner (@ref on_destroy /
-     * @ref on_active_changed) promotes whichever candidate attached before
-     * it, with no bookkeeping of its own.
+     * camera arbitration's spirit (rendering_engine/camera/camera.hpp) but
+     * without a priority ranking — so destroying or disabling the winner
+     * (@ref on_destroy / @ref on_active_changed) promotes whichever
+     * candidate attached before it, with no bookkeeping of its own.
      *
      * Holds only an opaque token (no heap payload), so unlike
      * @c camera_component / @c light_component it needs no @c unique_ptr for

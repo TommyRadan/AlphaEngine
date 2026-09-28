@@ -26,7 +26,7 @@ namespace editor
     // frame (models, draw calls, instances, triangles, vertices) plus a
     // breakdown of the live lights by type. The geometry figures come
     // from the renderer's per-frame @ref render_stats; the light counts
-    // are read live from the lighting registry.
+    // are read live from the renderer's world.
     void editor_layer::draw_scene_window()
     {
         if (!m_show.scene)
@@ -40,7 +40,7 @@ namespace editor
         uint32_t directional = 0;
         uint32_t point = 0;
         uint32_t spot = 0;
-        const auto& lights = rendering_engine::registered_lights();
+        const auto& lights = m_engine->renderer->world().lights();
         for (const auto* source : lights)
         {
             switch (source->type())
