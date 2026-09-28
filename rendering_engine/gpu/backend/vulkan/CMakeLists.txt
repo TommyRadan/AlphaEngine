@@ -8,6 +8,8 @@ target_sources(alpha_rhi PRIVATE
     vk_check.hpp
     vk_command_encoder.cpp
     vk_command_encoder.hpp
+    vk_descriptor_allocator.cpp
+    vk_descriptor_allocator.hpp
     vk_device.cpp
     vk_device.hpp
     vk_device_buffer.cpp

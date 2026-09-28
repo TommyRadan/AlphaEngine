@@ -62,6 +62,7 @@
 #include <rendering_engine/gpu/backend/handle_pool.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_allocator.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_check.hpp>
+#include <rendering_engine/gpu/backend/vulkan/vk_descriptor_allocator.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_instance.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_logical_device.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_physical_device.hpp>
@@ -432,16 +433,6 @@ namespace rendering_engine::gpu::backend::vulkan
         // ensure_host_region_current for every buffer @p group binds.
         void prepare_bind_group(vk_bind_group& group);
 
-        // Allocate one descriptor set of @p layout from the pool chain:
-        // the newest pool first, and when it is exhausted
-        // (VK_ERROR_OUT_OF_POOL_MEMORY / VK_ERROR_FRAGMENTED_POOL) a
-        // fresh, larger pool is appended and the allocation retried
-        // once. @p out_pool receives the pool the set came from, which
-        // is the only pool it may be freed back to. Returns false, with
-        // an error logged, when even the fresh pool refuses.
-        bool
-        allocate_descriptor_set(VkDescriptorSetLayout layout, VkDescriptorSet& out_set, VkDescriptorPool& out_pool);
-
         // Lazily create (and cache on the texture) the single-mip image
         // view used to bind @p tex as a storage image at @p level. Cube,
         // array and 3D textures bind every layer through one view; the
@@ -549,10 +540,6 @@ namespace rendering_engine::gpu::backend::vulkan
         // not be allocated or mapped; init treats that as fatal.
         bool create_staging_ring();
         void destroy_staging_ring();
-        // Append one pool to the chain, sized by
-        // descriptor_pool_budget_for(chain length). Returns false with
-        // an error logged when the driver refuses.
-        bool create_descriptor_pool();
         // A compute VkPipeline over @p module and @p layout, through the
         // pipeline cache; VK_NULL_HANDLE (logged) on failure.
         VkPipeline build_compute_pipeline(VkShaderModule module, VkPipelineLayout layout);
@@ -694,6 +681,7 @@ namespace rendering_engine::gpu::backend::vulkan
         vk_physical_device m_physical_device;
         vk_logical_device m_device{m_instance, m_physical_device};
         vk_pipeline_cache m_pipeline_cache;
+        vk_descriptor_allocator m_descriptors{m_device};
 
         // Whether presentation waits for vertical sync
         // (surface_desc::vsync), read at every swapchain build.
@@ -765,11 +753,6 @@ namespace rendering_engine::gpu::backend::vulkan
         uint8_t* m_staging_mapped{nullptr};
         staging_ring m_staging_ring;
 
-        // Grow-on-demand descriptor pool chain; allocations come from
-        // the back, sets are freed to the pool recorded on their bind
-        // group, and the whole chain is destroyed at quit. See
-        // allocate_descriptor_set.
-        std::vector<VkDescriptorPool> m_descriptor_pools;
         VkSampler m_fallback_sampler{VK_NULL_HANDLE};
 
         // end_frame has already raised the device loss to the main
