@@ -20,8 +20,9 @@
  * every file it (transitively) includes, the defines, the stage and the
  * glslang version, so a launch that compiles what a previous launch
  * compiled reads the SPIR-V back instead of running glslang. The cache
- * lives under @c platform::pref_path("AlphaEngine", "AlphaEngine")/shader_cache
- * unless @c ALPHAENGINE_SHADER_CACHE names another directory or is
+ * lives in the directory @ref set_default_shader_cache_directory names (the
+ * engine passes the @c shader_cache directory of its per-user preference
+ * directory) unless @c ALPHAENGINE_SHADER_CACHE names another directory or is
  * @c 0 / @c off / @c false, which disables it; @ref set_shader_cache_directory
  * overrides both. The Vulkan backend keeps its @c VkPipelineCache blob
  * in @ref shader_cache_directory as well, so the same switch covers it.
@@ -114,6 +115,15 @@ namespace rendering_engine::gpu
      * affect that shader", which is what the debug hot reload asks.
      */
     std::vector<std::string> shader_dependencies(std::string_view path);
+
+    /**
+     * @brief The directory the SPIR-V cache uses when
+     *        @c ALPHAENGINE_SHADER_CACHE names none; empty (the default)
+     *        leaves the cache off then. The location is resolved once, on
+     *        first use, so call this before the first compile and before
+     *        @ref shader_cache_directory.
+     */
+    void set_default_shader_cache_directory(const std::filesystem::path& directory);
 
     /**
      * @brief Point the SPIR-V cache at @p directory (created on demand),

@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <filesystem>
 #include <stdexcept>
+#include <string>
 #include <utility>
 
 #include <core/audio/audio.hpp>
@@ -20,6 +21,7 @@
 #include <platform/platform.hpp>
 #include <platform/window.hpp>
 #include <rendering_engine/gpu/device.hpp>
+#include <rendering_engine/gpu/shader_compiler.hpp>
 #include <rendering_engine/gpu/surface.hpp>
 #include <rendering_engine/renderer.hpp>
 #include <rendering_engine/resources/asset_cache.hpp>
@@ -69,6 +71,31 @@ namespace runtime
             }
             surface.vsync = settings.window.vsync;
             return surface;
+        }
+
+        // The Vulkan loader does not look beside the executable for
+        // explicit-layer JSON manifests by default. CI ships the validation
+        // layer alongside AlphaEngine.exe (the Windows build job in ci.yml);
+        // pointing VK_LAYER_PATH at the executable directory before the GPU
+        // device creates its instance lets the loader discover
+        // VkLayer_khronos_validation.json there. Skipped when VK_LAYER_PATH
+        // is already set, so a user's own SDK install wins.
+        void publish_bundled_layer_path()
+        {
+            if (core::os::environment_variable("VK_LAYER_PATH").has_value())
+            {
+                return;
+            }
+            // Without a trailing separator, so the loader's path
+            // concatenation produces a well-formed lookup.
+            const std::filesystem::path base_path = platform::base_path();
+            if (base_path.empty() || !core::os::file_exists(base_path / "VkLayer_khronos_validation.json"))
+            {
+                return;
+            }
+            const std::string layer_path = core::os::path_to_utf8(base_path);
+            platform::set_environment_variable("VK_LAYER_PATH", layer_path.c_str());
+            LOG_INF("Published VK_LAYER_PATH=%s for bundled validation layer", layer_path.c_str());
         }
     } // namespace
 
@@ -194,11 +221,23 @@ namespace runtime
         // reads; it loads through the asset cache only from its first frame,
         // after the cache is initialised below.
         window->init(settings->window);
+        // What the GPU device reads from the process before it comes up: the
+        // per-user directory its shader and pipeline caches live in, and the
+        // loader's layer path when a validation layer ships beside the
+        // executable.
+        if (const std::filesystem::path pref_path = platform::pref_path("AlphaEngine", "AlphaEngine");
+            !pref_path.empty())
+        {
+            rendering_engine::gpu::set_default_shader_cache_directory(pref_path / "shader_cache");
+        }
+        publish_bundled_layer_path();
         gpu->init(surface_for(*window, *settings), settings->graphics.frames_in_flight);
         rendering_engine::render_services render{};
         render.device = gpu.get();
-        render.window = window.get();
-        render.window_settings = &settings->window;
+        const platform::window_extent drawable = window->pixel_size();
+        render.drawable_width = drawable.width;
+        render.drawable_height = drawable.height;
+        render.fallback_aspect = settings->window.aspect_ratio();
         render.events = events.get();
         render.jobs = jobs.get();
         render.assets = assets.get();

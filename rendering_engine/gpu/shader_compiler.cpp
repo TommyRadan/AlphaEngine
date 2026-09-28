@@ -17,7 +17,6 @@
 
 #include <core/hash.hpp>
 #include <core/log.hpp>
-#include <platform/platform.hpp>
 #include <rendering_engine/gpu/shader_library.hpp>
 
 namespace rendering_engine::gpu
@@ -254,6 +253,8 @@ namespace rendering_engine::gpu
         {
             bool resolved{false};
             std::filesystem::path directory;
+            // Where the cache goes when the environment names no directory.
+            std::filesystem::path default_directory;
             shader_cache_stats stats;
         };
 
@@ -307,14 +308,13 @@ namespace rendering_engine::gpu
                 }
                 state.directory = std::filesystem::path{value};
             }
-            else if (const std::filesystem::path pref_path = platform::pref_path("AlphaEngine", "AlphaEngine");
-                     !pref_path.empty())
+            else if (!state.default_directory.empty())
             {
-                state.directory = pref_path / "shader_cache";
+                state.directory = state.default_directory;
             }
             else
             {
-                LOG_WRN("Shader cache: no per-user preference directory; caching disabled");
+                LOG_WRN("Shader cache: no default cache directory; caching disabled");
                 return;
             }
 
@@ -506,6 +506,11 @@ namespace rendering_engine::gpu
         visit_includes(shader_library::source(path), includes, [](std::string_view, std::string_view) {});
         files.insert(files.end(), includes.begin(), includes.end());
         return files;
+    }
+
+    void set_default_shader_cache_directory(const std::filesystem::path& directory)
+    {
+        cache().default_directory = directory;
     }
 
     void set_shader_cache_directory(const std::filesystem::path& directory)

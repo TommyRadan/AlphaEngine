@@ -3,7 +3,7 @@
 
 /**
  * @file types.hpp
- * @brief Backend-agnostic enums for the @ref rendering_engine::gpu device.
+ * @brief Backend-agnostic enums and limits for the @ref rendering_engine::gpu device.
  *
  * Values are abstract names — backends translate them to their own native
  * constants (@c gpu/backend/vulkan/vk_translate.hpp). No header in this
@@ -17,6 +17,12 @@
 
 namespace rendering_engine::gpu
 {
+    /**
+     * @brief The most frames a device keeps in flight: the upper bound of
+     *        the frame count @c device::init takes.
+     */
+    inline constexpr uint32_t max_frames_in_flight = 2;
+
     // Vertex attribute element types. The @c float32 and @c uint32 variants
     // cover everything the engine currently uploads.
     enum class scalar_type

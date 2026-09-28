@@ -553,10 +553,10 @@ jobs:
 
       # Stage the Khronos validation layer alongside the executable so
       # the Debug artifact is debuggable on a machine that does not
-      # have the LunarG SDK installed. vk_device::create_instance()
-      # points VK_LAYER_PATH at the executable directory when it
-      # spots the bundled manifest, so dropping these files next to
-      # AlphaEngine.exe is enough to enable validation at runtime.
+      # have the LunarG SDK installed. The engine points VK_LAYER_PATH
+      # at the executable directory when it spots the bundled manifest,
+      # before it creates the GPU device, so dropping these files next
+      # to AlphaEngine.exe is enough to enable validation at runtime.
       # Release builds do not ship the layer — validation is a
       # debug-time aid.
       - name: Stage validation layer

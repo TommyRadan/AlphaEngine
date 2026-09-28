@@ -114,8 +114,12 @@ namespace
                 return false;
             }
             const platform::window& window = *runtime::current_engine().window;
-            return m_button->contains(rendering_engine::drawable_rect(window),
-                                      rendering_engine::window_to_pixels(window, math::vec2{x, y}));
+            const platform::window_extent logical = window.size();
+            const platform::window_extent pixels = window.pixel_size();
+            const math::vec2 window_size{static_cast<float>(logical.width), static_cast<float>(logical.height)};
+            const math::vec2 pixel_size{static_cast<float>(pixels.width), static_cast<float>(pixels.height)};
+            return m_button->contains(rendering_engine::drawable_rect(pixel_size),
+                                      rendering_engine::window_to_pixels(math::vec2{x, y}, window_size, pixel_size));
         }
 
         void update_hover(const core::mouse_move& event)

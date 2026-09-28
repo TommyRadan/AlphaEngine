@@ -7,8 +7,6 @@
 #include <core/log.hpp>
 #include <core/os/os.hpp>
 #include <core/time.hpp>
-#include <platform/window.hpp>
-#include <platform/window_settings.hpp>
 #include <rendering_engine/camera/perspective_camera.hpp>
 #include <rendering_engine/debug_draw/axes_helper.hpp>
 #include <rendering_engine/debug_draw/debug_pass.hpp>
@@ -118,8 +116,8 @@ void rendering_engine::renderer::init(const render_services& services)
 {
     LOG_INF("Init Rendering Engine");
 
-    assert(services.device != nullptr && services.window != nullptr && services.events != nullptr &&
-           "renderer::init: the device, the window and the event bus are required");
+    assert(services.device != nullptr && services.events != nullptr &&
+           "renderer::init: the device and the event bus are required");
     m_services = services;
     gpu::device& device = *services.device;
 
@@ -140,17 +138,15 @@ void rendering_engine::renderer::init(const render_services& services)
     // drawable is measured in pixels rather than taken from the settings'
     // logical size: on a high-density display the two differ by the
     // display scale, and the swapchain and render targets follow pixels.
-    const platform::window_extent drawable = services.window->pixel_size();
-    const uint32_t width = drawable.width;
-    const uint32_t height = drawable.height;
+    const uint32_t width = services.drawable_width;
+    const uint32_t height = services.drawable_height;
     device.resize_swapchain(width, height);
 
     // Report the drawable's aspect to the world's cameras: every attached
     // camera takes it now and any camera attached later takes it on
-    // attach, so the projection always matches the drawable. The settings'
-    // logical size stands in while the window has no drawable.
-    const float settings_aspect = services.window_settings != nullptr ? services.window_settings->aspect_ratio() : 1.0f;
-    m_world.set_drawable_aspect(drawable_aspect_ratio(width, height, settings_aspect));
+    // attach, so the projection always matches the drawable. The fallback
+    // aspect stands in while the drawable is empty.
+    m_world.set_drawable_aspect(drawable_aspect_ratio(width, height, services.fallback_aspect));
 
     // Keep the swapchain extent, the off-screen targets and the passes in
     // step with the drawable as the window is resized, maximised, restored
