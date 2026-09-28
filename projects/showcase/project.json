@@ -1,0 +1,7 @@
+{
+    "format": "alphaengine.project",
+    "version": 1,
+    "name": "AlphaEngine showcase",
+    "content_root": "../../content",
+    "modules": ["camera", "exit", "physics_demo", "shadow_demo", "ui_demo"]
+}

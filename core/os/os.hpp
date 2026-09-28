@@ -9,11 +9,11 @@
  *
  * `core` never includes an OS library: `core/log`, `core/settings` and the
  * VFS reach files, paths and the environment through here. The services
- * that need one — the executable and preference directories, the content
- * root, the window, audio devices, dynamic libraries — belong to the
- * top-level platform module (platform/platform.hpp), which the engine
- * hands to core where core needs them. Directory watching has a header of
- * its own (directory_watcher.hpp).
+ * that need one — the executable and preference directories, the window,
+ * audio devices, dynamic libraries — belong to the top-level platform
+ * module (platform/platform.hpp), which the engine hands to core where
+ * core needs them. Directory watching has a header of its own
+ * (directory_watcher.hpp).
  */
 
 #pragma once

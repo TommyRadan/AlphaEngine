@@ -1,0 +1,7 @@
+{
+    "format": "alphaengine.project",
+    "version": 1,
+    "name": "Points",
+    "content_root": "../../content",
+    "modules": ["camera", "exit", "points_demo"]
+}

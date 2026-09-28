@@ -31,11 +31,6 @@ target_sources(alpha_world PRIVATE
     scheduler.hpp
 )
 
-# The entry point, shared by every game executable (see external/).
-target_sources(alpha_game PRIVATE
-    main_loop.cpp
-)
-
 add_subdirectory(animation)
 add_subdirectory(components)
 add_subdirectory(physics)

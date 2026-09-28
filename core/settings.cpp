@@ -75,7 +75,8 @@ namespace core
     settings_load_result load_settings(const settings_registry& registry,
                                        int argc,
                                        char* const argv[],
-                                       const std::function<std::filesystem::path()>& pref_directory)
+                                       const std::function<std::filesystem::path()>& pref_directory,
+                                       std::span<const std::string> base_layers)
     {
         settings_load_result result;
 
@@ -99,6 +100,11 @@ namespace core
         {
             result.help_requested = true;
             return result;
+        }
+
+        for (const std::string& layer : base_layers)
+        {
+            registry.apply_json(layer);
         }
 
         const std::string path =

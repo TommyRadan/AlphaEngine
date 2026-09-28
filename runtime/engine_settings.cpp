@@ -24,9 +24,10 @@ namespace runtime
                 .with_cli("--content-root")
                 .with_help("  --content-root <path>    directory relative asset paths resolve under\n");
             content_section.set_log_resolved(
-                [](const content_settings& s) {
+                [](const content_settings& s)
+                {
                     LOG_INF("Content settings resolved: content_root='%s'",
-                            s.root.empty() ? "(discover)" : s.root.c_str());
+                            s.root.empty() ? "(beside the executable)" : s.root.c_str());
                 });
 
             core::typed_section<diagnostics_settings> diagnostics_section =
@@ -84,9 +85,10 @@ namespace runtime
         rendering_engine::register_post_settings(registry, out.post);
     }
 
-    std::string settings_help_text(const core::settings_registry& registry)
+    std::string settings_help_text(const core::settings_registry& registry, std::string_view leading_options)
     {
         std::string text = core::settings_help_preamble();
+        text += leading_options;
         text += registry.help_lines_for("window");
         text += registry.help_lines_for("graphics");
         text += registry.help_lines_for("shadows");

@@ -107,9 +107,10 @@ namespace runtime
 
         /**
          * @brief Initializes every subsystem in dependency order — the
-         *        window, then the GPU device against it, then the renderer —
-         *        then installs the game modules (runtime/game_module.hpp)
-         *        into the active scene.
+         *        window, then the GPU device against it, then the renderer.
+         *        The game goes in afterwards: the application loads its
+         *        project's startup scene and installs its game modules
+         *        (runtime/game_module.hpp).
          */
         void init();
 

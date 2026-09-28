@@ -1,0 +1,7 @@
+{
+    "format": "alphaengine.project",
+    "version": 1,
+    "name": "glTF",
+    "content_root": "../../content",
+    "modules": ["camera", "exit", "gltf_demo"]
+}
