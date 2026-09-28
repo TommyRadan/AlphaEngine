@@ -9,8 +9,9 @@
 
 namespace rendering_engine
 {
+    struct render_world;
     struct renderer;
-}
+} // namespace rendering_engine
 
 namespace rendering_engine::debug_draw
 {
@@ -74,6 +75,10 @@ namespace rendering_engine::debug_draw
         // Linear-RGB triple in [0, 1] from a 0..255 @ref color,
         // ignoring alpha.
         static core::math::vec3 to_rgb(const assets::color& c);
+
+        // The world of the renderer the helper was constructed with, whose
+        // proxies the light and camera gizmos follow.
+        const render_world& renderer_world() const noexcept;
 
     private:
         renderer* m_renderer;

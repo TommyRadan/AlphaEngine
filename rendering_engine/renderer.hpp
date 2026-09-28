@@ -27,7 +27,6 @@
 
 namespace rendering_engine
 {
-    struct camera;
     struct renderable;
     struct scene_pass;
     struct skybox_pass;
@@ -124,10 +123,15 @@ namespace rendering_engine
          * frame's temporal-AA jitter, and the previous frame's unjittered
          * view-projection) so they cannot disagree mid-frame. The
          * active camera is the world's arbitration result
-         * (@ref render_world::active_camera: the highest-priority attached,
-         * enabled camera) evaluated once here, so a camera destroyed or
+         * (@ref render_world::active_camera: the highest-priority enabled
+         * camera proxy) evaluated once here, so a camera destroyed or
          * disabled since the last frame is replaced by the runner-up
-         * without any owner bookkeeping. The renderer is the only
+         * without any owner bookkeeping, and the enabled light proxies are
+         * gathered once here in packing order. Everything a pass reads
+         * about the world's cameras and lights is a proxy its owner wrote
+         * before the frame; the world refuses to create or destroy a proxy
+         * until the frame ends (@ref render_world::begin_frame). The
+         * renderer is the only
          * place that advances the frame index, the jitter sequence
          * and the previous-frame matrix, and it drops the latter
          * across a no-camera frame or a change of arbitrated camera.
@@ -160,9 +164,9 @@ namespace rendering_engine
          * passes compare against changes — calls @ref pass::resize on
          * every pass in order so they rebuild their own full-resolution
          * targets and size-dependent UBOs, and reports the new aspect to
-         * the world (@ref render_world::set_drawable_aspect), which forwards
-         * it to every attached camera's @ref camera::set_aspect_ratio and
-         * to cameras attached later, so the projection matches the new
+         * the world (@ref render_world::set_drawable_aspect), whose camera
+         * owners hand it to their cameras (@ref camera::set_aspect_ratio)
+         * before the next frame, so the projection matches the new
          * drawable. Passes that sample a texture owned by
          * the renderer or another pass rebind on the next frame through
          * the handle comparison they make in @c record, and the
@@ -622,7 +626,12 @@ namespace rendering_engine
         core::math::vec2 m_prev_jitter{0.0f, 0.0f};
         core::math::mat4 m_prev_view_projection{};
         bool m_has_prev_view_projection{false};
-        const camera* m_prev_camera{nullptr};
+        camera_proxy_handle m_prev_camera{};
+
+        // The enabled light proxies of the frame being rendered, in packing
+        // order; refilled by every @ref render and published as
+        // frame_context::lights.
+        std::vector<const light_proxy*> m_frame_lights;
 
         // Allocates the HDR scene-colour target (+ depth) and the LDR
         // target at @p width x @p height, pointing the four target members

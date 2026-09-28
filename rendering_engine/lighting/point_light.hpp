@@ -8,14 +8,12 @@
 
 namespace rendering_engine
 {
-    // Omni-directional light radiating from a world-space point and
-    // falling off with distance.
+    // Omni-directional light radiating from a point and falling off with
+    // distance. The point is its owner's world position (see
+    // @ref place_light).
     struct point_light : light
     {
         point_light();
-
-        // World-space position the light radiates from.
-        core::math::vec3 position{0.0f, 0.0f, 0.0f};
 
         // Distance past which the light contributes nothing. 0 means no
         // hard cutoff (falloff still applies).

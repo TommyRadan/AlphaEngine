@@ -12,12 +12,10 @@
 #include <core/job_pool.hpp>
 #include <core/log.hpp>
 #include <core/math/math.hpp>
-#include <rendering_engine/camera/camera.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/gpu/render_target.hpp>
 #include <rendering_engine/gpu/shader_bindings.hpp>
-#include <rendering_engine/lighting/light.hpp>
 #include <rendering_engine/lighting/lights_ubo.hpp>
 #include <rendering_engine/materials/material.hpp>
 #include <rendering_engine/materials/material_template.hpp>
@@ -25,7 +23,6 @@
 #include <rendering_engine/passes/shadow_pass.hpp>
 #include <rendering_engine/passes/spot_shadow_pass.hpp>
 #include <rendering_engine/passes/view_globals.hpp>
-#include <rendering_engine/render_world.hpp>
 #include <rendering_engine/renderables/per_draw_ubo.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
 
@@ -423,7 +420,7 @@ namespace rendering_engine
         // from the per-frame group; the scene pass owns it so light objects
         // never touch the GPU directly.
         gpu_lights lights_payload{};
-        pack_lights(ctx.world->lights(), lights_payload);
+        pack_lights(ctx.lights, lights_payload);
         gpu.write_buffer(m_lights_ubo, &lights_payload, sizeof(gpu_lights), 0);
 
         // Upload the directional shadow block: each cascade's light-space
@@ -521,9 +518,9 @@ namespace rendering_engine
         // remaining tie so a run of identical keys still shares one
         // bind-group rebind. The sort is stable, so within equal keys
         // submission order still applies.
-        const core::math::frustum view_frustum = ctx.active_camera->get_frustum();
-        const core::math::mat4 view_matrix = ctx.active_camera->get_view_matrix();
-        const uint32_t camera_mask = ctx.active_camera->culling_mask();
+        const core::math::frustum& view_frustum = ctx.active_camera->frustum;
+        const core::math::mat4& view_matrix = ctx.active_camera->view;
+        const uint32_t camera_mask = ctx.active_camera->culling_mask;
         uint32_t submitted = 0;
         uint32_t culled = 0;
         for (auto* r : *m_registry)

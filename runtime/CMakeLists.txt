@@ -17,6 +17,8 @@ target_sources(alpha_world PRIVATE
     overlay.hpp
     reflection.cpp
     reflection.hpp
+    render_extraction.cpp
+    render_extraction.hpp
     scene.cpp
     scene.hpp
     scene_assets.cpp

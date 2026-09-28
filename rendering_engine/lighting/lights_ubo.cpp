@@ -7,11 +7,6 @@
 #include <cmath>
 
 #include <core/math/math.hpp>
-#include <rendering_engine/lighting/ambient_light.hpp>
-#include <rendering_engine/lighting/directional_light.hpp>
-#include <rendering_engine/lighting/light.hpp>
-#include <rendering_engine/lighting/point_light.hpp>
-#include <rendering_engine/lighting/spot_light.hpp>
 
 namespace rendering_engine
 {
@@ -26,7 +21,7 @@ namespace rendering_engine
         }
     } // namespace
 
-    void pack_lights(const std::vector<light*>& lights, gpu_lights& out)
+    void pack_lights(std::span<const light_proxy* const> lights, gpu_lights& out)
     {
         out = gpu_lights{};
 
@@ -35,9 +30,9 @@ namespace rendering_engine
         uint32_t point_count = 0;
         uint32_t spot_count = 0;
 
-        for (const light* l : lights)
+        for (const light_proxy* l : lights)
         {
-            switch (l->type())
+            switch (l->type)
             {
             case light_type::ambient:
             {
@@ -50,10 +45,9 @@ namespace rendering_engine
                 {
                     break;
                 }
-                const auto* dl = static_cast<const directional_light*>(l);
                 gpu_directional_light& slot = out.directional[directional_count];
-                write_vec3(slot.direction, core::math::normalize(dl->direction), 0.0f);
-                write_vec3(slot.color, dl->color * dl->intensity, 0.0f);
+                write_vec3(slot.direction, core::math::normalize(l->direction), 0.0f);
+                write_vec3(slot.color, l->color * l->intensity, 0.0f);
                 ++directional_count;
                 break;
             }
@@ -63,14 +57,13 @@ namespace rendering_engine
                 {
                     break;
                 }
-                const auto* pl = static_cast<const point_light*>(l);
                 gpu_point_light& slot = out.point[point_count];
-                write_vec3(slot.position, pl->position, 0.0f);
-                write_vec3(slot.color, pl->color * pl->intensity, 0.0f);
-                slot.attenuation[0] = pl->range;
-                slot.attenuation[1] = pl->constant_attenuation;
-                slot.attenuation[2] = pl->linear_attenuation;
-                slot.attenuation[3] = pl->quadratic_attenuation;
+                write_vec3(slot.position, l->position, 0.0f);
+                write_vec3(slot.color, l->color * l->intensity, 0.0f);
+                slot.attenuation[0] = l->range;
+                slot.attenuation[1] = l->constant_attenuation;
+                slot.attenuation[2] = l->linear_attenuation;
+                slot.attenuation[3] = l->quadratic_attenuation;
                 ++point_count;
                 break;
             }
@@ -80,19 +73,18 @@ namespace rendering_engine
                 {
                     break;
                 }
-                const auto* sl = static_cast<const spot_light*>(l);
                 gpu_spot_light& slot = out.spot[spot_count];
-                write_vec3(slot.position, sl->position, 0.0f);
-                write_vec3(slot.direction, core::math::normalize(sl->direction), 0.0f);
-                write_vec3(slot.color, sl->color * sl->intensity, 0.0f);
-                slot.attenuation[0] = sl->range;
-                slot.attenuation[1] = sl->constant_attenuation;
-                slot.attenuation[2] = sl->linear_attenuation;
-                slot.attenuation[3] = sl->quadratic_attenuation;
+                write_vec3(slot.position, l->position, 0.0f);
+                write_vec3(slot.direction, core::math::normalize(l->direction), 0.0f);
+                write_vec3(slot.color, l->color * l->intensity, 0.0f);
+                slot.attenuation[0] = l->range;
+                slot.attenuation[1] = l->constant_attenuation;
+                slot.attenuation[2] = l->linear_attenuation;
+                slot.attenuation[3] = l->quadratic_attenuation;
                 // The inner cone can never be wider than the outer one, so
                 // the shader's smoothstep always runs in the right order.
-                const float outer = sl->outer_angle;
-                const float inner = std::min(sl->inner_angle, outer);
+                const float outer = l->outer_angle;
+                const float inner = std::min(l->inner_angle, outer);
                 slot.cone[0] = std::cos(outer);
                 slot.cone[1] = std::cos(inner);
                 slot.cone[2] = 0.0f;

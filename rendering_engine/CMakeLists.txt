@@ -12,6 +12,7 @@ target_sources(alpha_render PRIVATE
     post_process_settings.cpp
     post_process_settings.hpp
     post_settings.hpp
+    render_proxies.hpp
     render_services.hpp
     render_stats.hpp
     render_world.cpp

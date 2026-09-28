@@ -4,12 +4,12 @@
 #pragma once
 
 #include <cstdint>
-#include <vector>
+#include <span>
+
+#include <rendering_engine/render_proxies.hpp>
 
 namespace rendering_engine
 {
-    struct light;
-
     // Fixed UBO capacities. Excess lights past these counts are dropped
     // when packing; bump the constants (and the matching GLSL array
     // sizes in the consuming material) together if more are needed.
@@ -78,5 +78,5 @@ namespace rendering_engine
     // Accumulate @p lights into @p out: ambient lights sum into a single
     // term, directional / point lights fill their arrays up to capacity,
     // and the counts are written. @p out is fully overwritten.
-    void pack_lights(const std::vector<light*>& lights, gpu_lights& out);
+    void pack_lights(std::span<const light_proxy* const> lights, gpu_lights& out);
 } // namespace rendering_engine

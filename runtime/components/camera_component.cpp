@@ -45,13 +45,18 @@ runtime::camera_component runtime::camera_component::clone() const
         return camera_component{};
     }
 
-    // The camera's own transform is its local offset under the node.
-    copy->transform.set_position(m_camera->transform.get_position());
-    copy->transform.set_quaternion(m_camera->transform.get_quaternion());
-    copy->transform.set_scale(m_camera->transform.get_scale());
     copy->set_priority(m_camera->get_priority());
     copy->set_main(m_camera->is_main());
-    return camera_component{std::move(copy)};
+    camera_component cloned{std::move(copy)};
+    cloned.m_offset.set_position(m_offset.get_position());
+    cloned.m_offset.set_quaternion(m_offset.get_quaternion());
+    cloned.m_offset.set_scale(m_offset.get_scale());
+    return cloned;
+}
+
+core::math::mat4 runtime::camera_component::world_matrix(const node& owner) const
+{
+    return owner.transform.get_world_matrix() * m_offset.get_transform_matrix();
 }
 
 void runtime::camera_component::on_attach(node& owner)
@@ -61,43 +66,99 @@ void runtime::camera_component::on_attach(node& owner)
         return;
     }
 
-    // View from the node's world pose: the camera's own transform is a local
-    // offset that inherits the node pose through the transform parent chain,
-    // and the view matrix is derived from the composed world matrix on every
-    // query, so nothing has to be copied per frame.
-    m_camera->transform.set_parent(&owner.transform);
-
     runtime::scene* scene = owner.scene();
     rendering_engine::render_world* world = scene != nullptr ? scene->world() : nullptr;
     if (world == nullptr)
     {
-        LOG_WRN("runtime::camera_component::on_attach: node has no scene render_world; the camera stays unattached");
+        LOG_WRN("runtime::camera_component::on_attach: node has no scene render_world; the camera has no proxy");
         return;
     }
-    m_camera->attach(*world);
+
+    // Match the drawable the world reports, as every later report will be
+    // matched by extract().
+    if (world->drawable_aspect() > 0.0f)
+    {
+        m_camera->set_aspect_ratio(world->drawable_aspect());
+    }
+    m_aspect_revision = world->aspect_revision();
+
+    m_world = world;
+    m_proxy = world->create_camera(rendering_engine::camera_proxy{});
+    m_node_version = 0;
+    m_offset_version = 0;
+    extract(owner);
 }
 
 void runtime::camera_component::on_destroy()
 {
-    if (!m_camera)
+    if (m_world != nullptr)
     {
-        return;
+        m_world->destroy_camera(m_proxy);
     }
-
-    m_camera->detach();
-    // The owning node may outlive this component (remove_component, store
-    // teardown); do not leave the camera's transform pointing at it.
-    m_camera->transform.set_parent(nullptr);
+    m_world = nullptr;
+    m_proxy = {};
 }
 
 void runtime::camera_component::on_active_changed(node& owner, bool active)
 {
     (void)owner;
-    if (m_camera)
+    if (!m_camera)
     {
-        // The camera stays attached, so the arbitration promotes it again
-        // the moment the node is re-enabled (unless a higher-priority or
-        // later-attached peer has since taken over).
-        m_camera->set_enabled(active);
+        return;
+    }
+    m_camera->set_enabled(active);
+    // The arbitration may be asked before the next extraction (by game
+    // code finding the rendering camera), so the flag reaches the proxy now.
+    if (rendering_engine::camera_proxy* proxy = m_world != nullptr ? m_world->camera(m_proxy) : nullptr)
+    {
+        proxy->enabled = active;
+    }
+}
+
+void runtime::camera_component::extract(const node& owner)
+{
+    if (m_world == nullptr || !m_camera)
+    {
+        return;
+    }
+    rendering_engine::camera_proxy* proxy = m_world->camera(m_proxy);
+    if (proxy == nullptr)
+    {
+        return;
+    }
+
+    // A drawable size reported since the camera last took one.
+    if (m_world->aspect_revision() != m_aspect_revision)
+    {
+        m_aspect_revision = m_world->aspect_revision();
+        if (m_world->drawable_aspect() > 0.0f)
+        {
+            m_camera->set_aspect_ratio(m_world->drawable_aspect());
+        }
+    }
+
+    proxy->culling_mask = m_camera->culling_mask();
+    proxy->priority = m_camera->get_priority();
+    proxy->main = m_camera->is_main();
+    proxy->enabled = m_camera->is_enabled();
+
+    const uint64_t node_version = owner.transform.get_world_version();
+    const uint64_t offset_version = m_offset.get_world_version();
+    const bool moved = node_version != m_node_version || offset_version != m_offset_version;
+    if (moved)
+    {
+        proxy->world = world_matrix(owner);
+        proxy->view = rendering_engine::view_matrix_from_world(proxy->world);
+        m_node_version = node_version;
+        m_offset_version = offset_version;
+    }
+
+    // The camera caches its projection, so this is a copy unless the lens or
+    // the aspect changed.
+    const core::math::mat4 projection = m_camera->get_projection_matrix();
+    if (moved || projection != proxy->projection)
+    {
+        proxy->projection = projection;
+        proxy->frustum = core::math::frustum::from_view_projection(projection * proxy->view);
     }
 }

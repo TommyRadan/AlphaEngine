@@ -23,7 +23,6 @@
 
 #include <core/log.hpp>
 #include <core/math/math.hpp>
-#include <rendering_engine/camera/camera.hpp>
 #include <rendering_engine/lighting/ambient_light.hpp>
 #include <rendering_engine/lighting/directional_light.hpp>
 #include <rendering_engine/render_world.hpp>
@@ -38,6 +37,7 @@
 #include <runtime/scene_manager.hpp>
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdlib>
 #include <memory>
 #include <utility>
@@ -110,14 +110,15 @@ namespace
         return has_bounds;
     }
 
-    // The node in @p scene whose camera_component carries @p camera, or null.
-    runtime::node* find_camera_node(runtime::scene& scene, const rendering_engine::camera* camera)
+    // The node in @p scene whose camera_component owns the proxy @p camera,
+    // or null.
+    runtime::node* find_camera_node(runtime::scene& scene, rendering_engine::camera_proxy_handle camera)
     {
         runtime::node* found = nullptr;
         scene.each<runtime::camera_component>(
             [&found, camera](runtime::node& holder, runtime::camera_component& component)
             {
-                if (component.get() == camera)
+                if (component.proxy() == camera)
                 {
                     found = &holder;
                 }
@@ -155,8 +156,9 @@ namespace
             // one is rendering there is nothing to place.
             runtime::scene* scene = owner().scene();
             rendering_engine::render_world* world = scene != nullptr ? scene->world() : nullptr;
-            rendering_engine::camera* camera = world != nullptr ? world->active_camera() : nullptr;
-            if (camera == nullptr)
+            const rendering_engine::camera_proxy_handle camera =
+                world != nullptr ? world->active_camera() : rendering_engine::camera_proxy_handle{};
+            if (!camera.valid())
             {
                 return;
             }
@@ -168,23 +170,18 @@ namespace
             const float distance = radius * 2.2f;
             const math::vec3 eye = center + math::vec3{0.0f, -distance, distance * 0.35f};
 
-            // A camera on a node views from the node's pose (a fly camera
-            // reads it back every frame), so place the node; a bare camera is
-            // placed directly.
-            runtime::node* rig = find_camera_node(runtime::current_engine().scenes->persistent_scene(), camera);
-            if (rig == nullptr && owner().scene() != nullptr)
+            // A camera views from its node's pose (a fly camera reads it back
+            // every frame), so place the node, in whichever loaded scene it is.
+            runtime::scene_manager& scenes = *runtime::current_engine().scenes;
+            runtime::node* rig = nullptr;
+            for (std::size_t index = 0; index < scenes.scene_count() && rig == nullptr; ++index)
             {
-                rig = find_camera_node(*owner().scene(), camera);
+                rig = find_camera_node(scenes.scene_at(index), camera);
             }
             if (rig != nullptr)
             {
                 rig->set_world_position(eye);
                 rig->look_at(center);
-            }
-            else
-            {
-                camera->transform.set_position(eye);
-                camera->look_at(center);
             }
             m_camera_placed = true;
         }

@@ -47,6 +47,11 @@ namespace rendering_engine::debug_draw
         return m_name;
     }
 
+    const render_world& helper::renderer_world() const noexcept
+    {
+        return m_renderer->world();
+    }
+
     core::math::vec3 helper::to_rgb(const assets::color& c)
     {
         return core::math::vec3{

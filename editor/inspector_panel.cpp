@@ -156,14 +156,12 @@ namespace editor
             case rendering_engine::light_type::directional:
             {
                 auto* directional = static_cast<rendering_engine::directional_light*>(light);
-                ImGui::DragFloat3("Direction##light", directional->direction.data(), 0.01f);
                 ImGui::Checkbox("Cast shadow##light", &directional->cast_shadow);
                 break;
             }
             case rendering_engine::light_type::point:
             {
                 auto* point = static_cast<rendering_engine::point_light*>(light);
-                ImGui::DragFloat3("Position##light", point->position.data(), 0.05f);
                 ImGui::DragFloat("Range##light", &point->range, 0.1f, 0.0f, 100000.0f);
                 ImGui::DragFloat("Constant atten.##light", &point->constant_attenuation, 0.01f);
                 ImGui::DragFloat("Linear atten.##light", &point->linear_attenuation, 0.001f);
@@ -174,8 +172,6 @@ namespace editor
             case rendering_engine::light_type::spot:
             {
                 auto* spot = static_cast<rendering_engine::spot_light*>(light);
-                ImGui::DragFloat3("Position##light", spot->position.data(), 0.05f);
-                ImGui::DragFloat3("Direction##light", spot->direction.data(), 0.01f);
                 ImGui::DragFloat("Range##light", &spot->range, 0.1f, 0.0f, 100000.0f);
                 ImGui::DragFloat("Constant atten.##light", &spot->constant_attenuation, 0.01f);
                 ImGui::DragFloat("Linear atten.##light", &spot->linear_attenuation, 0.001f);

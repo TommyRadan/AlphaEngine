@@ -11,8 +11,6 @@
 
 namespace rendering_engine
 {
-    struct camera;
-
     /**
      * @brief Temporal anti-aliasing resolve on the tonemapped LDR image.
      *
@@ -164,10 +162,10 @@ namespace rendering_engine
         gpu::texture m_bound_current{};
         gpu::texture m_bound_velocity{};
 
-        // The camera the history was accumulated from (null before the
+        // The camera the history was accumulated from (invalid before the
         // first frame and across no-camera frames); a frame whose camera
         // differs restarts the accumulation.
-        const camera* m_history_camera{nullptr};
+        camera_proxy_handle m_history_camera{};
 
         // Allocates both rgba8 accumulation targets at @p width x @p height.
         void create_targets(uint32_t width, uint32_t height);

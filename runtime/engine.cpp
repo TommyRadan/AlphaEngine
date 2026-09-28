@@ -31,6 +31,7 @@
 #include <runtime/physics/physics_debug_draw.hpp>
 #include <runtime/physics/physics_world.hpp>
 #include <runtime/reflection.hpp>
+#include <runtime/render_extraction.hpp>
 #include <runtime/scene_manager.hpp>
 #include <runtime/scripting/script_host.hpp>
 
@@ -413,12 +414,12 @@ namespace runtime
         render_tick.m_delta_time = static_cast<float>(time->delta_time());
         events->emit<core::render_update>(render_tick);
 
-        // Propagate scene-graph component updates (light/camera poses tracking
-        // their nodes, behaviours' on_update) in every loaded scene after the
-        // fixed updates moved nodes and before the draw walk. Runs once per
-        // rendered frame; render_* events fire per render inside
-        // renderer->render(). The interpolation alpha for smoothing between
-        // fixed states is available via time->interpolation_alpha().
+        // Propagate scene-graph component updates (behaviours' on_update,
+        // animation) in every loaded scene after the fixed updates moved
+        // nodes and before the draw walk. Runs once per rendered frame;
+        // render_* events fire per render inside renderer->render(). The
+        // interpolation alpha for smoothing between fixed states is
+        // available via time->interpolation_alpha().
         scenes->update();
 
         // Mixed after the scene graph so every source/listener transform
@@ -438,6 +439,10 @@ namespace runtime
             {
                 m_overlay->begin_frame();
             }
+            // Every node has its final pose for the frame (the overlay edits
+            // them too): write the lights and cameras the renderer reads into
+            // its world, once, from that final state.
+            extract_render_proxies(*scenes);
             renderer->render();
 
             // Counts rendered frames only, so a run stuck minimized never reaches its limit.

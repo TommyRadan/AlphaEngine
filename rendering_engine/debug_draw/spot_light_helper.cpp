@@ -8,7 +8,7 @@
 #include <vector>
 
 #include <core/math/math.hpp>
-#include <rendering_engine/lighting/spot_light.hpp>
+#include <rendering_engine/render_world.hpp>
 
 namespace rendering_engine::debug_draw
 {
@@ -31,22 +31,23 @@ namespace rendering_engine::debug_draw
         constexpr int spoke_stride = ring_segments / 4;
     } // namespace
 
-    spot_light_helper::spot_light_helper(renderer& owner, const spot_light* light, float size)
+    spot_light_helper::spot_light_helper(renderer& owner, light_proxy_handle light, float size)
         : line_helper(owner, "Spot light"), m_light(light), m_size(size)
     {
     }
 
     void spot_light_helper::refresh()
     {
-        if (m_light == nullptr)
+        const light_proxy* proxy = renderer_world().light(m_light);
+        if (proxy == nullptr)
         {
             return;
         }
 
-        const math::vec3 position = m_light->position;
-        const math::vec3 direction = m_light->direction;
-        const math::vec3 color = m_light->color;
-        const float outer_angle = m_light->outer_angle;
+        const math::vec3 position = proxy->position;
+        const math::vec3 direction = proxy->direction;
+        const math::vec3 color = proxy->color;
+        const float outer_angle = proxy->outer_angle;
         if (m_built && position == m_last_position && direction == m_last_direction && color == m_last_color &&
             outer_angle == m_last_outer_angle)
         {

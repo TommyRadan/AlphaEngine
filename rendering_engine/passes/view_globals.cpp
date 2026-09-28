@@ -6,7 +6,6 @@
 #include <cstdint>
 
 #include <core/math/math.hpp>
-#include <rendering_engine/camera/camera.hpp>
 #include <rendering_engine/passes/pass.hpp>
 #include <rendering_engine/passes/projection_jitter.hpp>
 #include <rendering_engine/post_settings.hpp>
@@ -30,8 +29,8 @@ namespace rendering_engine
         // (jitter_projection), so it flows into the view-projection and the
         // inverses built from it; culling and the previous-frame matrix
         // stay unjittered.
-        const core::math::mat4 view = ctx.active_camera->get_view_matrix();
-        const core::math::mat4 projection = ctx.active_camera->get_projection_matrix();
+        const core::math::mat4& view = ctx.active_camera->view;
+        const core::math::mat4& projection = ctx.active_camera->projection;
         const core::math::vec2 jitter = apply_jitter ? ctx.jitter : core::math::vec2{0.0f, 0.0f};
         const core::math::vec2 prev_jitter = apply_jitter ? ctx.prev_jitter : core::math::vec2{0.0f, 0.0f};
 

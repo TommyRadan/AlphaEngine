@@ -13,10 +13,7 @@
 #include <rendering_engine/gpu/render_target.hpp>
 #include <rendering_engine/gpu/shader.hpp>
 #include <rendering_engine/gpu/shader_hot_reload.hpp>
-#include <rendering_engine/lighting/light.hpp>
 #include <rendering_engine/lighting/lights_ubo.hpp>
-#include <rendering_engine/lighting/point_light.hpp>
-#include <rendering_engine/render_world.hpp>
 #include <rendering_engine/renderables/per_draw_ubo.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
 
@@ -36,7 +33,7 @@ namespace
 
     // The face far plane for a caster: its range, or the default when it
     // has no cutoff. Never closer than the near plane.
-    float face_far_plane(const rendering_engine::point_light& caster)
+    float face_far_plane(const rendering_engine::light_proxy& caster)
     {
         const float far_plane = caster.range > 0.0f ? caster.range : default_light_far;
         return far_plane > light_near ? far_plane : default_light_far;
@@ -310,12 +307,12 @@ namespace rendering_engine
 
         // Locate the first shadow-casting point light, tracking its index in
         // the packed point array so the lit shader can match it.
-        const point_light* caster = nullptr;
+        const light_proxy* caster = nullptr;
         m_shadow_point_index = -1;
         int point_index = 0;
-        for (const light* l : ctx.world->lights())
+        for (const light_proxy* l : ctx.lights)
         {
-            if (l->type() != light_type::point)
+            if (l->type != light_type::point)
             {
                 continue;
             }
@@ -323,10 +320,9 @@ namespace rendering_engine
             {
                 break;
             }
-            const auto* pl = static_cast<const point_light*>(l);
-            if (pl->cast_shadow)
+            if (l->cast_shadow)
             {
-                caster = pl;
+                caster = l;
                 m_shadow_point_index = point_index;
                 break;
             }

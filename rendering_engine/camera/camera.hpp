@@ -6,101 +6,57 @@
 #include <cstdint>
 
 #include <core/math/math.hpp>
-#include <core/math/transform.hpp>
-#include <rendering_engine/renderables/renderable.hpp>
+#include <rendering_engine/render_proxies.hpp>
 
 namespace rendering_engine
 {
-    struct render_world;
-
     /**
-     * @brief A viewpoint: a transform plus a projection, and a candidate for
-     *        the camera a frame renders with.
+     * @brief A camera's lens and its rank among cameras: the projection, the
+     *        layers it renders, and its enabled flag, priority and main tag.
      *
-     * Orientation is the quaternion of @ref transform, in the engine's
-     * world convention (core/math/math.hpp): the camera looks along its
-     * transform's +X with +Z up, so a fresh camera faces +X. @ref look_at
-     * sets it; the transform's own setters, @ref core::transform::get_forward
-     * and its world matrix all agree with it, and a camera transform parented
-     * under a node composes like any other. The view matrix is derived from
-     * the transform's world matrix on every call — there is no view cache to
-     * invalidate, so a direct @c transform.set_position is never stale — and
-     * the projection is cached until one of the subclass setters invalidates
-     * it.
+     * The settings of a viewpoint, not the viewpoint itself: a camera carries
+     * no pose and knows no world. Its owner (a runtime::camera_component)
+     * keeps a @ref camera_proxy in a @ref render_world, places it from its
+     * node — the camera looks along its world +X with +Z up, the engine's
+     * world convention (core/math/math.hpp), so the view comes from
+     * @ref view_matrix_from_world — and copies these settings into it before
+     * each frame. The projection is cached until one of the subclass setters
+     * invalidates it.
      *
-     * Arbitration: a camera only renders while attached to a @ref
-     * render_world (@ref attach). Among the attached, enabled cameras the
-     * highest priority wins; a priority tie goes to the camera tagged main,
-     * then to the most recently attached. The renderer picks the winner once
-     * per frame, so destroying or disabling it promotes the next. A camera
-     * is non-copyable because the world it attaches to holds its address;
-     * the destructor detaches it.
+     * Arbitration: among the enabled cameras of a world the highest priority
+     * renders; a priority tie goes to the camera tagged main, then to the one
+     * whose proxy was created last (@ref render_world::active_camera). The
+     * renderer picks the winner once per frame, so disabling it (or dropping
+     * its proxy) promotes the next. Non-copyable, so its projection cache and
+     * settings have one owner.
      */
     struct camera
     {
         camera();
-        virtual ~camera();
+        virtual ~camera() = default;
 
         camera(const camera&) = delete;
         camera& operator=(const camera&) = delete;
-
-        core::transform transform;
-
-        /**
-         * @brief Orients the camera so it faces @p target in world space, with
-         *        @p up (the engine's +Z by default) as the reference up.
-         *
-         * A target on the up axis takes the fallback up of
-         * @ref core::math::reference_up; a target at the camera's position
-         * leaves the orientation unchanged. Under a parented transform the
-         * target and up are re-expressed in the parent's frame, so the camera
-         * faces the world-space target exactly.
-         */
-        void look_at(const core::math::vec3& target, const core::math::vec3& up = core::math::world_up);
-
-        /**
-         * @brief World-to-view matrix, derived from the transform's world
-         *        matrix: its translation is the eye, its +X column the
-         *        forward and its +Z column the up (each normalised, so the
-         *        transform's scale does not distort the view). A degenerate
-         *        (zero-scale) column falls back to the identity orientation
-         *        rather than producing NaNs.
-         */
-        core::math::mat4 get_view_matrix() const;
 
         /** @brief Marks the cached projection stale; the subclass setters call this. */
         void invalidate_projection_matrix();
         virtual const core::math::mat4 get_projection_matrix() const = 0;
 
-        // Follows the drawable's width / height. The attached world calls
-        // this on every attached camera whenever the renderer reports a new
-        // drawable size (init, resize) and on a camera as it attaches, so a
-        // resize does not stretch the image. Cameras whose projection has no
-        // aspect (orthographic magnifications) ignore it.
+        // Follows the drawable's width / height. The camera's owner hands it
+        // the aspect its render_world reports (@ref render_world::drawable_aspect)
+        // when the camera joins the world and again whenever the renderer
+        // reports a new drawable size (init, resize), so a resize does not
+        // stretch the image. Cameras whose projection has no aspect
+        // (orthographic magnifications) ignore it.
         virtual void set_aspect_ratio(float aspect_ratio)
         {
             (void)aspect_ratio;
         }
 
-        const core::math::frustum get_frustum() const;
-
         /**
-         * @brief Adds the camera to @p world's camera list as a candidate for
-         *        the active camera. Attaching an already attached camera —
-         *        to the same or a different world — moves it to the back, so
-         *        it wins ties against its peers.
-         */
-        void attach(render_world& world);
-
-        /** @brief Removes the camera from the world it is attached to. No-op when not attached. */
-        void detach();
-
-        bool is_attached() const noexcept;
-
-        /**
-         * @brief An attached but disabled camera stays registered but never
-         *        renders. Cameras start enabled; @c camera_component follows
-         *        its node's active state with this.
+         * @brief A disabled camera stays in its world but never renders.
+         *        Cameras start enabled; @c camera_component follows its
+         *        node's active state with this.
          */
         void set_enabled(bool enabled) noexcept;
         bool is_enabled() const noexcept;
@@ -111,7 +67,7 @@ namespace rendering_engine
 
         /**
          * @brief Tags the camera as the main one: it wins priority ties and is
-         *        what @ref main_camera returns. Off by default.
+         *        what @ref render_world::main_camera returns. Off by default.
          */
         void set_main(bool main) noexcept;
         bool is_main() const noexcept;
@@ -133,10 +89,18 @@ namespace rendering_engine
         mutable bool m_is_projection_matrix_dirty;
 
     private:
-        render_world* m_world{nullptr};
         bool m_enabled{true};
         bool m_main{false};
         int m_priority{0};
         uint32_t m_culling_mask{layer_all};
     };
+
+    /**
+     * @brief World-to-view matrix of a camera whose world matrix is @p world:
+     *        its translation is the eye, its +X column the forward and its
+     *        +Z column the up (each normalised, so the matrix's scale does
+     *        not distort the view). A degenerate (zero-scale) column falls
+     *        back to the identity orientation rather than producing NaNs.
+     */
+    core::math::mat4 view_matrix_from_world(const core::math::mat4& world);
 } // namespace rendering_engine

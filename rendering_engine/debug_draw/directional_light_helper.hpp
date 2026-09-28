@@ -5,28 +5,24 @@
 
 #include <core/math/math.hpp>
 #include <rendering_engine/debug_draw/line_helper.hpp>
-
-namespace rendering_engine
-{
-    struct directional_light;
-}
+#include <rendering_engine/render_proxies.hpp>
 
 namespace rendering_engine::debug_draw
 {
     // Gizmo for a directional light. Draws a small square facing the
     // light's travel direction at the world origin plus a ray along that
     // direction, both tinted with the light's colour. The geometry tracks
-    // the light's direction / colour every frame, so the helper must not
-    // outlive the light it points at.
+    // the direction / colour of the light proxy it names in its renderer's
+    // world every frame, and draws nothing once that proxy is gone.
     struct directional_light_helper : public line_helper
     {
-        directional_light_helper(renderer& owner, const directional_light* light, float size = 1.0f);
+        directional_light_helper(renderer& owner, light_proxy_handle light, float size = 1.0f);
 
     protected:
         void refresh() override;
 
     private:
-        const directional_light* m_light;
+        light_proxy_handle m_light;
         float m_size;
 
         // Last state the geometry was built from, so refresh() only

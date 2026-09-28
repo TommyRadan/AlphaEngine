@@ -2,6 +2,7 @@
 # Copyright (c) 2015-2026 Tomislav Radanovic
 
 target_sources(alpha_core PRIVATE
+    dense_pool.hpp
     event.hpp
     event_engine.cpp
     event_engine.hpp

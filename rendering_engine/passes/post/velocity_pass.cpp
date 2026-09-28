@@ -8,7 +8,6 @@
 #include <string>
 
 #include <core/math/math.hpp>
-#include <rendering_engine/camera/camera.hpp>
 #include <rendering_engine/gpu/bind_group.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
@@ -260,8 +259,8 @@ namespace rendering_engine
         // Build the current unjittered view-projection (the camera's
         // matrices are clean; the scene pass applies frame_context::jitter
         // on top of them, and the shader subtracts it again).
-        const core::math::mat4 view = ctx.active_camera->get_view_matrix();
-        const core::math::mat4 projection = ctx.active_camera->get_projection_matrix();
+        const core::math::mat4& view = ctx.active_camera->view;
+        const core::math::mat4& projection = ctx.active_camera->projection;
         const core::math::mat4 view_proj = projection * view;
 
         // Without a usable previous matrix (first camera frame, camera

@@ -8,20 +8,13 @@
 
 namespace rendering_engine
 {
-    // Cone-shaped light radiating from a world-space point along a
-    // direction, falling off with distance like a point_light and with
-    // angle within a cone.
+    // Cone-shaped light radiating from a point along a direction, falling
+    // off with distance like a point_light and with angle within a cone.
+    // The point and the direction are its owner's world position and
+    // forward (+X) axis (see @ref place_light).
     struct spot_light : light
     {
         spot_light();
-
-        // World-space position the light shines from.
-        core::math::vec3 position{0.0f, 0.0f, 0.0f};
-
-        // World-space direction the cone points along (from the source
-        // toward the scene). Need not be normalized; the scene pass
-        // normalizes before packing it into the UBO.
-        core::math::vec3 direction{1.0f, 0.0f, 0.0f};
 
         // Distance past which the light contributes nothing. 0 means no
         // hard cutoff (falloff still applies), matching point_light::range.

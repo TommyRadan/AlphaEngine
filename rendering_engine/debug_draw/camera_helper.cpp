@@ -7,26 +7,27 @@
 #include <vector>
 
 #include <core/math/math.hpp>
-#include <rendering_engine/camera/camera.hpp>
 #include <rendering_engine/debug_draw/box_edges.hpp>
+#include <rendering_engine/render_world.hpp>
 
 namespace rendering_engine::debug_draw
 {
-    camera_helper::camera_helper(renderer& owner, const camera* cam, assets::color color)
+    camera_helper::camera_helper(renderer& owner, camera_proxy_handle cam, assets::color color)
         : line_helper(owner, "Camera"), m_camera(cam), m_color(color)
     {
     }
 
     void camera_helper::refresh()
     {
-        if (m_camera == nullptr)
+        const camera_proxy* cam = renderer_world().camera(m_camera);
+        if (cam == nullptr)
         {
             return;
         }
 
         namespace math = core::math;
 
-        const math::mat4 view_projection = m_camera->get_projection_matrix() * m_camera->get_view_matrix();
+        const math::mat4 view_projection = cam->projection * cam->view;
         if (m_built && view_projection == m_last_view_projection)
         {
             return;

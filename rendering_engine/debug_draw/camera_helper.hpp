@@ -6,11 +6,7 @@
 #include <assets/color.hpp>
 #include <core/math/math.hpp>
 #include <rendering_engine/debug_draw/line_helper.hpp>
-
-namespace rendering_engine
-{
-    struct camera;
-}
+#include <rendering_engine/render_proxies.hpp>
 
 namespace rendering_engine::debug_draw
 {
@@ -18,20 +14,21 @@ namespace rendering_engine::debug_draw
     // The eight clip-space corners are unprojected
     // through the inverse view-projection into world space and drawn as a
     // hexahedron, so the gizmo shows exactly what the camera sees. The
-    // geometry tracks the camera's view-projection every frame, so the
-    // helper must not outlive the camera it points at.
+    // geometry tracks the view-projection of the camera proxy it names in
+    // its renderer's world every frame, and draws nothing once that proxy
+    // is gone.
     //
     // Visualising the active camera's own frustum is degenerate (it fills
     // the screen); this is meant for a secondary / inactive camera.
     struct camera_helper : public line_helper
     {
-        camera_helper(renderer& owner, const camera* cam, assets::color color = assets::color{200, 200, 80, 255});
+        camera_helper(renderer& owner, camera_proxy_handle cam, assets::color color = assets::color{200, 200, 80, 255});
 
     protected:
         void refresh() override;
 
     private:
-        const camera* m_camera;
+        camera_proxy_handle m_camera;
         assets::color m_color;
 
         // Last view-projection the geometry was built from, so refresh()

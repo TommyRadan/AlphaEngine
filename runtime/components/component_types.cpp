@@ -11,8 +11,8 @@
  *   parameters, priority, the main flag and the camera's local offset under
  *   the node. The aspect ratio follows the drawable and is not saved.
  * - @c "light": kind (none / ambient / directional / point / spot), colour,
- *   intensity, shadow casting, range, attenuation and cone angles. Position
- *   and direction follow the node every update, so they are not saved.
+ *   intensity, shadow casting, range, attenuation and cone angles. The light
+ *   is placed by its node, so it has no position or direction of its own.
  * - @c "mesh": the mesh as an asset reference (runtime/scene_assets.hpp)
  *   and the material as an object — @c "standard" (a full description),
  *   or @c "phong" / @c "basic" (the renderer's built-in instance).
@@ -657,18 +657,18 @@ namespace
             .when(has_camera)
             .field(
                 "position",
-                [](const camera_component& c) { return c.get()->transform.get_position(); },
-                [](camera_component& c, const math::vec3& value) { c.get()->transform.set_position(value); })
+                [](const camera_component& c) { return c.offset().get_position(); },
+                [](camera_component& c, const math::vec3& value) { c.offset().set_position(value); })
             .when(has_camera)
             .field(
                 "rotation",
-                [](const camera_component& c) { return c.get()->transform.get_quaternion(); },
-                [](camera_component& c, const math::quat& value) { restore_rotation(c.get()->transform, value); })
+                [](const camera_component& c) { return c.offset().get_quaternion(); },
+                [](camera_component& c, const math::quat& value) { restore_rotation(c.offset(), value); })
             .when(has_camera)
             .field(
                 "scale",
-                [](const camera_component& c) { return c.get()->transform.get_scale(); },
-                [](camera_component& c, const math::vec3& value) { c.get()->transform.set_scale(value); })
+                [](const camera_component& c) { return c.offset().get_scale(); },
+                [](camera_component& c, const math::vec3& value) { c.offset().set_scale(value); })
             .when(has_camera)
             .placeholder_reason(
                 [](const camera_component& c) -> std::string
