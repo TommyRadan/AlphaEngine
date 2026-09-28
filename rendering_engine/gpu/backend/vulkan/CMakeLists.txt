@@ -14,6 +14,7 @@ target_sources(alpha_rhi PRIVATE
     vk_device.hpp
     vk_device_buffer.cpp
     vk_device_pipeline.cpp
+    vk_device_render_target.cpp
     vk_device_shader.cpp
     vk_device_texture.cpp
     vk_factory.cpp
