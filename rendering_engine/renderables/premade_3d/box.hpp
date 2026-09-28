@@ -12,6 +12,7 @@
 
 namespace rendering_engine
 {
+    struct asset_cache;
     struct material;
     struct mesh_asset;
 
@@ -24,13 +25,14 @@ namespace rendering_engine
     // position/uv/normal channels via @ref generate_tangents.
     struct box : public renderable
     {
-        explicit box(material* mat,
-                     float width = 1.0f,
-                     float height = 1.0f,
-                     float depth = 1.0f,
-                     unsigned int width_segments = 1,
-                     unsigned int height_segments = 1,
-                     unsigned int depth_segments = 1);
+        box(asset_cache& cache,
+            material* mat,
+            float width = 1.0f,
+            float height = 1.0f,
+            float depth = 1.0f,
+            unsigned int width_segments = 1,
+            unsigned int height_segments = 1,
+            unsigned int depth_segments = 1);
         ~box() override;
 
         core::transform transform;
@@ -49,6 +51,9 @@ namespace rendering_engine
         unsigned int get_index_count() const;
 
     private:
+        // The cache @ref upload fetches the shared geometry through; it
+        // outlives the shape.
+        asset_cache* m_cache{nullptr};
         material* m_material{nullptr};
         float m_width;
         float m_height;

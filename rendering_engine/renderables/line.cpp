@@ -14,13 +14,12 @@
 #include <rendering_engine/materials/material.hpp>
 #include <rendering_engine/renderables/per_draw_ubo.hpp>
 #include <rendering_engine/resources/mesh_asset.hpp>
-#include <runtime/engine.hpp>
 
-rendering_engine::line::line(material* mat) : m_material{mat} {}
+rendering_engine::line::line(gpu::device& device, material* mat) : m_device{&device}, m_material{mat} {}
 
 rendering_engine::line::~line()
 {
-    auto& gpu = *runtime::current_engine().gpu;
+    auto& gpu = *m_device;
     if (m_index_buffer.valid())
     {
         gpu.destroy(m_index_buffer);
@@ -80,7 +79,7 @@ void rendering_engine::line::upload()
     m_has_local_bounds = bounds.has_value();
     m_local_bounds = bounds.value_or(core::math::aabb{});
 
-    auto& gpu = *runtime::current_engine().gpu;
+    auto& gpu = *m_device;
 
     // Re-uploading replaces the previous buffers, so drop them first.
     if (m_vertex_buffer.valid())

@@ -7,12 +7,13 @@
 
 namespace rendering_engine
 {
+    struct asset_cache;
     struct material;
 
     // Regular icosahedron (12 vertices, 20 triangular faces) built on the
     // shared polyhedron generator with the canonical base table.
     struct icosahedron : public polyhedron
     {
-        explicit icosahedron(material* mat, float radius = 1.0f, unsigned int detail = 0);
+        icosahedron(asset_cache& cache, material* mat, float radius = 1.0f, unsigned int detail = 0);
     };
 } // namespace rendering_engine

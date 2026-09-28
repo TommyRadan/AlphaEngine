@@ -15,6 +15,11 @@
 
 namespace rendering_engine
 {
+    namespace gpu
+    {
+        struct device;
+    }
+
     struct material;
     struct mesh_asset;
 
@@ -38,7 +43,7 @@ namespace rendering_engine
         // capacity of the per-instance buffer (see @ref reserve_instances);
         // the active draw count starts equal to it and can be lowered via
         // @ref set_instance_count.
-        instanced_mesh(material* mat, uint32_t instance_count);
+        instanced_mesh(gpu::device& device, material* mat, uint32_t instance_count);
         ~instanced_mesh() override;
 
         // Upload the shared geometry drawn once per instance. Vertices use
@@ -104,6 +109,9 @@ namespace rendering_engine
             core::math::vec4 color{1.0f, 1.0f, 1.0f, 1.0f};
         };
 
+        // The device this renderable's GPU resources are created on and
+        // released through; it outlives the renderable.
+        gpu::device* m_device{nullptr};
         material* m_material{nullptr};
         uint32_t m_capacity{0};
         uint32_t m_instance_count{0};

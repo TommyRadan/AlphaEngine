@@ -12,6 +12,7 @@
 
 namespace rendering_engine
 {
+    struct asset_cache;
     struct material;
     struct mesh_asset;
 
@@ -25,11 +26,12 @@ namespace rendering_engine
     // (radius, length, cap_segments, radial_segments).
     struct capsule : public renderable
     {
-        explicit capsule(material* mat,
-                         float radius = 0.5f,
-                         float length = 1.0f,
-                         unsigned int cap_segments = 8,
-                         unsigned int radial_segments = 16);
+        capsule(asset_cache& cache,
+                material* mat,
+                float radius = 0.5f,
+                float length = 1.0f,
+                unsigned int cap_segments = 8,
+                unsigned int radial_segments = 16);
         ~capsule() override;
 
         core::transform transform;
@@ -48,6 +50,9 @@ namespace rendering_engine
         unsigned int get_index_count() const;
 
     private:
+        // The cache @ref upload fetches the shared geometry through; it
+        // outlives the shape.
+        asset_cache* m_cache{nullptr};
         material* m_material{nullptr};
         float m_radius;
         float m_length;

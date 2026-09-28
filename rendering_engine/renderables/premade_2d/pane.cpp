@@ -7,10 +7,9 @@
 
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/resources/texture_formats.hpp>
-#include <runtime/engine.hpp>
 
-rendering_engine::pane::pane(ui_material* mat, const core::math::vec2& size)
-    : m_batch{mat},
+rendering_engine::pane::pane(gpu::device& device, ui_material* mat, const core::math::vec2& size)
+    : m_device{&device}, m_batch{device, mat},
       m_rect{rect_transform::anchored(ui_anchor::top_left, ui_anchor::top_left, core::math::vec2{0.0f, 0.0f}, size)}
 {
 }
@@ -24,7 +23,7 @@ void rendering_engine::pane::release_owned_texture()
 {
     if (m_owns_texture && m_texture.valid())
     {
-        runtime::current_engine().gpu->destroy(m_texture);
+        m_device->destroy(m_texture);
     }
     m_texture = {};
     m_owns_texture = false;
@@ -60,7 +59,7 @@ void rendering_engine::pane::set_image(const assets::image& image, assets::color
     descriptor.address_v = gpu::address_mode::clamp_edge;
     descriptor.address_w = gpu::address_mode::clamp_edge;
 
-    auto& gpu = *runtime::current_engine().gpu;
+    auto& gpu = *m_device;
     m_texture = gpu.create_texture(descriptor);
     const std::size_t pixel_bytes = static_cast<std::size_t>(image.get_width()) *
                                     static_cast<std::size_t>(image.get_height()) * sizeof(assets::color);
@@ -125,9 +124,9 @@ void rendering_engine::pane::set_rotation(float radians)
     m_dirty = true;
 }
 
-bool rendering_engine::pane::contains(const core::math::vec2& point) const
+bool rendering_engine::pane::contains(const ui_rect& drawable, const core::math::vec2& point) const
 {
-    return m_rect.contains(drawable_rect(), point);
+    return m_rect.contains(drawable, point);
 }
 
 void rendering_engine::pane::upload() {}

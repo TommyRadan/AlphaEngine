@@ -19,11 +19,15 @@
 #include <rendering_engine/renderables/vertex_format_check.hpp>
 #include <rendering_engine/resources/asset_cache.hpp>
 #include <rendering_engine/resources/cache_key.hpp>
-#include <runtime/engine.hpp>
 
-rendering_engine::torus::torus(
-    material* mat, float radius, float tube, unsigned int radial_segments, unsigned int tubular_segments, float arc)
-    : m_material{mat}, m_radius{radius}, m_tube{tube}, m_radial_segments{radial_segments},
+rendering_engine::torus::torus(asset_cache& cache,
+                               material* mat,
+                               float radius,
+                               float tube,
+                               unsigned int radial_segments,
+                               unsigned int tubular_segments,
+                               float arc)
+    : m_cache{&cache}, m_material{mat}, m_radius{radius}, m_tube{tube}, m_radial_segments{radial_segments},
       m_tubular_segments{tubular_segments}, m_arc{arc}
 {
 }
@@ -39,7 +43,7 @@ void rendering_engine::torus::upload()
     // Build and upload through the asset cache, keyed by the torus geometry
     // parameters so two tori of the same shape share one upload. The builder
     // only runs on a cache miss.
-    m_mesh = runtime::current_engine().assets->get_or_create_mesh(
+    m_mesh = m_cache->get_or_create_mesh(
         "torus:" + cache_key_number(m_radius) + ":" + cache_key_number(m_tube) + ":" +
             cache_key_number(m_radial_segments) + "x" + cache_key_number(m_tubular_segments) + ":" +
             cache_key_number(m_arc) + ":" +

@@ -7,6 +7,8 @@
 #include <core/log.hpp>
 #include <core/math/vec2.hpp>
 #include <core/subscription.hpp>
+#include <platform/window.hpp>
+#include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/renderables/premade_2d/label.hpp>
 #include <rendering_engine/renderables/premade_2d/pane.hpp>
 #include <rendering_engine/renderer.hpp>
@@ -61,7 +63,7 @@ namespace
             auto& eng = runtime::current_engine();
             auto& renderer = *eng.renderer;
 
-            m_button = std::make_unique<rendering_engine::pane>(&renderer.get_ui_material(), button_size);
+            m_button = std::make_unique<rendering_engine::pane>(*eng.gpu, &renderer.get_ui_material(), button_size);
             m_button->set_anchor(rendering_engine::ui_anchor::bottom_right);
             m_button->set_pivot(rendering_engine::ui_anchor::bottom_right);
             m_button->set_position(-button_margin);
@@ -76,7 +78,7 @@ namespace
             try
             {
                 m_caption = std::make_unique<rendering_engine::label>(
-                    eng.assets->load_font(font_path, 18.0f), &renderer.get_ui_material(), "Esc");
+                    *eng.gpu, eng.assets->load_font(font_path, 18.0f), &renderer.get_ui_material(), "Esc");
                 // Centred on the button: same anchor, pivot at the text's centre.
                 m_caption->set_anchor(rendering_engine::ui_anchor::bottom_right);
                 m_caption->set_pivot(rendering_engine::ui_anchor::center);
@@ -107,7 +109,13 @@ namespace
     private:
         bool is_over_button(float x, float y) const
         {
-            return m_button != nullptr && m_button->contains(rendering_engine::window_to_pixels(math::vec2{x, y}));
+            if (m_button == nullptr)
+            {
+                return false;
+            }
+            const platform::window& window = *runtime::current_engine().window;
+            return m_button->contains(rendering_engine::drawable_rect(window),
+                                      rendering_engine::window_to_pixels(window, math::vec2{x, y}));
         }
 
         void update_hover(const core::mouse_move& event)

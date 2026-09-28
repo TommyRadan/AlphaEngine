@@ -188,6 +188,7 @@ GAME_MODULE()
     {
         return;
     }
+    auto& cache = *runtime::current_engine().assets;
 
     // A roughness x metalness grid. The camera sits at -X looking
     // toward the origin with +Z up, so the grid is laid out across Y
@@ -206,8 +207,8 @@ GAME_MODULE()
 
             const float y = (static_cast<float>(col) - static_cast<float>(grid_columns - 1) * 0.5f) * grid_spacing;
             const float z = (static_cast<float>(grid_rows - 1) * 0.5f - static_cast<float>(row)) * grid_row_height;
-            runtime::node& ball =
-                spawn_prop(scene, demo, math::vec3{0.0f, y, z}, std::make_unique<rendering_engine::sphere>(material));
+            runtime::node& ball = spawn_prop(
+                scene, demo, math::vec3{0.0f, y, z}, std::make_unique<rendering_engine::sphere>(cache, material));
             ball.transform.set_scale(math::vec3{sphere_scale, sphere_scale, sphere_scale});
         }
     }
@@ -223,7 +224,7 @@ GAME_MODULE()
     spawn_prop(scene,
                demo,
                math::vec3{0.0f, 0.0f, ground_z},
-               std::make_unique<rendering_engine::plane>(ground_material, 40.0f, 40.0f));
+               std::make_unique<rendering_engine::plane>(cache, ground_material, 40.0f, 40.0f));
 
     // A warm key light aligned with the sun in the sky so the direct
     // and image-based lighting agree. It casts the scene's shadow map

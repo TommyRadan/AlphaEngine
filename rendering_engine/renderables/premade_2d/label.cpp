@@ -81,8 +81,11 @@ namespace
     }
 } // namespace
 
-rendering_engine::label::label(std::shared_ptr<font_asset> font, ui_material* mat, const std::string& text)
-    : m_font{std::move(font)}, m_batch{mat}, m_text{text},
+rendering_engine::label::label(gpu::device& device,
+                               std::shared_ptr<font_asset> font,
+                               ui_material* mat,
+                               const std::string& text)
+    : m_font{std::move(font)}, m_batch{device, mat}, m_text{text},
       m_rect{rect_transform::anchored(
           ui_anchor::top_left, ui_anchor::top_left, core::math::vec2{0.0f, 0.0f}, core::math::vec2{0.0f, 0.0f})}
 {
@@ -157,9 +160,9 @@ float rendering_engine::label::get_width() const
     return m_rect.size.x;
 }
 
-bool rendering_engine::label::contains(const core::math::vec2& point) const
+bool rendering_engine::label::contains(const ui_rect& drawable, const core::math::vec2& point) const
 {
-    return m_rect.contains(drawable_rect(), point);
+    return m_rect.contains(drawable, point);
 }
 
 void rendering_engine::label::layout()

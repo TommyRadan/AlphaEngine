@@ -11,6 +11,7 @@
 
 #include <assets/color.hpp>
 #include <core/math/math.hpp>
+#include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/materials/points_material.hpp>
 #include <rendering_engine/renderables/points.hpp>
 #include <rendering_engine/renderer.hpp>
@@ -66,7 +67,7 @@ GAME_MODULE()
         colors.push_back(math::vec3{0.5f + 0.5f * position.x, 0.5f + 0.5f * position.y, 0.5f + 0.5f * position.z});
     }
 
-    auto dots = std::make_unique<rendering_engine::points>(&material);
+    auto dots = std::make_unique<rendering_engine::points>(*runtime::current_engine().gpu, &material);
     dots->set_positions(positions, colors);
     dots->upload();
 

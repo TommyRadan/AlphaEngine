@@ -154,6 +154,7 @@ GAME_MODULE()
     {
         return;
     }
+    auto& cache = *runtime::current_engine().assets;
 
     // Dim ambient so the shadowed areas read as genuinely dark.
     auto ambient = std::make_unique<rendering_engine::ambient_light>();
@@ -168,7 +169,7 @@ GAME_MODULE()
     spawn_prop(scene,
                demo,
                math::vec3{6.0f, 0.0f, ground_z},
-               std::make_unique<rendering_engine::plane>(ground_material, 60.0f, 60.0f));
+               std::make_unique<rendering_engine::plane>(cache, ground_material, 60.0f, 60.0f));
 
     // A few coloured surfaces shared across the field.
     rendering_engine::standard_material* warm = field->make_material(assets::color{230, 126, 34, 255}, 0.55f);
@@ -192,8 +193,10 @@ GAME_MODULE()
             const float y = (static_cast<float>(col) - static_cast<float>(lateral_cols - 1) * 0.5f) * 4.0f;
             // Unit sphere (radius 1): centre one radius above the plane so it
             // rests on the ground and casts a contact shadow.
-            spawn_prop(
-                scene, demo, math::vec3{x, y, ground_z + 1.0f}, std::make_unique<rendering_engine::sphere>(tint));
+            spawn_prop(scene,
+                       demo,
+                       math::vec3{x, y, ground_z + 1.0f},
+                       std::make_unique<rendering_engine::sphere>(cache, tint));
         }
     }
 
@@ -213,7 +216,7 @@ GAME_MODULE()
             spawn_prop(scene,
                        demo,
                        math::vec3{spot.x, spot.y, ground_z + pillar_height * 0.5f},
-                       std::make_unique<rendering_engine::box>(pillar_material, 0.8f, 0.8f, pillar_height));
+                       std::make_unique<rendering_engine::box>(cache, pillar_material, 0.8f, 0.8f, pillar_height));
         if (scripted_pillar == nullptr)
         {
             scripted_pillar = &pillar;

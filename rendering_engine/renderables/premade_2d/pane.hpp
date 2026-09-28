@@ -16,6 +16,11 @@
 
 namespace rendering_engine
 {
+    namespace gpu
+    {
+        struct device;
+    }
+
     struct ui_material;
 
     /**
@@ -34,7 +39,7 @@ namespace rendering_engine
      */
     struct pane : public renderable
     {
-        pane(ui_material* mat, const core::math::vec2& size);
+        pane(gpu::device& device, ui_material* mat, const core::math::vec2& size);
         ~pane() override;
 
         pane(const pane&) = delete;
@@ -74,11 +79,12 @@ namespace rendering_engine
         void set_rotation(float radians);
 
         /**
-         * @brief Hit test against the live drawable: whether @p point, in
-         *        UI pixels (a mouse position goes through
-         *        @ref window_to_pixels first), lies on the pane.
+         * @brief Hit test against @p drawable, the rect the pane is placed
+         *        in (see @ref drawable_rect): whether @p point, in UI
+         *        pixels (a mouse position goes through @ref window_to_pixels
+         *        first), lies on the pane.
          */
-        bool contains(const core::math::vec2& point) const;
+        bool contains(const ui_rect& drawable, const core::math::vec2& point) const;
 
         /** @brief Nothing to upload up front: the quad is streamed at collect time. */
         void upload() final;
@@ -92,6 +98,9 @@ namespace rendering_engine
     private:
         void release_owned_texture();
 
+        // The device the texture @ref set_image uploads is created on and
+        // released through; it outlives the pane.
+        gpu::device* m_device{nullptr};
         sprite_batch m_batch;
         rect_transform m_rect;
         assets::color m_color{255, 255, 255, 255};

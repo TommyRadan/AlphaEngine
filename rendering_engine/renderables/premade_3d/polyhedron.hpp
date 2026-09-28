@@ -14,6 +14,7 @@
 
 namespace rendering_engine
 {
+    struct asset_cache;
     struct material;
     struct mesh_asset;
 
@@ -30,7 +31,8 @@ namespace rendering_engine
     // dodecahedron) feed canonical base tables into this generator.
     struct polyhedron : public renderable
     {
-        polyhedron(material* mat,
+        polyhedron(asset_cache& cache,
+                   material* mat,
                    std::vector<float> base_vertices,
                    std::vector<uint32_t> base_indices,
                    float radius = 1.0f,
@@ -53,6 +55,9 @@ namespace rendering_engine
         unsigned int get_index_count() const;
 
     private:
+        // The cache @ref upload fetches the shared geometry through; it
+        // outlives the shape.
+        asset_cache* m_cache{nullptr};
         material* m_material{nullptr};
         std::vector<float> m_base_vertices;
         std::vector<uint32_t> m_base_indices;

@@ -12,6 +12,7 @@
 
 namespace rendering_engine
 {
+    struct asset_cache;
     struct material;
     struct mesh_asset;
 
@@ -21,13 +22,14 @@ namespace rendering_engine
     // CCW when viewed from +Z.
     struct ring : public renderable
     {
-        explicit ring(material* mat,
-                      float inner_radius = 0.5f,
-                      float outer_radius = 1.0f,
-                      unsigned int theta_segments = 32,
-                      unsigned int phi_segments = 1,
-                      float theta_start = 0.0f,
-                      float theta_length = 6.28318530718f);
+        ring(asset_cache& cache,
+             material* mat,
+             float inner_radius = 0.5f,
+             float outer_radius = 1.0f,
+             unsigned int theta_segments = 32,
+             unsigned int phi_segments = 1,
+             float theta_start = 0.0f,
+             float theta_length = 6.28318530718f);
         ~ring() override;
 
         core::transform transform;
@@ -46,6 +48,9 @@ namespace rendering_engine
         unsigned int get_index_count() const;
 
     private:
+        // The cache @ref upload fetches the shared geometry through; it
+        // outlives the shape.
+        asset_cache* m_cache{nullptr};
         material* m_material{nullptr};
         float m_inner_radius;
         float m_outer_radius;

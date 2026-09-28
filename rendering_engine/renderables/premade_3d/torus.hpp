@@ -12,6 +12,7 @@
 
 namespace rendering_engine
 {
+    struct asset_cache;
     struct material;
     struct mesh_asset;
 
@@ -24,12 +25,13 @@ namespace rendering_engine
     // position + uv + normal + tangent with outward-facing CCW winding.
     struct torus : public renderable
     {
-        explicit torus(material* mat,
-                       float radius = 1.0f,
-                       float tube = 0.4f,
-                       unsigned int radial_segments = 12,
-                       unsigned int tubular_segments = 48,
-                       float arc = 6.28318530718f /* 2*pi */);
+        torus(asset_cache& cache,
+              material* mat,
+              float radius = 1.0f,
+              float tube = 0.4f,
+              unsigned int radial_segments = 12,
+              unsigned int tubular_segments = 48,
+              float arc = 6.28318530718f /* 2*pi */);
         ~torus() override;
 
         core::transform transform;
@@ -48,6 +50,9 @@ namespace rendering_engine
         unsigned int get_index_count() const;
 
     private:
+        // The cache @ref upload fetches the shared geometry through; it
+        // outlives the shape.
+        asset_cache* m_cache{nullptr};
         material* m_material{nullptr};
         float m_radius;
         float m_tube;

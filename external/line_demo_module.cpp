@@ -10,6 +10,7 @@
 
 #include <assets/color.hpp>
 #include <core/math/math.hpp>
+#include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/materials/line_material.hpp>
 #include <rendering_engine/renderables/line.hpp>
 #include <rendering_engine/renderer.hpp>
@@ -61,7 +62,7 @@ GAME_MODULE()
         colors.push_back(math::vec3{0.5f + 0.5f * std::cos(angle), t, 0.5f + 0.5f * std::sin(angle)});
     }
 
-    auto strip = std::make_unique<rendering_engine::line>(&material);
+    auto strip = std::make_unique<rendering_engine::line>(*runtime::current_engine().gpu, &material);
     strip->set_mode(rendering_engine::line_mode::strip);
     strip->set_positions(positions, colors);
     strip->upload();

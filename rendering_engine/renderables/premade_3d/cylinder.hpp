@@ -12,6 +12,7 @@
 
 namespace rendering_engine
 {
+    struct asset_cache;
     struct material;
     struct mesh_asset;
 
@@ -25,13 +26,14 @@ namespace rendering_engine
     // normal + tangent with CCW outward winding.
     struct cylinder : public renderable
     {
-        explicit cylinder(material* mat,
-                          float radius_top = 1.0f,
-                          float radius_bottom = 1.0f,
-                          float height = 1.0f,
-                          unsigned int radial_segments = 32,
-                          unsigned int height_segments = 1,
-                          bool open_ended = false);
+        cylinder(asset_cache& cache,
+                 material* mat,
+                 float radius_top = 1.0f,
+                 float radius_bottom = 1.0f,
+                 float height = 1.0f,
+                 unsigned int radial_segments = 32,
+                 unsigned int height_segments = 1,
+                 bool open_ended = false);
         ~cylinder() override;
 
         core::transform transform;
@@ -50,6 +52,9 @@ namespace rendering_engine
         unsigned int get_index_count() const;
 
     private:
+        // The cache @ref upload fetches the shared geometry through; it
+        // outlives the shape.
+        asset_cache* m_cache{nullptr};
         material* m_material{nullptr};
         float m_radius_top;
         float m_radius_bottom;

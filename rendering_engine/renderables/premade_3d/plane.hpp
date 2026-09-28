@@ -12,6 +12,7 @@
 
 namespace rendering_engine
 {
+    struct asset_cache;
     struct material;
     struct mesh_asset;
 
@@ -21,11 +22,12 @@ namespace rendering_engine
     // normal points along +Z and UVs span [0, 1] across the surface.
     struct plane : public renderable
     {
-        explicit plane(material* mat,
-                       float width = 1.0f,
-                       float height = 1.0f,
-                       unsigned int width_segments = 1,
-                       unsigned int height_segments = 1);
+        plane(asset_cache& cache,
+              material* mat,
+              float width = 1.0f,
+              float height = 1.0f,
+              unsigned int width_segments = 1,
+              unsigned int height_segments = 1);
         ~plane() override;
 
         core::transform transform;
@@ -44,6 +46,9 @@ namespace rendering_engine
         unsigned int get_index_count() const;
 
     private:
+        // The cache @ref upload fetches the shared geometry through; it
+        // outlives the shape.
+        asset_cache* m_cache{nullptr};
         material* m_material{nullptr};
         float m_width;
         float m_height;

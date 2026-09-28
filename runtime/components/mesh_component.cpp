@@ -5,13 +5,14 @@
 
 #include <assets/mesh_data.hpp>
 #include <core/log.hpp>
+#include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/renderer.hpp>
 #include <rendering_engine/resources/mesh_asset.hpp>
 #include <runtime/engine.hpp>
 #include <runtime/node.hpp>
 
 runtime::mesh_component::mesh_component(rendering_engine::material* material, const assets::mesh_data& mesh)
-    : m_model{std::make_unique<rendering_engine::model>(material)}, m_material{material}
+    : m_model{std::make_unique<rendering_engine::model>(*runtime::current_engine().gpu, material)}, m_material{material}
 {
     m_model->upload_mesh(mesh);
     // Geometry with no complete record uploads nothing, so it has no box.
@@ -23,7 +24,8 @@ runtime::mesh_component::mesh_component(rendering_engine::material* material, co
 
 runtime::mesh_component::mesh_component(rendering_engine::material* material,
                                         std::shared_ptr<rendering_engine::mesh_asset> mesh)
-    : m_model{std::make_unique<rendering_engine::model>(material)}, m_material{material}, m_mesh{mesh}
+    : m_model{std::make_unique<rendering_engine::model>(*runtime::current_engine().gpu, material)},
+      m_material{material}, m_mesh{mesh}
 {
     m_model->set_mesh(std::move(mesh));
 }
@@ -34,7 +36,7 @@ runtime::mesh_component::mesh_component(std::shared_ptr<rendering_engine::materi
 {
     if (m_material != nullptr)
     {
-        m_model = std::make_unique<rendering_engine::model>(m_material);
+        m_model = std::make_unique<rendering_engine::model>(*runtime::current_engine().gpu, m_material);
         m_model->set_mesh(m_mesh);
     }
 }

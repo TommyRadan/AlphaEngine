@@ -12,6 +12,7 @@
 
 namespace rendering_engine
 {
+    struct asset_cache;
     struct material;
     struct mesh_asset;
 
@@ -21,11 +22,12 @@ namespace rendering_engine
     // CCW when viewed from +Z.
     struct circle : public renderable
     {
-        explicit circle(material* mat,
-                        float radius = 1.0f,
-                        unsigned int segments = 32,
-                        float theta_start = 0.0f,
-                        float theta_length = 6.28318530718f);
+        circle(asset_cache& cache,
+               material* mat,
+               float radius = 1.0f,
+               unsigned int segments = 32,
+               float theta_start = 0.0f,
+               float theta_length = 6.28318530718f);
         ~circle() override;
 
         core::transform transform;
@@ -44,6 +46,9 @@ namespace rendering_engine
         unsigned int get_index_count() const;
 
     private:
+        // The cache @ref upload fetches the shared geometry through; it
+        // outlives the shape.
+        asset_cache* m_cache{nullptr};
         material* m_material{nullptr};
         float m_radius;
         unsigned int m_segments;

@@ -7,12 +7,13 @@
 
 namespace rendering_engine
 {
+    struct asset_cache;
     struct material;
 
     // Regular tetrahedron (4 vertices, 4 triangular faces) built on the shared
     // polyhedron generator with the canonical base table.
     struct tetrahedron : public polyhedron
     {
-        explicit tetrahedron(material* mat, float radius = 1.0f, unsigned int detail = 0);
+        tetrahedron(asset_cache& cache, material* mat, float radius = 1.0f, unsigned int detail = 0);
     };
 } // namespace rendering_engine

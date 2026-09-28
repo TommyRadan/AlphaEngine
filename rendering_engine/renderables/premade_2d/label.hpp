@@ -15,6 +15,11 @@
 
 namespace rendering_engine
 {
+    namespace gpu
+    {
+        struct device;
+    }
+
     struct font_asset;
     struct ui_material;
 
@@ -44,8 +49,9 @@ namespace rendering_engine
     struct label : public renderable
     {
         // @p font supplies the atlas and metrics and is held for the
-        // label's lifetime; @p mat is the ui material (not owned).
-        label(std::shared_ptr<font_asset> font, ui_material* mat, const std::string& text = {});
+        // label's lifetime; @p mat is the ui material (not owned). The
+        // glyph quads' buffers live on @p device.
+        label(gpu::device& device, std::shared_ptr<font_asset> font, ui_material* mat, const std::string& text = {});
         ~label() override;
 
         label(const label&) = delete;
@@ -71,11 +77,12 @@ namespace rendering_engine
         float get_width() const;
 
         /**
-         * @brief Hit test of the text block against the live drawable:
-         *        whether @p point, in UI pixels (a mouse position goes
-         *        through @ref window_to_pixels first), lies on it.
+         * @brief Hit test of the text block against @p drawable, the rect
+         *        it is placed in (see @ref drawable_rect): whether @p point,
+         *        in UI pixels (a mouse position goes through
+         *        @ref window_to_pixels first), lies on it.
          */
-        bool contains(const core::math::vec2& point) const;
+        bool contains(const ui_rect& drawable, const core::math::vec2& point) const;
 
         /** @brief Nothing to upload up front: the quads are streamed at collect time. */
         void upload() final;

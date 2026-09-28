@@ -14,6 +14,11 @@
 
 namespace rendering_engine
 {
+    namespace gpu
+    {
+        struct device;
+    }
+
     struct material;
 
     // A point cloud. It owns a list
@@ -28,7 +33,7 @@ namespace rendering_engine
         // @ref points_material (its pipeline must bake point topology)
         // created by @ref rendering_engine::renderer and shared by every
         // point cloud that draws under it.
-        explicit points(material* mat);
+        points(gpu::device& device, material* mat);
         ~points() override;
 
         core::transform transform;
@@ -55,6 +60,9 @@ namespace rendering_engine
         bool world_bounds(core::math::aabb& out) const final;
 
     private:
+        // The device this renderable's GPU resources are created on and
+        // released through; it outlives the renderable.
+        gpu::device* m_device{nullptr};
         material* m_material{nullptr};
         std::vector<assets::vertex_position_color> m_vertices;
 
