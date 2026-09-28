@@ -327,7 +327,7 @@ namespace rendering_engine::gpu::backend::vulkan
         // and a sub-allocation of the allocator's blocks unless the
         // driver prefers a dedicated allocation for this image.
         const VmaAllocationCreateInfo alloc = device_local_allocation();
-        if (!vk_check(vmaCreateImage(m_allocator, &ii, &alloc, &record.image, &record.allocation, nullptr),
+        if (!vk_check(vmaCreateImage(m_device.allocator(), &ii, &alloc, &record.image, &record.allocation, nullptr),
                       "vmaCreateImage"))
         {
             return {};
@@ -339,13 +339,13 @@ namespace rendering_engine::gpu::backend::vulkan
         {
             if (record.default_sampler != VK_NULL_HANDLE)
             {
-                vkDestroySampler(m_device, record.default_sampler, nullptr);
+                vkDestroySampler(m_device.handle(), record.default_sampler, nullptr);
             }
             if (record.view != VK_NULL_HANDLE)
             {
-                vkDestroyImageView(m_device, record.view, nullptr);
+                vkDestroyImageView(m_device.handle(), record.view, nullptr);
             }
-            vmaDestroyImage(m_allocator, record.image, record.allocation);
+            vmaDestroyImage(m_device.allocator(), record.image, record.allocation);
         };
 
         // The sampling view names one aspect: the depth plane of a
@@ -359,7 +359,7 @@ namespace rendering_engine::gpu::backend::vulkan
         vi.subresourceRange.aspectMask = single_aspect(record);
         vi.subresourceRange.levelCount = record.mip_levels;
         vi.subresourceRange.layerCount = record.array_layers;
-        if (!vk_check(vkCreateImageView(m_device, &vi, nullptr, &record.view), "vkCreateImageView"))
+        if (!vk_check(vkCreateImageView(m_device.handle(), &vi, nullptr, &record.view), "vkCreateImageView"))
         {
             record.view = VK_NULL_HANDLE;
             release();
@@ -376,7 +376,8 @@ namespace rendering_engine::gpu::backend::vulkan
                                      descriptor.address_u,
                                      descriptor.address_v,
                                      descriptor.address_w);
-        if (!vk_check(vkCreateSampler(m_device, &si, nullptr, &record.default_sampler), "vkCreateSampler (texture)"))
+        if (!vk_check(vkCreateSampler(m_device.handle(), &si, nullptr, &record.default_sampler),
+                      "vkCreateSampler (texture)"))
         {
             // The image is still usable as an attachment and as a copy
             // target; a bind group that samples it substitutes the
@@ -423,8 +424,8 @@ namespace rendering_engine::gpu::backend::vulkan
         {
             return;
         }
-        const VkDevice dev = m_device;
-        const VmaAllocator allocator = m_allocator;
+        const VkDevice dev = m_device.handle();
+        const VmaAllocator allocator = m_device.allocator();
         const VkSampler sampler = record->default_sampler;
         const VkImageView view = record->view;
         std::vector<VkImageView> extra_views = std::move(record->storage_views);
@@ -680,7 +681,7 @@ namespace rendering_engine::gpu::backend::vulkan
             LOG_WRN("read_texture: %zu bytes supplied, %zu needed", size, required);
             return false;
         }
-        if (m_device_lost || m_device == VK_NULL_HANDLE)
+        if (m_device.device_lost() || m_device.handle() == VK_NULL_HANDLE)
         {
             return false;
         }
@@ -703,7 +704,7 @@ namespace rendering_engine::gpu::backend::vulkan
         VkBuffer readback = VK_NULL_HANDLE;
         VmaAllocation readback_allocation = VK_NULL_HANDLE;
         VmaAllocationInfo info{};
-        if (!vk_check(vmaCreateBuffer(m_allocator, &bi, &ai, &readback, &readback_allocation, &info),
+        if (!vk_check(vmaCreateBuffer(m_device.allocator(), &bi, &ai, &readback, &readback_allocation, &info),
                       "vmaCreateBuffer (readback)"))
         {
             return false;
@@ -723,14 +724,15 @@ namespace rendering_engine::gpu::backend::vulkan
             cai.commandPool = m_transfer_command_pool;
             cai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
             cai.commandBufferCount = 1;
-            if (!vk_check(vkAllocateCommandBuffers(m_device, &cai, &cmd), "vkAllocateCommandBuffers (readback)"))
+            if (!vk_check(vkAllocateCommandBuffers(m_device.handle(), &cai, &cmd),
+                          "vkAllocateCommandBuffers (readback)"))
             {
                 cmd = VK_NULL_HANDLE;
                 break;
             }
             VkFenceCreateInfo fi{};
             fi.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-            if (!vk_check(vkCreateFence(m_device, &fi, nullptr, &fence), "vkCreateFence (readback)"))
+            if (!vk_check(vkCreateFence(m_device.handle(), &fi, nullptr, &fence), "vkCreateFence (readback)"))
             {
                 fence = VK_NULL_HANDLE;
                 break;
@@ -780,12 +782,13 @@ namespace rendering_engine::gpu::backend::vulkan
             si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
             si.commandBufferCount = 1;
             si.pCommandBuffers = &cmd;
-            if (!check_queue_result(vkQueueSubmit(m_graphics_queue, 1, &si, fence), "vkQueueSubmit (readback)"))
+            if (!m_device.check_queue_result(vkQueueSubmit(m_device.graphics_queue(), 1, &si, fence),
+                                             "vkQueueSubmit (readback)"))
             {
                 break;
             }
-            if (!check_queue_result(vkWaitForFences(m_device, 1, &fence, VK_TRUE, UINT64_MAX),
-                                    "vkWaitForFences (readback)"))
+            if (!m_device.check_queue_result(vkWaitForFences(m_device.handle(), 1, &fence, VK_TRUE, UINT64_MAX),
+                                             "vkWaitForFences (readback)"))
             {
                 break;
             }
@@ -795,13 +798,13 @@ namespace rendering_engine::gpu::backend::vulkan
 
         if (fence != VK_NULL_HANDLE)
         {
-            vkDestroyFence(m_device, fence, nullptr);
+            vkDestroyFence(m_device.handle(), fence, nullptr);
         }
         if (cmd != VK_NULL_HANDLE)
         {
-            vkFreeCommandBuffers(m_device, m_transfer_command_pool, 1, &cmd);
+            vkFreeCommandBuffers(m_device.handle(), m_transfer_command_pool, 1, &cmd);
         }
-        vmaDestroyBuffer(m_allocator, readback, readback_allocation);
+        vmaDestroyBuffer(m_device.allocator(), readback, readback_allocation);
         return ok;
     }
 
@@ -948,7 +951,7 @@ namespace rendering_engine::gpu::backend::vulkan
         const float max_anisotropy =
             m_features.sampler_anisotropy ? std::min(descriptor.max_anisotropy, m_limits.max_anisotropy) : 1.0f;
         VkSamplerCreateInfo si = make_sampler_create_info(descriptor, max_anisotropy);
-        if (!vk_check(vkCreateSampler(m_device, &si, nullptr, &record.object), "vkCreateSampler"))
+        if (!vk_check(vkCreateSampler(m_device.handle(), &si, nullptr, &record.object), "vkCreateSampler"))
         {
             return {};
         }
@@ -967,7 +970,7 @@ namespace rendering_engine::gpu::backend::vulkan
         // Deferred like every other resource: a sampler named by a
         // descriptor set the in-flight command buffer still binds must
         // outlive that submission.
-        const VkDevice dev = m_device;
+        const VkDevice dev = m_device.handle();
         const VkSampler object = record->object;
         if (object != VK_NULL_HANDLE)
         {
@@ -1001,7 +1004,7 @@ namespace rendering_engine::gpu::backend::vulkan
         vi.subresourceRange.levelCount = 1;
         vi.subresourceRange.baseArrayLayer = 0;
         vi.subresourceRange.layerCount = tex.array_layers;
-        if (!vk_check(vkCreateImageView(m_device, &vi, nullptr, &tex.storage_views[level]),
+        if (!vk_check(vkCreateImageView(m_device.handle(), &vi, nullptr, &tex.storage_views[level]),
                       "vkCreateImageView (storage level)"))
         {
             tex.storage_views[level] = VK_NULL_HANDLE;
@@ -1039,7 +1042,7 @@ namespace rendering_engine::gpu::backend::vulkan
         vi.subresourceRange.levelCount = 1;
         vi.subresourceRange.baseArrayLayer = layer;
         vi.subresourceRange.layerCount = 1;
-        if (!vk_check(vkCreateImageView(m_device, &vi, nullptr, &tex.attachment_views[index]),
+        if (!vk_check(vkCreateImageView(m_device.handle(), &vi, nullptr, &tex.attachment_views[index]),
                       "vkCreateImageView (attachment)"))
         {
             tex.attachment_views[index] = VK_NULL_HANDLE;
