@@ -700,7 +700,7 @@ namespace rendering_engine::gpu::backend::vulkan
         // the pool it came from.
         for (uint32_t set_index = 0; set_index < record.set_count; ++set_index)
         {
-            if (!allocate_descriptor_set(
+            if (!m_descriptors.allocate_descriptor_set(
                     layout_record->object, record.descriptor_sets[set_index], record.pools[set_index]))
             {
                 LOG_ERR("vk_device::create_bind_group: no descriptor set could be allocated; the bind group is "
