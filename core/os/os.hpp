@@ -114,7 +114,9 @@ namespace core::os
 
     /**
      * @brief Installs @p handler for the fatal signals (@c SIGSEGV, @c SIGABRT,
-     *        @c SIGFPE, @c SIGILL) and for @c std::terminate. After the handler
+     *        @c SIGFPE, @c SIGILL) and for @c std::terminate. Before the handler
+     *        runs, the log's buffered lines are written out
+     *        (@c core::logging::flush_after_crash). After the handler
      *        returns the default disposition is restored and the signal
      *        re-raised, so the OS still produces its crash report / core dump.
      *        A null handler uninstalls.

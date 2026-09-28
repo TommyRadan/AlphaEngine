@@ -11,6 +11,8 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cstdarg>
 #include <cstddef>
@@ -29,7 +31,8 @@
 #include <Jolt/Jolt.h>
 
 #include <Jolt/Core/Factory.h>
-#include <Jolt/Core/JobSystemThreadPool.h>
+#include <Jolt/Core/FixedSizeFreeList.h>
+#include <Jolt/Core/JobSystemWithBarrier.h>
 #include <Jolt/Core/TempAllocator.h>
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
 #include <Jolt/Physics/Body/BodyFilter.h>
@@ -48,6 +51,7 @@
 #include <Jolt/RegisterTypes.h>
 
 #include <core/event_engine.hpp>
+#include <core/job_pool.hpp>
 #include <core/log.hpp>
 #include <core/math/math.hpp>
 #include <runtime/components/drawn_bounds.hpp>
@@ -64,7 +68,6 @@ namespace runtime::physics
         constexpr JPH::uint k_max_body_pairs = 16384;
         constexpr JPH::uint k_max_contact_constraints = 8192;
         constexpr std::size_t k_temp_allocator_bytes = std::size_t{8} * 1024 * 1024;
-        constexpr int k_max_worker_threads = 4;
 
         // Smallest half extent / radius a shape is built with, so a flat mesh
         // (a plane's bounds have no thickness) still yields a valid box.
@@ -145,6 +148,112 @@ namespace runtime::physics
             delete JPH::Factory::sInstance;
             JPH::Factory::sInstance = nullptr;
         }
+
+        // Runs the library's jobs on the engine's worker pool, so a physics
+        // step shares the pool's threads with every other parallel workload
+        // instead of adding threads of its own. The barrier side comes from
+        // JobSystemWithBarrier: the thread waiting on a barrier runs the
+        // barrier's ready jobs itself, and Job::Execute runs a job only once,
+        // so a job the waiter already ran is a no-op when its pool task comes
+        // round. With no workers nothing is queued and the waiter runs every
+        // job.
+        struct pool_job_system final : JPH::JobSystemWithBarrier
+        {
+            pool_job_system(core::job_pool& pool, JPH::uint max_jobs, JPH::uint max_barriers)
+                : JPH::JobSystemWithBarrier(max_barriers), m_pool{pool}
+            {
+                m_jobs.Init(max_jobs, max_jobs);
+            }
+
+            // A pool task may still hold a reference to a job the barrier
+            // already finished; the job storage has to outlive it.
+            ~pool_job_system() override
+            {
+                while (m_queued.load(std::memory_order_acquire) != 0)
+                {
+                    std::this_thread::yield();
+                }
+            }
+
+            pool_job_system(const pool_job_system&) = delete;
+            pool_job_system& operator=(const pool_job_system&) = delete;
+            pool_job_system(pool_job_system&&) = delete;
+            pool_job_system& operator=(pool_job_system&&) = delete;
+
+            int GetMaxConcurrency() const override
+            {
+                return static_cast<int>(m_pool.worker_count()) + 1;
+            }
+
+            JobHandle CreateJob(const char* name,
+                                JPH::ColorArg color,
+                                const JobFunction& function,
+                                JPH::uint32 dependencies) override
+            {
+                JPH::uint32 index = job_storage::cInvalidObjectIndex;
+                for (;;)
+                {
+                    index = m_jobs.ConstructObject(name, color, this, function, dependencies);
+                    if (index != job_storage::cInvalidObjectIndex)
+                    {
+                        break;
+                    }
+                    // Every job slot is taken: wait for a running job to
+                    // retire one, as the library's own thread pool does.
+                    JPH_ASSERT(false, "No jobs available!");
+                    std::this_thread::sleep_for(std::chrono::microseconds(100));
+                }
+                Job* job = &m_jobs.Get(index);
+                // The handle holds a reference before the job is queued, since
+                // a queued job may complete at once.
+                JobHandle handle(job);
+                if (dependencies == 0)
+                {
+                    QueueJob(job);
+                }
+                return handle;
+            }
+
+        protected:
+            void QueueJob(Job* job) override
+            {
+                if (m_pool.worker_count() == 0)
+                {
+                    return;
+                }
+                job->AddRef();
+                m_queued.fetch_add(1, std::memory_order_relaxed);
+                m_pool.dispatch(
+                    [this, job]
+                    {
+                        job->Execute();
+                        job->Release();
+                        m_queued.fetch_sub(1, std::memory_order_release);
+                    },
+                    core::job_pool::priority::high);
+            }
+
+            void QueueJobs(Job** jobs, JPH::uint count) override
+            {
+                for (JPH::uint i = 0; i < count; ++i)
+                {
+                    QueueJob(jobs[i]);
+                }
+            }
+
+            void FreeJob(Job* job) override
+            {
+                m_jobs.DestructObject(job);
+            }
+
+        private:
+            using job_storage = JPH::FixedSizeFreeList<Job>;
+
+            core::job_pool& m_pool;
+            job_storage m_jobs;
+            // Pool tasks dispatched and not yet finished.
+            std::atomic<std::size_t> m_queued{0};
+        };
 
         // Two object layers — static bodies and everything that moves — each
         // with its own broad-phase tree. Static bodies never test against
@@ -897,7 +1006,7 @@ namespace runtime::physics
         object_layer_pairs object_layer_pair_filter;
         contact_recorder contacts;
         std::unique_ptr<JPH::TempAllocatorImpl> temp_allocator;
-        std::unique_ptr<JPH::JobSystemThreadPool> job_system;
+        std::unique_ptr<pool_job_system> job_system;
         std::unique_ptr<JPH::PhysicsSystem> system;
 
         std::unordered_map<const runtime::node*, std::unique_ptr<body_record>> records;
@@ -1666,7 +1775,7 @@ namespace runtime::physics
         quit();
     }
 
-    void world::init()
+    void world::init(core::job_pool& jobs)
     {
         impl& self = *m_impl;
         if (self.initialized)
@@ -1677,10 +1786,7 @@ namespace runtime::physics
         self.jolt_acquired = true;
 
         self.temp_allocator = std::make_unique<JPH::TempAllocatorImpl>(k_temp_allocator_bytes);
-        const int workers =
-            std::clamp(static_cast<int>(std::thread::hardware_concurrency()) / 2, 1, k_max_worker_threads);
-        self.job_system =
-            std::make_unique<JPH::JobSystemThreadPool>(JPH::cMaxPhysicsJobs, JPH::cMaxPhysicsBarriers, workers);
+        self.job_system = std::make_unique<pool_job_system>(jobs, JPH::cMaxPhysicsJobs, JPH::cMaxPhysicsBarriers);
         self.system = std::make_unique<JPH::PhysicsSystem>();
         self.system->Init(k_max_bodies,
                           0,
@@ -1694,11 +1800,11 @@ namespace runtime::physics
         self.events = runtime::current_engine().events.get();
         self.initialized = true;
 
-        LOG_INF("Physics: Jolt %d.%d.%d up, %d worker thread(s)",
+        LOG_INF("Physics: Jolt %d.%d.%d up, running its jobs on the engine's worker pool (%d-way)",
                 JPH_VERSION_MAJOR,
                 JPH_VERSION_MINOR,
                 JPH_VERSION_PATCH,
-                workers);
+                self.job_system->GetMaxConcurrency());
     }
 
     void world::quit()

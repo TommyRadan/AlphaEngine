@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2015-2026 Tomislav Radanovic
 
-#include <algorithm>
+#include <atomic>
 #include <cstddef>
 #include <memory>
 #include <utility>
@@ -10,31 +10,11 @@
 #include <core/event_engine.hpp>
 #include <core/log.hpp>
 
-// Brackets one dispatch: bumps the depth so subscribe / unsubscribe defer
-// rather than mutate the registry under the walk, and applies the deferred
-// changes once the outermost dispatch returns. Runs on exceptional exit too,
-// so a throwing listener cannot leave the bus deferring forever.
-struct core::event_bus::dispatch_scope
+std::uint32_t core::detail::next_event_type_index() noexcept
 {
-    explicit dispatch_scope(event_bus& bus) noexcept : m_bus{bus}
-    {
-        ++m_bus.m_dispatch_depth;
-    }
-
-    ~dispatch_scope()
-    {
-        if (--m_bus.m_dispatch_depth == 0)
-        {
-            m_bus.apply_deferred();
-        }
-    }
-
-    dispatch_scope(const dispatch_scope&) = delete;
-    dispatch_scope& operator=(const dispatch_scope&) = delete;
-
-private:
-    event_bus& m_bus;
-};
+    static std::atomic<std::uint32_t> next{0};
+    return next.fetch_add(1, std::memory_order_relaxed);
+}
 
 core::event_bus::event_bus() : m_self{std::make_shared<event_bus*>(this)} {}
 
@@ -53,148 +33,111 @@ void core::event_bus::init()
 
 void core::event_bus::quit()
 {
-    LOG_INF("Quit Event Engine: %zu event types had listeners registered", m_listeners.size());
-    m_pending_unsubscribes.clear();
+    std::size_t types_with_listeners = 0;
+    for (const std::unique_ptr<channel_base>& channel : m_channels)
+    {
+        if (channel != nullptr && channel->listener_count() > 0)
+        {
+            ++types_with_listeners;
+        }
+    }
+    LOG_INF("Quit Event Engine: %zu event types had listeners registered", types_with_listeners);
     m_queued.clear();
 
-    // Detach the listeners from the bus first and let them die at scope
-    // exit: their captures may own tokens on this bus whose destructors
-    // call back into unsubscribe, and those must find an empty, consistent
-    // registry rather than one being cleared underneath them.
-    std::vector<pending_subscribe> dropped_pending;
-    dropped_pending.swap(m_pending_subscribes);
-    std::unordered_map<std::type_index, std::vector<listener_entry>> dropped;
-    dropped.swap(m_listeners);
+    // Every id goes stale first, then the channels are detached from the
+    // bus and die at scope exit: their listeners' captures may own tokens
+    // on this bus, whose destructors call back into unsubscribe and must
+    // find a consistent, empty registry.
+    for (std::uint32_t index = 0; index < m_slots.size(); ++index)
+    {
+        if (m_slots[index].in_use)
+        {
+            release_slot(index);
+        }
+    }
+    m_unsettled.clear();
+    std::vector<std::unique_ptr<channel_base>> dropped;
+    dropped.swap(m_channels);
 }
 
-std::uint64_t core::event_bus::add_listener(std::type_index type, listener_callback callback)
+std::uint32_t core::event_bus::acquire_slot(std::uint32_t type)
 {
-    const std::uint64_t id = m_next_id++;
-    listener_entry entry{id, std::move(callback)};
-    if (m_dispatch_depth > 0)
+    std::uint32_t index = 0;
+    if (!m_free_slots.empty())
     {
-        // Inserting now could rehash the map or reallocate the vector a
-        // dispatch is walking; apply_deferred adds it once that returns.
-        m_pending_subscribes.push_back({type, std::move(entry)});
+        index = m_free_slots.back();
+        m_free_slots.pop_back();
     }
     else
     {
-        m_listeners[type].push_back(std::move(entry));
+        index = static_cast<std::uint32_t>(m_slots.size());
+        m_slots.emplace_back();
     }
-    return id;
+    listener_slot& slot = m_slots[index];
+    slot.in_use = true;
+    slot.channel = type;
+    return index;
 }
 
-bool core::event_bus::remove_listener(std::uint64_t id)
+void core::event_bus::release_slot(std::uint32_t index) noexcept
 {
-    // Listener counts are small (a few dozen at most), so a linear scan
-    // beats keeping a second id -> type index in sync.
-    for (auto& bucket : m_listeners)
+    listener_slot& slot = m_slots[index];
+    slot.in_use = false;
+    slot.pending = false;
+    // An id carries the generation it was issued with, so bumping it here
+    // turns every earlier id for this slot into a no-op. 0 is skipped on
+    // wrap to keep every id non-zero.
+    if (++slot.generation == 0)
     {
-        std::vector<listener_entry>& listeners = bucket.second;
-        const auto it = std::find_if(
-            listeners.begin(), listeners.end(), [id](const listener_entry& entry) { return entry.id == id; });
-        if (it == listeners.end())
-        {
-            continue;
-        }
-        // Take the callable out before erasing the slot and let it die on
-        // return, once the vector is consistent again: its captures may own
-        // tokens on this bus whose destructors re-enter unsubscribe.
-        const listener_callback detached = std::move(it->callback);
-        listeners.erase(it);
-        return true;
+        slot.generation = 1;
     }
-    return false;
+    m_free_slots.push_back(index);
 }
 
-bool core::event_bus::remove_pending_subscribe(std::uint64_t id)
+void core::event_bus::list_unsettled(channel_base& target)
 {
-    const auto it = std::find_if(m_pending_subscribes.begin(),
-                                 m_pending_subscribes.end(),
-                                 [id](const pending_subscribe& pending) { return pending.entry.id == id; });
-    if (it == m_pending_subscribes.end())
+    if (!target.listed)
     {
-        return false;
+        target.listed = true;
+        m_unsettled.push_back(&target);
     }
-    // Same ordering as remove_listener: the callable outlives the erase.
-    const listener_callback detached = std::move(it->entry.callback);
-    m_pending_subscribes.erase(it);
-    return true;
 }
 
-bool core::event_bus::is_removal_pending(std::uint64_t id) const
+void core::event_bus::settle_channels()
 {
-    return std::find(m_pending_unsubscribes.begin(), m_pending_unsubscribes.end(), id) != m_pending_unsubscribes.end();
+    // Take the list by value: settling destroys listener callables, whose
+    // destructors may subscribe or unsubscribe in turn, and those must
+    // start from a fresh list.
+    std::vector<channel_base*> channels;
+    channels.swap(m_unsettled);
+    for (channel_base* channel : channels)
+    {
+        channel->listed = false;
+    }
+    for (channel_base* channel : channels)
+    {
+        channel->settle(*this);
+    }
 }
 
 void core::event_bus::unsubscribe(std::uint64_t id)
 {
-    if (id == 0)
+    const auto index = static_cast<std::uint32_t>(id & 0xffffffffu);
+    const auto generation = static_cast<std::uint32_t>(id >> 32);
+    if (id == 0 || index >= m_slots.size())
+    {
+        return;
+    }
+    const listener_slot slot = m_slots[index];
+    if (!slot.in_use || slot.generation != generation)
     {
         return;
     }
 
-    if (m_dispatch_depth == 0)
-    {
-        remove_listener(id);
-        return;
-    }
-
-    // Mid-dispatch. A listener subscribed during this same dispatch has not
-    // reached the registry yet, so cancel its pending add instead. Otherwise
-    // record the id: the walk skips it from now on and apply_deferred erases
-    // it once the outermost dispatch returns, so the callable is never
-    // destroyed while it may be the one executing.
-    if (remove_pending_subscribe(id) || is_removal_pending(id))
-    {
-        return;
-    }
-    m_pending_unsubscribes.push_back(id);
-}
-
-void core::event_bus::apply_deferred()
-{
-    // Take both lists by value: applying them can run listener destructors
-    // that subscribe or unsubscribe in turn, and those must start from a
-    // fresh, consistent pending state.
-    std::vector<pending_subscribe> subscribes;
-    subscribes.swap(m_pending_subscribes);
-    std::vector<std::uint64_t> unsubscribes;
-    unsubscribes.swap(m_pending_unsubscribes);
-
-    for (pending_subscribe& pending : subscribes)
-    {
-        m_listeners[pending.type].push_back(std::move(pending.entry));
-    }
-    for (const std::uint64_t id : unsubscribes)
-    {
-        remove_listener(id);
-    }
-}
-
-void core::event_bus::dispatch(std::type_index type, const std::any& payload)
-{
-    const auto bucket = m_listeners.find(type);
-    if (bucket == m_listeners.end())
-    {
-        return;
-    }
-
-    // Every subscribe / unsubscribe is deferred while the depth is non-zero,
-    // so neither the map nor this vector changes under the walk: the
-    // reference and the index stay valid across listener bodies and nested
-    // emits. An entry unsubscribed part-way through stays in place (its
-    // callable may be the one running) and is skipped from then on.
-    const dispatch_scope scope{*this};
-    const std::vector<listener_entry>& listeners = bucket->second;
-    for (std::size_t i = 0; i < listeners.size(); ++i)
-    {
-        const listener_entry& entry = listeners[i];
-        if (!is_removal_pending(entry.id))
-        {
-            entry.callback(payload);
-        }
-    }
+    // The slot goes first: retiring may destroy the listener's callable,
+    // whose captures may own tokens on this bus.
+    release_slot(index);
+    m_channels[slot.channel]->retire(*this, slot.position, slot.pending);
 }
 
 void core::event_bus::flush()
@@ -205,8 +148,12 @@ void core::event_bus::flush()
     std::vector<queued_event> draining;
     draining.swap(m_queued);
 
-    for (const auto& entry : draining)
+    for (const queued_event& event : draining)
     {
-        dispatch(entry.first, entry.second);
+        if (event.type < m_channels.size() && m_channels[event.type] != nullptr)
+        {
+            const dispatch_scope scope{*this};
+            m_channels[event.type]->dispatch_queued(event.payload);
+        }
     }
 }

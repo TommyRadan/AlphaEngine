@@ -36,13 +36,15 @@ namespace
     constexpr verbosity k_default_level = verbosity::info;
 #endif
 
-    // The output core provides itself: every line to stderr, flushed as it is written.
+    // Buffered lines past which the buffer is written out before the next flush point.
+    constexpr std::size_t k_buffer_limit = std::size_t{64} * 1024;
+
+    // The output core provides itself: stderr.
     struct console_sink : core::logging::sink
     {
-        void write(std::string_view line) override
+        void write(std::string_view lines) override
         {
-            std::fwrite(line.data(), 1, line.size(), stderr);
-            std::fflush(stderr);
+            std::fwrite(lines.data(), 1, lines.size(), stderr);
         }
 
         void flush() override
@@ -59,6 +61,12 @@ namespace
         std::mutex sink_mutex;
         console_sink console;
         std::vector<std::unique_ptr<core::logging::sink>> sinks;
+
+        // Formatted lines not yet handed to the sinks (see set_buffered), and whether the sinks were written since
+        // they were last flushed. Both under sink_mutex.
+        bool buffered = false;
+        std::string pending;
+        bool unflushed = false;
 
         // Told about every level change (see set_level_observer).
         std::atomic<core::logging::level_observer> level_observer{nullptr};
@@ -121,6 +129,43 @@ namespace
         }
     }
 
+    // Hands @p lines to the console and every added sink. The caller holds sink_mutex.
+    void write_locked(logging_state& s, std::string_view lines)
+    {
+        s.console.write(lines);
+        for (const std::unique_ptr<core::logging::sink>& destination : s.sinks)
+        {
+            destination->write(lines);
+        }
+        s.unflushed = true;
+    }
+
+    // Hands the buffered lines to the sinks. The caller holds sink_mutex.
+    void write_pending_locked(logging_state& s)
+    {
+        if (!s.pending.empty())
+        {
+            write_locked(s, s.pending);
+            // clear() keeps the capacity, so the buffer settles at its working size.
+            s.pending.clear();
+        }
+    }
+
+    // Flushes every sink written since the last flush. The caller holds sink_mutex.
+    void flush_sinks_locked(logging_state& s)
+    {
+        if (!s.unflushed)
+        {
+            return;
+        }
+        s.console.flush();
+        for (const std::unique_ptr<core::logging::sink>& destination : s.sinks)
+        {
+            destination->flush();
+        }
+        s.unflushed = false;
+    }
+
     void push_recent(record&& entry)
     {
         auto& s = state();
@@ -181,10 +226,21 @@ namespace
         auto& s = state();
         {
             std::lock_guard<std::mutex> lock{s.sink_mutex};
-            s.console.write(text);
-            for (const std::unique_ptr<core::logging::sink>& destination : s.sinks)
+            if (s.buffered)
             {
-                destination->write(text);
+                s.pending.append(text);
+                // A warning or worse reaches the sinks at once, with everything buffered before it; so does a
+                // buffer that has grown large.
+                if (level >= verbosity::warn || s.pending.size() >= k_buffer_limit)
+                {
+                    write_pending_locked(s);
+                    flush_sinks_locked(s);
+                }
+            }
+            else
+            {
+                write_locked(s, text);
+                flush_sinks_locked(s);
             }
         }
 
@@ -292,11 +348,46 @@ void core::logging::shutdown()
 {
     auto& s = state();
     std::lock_guard<std::mutex> lock{s.sink_mutex};
+    write_pending_locked(s);
+    s.console.flush();
     for (const std::unique_ptr<sink>& destination : s.sinks)
     {
         destination->flush();
     }
     s.sinks.clear();
+    s.buffered = false;
+    s.unflushed = false;
+}
+
+void core::logging::set_buffered(bool buffered)
+{
+    auto& s = state();
+    std::lock_guard<std::mutex> lock{s.sink_mutex};
+    s.buffered = buffered;
+    if (!buffered)
+    {
+        write_pending_locked(s);
+        flush_sinks_locked(s);
+    }
+}
+
+void core::logging::flush_after_crash() noexcept
+{
+    // The crash may have struck while some thread held the lock, the crashing one included, so the lock is only
+    // tried, a bounded number of times; the process is going down either way.
+    constexpr int k_lock_attempts = 1000;
+    auto& s = state();
+    std::unique_lock<std::mutex> lock{s.sink_mutex, std::defer_lock};
+    for (int attempt = 0; attempt < k_lock_attempts && !lock.try_lock(); ++attempt)
+    {
+        std::this_thread::yield();
+    }
+    if (!lock.owns_lock())
+    {
+        return;
+    }
+    write_pending_locked(s);
+    flush_sinks_locked(s);
 }
 
 void core::logging::add_sink(std::unique_ptr<sink> destination)
@@ -332,11 +423,8 @@ void core::logging::flush()
 {
     auto& s = state();
     std::lock_guard<std::mutex> lock{s.sink_mutex};
-    s.console.flush();
-    for (const std::unique_ptr<sink>& destination : s.sinks)
-    {
-        destination->flush();
-    }
+    write_pending_locked(s);
+    flush_sinks_locked(s);
 }
 
 void core::logging::message(
@@ -366,8 +454,6 @@ void core::logging::message(
     else if (level == verbosity::fatal)
     {
         state().fatal_count.fetch_add(1, std::memory_order_relaxed);
-        // The caller throws next; make sure the last line is on disk before the stack unwinds.
-        flush();
     }
 }
 

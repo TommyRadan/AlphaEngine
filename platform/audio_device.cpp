@@ -3,6 +3,9 @@
 
 #include <platform/audio_device.hpp>
 
+#include <algorithm>
+#include <utility>
+
 #include <SDL3/SDL_audio.h>
 #include <SDL3/SDL_init.h>
 
@@ -10,6 +13,10 @@ namespace platform
 {
     namespace
     {
+        // Frames rendered per call to the render function; a request for
+        // more is filled in several blocks.
+        constexpr std::size_t k_block_frames = 1024;
+
         // "<what> (<SDL's reason>)", the form every failure below reports.
         std::string with_sdl_error(const char* what)
         {
@@ -22,7 +29,10 @@ namespace platform
         close();
     }
 
-    bool sdl_audio_output::open(std::uint32_t sample_rate, std::uint32_t channels, std::string& error)
+    bool sdl_audio_output::open(std::uint32_t sample_rate,
+                                std::uint32_t channels,
+                                render_function render,
+                                std::string& error)
     {
         close();
 
@@ -45,8 +55,15 @@ namespace platform
             return false;
         }
 
+        m_channels = channels;
+        m_render = std::move(render);
+        m_block.assign(k_block_frames * channels, 0.0f);
+
+        // The callback goes in before the stream is bound, so the device's
+        // first request already reaches the mix.
         SDL_AudioStream* stream = SDL_CreateAudioStream(&spec, &spec);
-        if (stream == nullptr || !SDL_BindAudioStream(device, stream))
+        if (stream == nullptr || !SDL_SetAudioStreamGetCallback(stream, &sdl_audio_output::on_stream_request, this) ||
+            !SDL_BindAudioStream(device, stream))
         {
             error = with_sdl_error("could not create/bind the mixer stream");
             if (stream != nullptr)
@@ -55,12 +72,13 @@ namespace platform
             }
             SDL_CloseAudioDevice(device);
             SDL_QuitSubSystem(SDL_INIT_AUDIO);
+            m_render = nullptr;
+            m_channels = 0;
             return false;
         }
 
         m_device = device;
         m_stream = stream;
-        m_channels = channels;
         return true;
     }
 
@@ -70,6 +88,10 @@ namespace platform
         {
             return;
         }
+        // Clearing the callback takes the stream's lock, which a running
+        // request holds, so once this returns the render function is done
+        // for good.
+        SDL_SetAudioStreamGetCallback(m_stream, nullptr, nullptr);
         // Unbinds from the device as part of destroying it; the device
         // itself is only closed by SDL_OpenAudioDeviceStream's stream,
         // which this output does not use (see the class docs).
@@ -78,6 +100,7 @@ namespace platform
         SDL_CloseAudioDevice(static_cast<SDL_AudioDeviceID>(m_device));
         m_device = 0;
         m_channels = 0;
+        m_render = nullptr;
         SDL_QuitSubSystem(SDL_INIT_AUDIO);
     }
 
@@ -87,23 +110,26 @@ namespace platform
         return name != nullptr ? std::string{name} : std::string{};
     }
 
-    std::size_t sdl_audio_output::queued_frames() const
+    void
+    sdl_audio_output::on_stream_request(void* user, SDL_AudioStream* stream, int additional_amount, int total_amount)
     {
-        if (m_stream == nullptr)
-        {
-            return 0;
-        }
-        const int queued_bytes = SDL_GetAudioStreamQueued(m_stream);
-        return queued_bytes > 0 ? static_cast<std::size_t>(queued_bytes) / (m_channels * sizeof(float)) : 0;
-    }
-
-    void sdl_audio_output::queue(const float* samples, std::size_t frame_count)
-    {
-        if (m_stream == nullptr || frame_count == 0)
+        (void)total_amount;
+        auto& self = *static_cast<sdl_audio_output*>(user);
+        if (additional_amount <= 0)
         {
             return;
         }
-        SDL_PutAudioStreamData(m_stream, samples, static_cast<int>(frame_count * m_channels * sizeof(float)));
+        // The amount is in bytes of the stream's input format, the mixer's;
+        // a partial frame rounds up to a whole one.
+        const std::size_t frame_bytes = self.m_channels * sizeof(float);
+        std::size_t frames = (static_cast<std::size_t>(additional_amount) + frame_bytes - 1) / frame_bytes;
+        while (frames > 0)
+        {
+            const std::size_t block = std::min(frames, k_block_frames);
+            self.m_render(self.m_block.data(), block);
+            SDL_PutAudioStreamData(stream, self.m_block.data(), static_cast<int>(block * frame_bytes));
+            frames -= block;
+        }
     }
 
     bool sdl_audio_decoder::decode_wav(const std::vector<std::byte>& bytes,

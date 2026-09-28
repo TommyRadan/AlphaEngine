@@ -4,8 +4,8 @@
 /**
  * @file audio_backend.hpp
  * @brief The platform services @ref core::audio reaches the OS through: a
- *        playback device to queue mixed samples into and a decoder that
- *        turns a sound file into mixer-format samples.
+ *        playback device that pulls mixed samples and a decoder that turns
+ *        a sound file into mixer-format samples.
  *
  * core declares them and the platform module implements them
  * (platform/audio_device.hpp); @c runtime::engine hands the
@@ -17,6 +17,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -25,33 +26,42 @@ namespace core
     /**
      * @brief A playback device fed with interleaved 32-bit float samples.
      *
-     * The mixer pulls: once per tick it asks how much is still queued and
-     * tops the queue up. Nothing here runs a callback on another thread.
+     * The device pulls: whenever it needs more to play, it calls the render
+     * function it was opened with, on a thread of its own, one call at a
+     * time.
      */
     struct audio_output
     {
+        /**
+         * @brief Fills @p samples with the next @p frame_count frames
+         *        (@p frame_count times the open channel count floats). Runs on
+         *        the device's thread, so it must not block.
+         */
+        using render_function = std::function<void(float* samples, std::size_t frame_count)>;
+
         virtual ~audio_output() = default;
 
         /**
          * @brief Opens the default playback device for @p channels
-         *        interleaved channels at @p sample_rate. A device whose
-         *        native format differs converts on its side.
+         *        interleaved channels at @p sample_rate and starts pulling
+         *        from @p render. A device whose native format differs
+         *        converts on its side.
          * @param error Receives a one-line reason when no device can be opened.
-         * @return true when the device is open and accepts @ref queue.
+         * @return true when the device is open; @p render may be called
+         *         from then until @ref close returns.
          */
-        virtual bool open(std::uint32_t sample_rate, std::uint32_t channels, std::string& error) = 0;
+        virtual bool
+        open(std::uint32_t sample_rate, std::uint32_t channels, render_function render, std::string& error) = 0;
 
-        /** @brief Closes the device, dropping anything still queued. No-op when nothing is open. */
+        /**
+         * @brief Closes the device, dropping anything not yet played. Once
+         *        it returns the render function is not running and is never
+         *        called again. No-op when nothing is open.
+         */
         virtual void close() = 0;
 
         /** @brief A human-readable name of the open device. */
         virtual std::string name() const = 0;
-
-        /** @brief Frames queued but not yet played. */
-        virtual std::size_t queued_frames() const = 0;
-
-        /** @brief Appends @p frame_count frames (@p frame_count times the open channel count floats) to the queue. */
-        virtual void queue(const float* samples, std::size_t frame_count) = 0;
     };
 
     /** @brief Decodes whole sound files, already read into memory, into mixer-format samples. */
