@@ -18,6 +18,7 @@
 
 #include <runtime/scripting/lua_state.hpp>
 
+#include <cstdint>
 #include <string>
 #include <utility>
 #include <vector>
@@ -484,8 +485,50 @@ namespace
         return *runtime::current_engine().input;
     }
 
-    void bind_input(sol::state& lua)
+    // A local player index as a script holds it: input.player(n) hands one of these back rather than n itself,
+    // so :action(name) and friends read naturally. Plain data — every player slot is always valid to query
+    // (core::input::is_action_down and friends answer false/0 for one out of range), so unlike node_ref / scene_ref
+    // this needs no liveness check.
+    struct player_ref
     {
+        int index{core::input::k_default_player};
+    };
+
+    void bind_input(sol::state& lua, sol::table& types)
+    {
+        sol::usertype<player_ref> player_type = types.new_usertype<player_ref>("input_player", sol::no_constructor);
+        player_type["index"] = sol::readonly_property([](const player_ref& self) { return self.index; });
+        player_type["action"] = [](const player_ref& self, const std::string& name)
+        { return engine_input().is_action_down(self.index, name); };
+        player_type["pressed"] = [](const player_ref& self, const std::string& name)
+        { return engine_input().was_action_pressed(self.index, name); };
+        player_type["released"] = [](const player_ref& self, const std::string& name)
+        { return engine_input().was_action_released(self.index, name); };
+        player_type["axis"] = [](const player_ref& self, const std::string& name)
+        { return engine_input().get_axis(self.index, name); };
+        player_type["assign_gamepad"] = [](const player_ref& self, std::uint32_t gamepad_id)
+        { return engine_input().assign_gamepad(gamepad_id, self.index); };
+        player_type["unassign_gamepad"] = [](const player_ref& self)
+        {
+            core::input& in = engine_input();
+            if (const auto gamepad_id = in.player_gamepad(self.index))
+            {
+                in.unassign_gamepad(*gamepad_id);
+            }
+        };
+        player_type["gamepad_id"] = [](const player_ref& self) -> sol::optional<std::uint32_t>
+        {
+            const auto gamepad_id = engine_input().player_gamepad(self.index);
+            return gamepad_id ? sol::optional<std::uint32_t>{*gamepad_id} : sol::nullopt;
+        };
+        // The capture runs synchronously inside the native raw-input handler that satisfies it (see
+        // core::input::listen_for_next_input), long after this call — and possibly this script's own
+        // lua_State — may be gone, so this takes no Lua callback; poll listening() instead.
+        player_type["listen"] = [](const player_ref& self, const std::string& name, bool is_axis)
+        { engine_input().listen_for_next_input(self.index, name, is_axis); };
+        player_type["listening"] = [](const player_ref&) { return engine_input().is_listening(); };
+        player_type["cancel_listen"] = [](const player_ref&) { engine_input().cancel_listen(); };
+
         sol::table input = lua.create_named_table("input");
         input["is_action_down"] = [](const std::string& name) { return engine_input().is_action_down(name); };
         input["was_action_pressed"] = [](const std::string& name) { return engine_input().was_action_pressed(name); };
@@ -494,6 +537,21 @@ namespace
         input["mouse_position"] = [] { return engine_input().mouse_position(); };
         input["mouse_delta"] = [] { return engine_input().mouse_delta(); };
         input["mouse_wheel_delta"] = [] { return engine_input().mouse_wheel_delta(); };
+
+        input["max_players"] = [] { return engine_input().max_players(); };
+        input["player"] = [](int index) -> player_ref
+        {
+            if (index < 0 || index >= engine_input().max_players())
+            {
+                raise("input.player: " + std::to_string(index) + " is out of range (max_players() is " +
+                      std::to_string(engine_input().max_players()) + ")");
+            }
+            return player_ref{index};
+        };
+        input["assign_keyboard"] = [](int player) { engine_input().assign_keyboard(player); };
+        input["assign_mouse"] = [](int player) { engine_input().assign_mouse(player); };
+        input["keyboard_player"] = [] { return engine_input().keyboard_player(); };
+        input["mouse_player"] = [] { return engine_input().mouse_player(); };
     }
 
     // log.<level>(...): the arguments joined as print joins them, logged
@@ -596,8 +654,8 @@ void runtime::scripting::bind_world(sol::state& lua)
     bind_camera(types);
     bind_rigidbody(types);
     bind_audio_source(types);
+    bind_input(lua, types);
     lua.registry()["alphaengine.script_types"] = types;
 
-    bind_input(lua);
     bind_log(lua);
 }

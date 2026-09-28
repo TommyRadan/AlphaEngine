@@ -73,6 +73,7 @@ namespace runtime
         text += registry.help_lines_for("window");
         text += registry.help_lines_for("graphics");
         text += registry.help_lines_for("shadows");
+        text += registry.help_lines_for("input");
         text += registry.help_lines_for("content");
         text += registry.help_lines_for("diagnostics");
         text += core::settings_meta_options_help();
