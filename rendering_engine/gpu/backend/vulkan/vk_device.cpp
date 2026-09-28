@@ -120,18 +120,7 @@ namespace rendering_engine::gpu::backend::vulkan
         m_window_height = surface.height;
         m_vsync = surface.vsync;
 
-        // The slot ring is sized once, here: the command pools, sync
-        // objects, swapchain depth images and every dynamic buffer's
-        // regions follow it, so it cannot change while the device is
-        // up. The settings layer already clamps the value to the range;
-        // the clamp here guards any other caller.
-        static_assert(gpu::max_frames_in_flight == k_max_frames_in_flight,
-                      "the device interface's bound and the backend ring must agree");
-        m_frames_in_flight = std::clamp<uint32_t>(frames_in_flight, 1, k_max_frames_in_flight);
-        m_frame_slot = 0;
-        m_in_frame = false;
-        m_submit_serial = 0;
-        m_completed_submit_serial = 0;
+        m_frame.set_frames_in_flight(frames_in_flight);
 
         m_instance.create_instance(surface.vulkan_instance_extensions);
         m_instance.load_debug_utils_functions();
@@ -144,7 +133,7 @@ namespace rendering_engine::gpu::backend::vulkan
         m_pipeline_cache.create(m_physical_device.handle(), m_device.handle());
         m_device.create_allocator();
         m_transfer.create_command_pool();
-        create_command_pools();
+        m_frame.create_command_pools();
         if (!m_transfer.create_staging_ring())
         {
             throw std::runtime_error{"vk_device::init: staging ring allocation failed"};
@@ -174,7 +163,7 @@ namespace rendering_engine::gpu::backend::vulkan
         {
             throw std::runtime_error{"vk_device::init: swapchain creation failed"};
         }
-        create_sync_objects();
+        m_frame.create_sync_objects();
 
         vk_render_target swap{};
         swap.is_swapchain = true;
@@ -188,7 +177,7 @@ namespace rendering_engine::gpu::backend::vulkan
 
         create_default_textures();
 
-        LOG_INF("Vulkan frames in flight: %u", m_frames_in_flight);
+        LOG_INF("Vulkan frames in flight: %u", m_frame.frames_in_flight());
         m_initialised = true;
     }
 
@@ -243,9 +232,8 @@ namespace rendering_engine::gpu::backend::vulkan
         // Idle or lost: nothing executes any more, so every deferred
         // destroy — including those stamped with a submission that
         // never happened — may run.
-        m_in_frame = false;
-        note_device_idle();
-        m_completed_submit_serial = UINT64_MAX;
+        m_frame.abandon_frame();
+        m_frame.note_device_drained();
 
         if (m_default_texture_2d.valid())
         {
@@ -264,7 +252,7 @@ namespace rendering_engine::gpu::backend::vulkan
         // free, and the active handle pools below need to release
         // whatever is still resident.
         m_transfer.discard_transfer_batches();
-        drain_pending_destroys();
+        m_frame.drain_pending_destroys();
 
         m_pipelines.for_each(
             [&](vk_pipeline& p)
@@ -406,7 +394,7 @@ namespace rendering_engine::gpu::backend::vulkan
         m_render_targets.clear();
         m_query_sets.clear();
 
-        destroy_sync_objects();
+        m_frame.destroy_sync_objects();
         destroy_swapchain();
 
         // Every descriptor set was freed above (or belongs to a leaked
@@ -421,7 +409,7 @@ namespace rendering_engine::gpu::backend::vulkan
         // allocations, so both go before the allocator, which goes
         // before the device.
         m_transfer.destroy_command_pool();
-        destroy_command_pools();
+        m_frame.destroy_command_pools();
         m_transfer.destroy_staging_ring();
         m_device.destroy_allocator();
         m_device.destroy();
@@ -430,14 +418,8 @@ namespace rendering_engine::gpu::backend::vulkan
         m_have_current_image = false;
         m_acquire_attempted = false;
         m_present_pending = false;
-        m_in_flight_fence_armed.fill(false);
-        m_fence_submit_serial.fill(0);
-        m_submit_serial = 0;
-        m_completed_submit_serial = 0;
-        m_frame_slot = 0;
-        m_frames_in_flight = 1;
+        m_frame.reset();
         m_physical_device.reset();
-        m_in_frame = false;
         m_transfer.reset();
         m_swapchain_suspended = false;
         m_device.reset();
@@ -525,51 +507,6 @@ namespace rendering_engine::gpu::backend::vulkan
         VkFormatProperties props{};
         vkGetPhysicalDeviceFormatProperties(m_physical_device.handle(), vk_format_for(format), &props);
         return to_texture_usage(props.optimalTilingFeatures, is_depth_format(format));
-    }
-
-    void vk_device::create_command_pools()
-    {
-        // A frame pool is reset whole, which is the cheaper operation
-        // and needs no per-buffer flag. Transient: every buffer is
-        // recorded once and reset.
-        VkCommandPoolCreateInfo info{};
-        info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-        info.queueFamilyIndex = m_physical_device.graphics_queue_family();
-        info.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
-        for (uint32_t slot = 0; slot < m_frames_in_flight; ++slot)
-        {
-            frame_command_slot& frame_slot = m_frame_command_slots[slot];
-            if (!vk_check(vkCreateCommandPool(m_device.handle(), &info, nullptr, &frame_slot.pool),
-                          "vkCreateCommandPool (frame)"))
-            {
-                frame_slot.pool = VK_NULL_HANDLE;
-                throw std::runtime_error{"vkCreateCommandPool failed"};
-            }
-        }
-    }
-
-    void vk_device::destroy_command_pools()
-    {
-        // Under vkDeviceWaitIdle (quit): destroying the pools frees
-        // their command buffers.
-        for (frame_command_slot& slot : m_frame_command_slots)
-        {
-            slot.buffers.clear();
-            slot.next = 0;
-            if (slot.pool != VK_NULL_HANDLE)
-            {
-                vkDestroyCommandPool(m_device.handle(), slot.pool, nullptr);
-                slot.pool = VK_NULL_HANDLE;
-            }
-            for (frame_command_slot::lane& lane : slot.lanes)
-            {
-                if (lane.pool != VK_NULL_HANDLE)
-                {
-                    vkDestroyCommandPool(m_device.handle(), lane.pool, nullptr);
-                }
-            }
-            slot.lanes.clear();
-        }
     }
 
     // -- Swapchain ------------------------------------------------------
@@ -674,7 +611,7 @@ namespace rendering_engine::gpu::backend::vulkan
         // resolve_depth_formats), not the nominal translation. One
         // depth image per frame slot (see m_swapchain_depth_images).
         const VkFormat depth_fmt = vk_format_for(m_swapchain_depth_format);
-        for (uint32_t slot = 0; slot < m_frames_in_flight; ++slot)
+        for (uint32_t slot = 0; slot < m_frame.frames_in_flight(); ++slot)
         {
             VkImageCreateInfo di{};
             di.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -798,52 +735,6 @@ namespace rendering_engine::gpu::backend::vulkan
         }
     }
 
-    void vk_device::create_sync_objects()
-    {
-        VkSemaphoreCreateInfo si{};
-        si.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-        VkFenceCreateInfo fi{};
-        fi.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-        fi.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-        // The render-finished semaphores live with the swapchain (one per
-        // image); the per-slot image-available semaphores and in-flight
-        // fences are owned here.
-        for (uint32_t slot = 0; slot < m_frames_in_flight; ++slot)
-        {
-            if (!vk_check(vkCreateSemaphore(m_device.handle(), &si, nullptr, &m_image_available[slot]),
-                          "vkCreateSemaphore (image-available)") ||
-                !vk_check(vkCreateFence(m_device.handle(), &fi, nullptr, &m_in_flight_fences[slot]),
-                          "vkCreateFence (in-flight)"))
-            {
-                throw std::runtime_error{"vk sync objects"};
-            }
-        }
-        m_in_flight_fence_armed.fill(false);
-        m_fence_submit_serial.fill(0);
-    }
-
-    void vk_device::destroy_sync_objects()
-    {
-        if (m_device.handle() == VK_NULL_HANDLE)
-        {
-            return;
-        }
-        for (uint32_t slot = 0; slot < k_max_frames_in_flight; ++slot)
-        {
-            if (m_image_available[slot] != VK_NULL_HANDLE)
-            {
-                vkDestroySemaphore(m_device.handle(), m_image_available[slot], nullptr);
-                m_image_available[slot] = VK_NULL_HANDLE;
-            }
-            if (m_in_flight_fences[slot] != VK_NULL_HANDLE)
-            {
-                vkDestroyFence(m_device.handle(), m_in_flight_fences[slot], nullptr);
-                m_in_flight_fences[slot] = VK_NULL_HANDLE;
-            }
-        }
-        m_in_flight_fence_armed.fill(false);
-    }
-
     // -- Render targets / swapchain accessors ---------------------------
 
     render_target vk_device::swapchain_target()
@@ -948,7 +839,7 @@ namespace rendering_engine::gpu::backend::vulkan
         // The idle wait covered every frame the fences track and every
         // submitted transfer batch; the batch still recording, if any,
         // was never submitted and stays open.
-        note_device_idle();
+        m_frame.note_device_idle();
         m_transfer.retire_transfer_batches();
 
         // The swapchain target's framebuffers point at image views that
@@ -1435,39 +1326,6 @@ namespace rendering_engine::gpu::backend::vulkan
         }
     }
 
-    void vk_device::note_render_pass_opened(bool is_swapchain, bool use_depth)
-    {
-        if (is_swapchain)
-        {
-            ++m_frame_stats.passes_swapchain;
-        }
-        else
-        {
-            ++m_frame_stats.passes_offscreen;
-        }
-        (void)use_depth;
-    }
-
-    void vk_device::note_draw(uint32_t vertex_count)
-    {
-        ++m_frame_stats.draws;
-        m_frame_stats.vertices += vertex_count;
-    }
-
-    void vk_device::note_draw_indexed(uint32_t index_count)
-    {
-        ++m_frame_stats.draws_indexed;
-        m_frame_stats.indices += index_count;
-    }
-
-    void vk_device::note_draws(uint32_t draws, uint32_t vertices, uint32_t draws_indexed, uint32_t indices)
-    {
-        m_frame_stats.draws += draws;
-        m_frame_stats.vertices += vertices;
-        m_frame_stats.draws_indexed += draws_indexed;
-        m_frame_stats.indices += indices;
-    }
-
     // -- Command recording ---------------------------------------------
 
     std::unique_ptr<command_encoder> vk_device::create_command_encoder()
@@ -1511,267 +1369,28 @@ namespace rendering_engine::gpu::backend::vulkan
         // logged there; the frame still runs.
         m_transfer.flush_transfer_batch();
 
-        const uint32_t slot = m_frame_slot;
-        VkFence fence = m_in_flight_fences[slot];
         if (!m_have_current_image)
         {
-            // No swapchain image this frame: either work submitted
-            // outside a frame bracket (the IBL prefilter at start-up)
-            // or a frame whose passes never reached the swapchain. It
-            // runs on the current slot's fence like a frame submission,
-            // with no semaphores and no present: the next begin_frame
-            // of that slot waits for it before the pool reset and the
-            // deferred-destroy drain, so the command buffer is not
-            // reused and nothing it references (the IBL scaffold is
-            // destroyed right after its submit) is freed while it
-            // executes. A fence still armed by an earlier such
-            // submission is waited first — for that one submission, not
-            // the whole queue.
-            if (!wait_slot_fence(slot))
-            {
-                return;
-            }
-            if (!vk_check(vkResetFences(m_device.handle(), 1, &fence), "vkResetFences (no-image)"))
-            {
-                return;
-            }
-            VkSubmitInfo si{};
-            si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-            si.commandBufferCount = 1;
-            si.pCommandBuffers = &cmd;
-            if (m_device.check_queue_result(vkQueueSubmit(m_device.graphics_queue(), 1, &si, fence),
-                                            "vkQueueSubmit (no-image)"))
-            {
-                m_in_flight_fence_armed[slot] = true;
-                m_fence_submit_serial[slot] = ++m_submit_serial;
-            }
+            m_frame.submit_without_image(cmd);
             return;
         }
-
-        // begin_frame already waited this slot's fence for the frame
-        // that last used it, so it is signaled and idle unless a
-        // no-image submission armed it again this frame. Reset it
-        // here, right before the one submission that signals it again,
-        // rather than at acquire time: a reset at acquire time would
-        // leave the fence unsignaled whenever the acquire fails
-        // (out-of-date swapchain), and the next begin_frame would then
-        // block forever.
-        if (!wait_slot_fence(slot))
+        if (!m_frame.submit_with_image(cmd, m_render_finished[m_current_image_index]))
         {
+            // Nothing signals the render-finished semaphore now, so the
+            // frame is not presented (the present would wait forever on
+            // it).
             return;
         }
-        if (!vk_check(vkResetFences(m_device.handle(), 1, &fence), "vkResetFences"))
-        {
-            return;
-        }
-
-        const VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        VkSubmitInfo si{};
-        si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-        si.waitSemaphoreCount = 1;
-        si.pWaitSemaphores = &m_image_available[slot];
-        si.pWaitDstStageMask = &wait_stage;
-        si.commandBufferCount = 1;
-        si.pCommandBuffers = &cmd;
-        si.signalSemaphoreCount = 1;
-        si.pSignalSemaphores = &m_render_finished[m_current_image_index];
-        if (!m_device.check_queue_result(vkQueueSubmit(m_device.graphics_queue(), 1, &si, fence), "vkQueueSubmit"))
-        {
-            // Nothing signals the fence or the render-finished
-            // semaphore now: the fence stays disarmed so the next
-            // begin_frame does not wait on it forever, and the frame
-            // is not presented (the present would wait forever on the
-            // semaphore).
-            return;
-        }
-        m_in_flight_fence_armed[slot] = true;
-        m_fence_submit_serial[slot] = ++m_submit_serial;
         // This frame now owns the image until its fence retires; the
         // acquire that hands the image back checks (see
         // acquire_swapchain_image).
         if (m_current_image_index < m_image_last_slot.size())
         {
-            m_image_last_slot[m_current_image_index] = slot;
+            m_image_last_slot[m_current_image_index] = m_frame.frame_slot();
         }
         // The present itself belongs to the frame boundary; end_frame
         // issues it once the renderer has closed the frame.
         m_present_pending = true;
-    }
-
-    bool vk_device::wait_slot_fence(uint32_t slot)
-    {
-        if (slot >= k_max_frames_in_flight || !m_in_flight_fence_armed[slot])
-        {
-            return true;
-        }
-        // Disarmed before the wait: after a failure nothing would ever
-        // signal it, and a lost device is done anyway.
-        m_in_flight_fence_armed[slot] = false;
-        if (!m_device.check_queue_result(
-                vkWaitForFences(m_device.handle(), 1, &m_in_flight_fences[slot], VK_TRUE, UINT64_MAX),
-                "vkWaitForFences"))
-        {
-            return false;
-        }
-        // The queue completes submissions in order, so this one
-        // retiring proves every earlier one retired too.
-        m_completed_submit_serial = std::max(m_completed_submit_serial, m_fence_submit_serial[slot]);
-        return true;
-    }
-
-    void vk_device::note_device_idle()
-    {
-        m_in_flight_fence_armed.fill(false);
-        m_completed_submit_serial = std::max(m_completed_submit_serial, m_submit_serial);
-    }
-
-    void vk_device::wait_slot_before_host_write()
-    {
-        if (!m_in_frame)
-        {
-            // Between frames the current slot's region still belongs to
-            // the frame that last recorded into the slot until its fence
-            // retires — the wait begin_frame would do next, brought
-            // forward. It disarms the fence, so the frame's own wait is
-            // then free.
-            wait_slot_fence(m_frame_slot);
-        }
-    }
-
-    void vk_device::reset_frame_command_pool()
-    {
-        frame_command_slot& slot = m_frame_command_slots[m_frame_slot];
-        if (slot.pool != VK_NULL_HANDLE)
-        {
-            vk_check(vkResetCommandPool(m_device.handle(), slot.pool, 0), "vkResetCommandPool (frame)");
-        }
-        slot.next = 0;
-        // The secondaries of this slot's frame were executed by its
-        // primary, so the same fence wait proved them complete.
-        for (frame_command_slot::lane& lane : slot.lanes)
-        {
-            if (lane.pool != VK_NULL_HANDLE)
-            {
-                vk_check(vkResetCommandPool(m_device.handle(), lane.pool, 0), "vkResetCommandPool (lane)");
-            }
-            lane.next = 0;
-        }
-    }
-
-    VkCommandBuffer vk_device::acquire_secondary_command_buffer(uint32_t lane_index)
-    {
-        if (m_device.device_lost() || m_device.handle() == VK_NULL_HANDLE)
-        {
-            return VK_NULL_HANDLE;
-        }
-        frame_command_slot& slot = m_frame_command_slots[m_frame_slot];
-        // Lanes are appended as a wider fork asks for them; a pool that
-        // failed to create leaves its lane empty and every later request
-        // for it retries.
-        if (lane_index >= slot.lanes.size())
-        {
-            slot.lanes.resize(static_cast<size_t>(lane_index) + 1);
-        }
-        frame_command_slot::lane& lane = slot.lanes[lane_index];
-        if (lane.pool == VK_NULL_HANDLE)
-        {
-            // Transient and reset whole, like the frame's primary pool.
-            VkCommandPoolCreateInfo info{};
-            info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-            info.queueFamilyIndex = m_physical_device.graphics_queue_family();
-            info.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
-            if (!vk_check(vkCreateCommandPool(m_device.handle(), &info, nullptr, &lane.pool),
-                          "vkCreateCommandPool (lane)"))
-            {
-                lane.pool = VK_NULL_HANDLE;
-                return VK_NULL_HANDLE;
-            }
-        }
-        if (lane.next < lane.buffers.size())
-        {
-            return lane.buffers[lane.next++];
-        }
-        VkCommandBufferAllocateInfo ai{};
-        ai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-        ai.commandPool = lane.pool;
-        ai.level = VK_COMMAND_BUFFER_LEVEL_SECONDARY;
-        ai.commandBufferCount = 1;
-        VkCommandBuffer cmd = VK_NULL_HANDLE;
-        if (!vk_check(vkAllocateCommandBuffers(m_device.handle(), &ai, &cmd), "vkAllocateCommandBuffers (lane)"))
-        {
-            return VK_NULL_HANDLE;
-        }
-        lane.buffers.push_back(cmd);
-        ++lane.next;
-        return cmd;
-    }
-
-    VkCommandBuffer vk_device::acquire_frame_command_buffer()
-    {
-        if (m_device.device_lost())
-        {
-            return VK_NULL_HANDLE;
-        }
-        frame_command_slot& slot = m_frame_command_slots[m_frame_slot];
-        if (slot.pool == VK_NULL_HANDLE)
-        {
-            return VK_NULL_HANDLE;
-        }
-        if (slot.next < slot.buffers.size())
-        {
-            return slot.buffers[slot.next++];
-        }
-        // The slot has handed out every buffer it owns since the last
-        // reset (one per frame in the steady state, more only when
-        // several encoders are recorded between two frames); grow it.
-        VkCommandBufferAllocateInfo ai{};
-        ai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-        ai.commandPool = slot.pool;
-        ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-        ai.commandBufferCount = 1;
-        VkCommandBuffer cmd = VK_NULL_HANDLE;
-        if (!vk_check(vkAllocateCommandBuffers(m_device.handle(), &ai, &cmd), "vkAllocateCommandBuffers (frame)"))
-        {
-            return VK_NULL_HANDLE;
-        }
-        slot.buffers.push_back(cmd);
-        ++slot.next;
-        return cmd;
-    }
-
-    void vk_device::enqueue_destroy(std::function<void()> fn)
-    {
-        if (fn)
-        {
-            // Inside a frame the frame's own submission, still to come,
-            // may reference the resource; between frames only the
-            // submissions already queued can. The newest batch — open,
-            // or submitted and maybe still executing — is the last one
-            // that can hold a copy into the resource; a batch begun
-            // later never sees its handle.
-            const uint64_t submit_serial = m_in_frame ? m_submit_serial + 1 : m_submit_serial;
-            m_pending_destroys.push_back({submit_serial, m_transfer.newest_transfer_batch_id(), std::move(fn)});
-        }
-    }
-
-    void vk_device::drain_pending_destroys()
-    {
-        // Move out first so a destroy callback that itself enqueues
-        // is captured into the next drain rather than running here.
-        // An entry whose submission or transfer batch has not retired
-        // yet goes back in the queue for a later drain.
-        std::vector<pending_destroy> drain;
-        drain.swap(m_pending_destroys);
-        for (pending_destroy& entry : drain)
-        {
-            if (entry.submit_serial > m_completed_submit_serial ||
-                m_transfer.transfer_batch_live_up_to(entry.transfer_batch_id))
-            {
-                m_pending_destroys.push_back(std::move(entry));
-                continue;
-            }
-            entry.fn();
-        }
     }
 
     void vk_device::flush_pending_destroys()
@@ -1784,10 +1403,9 @@ namespace rendering_engine::gpu::backend::vulkan
         // Idle: nothing executes any more, so every deferred destroy —
         // including one stamped for a submission that never happened —
         // may run now, same reasoning as quit()'s own final drain.
-        note_device_idle();
-        m_completed_submit_serial = UINT64_MAX;
+        m_frame.note_device_drained();
         m_transfer.retire_transfer_batches();
-        drain_pending_destroys();
+        m_frame.drain_pending_destroys();
     }
 
     // -- Frame boundary ------------------------------------------------
@@ -1801,19 +1419,9 @@ namespace rendering_engine::gpu::backend::vulkan
             // loss.
             return;
         }
-        m_in_frame = true;
-        // Block until the command buffer of the frame that last used
-        // this slot — frames_in_flight frames ago — has finished
-        // executing. This runs before the renderer records anything for
-        // the new frame, so every host write that follows — this slot's
-        // regions of the per-frame camera / light / shadow UBOs, instance
-        // re-uploads — lands in memory the GPU is no longer reading.
-        // Waiting lazily at the first swapchain pass instead, after every
-        // off-screen pass had already written its UBOs, would race those
-        // host writes against the GPU's reads. The fence is only waited
-        // when a submission armed it: after a failed submit nothing would
-        // ever signal it.
-        if (!wait_slot_fence(m_frame_slot) && m_device.device_lost())
+        // Wait for the frame that last recorded into this slot, before
+        // anything is written for the new one (see vk_frame::begin).
+        if (!m_frame.begin() && m_device.device_lost())
         {
             return;
         }
@@ -1830,14 +1438,14 @@ namespace rendering_engine::gpu::backend::vulkan
         }
         // Nothing from this slot's pool is pending any more: reclaim
         // the command buffers for this frame's encoders.
-        reset_frame_command_pool();
+        m_frame.reset_frame_command_pool();
         // Everything enqueued for destruction up to the submission the
         // fence retired is no longer referenced by the GPU — and no
         // command buffer is open yet that could reference what a
         // material rebuilds this frame. This is the one in-frame point
         // where freeing is safe (entries a later submission or a live
         // transfer batch still gates stay queued).
-        drain_pending_destroys();
+        m_frame.drain_pending_destroys();
 
         if (m_swapchain_suspended)
         {
@@ -1903,23 +1511,7 @@ namespace rendering_engine::gpu::backend::vulkan
             throw std::runtime_error{"Vulkan device lost"};
         }
 
-        if (m_frame_index < k_diagnostic_frames)
-        {
-            LOG_INF("Vulkan frame %u: passes(off=%u, swap=%u) draws(non_indexed=%u, indexed=%u) verts=%u idxs=%u",
-                    m_frame_index,
-                    m_frame_stats.passes_offscreen,
-                    m_frame_stats.passes_swapchain,
-                    m_frame_stats.draws,
-                    m_frame_stats.draws_indexed,
-                    m_frame_stats.vertices,
-                    m_frame_stats.indices);
-        }
-        m_frame_stats = {};
-        ++m_frame_index;
-        // The next frame records into the next slot; its begin_frame
-        // waits that slot's fence.
-        m_frame_slot = (m_frame_slot + 1) % m_frames_in_flight;
-        m_in_frame = false;
+        m_frame.end();
     }
 
     void vk_device::acquire_swapchain_image()
@@ -1938,7 +1530,7 @@ namespace rendering_engine::gpu::backend::vulkan
             const VkResult r = vkAcquireNextImageKHR(m_device.handle(),
                                                      m_swapchain,
                                                      UINT64_MAX,
-                                                     m_image_available[m_frame_slot],
+                                                     m_frame.image_available(),
                                                      VK_NULL_HANDLE,
                                                      &m_current_image_index);
             if (r == VK_SUCCESS || r == VK_SUBOPTIMAL_KHR)
@@ -1957,9 +1549,9 @@ namespace rendering_engine::gpu::backend::vulkan
                 if (m_current_image_index < m_image_last_slot.size())
                 {
                     const uint32_t last_slot = m_image_last_slot[m_current_image_index];
-                    if (last_slot != k_no_slot && last_slot != m_frame_slot)
+                    if (last_slot != k_no_slot && last_slot != m_frame.frame_slot())
                     {
-                        wait_slot_fence(last_slot);
+                        m_frame.wait_slot_fence(last_slot);
                     }
                 }
                 return;
@@ -2219,10 +1811,10 @@ namespace rendering_engine::gpu::backend::vulkan
             // since the depth attachment is the slot's; the encoder
             // picks by swapchain_framebuffer_index.
             const size_t image_count = m_swapchain_image_views.size();
-            v.framebuffers.resize(image_count * m_frames_in_flight, VK_NULL_HANDLE);
+            v.framebuffers.resize(image_count * m_frame.frames_in_flight(), VK_NULL_HANDLE);
             for (size_t i = 0; i < image_count; ++i)
             {
-                for (uint32_t slot = 0; slot < m_frames_in_flight; ++slot)
+                for (uint32_t slot = 0; slot < m_frame.frames_in_flight(); ++slot)
                 {
                     std::array<VkImageView, 2> views{m_swapchain_image_views[i], m_swapchain_depth_views[slot]};
                     VkFramebufferCreateInfo fbi{};
@@ -2233,7 +1825,7 @@ namespace rendering_engine::gpu::backend::vulkan
                     fbi.width = m_swapchain_extent.width;
                     fbi.height = m_swapchain_extent.height;
                     fbi.layers = 1;
-                    VkFramebuffer& framebuffer = v.framebuffers[i * m_frames_in_flight + slot];
+                    VkFramebuffer& framebuffer = v.framebuffers[i * m_frame.frames_in_flight() + slot];
                     const VkResult fb_result = vkCreateFramebuffer(m_device.handle(), &fbi, nullptr, &framebuffer);
                     if (fb_result != VK_SUCCESS)
                     {
@@ -2400,15 +1992,15 @@ namespace rendering_engine::gpu::backend::vulkan
     }
     uint32_t vk_device::swapchain_framebuffer_index(uint32_t image_index) const noexcept
     {
-        return image_index * m_frames_in_flight + m_frame_slot;
+        return image_index * m_frame.frames_in_flight() + m_frame.frame_slot();
     }
     uint32_t vk_device::frames_in_flight() const noexcept
     {
-        return m_frames_in_flight;
+        return m_frame.frames_in_flight();
     }
     uint32_t vk_device::frame_slot() const noexcept
     {
-        return m_frame_slot;
+        return m_frame.frame_slot();
     }
     bool vk_device::extended_dynamic_state_enabled() const noexcept
     {
@@ -2417,5 +2009,34 @@ namespace rendering_engine::gpu::backend::vulkan
     PFN_vkCmdBindVertexBuffers2EXT vk_device::cmd_bind_vertex_buffers2() const noexcept
     {
         return m_device.cmd_bind_vertex_buffers2();
+    }
+
+    VkCommandBuffer vk_device::acquire_frame_command_buffer()
+    {
+        return m_frame.acquire_frame_command_buffer();
+    }
+    VkCommandBuffer vk_device::acquire_secondary_command_buffer(uint32_t lane)
+    {
+        return m_frame.acquire_secondary_command_buffer(lane);
+    }
+    void vk_device::enqueue_destroy(std::function<void()> fn)
+    {
+        m_frame.enqueue_destroy(std::move(fn));
+    }
+    void vk_device::note_render_pass_opened(bool is_swapchain, bool use_depth)
+    {
+        m_frame.note_render_pass_opened(is_swapchain, use_depth);
+    }
+    void vk_device::note_draw(uint32_t vertex_count)
+    {
+        m_frame.note_draw(vertex_count);
+    }
+    void vk_device::note_draw_indexed(uint32_t index_count)
+    {
+        m_frame.note_draw_indexed(index_count);
+    }
+    void vk_device::note_draws(uint32_t draws, uint32_t vertices, uint32_t draws_indexed, uint32_t indices)
+    {
+        m_frame.note_draws(draws, vertices, draws_indexed, indices);
     }
 } // namespace rendering_engine::gpu::backend::vulkan
