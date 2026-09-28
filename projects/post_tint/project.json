@@ -1,0 +1,7 @@
+{
+    "format": "alphaengine.project",
+    "version": 1,
+    "name": "Post-process tint",
+    "content_root": "../../content",
+    "modules": ["camera", "exit", "post_tint_demo"]
+}

@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  SOURCE_DIRS: "runtime core platform assets rendering_engine editor external"
+  SOURCE_DIRS: "runtime core platform assets rendering_engine editor app external"
   CLANG_VERSION: "18"
   # Dev packages every Linux job that configures the tree installs. SDL3 is
   # built from source via FetchContent and on Linux its CMake refuses to
@@ -81,7 +81,7 @@ jobs:
           # Every first-party source, shader, build file, script and workflow
           # must start with the SPDX identifier line (line 2 after a shebang).
           # Directory pathspecs recurse; vendor/ is deliberately not listed.
-          files=$(git ls-files -- core platform runtime assets rendering_engine editor external shaders cmake scripts CMakeLists.txt .github/workflows \
+          files=$(git ls-files -- core platform runtime assets rendering_engine editor app external shaders cmake scripts CMakeLists.txt .github/workflows \
             | grep -E '(\.(cpp|hpp|h|c|glsl|cmake|ps1|yml)|CMakeLists\.txt)$')
           echo "Checking $(echo "${files}" | wc -l) files"
           failed=0
@@ -160,16 +160,16 @@ jobs:
           # repo's top-level modules and not vendored sources that happen
           # to live under a like-named subdirectory (e.g. SDL3's
           # build/_deps/sdl3-src/src/core/).
-          pattern="${GITHUB_WORKSPACE}/(runtime|core|platform|assets|rendering_engine|editor|external)/"
+          pattern="${GITHUB_WORKSPACE}/(runtime|core|platform|assets|rendering_engine|editor|app|external)/"
           run-clang-tidy -p build -quiet "${pattern}"
 
   # ---------------------------------------------------------------------------
   # build-linux: compile the full AlphaEngine target (the Vulkan backend,
-  # glslang, ImGui) and every demo executable (alpha_demos) with GCC and
-  # with Clang + libc++ on Linux. The binaries themselves are not run
-  # interactively here — see the smoke job below for that — so this job
-  # proves that the tree compiles and links on both Linux toolchains; with
-  # only the MSVC matrix a Linux-only breakage would keep CI green.
+  # glslang, ImGui, and every game module the projects under projects/
+  # run) with GCC and with Clang + libc++ on Linux. The binary itself is
+  # not run here — see the smoke job below for that — so this job proves
+  # that the tree compiles and links on both Linux toolchains; with only
+  # the MSVC matrix a Linux-only breakage would keep CI green.
   # ---------------------------------------------------------------------------
   build-linux:
     name: build (linux-${{ matrix.compiler }})
@@ -251,28 +251,33 @@ jobs:
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             ${{ matrix.cmake_args }}
 
-      - name: Build engine and demos
-        run: cmake --build build --target AlphaEngine alpha_demos
+      - name: Build engine
+        run: cmake --build build --target AlphaEngine
 
       - name: Verify output
         run: |
           set -euo pipefail
-          for exe in Binaries/AlphaEngine Binaries/alpha_demo_*; do
-            if [ ! -x "${exe}" ]; then
-              echo "Missing ${exe}" >&2
-              exit 1
-            fi
-            echo "Built ${exe} ($(stat -c %s "${exe}") bytes)"
-          done
+          if [ ! -x Binaries/AlphaEngine ]; then
+            echo "Missing Binaries/AlphaEngine" >&2
+            exit 1
+          fi
+          echo "Built Binaries/AlphaEngine ($(stat -c %s Binaries/AlphaEngine) bytes)"
+          if [ ! -f Binaries/project.json ]; then
+            echo "Missing Binaries/project.json, the project AlphaEngine runs by default" >&2
+            exit 1
+          fi
 
   # ---------------------------------------------------------------------------
   # smoke: launches the real Debug binary headlessly under Xvfb, on Mesa's
   # software Vulkan implementation (lavapipe) with the Khronos validation
   # layer, for a bounded number of frames (--frames), and fails the step on
   # any [ERR] or [FTL] line (--fail-on-error) — so a validation message, not
-  # only a crash, fails CI. Run twice: once with the layer's default checks,
-  # once with synchronization validation added, which catches a different
-  # class of hazard (a missing barrier) the default checks miss.
+  # only a crash, fails CI. The default project runs twice: once with the
+  # layer's default checks, once with synchronization validation added,
+  # which catches a different class of hazard (a missing barrier) the
+  # default checks miss. Every other project under projects/ then runs
+  # once, for fewer frames, with the default checks: each installs game
+  # modules the default project does not.
   #
   # A second matrix entry repeats both runs under AddressSanitizer +
   # UndefinedBehaviorSanitizer. Its leak check reads
@@ -380,6 +385,22 @@ jobs:
             --width 640 --height 360 --frames 300 --fail-on-error \
             2>&1 | tee smoke-sync-validation.log
 
+      - name: Smoke run (demo projects)
+        timeout-minutes: 20
+        run: |
+          set -euo pipefail
+          for project in projects/*/; do
+            name=$(basename "${project}")
+            if [ "${name}" = showcase ]; then
+              continue
+            fi
+            echo "::group::${name}"
+            xvfb-run -a ./Binaries/AlphaEngine --project "${project}" \
+              --width 640 --height 360 --frames 60 --fail-on-error \
+              2>&1 | tee "smoke-project-${name}.log"
+            echo "::endgroup::"
+          done
+
       - name: Upload smoke logs
         if: failure()
         uses: actions/upload-artifact@v4
@@ -391,8 +412,7 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # build: Windows MSVC build matrix (Debug + Release), building the default
-  # target (AlphaEngine) and then every demo executable (alpha_demos),
-  # which the default build leaves out. The Vulkan SDK is an
+  # target (AlphaEngine, with every game module). The Vulkan SDK is an
   # unconditional build dependency. The SDK comes from the LunarG installer
   # at a pinned version so the job is reproducible; CMake's find_package(Vulkan)
   # picks it up through the VULKAN_SDK environment variable. glslang is fetched
@@ -546,12 +566,6 @@ jobs:
         run: |
           cmake --build build
           if ($LASTEXITCODE -ne 0) { throw "cmake build failed" }
-
-      - name: Build demos
-        shell: pwsh
-        run: |
-          cmake --build build --target alpha_demos
-          if ($LASTEXITCODE -ne 0) { throw "cmake build of alpha_demos failed" }
 
       - name: Verify output
         shell: pwsh

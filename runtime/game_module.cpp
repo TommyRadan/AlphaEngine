@@ -13,7 +13,7 @@ namespace
 {
     struct registration
     {
-        const char* source;
+        std::string_view name;
         runtime::game_module_bootstrap bootstrap;
     };
 
@@ -25,9 +25,11 @@ namespace
         return storage;
     }
 
-    // "external/camera_module.cpp" -> "camera_module", for the log.
+    // "external/fog_demo_module.cpp" -> "fog_demo". A view into the source
+    // path, which __FILE__ keeps alive for the whole run.
     std::string_view module_name(const char* source)
     {
+        constexpr std::string_view suffix = "_module";
         std::string_view name{source != nullptr ? source : "?"};
         const std::size_t slash = name.find_last_of("/\\");
         if (slash != std::string_view::npos)
@@ -39,28 +41,63 @@ namespace
         {
             name.remove_suffix(name.size() - dot);
         }
+        if (name.size() > suffix.size() && name.ends_with(suffix))
+        {
+            name.remove_suffix(suffix.size());
+        }
         return name;
+    }
+
+    const registration* find(std::string_view name)
+    {
+        for (const registration& entry : registrations())
+        {
+            if (entry.name == name)
+            {
+                return &entry;
+            }
+        }
+        return nullptr;
     }
 } // namespace
 
 bool runtime::register_game_module(const char* source, game_module_bootstrap bootstrap)
 {
-    if (bootstrap != nullptr)
+    const std::string_view name = module_name(source);
+    if (bootstrap != nullptr && find(name) == nullptr)
     {
-        registrations().push_back(registration{source, bootstrap});
+        registrations().push_back(registration{name, bootstrap});
     }
     return true;
 }
 
-void runtime::install_game_modules(scene& scene)
+std::vector<std::string> runtime::game_module_names()
 {
-    // Indexed, and copied out, so the loop stays valid even if a bootstrap
-    // were to register another module.
-    for (std::size_t index = 0; index < registrations().size(); ++index)
+    std::vector<std::string> names;
+    names.reserve(registrations().size());
+    for (const registration& entry : registrations())
     {
-        const registration entry = registrations()[index];
-        const std::string_view name = module_name(entry.source);
-        LOG_INF("Installing game module: %.*s", static_cast<int>(name.size()), name.data());
-        entry.bootstrap(scene);
+        names.emplace_back(entry.name);
     }
+    return names;
+}
+
+bool runtime::has_game_module(std::string_view name)
+{
+    return find(name) != nullptr;
+}
+
+bool runtime::install_game_module(std::string_view name, scene& scene)
+{
+    // Copied out, so the entry stays valid even if the bootstrap were to
+    // register another module.
+    const registration* found = find(name);
+    if (found == nullptr)
+    {
+        return false;
+    }
+    const registration entry = *found;
+    LOG_INF("Installing game module: %.*s", static_cast<int>(entry.name.size()), entry.name.data());
+    entry.bootstrap(scene);
+    return true;
 }

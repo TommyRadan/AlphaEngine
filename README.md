@@ -63,6 +63,13 @@ Visual Studio generator). Run it from the repository root:
 
 `--help` lists every setting.
 
+With no arguments it runs the default showcase. Each other showcase is a
+project under `projects/`, run by naming it:
+
+```
+./Binaries/AlphaEngine --project projects/skybox
+```
+
 Formatting and naming checks:
 
 ```

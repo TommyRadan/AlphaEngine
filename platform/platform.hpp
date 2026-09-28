@@ -4,9 +4,9 @@
 /**
  * @file platform.hpp
  * @brief The operating-system services the engine reaches through SDL3:
- *        the executable and per-user preference directories, the content
- *        root, the process environment, and the log sinks the platform
- *        adds to @c core::logging.
+ *        the executable and per-user preference directories, the process
+ *        environment, and the log sinks the platform adds to
+ *        @c core::logging.
  *
  * The platform module is where the engine talks to SDL: this file, the
  * window (window.hpp), the SDL input translation (sdl_input.hpp), the
@@ -39,24 +39,6 @@ namespace platform
      *        trailing separator.
      */
     std::filesystem::path pref_path(const char* organization, const char* application);
-
-    /**
-     * @brief Where the engine's loose content files are: the directory the
-     *        default VFS mount points at (see core/vfs/vfs.hpp).
-     * Resolved once through @ref locate_content_root from @ref base_path.
-     * This is the discovered default only; the settings layer's
-     * @c content.root (or @c ALPHAENGINE_CONTENT_ROOT) overrides it in the
-     * engine.
-     */
-    std::filesystem::path content_root();
-
-    /**
-     * @brief The pure part of @ref content_root: the first existing
-     *        @c content directory in @p base_path or any of its parents
-     *        (so a binary under @c Binaries/Debug/ finds the repository's),
-     *        else @c <base_path>/content even though it does not exist.
-     */
-    std::filesystem::path locate_content_root(const std::filesystem::path& base_path);
 
     // -- Environment ---------------------------------------------------------
 

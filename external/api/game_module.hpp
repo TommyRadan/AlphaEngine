@@ -13,6 +13,11 @@
  * on. Everything it makes belongs to a scene, so the scenes tear it down —
  * before the renderer — however the engine shuts down.
  *
+ * The module goes by its file's name without @c _module
+ * (@c fog_demo_module.cpp is @c fog_demo), and it runs only in a project
+ * that names it (app/project.hpp): the project's @c modules list picks the
+ * modules to install and the order their bootstraps run in.
+ *
  * @code
  * struct spinner final : runtime::behavior
  * {
@@ -33,13 +38,14 @@
  * }
  * @endcode
  *
- * The body receives @c scene, the engine's active scene at start-up (the
- * persistent scene); a module may load scenes of its own through
- * @c runtime::current_engine().scenes. A game-wide concern that belongs to
- * no object may still subscribe to the event bus from its bootstrap; logic
- * that runs every frame or every fixed step in a place of its own in the
- * frame is a system, added to one of the frame's stages through
- * @c runtime::current_engine().systems (runtime/scheduler.hpp) by a
+ * The body receives @c scene, the persistent scene, which outlives every
+ * scene loaded later; the project's startup scene, when it has one, is
+ * already loaded and is the active scene. A module may load scenes of its
+ * own through @c runtime::current_engine().scenes. A game-wide concern that
+ * belongs to no object may still subscribe to the event bus from its
+ * bootstrap; logic that runs every frame or every fixed step in a place of
+ * its own in the frame is a system, added to one of the frame's stages
+ * through @c runtime::current_engine().systems (runtime/scheduler.hpp) by a
  * behaviour that keeps the returned registration, so the system goes with
  * it.
  *

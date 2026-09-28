@@ -30,7 +30,6 @@
 #include <runtime/components/audio_listener_component.hpp>
 #include <runtime/components/audio_source_component.hpp>
 #include <runtime/engine_settings.hpp>
-#include <runtime/game_module.hpp>
 #include <runtime/overlay.hpp>
 #include <runtime/physics/physics_debug_draw.hpp>
 #include <runtime/physics/physics_world.hpp>
@@ -254,7 +253,8 @@ namespace runtime
         // sound immediately.
         audio->init();
         // Subscribes to the raw input events the window will start emitting once it is up, and picks up any
-        // `input.bindings` rebind from settings ahead of the game modules' bind_action / bind_axis calls below.
+        // `input.bindings` rebind from settings ahead of the game modules' bind_action / bind_axis calls, which run
+        // once the engine is up.
         input->init(*events, settings->input);
         // The per-user rebinds a player saved at runtime (core::input::save_user_bindings), read back the same
         // way before any bind_action / bind_axis call so they land on top of the compiled and settings.json
@@ -266,10 +266,11 @@ namespace runtime
         }
 
         // Mount the content root before anything loads a file: the configured
-        // directory when one is set, else the discovered default beside the
-        // executable (or in one of its parents).
-        const std::filesystem::path content_root =
-            settings->content.root.empty() ? platform::content_root() : core::os::utf8_path(settings->content.root);
+        // directory (the project's, unless the user's settings name another),
+        // else the content directory beside the executable.
+        const std::filesystem::path content_root = settings->content.root.empty()
+                                                       ? platform::base_path() / "content"
+                                                       : core::os::utf8_path(settings->content.root);
         LOG_INF("Content root: %s", core::os::path_to_utf8(content_root).c_str());
         core::default_vfs().mount_directory(content_root);
 
@@ -340,12 +341,7 @@ namespace runtime
         m_quit_subscription =
             events->subscribe<core::quit_requested>([this](const core::quit_requested&) { m_quit_requested = true; });
 
-        // Every subsystem is up: install the game. Each game module
-        // registered its bootstrap at static-init time (before the engine
-        // existed); run them now so they spawn their nodes and behaviours
-        // into the active scene, where the scenes own and tear them down.
         log_registered_types();
-        install_game_modules(scenes->active_scene());
     }
 
     void engine::quit()

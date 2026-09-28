@@ -96,13 +96,15 @@ include_directories(${CMAKE_SOURCE_DIR})
 #   alpha_world     scenes, nodes, components, physics, animation,
 #                   scripting, serialisation, reflection and the engine
 #   alpha_editor    the ImGui panels and gizmos (Debug; see below)
+#   alpha_app       the application: the project it runs, the engine, the
+#                   frame loop and the start-up and shutdown around them
 #
-# The game executables are built from alpha_game, an object library with
-# the entry point (runtime/main_loop.cpp), the game-module API and the
-# modules every game shares, plus their own game modules (external/). A
-# game module registers itself from a static initialiser, which the
-# linker would leave out of a static library, so the modules are always
-# compiled straight into an executable.
+# AlphaEngine, the stock executable, is built from alpha_game, an object
+# library with the entry point (app/main.cpp), the game-module API and
+# every game module (external/); the project it runs names the modules to
+# install. A game module registers itself from a static initialiser, which
+# the linker would leave out of a static library, so the modules are
+# always compiled straight into an executable.
 add_library(alpha_core STATIC)
 add_library(alpha_platform STATIC)
 add_library(alpha_rhi STATIC)
@@ -110,6 +112,7 @@ add_library(alpha_assets STATIC)
 add_library(alpha_render STATIC)
 add_library(alpha_world STATIC)
 add_library(alpha_editor STATIC)
+add_library(alpha_app STATIC)
 add_library(alpha_game OBJECT)
 add_executable(AlphaEngine)
 
@@ -131,6 +134,7 @@ alpha_module_directories(alpha_assets assets)
 alpha_module_directories(alpha_render rendering_engine)
 alpha_module_directories(alpha_world runtime)
 alpha_module_directories(alpha_editor editor)
+alpha_module_directories(alpha_app app)
 alpha_module_directories(alpha_game external)
 target_link_libraries(alpha_platform PUBLIC alpha_core)
 target_link_libraries(alpha_rhi PUBLIC alpha_core)
@@ -138,7 +142,10 @@ target_link_libraries(alpha_assets PUBLIC alpha_core)
 target_link_libraries(alpha_render PUBLIC alpha_core alpha_rhi alpha_assets)
 target_link_libraries(alpha_world PUBLIC alpha_core alpha_platform alpha_assets alpha_render)
 target_link_libraries(alpha_editor PUBLIC alpha_world)
-target_link_libraries(alpha_game PUBLIC alpha_world alpha_editor)
+# The application draws the editor over the engine in Debug builds; nothing
+# that builds on the application sees the editor's headers.
+target_link_libraries(alpha_app PUBLIC alpha_world PRIVATE alpha_editor)
+target_link_libraries(alpha_game PUBLIC alpha_app)
 target_link_libraries(AlphaEngine PRIVATE alpha_game)
 
 # Compiler settings every first-party target shares: libc++ under Clang,
@@ -158,7 +165,8 @@ function(alpha_target_settings target)
 endfunction()
 
 foreach(target IN ITEMS
-        alpha_core alpha_platform alpha_rhi alpha_assets alpha_render alpha_world alpha_editor alpha_game AlphaEngine)
+        alpha_core alpha_platform alpha_rhi alpha_assets alpha_render alpha_world alpha_editor alpha_app alpha_game
+        AlphaEngine)
     alpha_target_settings(${target})
 endforeach()
 
@@ -168,7 +176,21 @@ add_subdirectory(assets)
 add_subdirectory(rendering_engine)
 add_subdirectory(runtime)
 add_subdirectory(editor)
+add_subdirectory(app)
 add_subdirectory(external)
+
+# The project AlphaEngine runs when none is named: project.json beside the
+# executable (see app/application.hpp). The build tree gets a copy of the
+# showcase's project file there, with its content root spelled out as the
+# source tree's content/ directory, so a freshly built binary runs the
+# showcase straight from the build output with no arguments. The demo
+# projects under projects/ run with --project projects/<name>.
+set(ALPHAENGINE_DEFAULT_PROJECT_FILE "${CMAKE_SOURCE_DIR}/projects/showcase/project.json")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${ALPHAENGINE_DEFAULT_PROJECT_FILE}")
+file(READ "${ALPHAENGINE_DEFAULT_PROJECT_FILE}" ALPHAENGINE_DEFAULT_PROJECT)
+string(JSON ALPHAENGINE_DEFAULT_PROJECT SET "${ALPHAENGINE_DEFAULT_PROJECT}"
+    content_root "\"${CMAKE_SOURCE_DIR}/content\"")
+file(GENERATE OUTPUT "$<TARGET_FILE_DIR:AlphaEngine>/project.json" CONTENT "${ALPHAENGINE_DEFAULT_PROJECT}\n")
 
 # Shaders — the GLSL sources under shaders/ are embedded into the
 # shader_registry library at build time (see shaders/CMakeLists.txt) and

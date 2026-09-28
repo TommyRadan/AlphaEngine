@@ -1,0 +1,7 @@
+{
+    "format": "alphaengine.project",
+    "version": 1,
+    "name": "Instancing",
+    "content_root": "../../content",
+    "modules": ["camera", "exit", "instanced_demo"]
+}

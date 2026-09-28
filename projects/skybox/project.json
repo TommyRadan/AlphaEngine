@@ -1,0 +1,7 @@
+{
+    "format": "alphaengine.project",
+    "version": 1,
+    "name": "Skybox",
+    "content_root": "../../content",
+    "modules": ["camera", "exit", "skybox_demo"]
+}

@@ -11,6 +11,7 @@
 #pragma once
 
 #include <string>
+#include <string_view>
 
 #include <core/input.hpp>
 #include <platform/window_settings.hpp>
@@ -26,16 +27,15 @@ namespace core
 
 namespace runtime
 {
-    /** @brief Content location configuration. Owned by @c runtime: it has no other natural home (see
-     *         @c platform::content_root for the discovered default this overrides). */
+    /** @brief Content location configuration. Owned by @c runtime: it has no other natural home. */
     struct content_settings
     {
         /**
          * @brief Directory the engine mounts as the root of the virtual filesystem (see core/vfs/vfs.hpp), so
-         *        relative asset paths resolve under it. Empty (the default) means "discover it": the first
-         *        @c content directory beside the executable or in one of its parents
-         *        (@ref platform::content_root). Set from @c content.root in settings.json,
-         *        @c ALPHAENGINE_CONTENT_ROOT or @c --content-root.
+         *        relative asset paths resolve under it. The application sets it from the project's content root
+         *        (app/project.hpp), below the user's own settings; empty means the @c content directory beside
+         *        the executable. Set from @c content.root in settings.json, @c ALPHAENGINE_CONTENT_ROOT or
+         *        @c --content-root.
          */
         std::string root;
     };
@@ -118,6 +118,8 @@ namespace runtime
      *        @c core::settings_registry::help_lines_for), interleaved with the handful of literal fragments
      *        @c core owns directly (the preamble, `--log-level` / `--settings` / `-h`, the epilogue) and the
      *        post-processing block's own header.
+     * @param leading_options The `--help` lines of the options the caller reads itself, before the settings
+     *                        resolve (the application's `--project`), printed first.
      */
-    std::string settings_help_text(const core::settings_registry& registry);
+    std::string settings_help_text(const core::settings_registry& registry, std::string_view leading_options = {});
 } // namespace runtime

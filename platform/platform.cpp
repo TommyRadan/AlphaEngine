@@ -7,7 +7,6 @@
 #include <memory>
 #include <string>
 #include <string_view>
-#include <system_error>
 
 #include <SDL3/SDL_filesystem.h>
 #include <SDL3/SDL_log.h>
@@ -142,30 +141,6 @@ namespace platform
         std::filesystem::path result = path_from_sdl(path);
         SDL_free(path);
         return result;
-    }
-
-    std::filesystem::path content_root()
-    {
-        static const std::filesystem::path root = locate_content_root(base_path());
-        return root;
-    }
-
-    std::filesystem::path locate_content_root(const std::filesystem::path& base_path)
-    {
-        std::error_code error;
-        for (std::filesystem::path directory = base_path; !directory.empty(); directory = directory.parent_path())
-        {
-            const std::filesystem::path candidate = directory / "content";
-            if (std::filesystem::is_directory(candidate, error))
-            {
-                return candidate;
-            }
-            if (directory.parent_path() == directory)
-            {
-                break;
-            }
-        }
-        return base_path / "content";
     }
 
     bool set_environment_variable(const char* name, const char* value)

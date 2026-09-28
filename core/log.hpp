@@ -232,7 +232,7 @@ namespace core
 
         /**
          * @brief Number of messages logged at @ref verbosity::error since the process started, so a headless run
-         * (@c runtime::main_loop) can turn a validation message or any other error into a non-zero exit code
+         * (@c app::application::run) can turn a validation message or any other error into a non-zero exit code
          * without a second log sink. Counts only messages that actually reached the sinks — one a category
          * override filtered out was never "logged". Thread-safe.
          */

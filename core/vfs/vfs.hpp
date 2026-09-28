@@ -87,7 +87,7 @@ namespace core
      * Every asset loader (`assets::image`, `assets::font`,
      * the asset cache and the glTF importer) reads its files through here, so
      * where the assets come from is decided once — the engine mounts the content root
-     * (`platform::content_root()`, or `settings.content.root`) at start-up,
+     * (`settings.content.root`: the project's, by default) at start-up,
      * a test mounts a scratch directory — and the loaders stay oblivious.
      *
      * Path rules:

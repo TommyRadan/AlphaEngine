@@ -1,0 +1,7 @@
+{
+    "format": "alphaengine.project",
+    "version": 1,
+    "name": "Phong",
+    "content_root": "../../content",
+    "modules": ["camera", "exit", "phong_demo"]
+}
