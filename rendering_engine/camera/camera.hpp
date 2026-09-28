@@ -78,8 +78,8 @@ namespace rendering_engine
          *        culling_mask()) == 0, the same way it skips one wholly
          *        outside the frustum. Defaults to @ref layer_all, so a
          *        fresh camera renders every layer, including the editor
-         *        one (@ref layer_editor) the debug helpers use; clear that
-         *        bit to hide them from a gameplay camera.
+         *        one (@ref layer_editor) the debug geometry uses; clear
+         *        that bit to hide it from a gameplay camera.
          */
         void set_culling_mask(uint32_t mask) noexcept;
         uint32_t culling_mask() const noexcept;

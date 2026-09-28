@@ -35,6 +35,7 @@ namespace
 void rendering_engine::render_world::quit()
 {
     set_drawable_aspect(0.0f);
+    m_debug_draw.clear();
 }
 
 void rendering_engine::render_world::begin_frame() noexcept
@@ -339,16 +340,6 @@ void rendering_engine::render_world::set_drawable_aspect(float aspect_ratio)
     {
         ++m_aspect_revision;
     }
-}
-
-void rendering_engine::render_world::add_helper(debug_draw::helper& h)
-{
-    m_helpers.push_back(&h);
-}
-
-void rendering_engine::render_world::remove_helper(debug_draw::helper& h)
-{
-    m_helpers.erase(std::remove(m_helpers.begin(), m_helpers.end(), &h), m_helpers.end());
 }
 
 void rendering_engine::render_world::set_environment(const environment_probe* probe)

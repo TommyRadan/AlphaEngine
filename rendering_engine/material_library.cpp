@@ -39,12 +39,14 @@ void rendering_engine::material_library::init(gpu::device& device,
     m_standard_template = standard_material::create_template(device, scene_frame_layout);
     m_standard_material = std::make_unique<standard_material>(m_standard_template);
     m_points_material = std::make_unique<points_material>(points_material::create_template(device, scene_frame_layout));
-    // The scene lines and the depth-disabled debug-gizmo lines (which
-    // always read on top in the depth-less debug pass) are two instances
-    // of one line template, bound to two pipeline variants.
-    const std::shared_ptr<material_template> line_template = line_material::create_template(device, scene_frame_layout);
-    m_line_material = std::make_unique<line_material>(line_template);
-    m_debug_line_material = std::make_unique<line_material>(line_template, /*depth_tested=*/false);
+    // The scene lines and the depth-disabled debug lines (which always
+    // read on top in the depth-less debug pass) are two instances of one
+    // line template, bound to two pipeline variants; the template is held
+    // here too so create_line_material hands further instances the same
+    // one.
+    m_line_template = line_material::create_template(device, scene_frame_layout);
+    m_line_material = std::make_unique<line_material>(m_line_template);
+    m_debug_line_material = std::make_unique<line_material>(m_line_template, /*depth_tested=*/false);
     // Analytic infinite-grid material; shares the scene per-frame layout.
     m_grid_material = std::make_unique<grid_material>(grid_material::create_template(device, scene_frame_layout));
     m_ui_material = std::make_unique<ui_material>(ui_material::create_template(device, ui_frame_layout));
@@ -66,7 +68,9 @@ void rendering_engine::material_library::quit()
     m_instanced_material.reset();
     m_basic_material.reset();
     // The other templates went with their last instance above; the
-    // standard one is held here too and must go before the device.
+    // standard and line ones are held here too and must go before the
+    // device.
+    m_line_template.reset();
     m_standard_template.reset();
 }
 
@@ -161,6 +165,13 @@ rendering_engine::line_material& rendering_engine::material_library::get_line_ma
 rendering_engine::line_material& rendering_engine::material_library::get_debug_line_material()
 {
     return *m_debug_line_material;
+}
+
+std::unique_ptr<rendering_engine::line_material>
+rendering_engine::material_library::create_line_material(bool depth_tested)
+{
+    assert(m_line_template != nullptr && "material_library::create_line_material is only valid between init and quit");
+    return std::make_unique<line_material>(m_line_template, depth_tested);
 }
 
 rendering_engine::grid_material& rendering_engine::material_library::get_grid_material()

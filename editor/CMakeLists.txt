@@ -6,6 +6,7 @@
 # CMakeLists.txt, which links ImGui and ImGuizmo for Debug only).
 target_sources(alpha_editor PRIVATE
     console_panel.cpp
+    debug_visuals.cpp
     editor.cpp
     editor.hpp
     editor_layer.hpp

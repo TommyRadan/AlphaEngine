@@ -8,10 +8,9 @@
 #include <core/os/os.hpp>
 #include <core/time.hpp>
 #include <rendering_engine/camera/perspective_camera.hpp>
-#include <rendering_engine/debug_draw/axes_helper.hpp>
 #include <rendering_engine/debug_draw/debug_pass.hpp>
-#include <rendering_engine/debug_draw/helper.hpp>
 #include <rendering_engine/debug_draw/infinite_grid.hpp>
+#include <rendering_engine/debug_draw/line_batches.hpp>
 #include <rendering_engine/gpu/command_encoder.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/gpu/shader_compiler.hpp>
@@ -338,17 +337,12 @@ void rendering_engine::renderer::init(const render_services& services)
     rebuild_pass_list();
 
 #if _DEBUG
-    // Provide a couple of always-available reference gizmos (the infinite
-    // ground grid + world axes) so a fresh debug build has something to
-    // toggle from the overlay's Helpers panel. They join the world's
-    // helper list on construction and draw through mesh proxies: the
-    // infinite grid one the scene pass draws (depth-tested), the axes an
-    // overlay one the always-on-top debug pass draws. Game code can add
-    // the box / light / camera helpers against its own objects the same
-    // way. The debug pass is dropped in release, so this whole block
-    // compiles out there.
-    m_debug_helpers.push_back(std::make_unique<debug_draw::infinite_grid>(*this));
-    m_debug_helpers.push_back(std::make_unique<debug_draw::axes_helper>(*this));
+    // The editor's ground grid, a mesh proxy the scene pass draws
+    // (depth-tested), and the batches the world's debug-draw list is drawn
+    // through (see render). Debug-only, like the debug pass the on-top
+    // lines need.
+    m_editor_grid = std::make_unique<debug_draw::infinite_grid>(*this);
+    m_debug_lines = std::make_unique<debug_draw::line_batches>(m_world, device, m_materials);
 #endif
 }
 
@@ -366,13 +360,13 @@ void rendering_engine::renderer::quit()
     // Nothing reloads during teardown; the modules it tracks go with
     // their owners below.
     m_shader_hot_reload.reset();
-#endif
 
-    // Release the built-in debug helpers before the line material and the
-    // GPU device they reference; their destructors destroy their proxies,
-    // leave the helper list and free their geometry. Empty in release.
-    // Game-owned helpers must likewise be released before quit.
-    m_debug_helpers.clear();
+    // Release the ground grid and the debug line batches before the
+    // materials and the GPU device they reference; their destructors
+    // destroy their proxies and free their geometry.
+    m_debug_lines.reset();
+    m_editor_grid.reset();
+#endif
 
     // The profiler's query sets go before the device does. Without a
     // device init never ran, and there is nothing to release.
@@ -418,7 +412,7 @@ void rendering_engine::renderer::quit()
 
     // Last, the world: withdraw the drawable aspect it hands to attaching
     // cameras, since there is no drawable left to match. Every pass and
-    // helper that pointed into it is gone.
+    // debug batch that pointed into it is gone.
     m_world.quit();
 
     // Forget the subsystems init was handed; the owner takes them down
@@ -440,6 +434,14 @@ void rendering_engine::renderer::render()
     if (m_shader_hot_reload != nullptr)
     {
         m_shader_hot_reload->poll();
+    }
+
+    // Everything this frame draws through the debug-draw functions has been
+    // recorded: turn the world's debug-draw list into the debug line
+    // proxies, before the frame opens and the proxies become draws.
+    if (m_debug_lines != nullptr)
+    {
+        m_debug_lines->capture();
     }
 #endif
 
@@ -825,6 +827,15 @@ rendering_engine::line_material& rendering_engine::renderer::get_line_material()
 rendering_engine::line_material& rendering_engine::renderer::get_debug_line_material()
 {
     return m_materials.get_debug_line_material();
+}
+
+rendering_engine::debug_draw::infinite_grid* rendering_engine::renderer::editor_grid() noexcept
+{
+#if _DEBUG
+    return m_editor_grid.get();
+#else
+    return nullptr;
+#endif
 }
 
 rendering_engine::grid_material& rendering_engine::renderer::get_grid_material()

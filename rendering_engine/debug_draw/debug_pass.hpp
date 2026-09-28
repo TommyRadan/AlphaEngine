@@ -23,10 +23,10 @@ namespace rendering_engine::debug_draw
      * Everything the pass records is either an overlay mesh proxy's
      * @ref draw_item or ImGui draw data built earlier in the frame, so
      * @ref record runs no event listener and does not depend on the
-     * main-thread event bus. Debug-line / gizmo / frustum / bounds
-     * visualisations reach it as mesh proxies with
-     * @ref mesh_description::overlay set, such as the @ref line_helper
-     * family's.
+     * main-thread event bus. What the debug-draw functions (debug_draw.hpp)
+     * record on top reaches it as the one mesh proxy with
+     * @ref mesh_description::overlay set that the renderer's
+     * @ref line_batches keep.
      *
      * Only registered in debug builds — the `#if _DEBUG` gate at the
      * registration in @ref renderer::init drops it from release entirely,
@@ -50,7 +50,7 @@ namespace rendering_engine::debug_draw
         // swapchain target and the scene pass's camera group.
         void prepare(const frame_context& ctx) override;
 
-        // The debug helpers draw through the line material, whose
+        // The debug lines draw through the line material, whose
         // pipeline reserves slot 0 for the camera, so the pass binds the
         // scene pass's unjittered per-frame group there
         // (@ref scene_view_data::overlay_frame_group): the world-space

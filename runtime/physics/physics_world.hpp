@@ -95,10 +95,10 @@ namespace runtime::physics
      * **Debug draw.** @ref debug_lines describes every collider — green
      * dynamic (dim when asleep), blue kinematic, grey static, yellow
      * trigger — and the last step's contact points in red. Debug builds
-     * draw it on top of the scene through a line helper ("Physics", see
-     * physics_debug_draw.hpp) the engine creates once the world is up; it
-     * is toggled from the debug overlay's Helpers panel. The world itself
-     * does not depend on the renderer.
+     * draw it on top of the scene through the debug-draw functions
+     * (@ref draw_debug, physics_debug_draw.hpp), which the editor calls
+     * every frame while its Helpers panel's Physics toggle is on. The world
+     * itself does not depend on the renderer.
      */
     struct world
     {

@@ -4,7 +4,7 @@
 /**
  * @file render_world.hpp
  * @brief What the renderer draws: mesh, UI, light and camera proxies, the
- *        environment probe and the scene-wide fog.
+ *        debug-draw list, the environment probe and the scene-wide fog.
  */
 
 #pragma once
@@ -16,6 +16,7 @@
 
 #include <core/dense_pool.hpp>
 #include <core/math/mat4.hpp>
+#include <rendering_engine/debug_draw/draw_list.hpp>
 #include <rendering_engine/fog.hpp>
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/mesh_proxy.hpp>
@@ -25,11 +26,6 @@
 namespace rendering_engine
 {
     struct environment_probe;
-
-    namespace debug_draw
-    {
-        struct helper;
-    }
 
     /**
      * @brief The renderer's view of the world.
@@ -46,36 +42,35 @@ namespace rendering_engine
      *   are packed into the lights UBO in (@ref enabled_lights);
      * - the camera proxies (@ref camera_proxy) and the arbitration that picks
      *   the camera a frame renders with (@ref active_camera);
-     * - the debug-draw helper list the debug UI walks to toggle visibility
-     *   and @ref debug_draw::update_helpers to rebuild the gizmos
-     *   (@ref helpers), which no pass reads;
+     * - the debug-draw list (@ref debug_draw_list): what the immediate-mode
+     *   debug-draw functions (debug_draw/debug_draw.hpp) recorded and has not
+     *   expired, which the renderer turns into its debug line proxies
+     *   between frames and no pass reads;
      * - the environment probe the skybox and the standard materials use;
      * - the scene-wide atmospheric fog.
      *
      * A proxy is a plain copy the world owns, addressed by a handle: its
      * creator (a runtime mesh, renderable, UI element, light or camera
-     * component, or a debug helper) creates it, enables it, writes it before
-     * the renderer reads it, and destroys it. The renderer and its passes
-     * read only the proxies, never the objects they were copied from, so
-     * everything a frame draws with is fixed before the frame starts: a mesh
-     * proxy's instance records and joint palette and a UI proxy's quads are
-     * copies too, which the renderer uploads from here. Proxies are created
-     * and destroyed between frames only (see @ref begin_frame). The helper
-     * entries are non-owning back-pointers: a helper joins through its
-     * constructor and leaves through its destructor. Passes read the
-     * world only through the one a frame's @ref frame_context carries,
-     * never through a global, so more than one world can exist in a process
-     * (an editor's preview viewport, a render-to-texture scene) without them
-     * interfering. Main-thread only, like the renderer.
+     * component, or the renderer's debug line batches) creates it, enables
+     * it, writes it before the renderer reads it, and destroys it. The
+     * renderer and its passes read only the proxies, never the objects they
+     * were copied from, so everything a frame draws with is fixed before the
+     * frame starts: a mesh proxy's instance records and joint palette and a
+     * UI proxy's quads are copies too, which the renderer uploads from here.
+     * Proxies are created and destroyed between frames only (see
+     * @ref begin_frame). Passes read the world only through the one a
+     * frame's @ref frame_context carries, never through a global, so more
+     * than one world can exist in a process (an editor's preview viewport, a
+     * render-to-texture scene) without them interfering. Main-thread only,
+     * like the renderer.
      */
     struct render_world
     {
         /**
-         * @brief Withdraws the drawable aspect reported to cameras: the
-         *        renderer is going down, so there is no drawable to match.
-         *        The proxies and the helper list are left as they are —
-         *        every proxy's creator destroys it, and every helper removes
-         *        itself.
+         * @brief Withdraws the drawable aspect reported to cameras and
+         *        drops the debug-draw list: the renderer is going down, so
+         *        there is no drawable to match. The proxies are left as they
+         *        are — every proxy's creator destroys it.
          */
         void quit();
 
@@ -262,6 +257,18 @@ namespace rendering_engine
             return m_cameras.size();
         }
 
+        /** @brief Every camera proxy, in creation order. */
+        std::span<const camera_proxy> cameras() const noexcept
+        {
+            return m_cameras.values();
+        }
+
+        /** @brief The handle of the proxy at @p position of @ref cameras. */
+        camera_proxy_handle camera_at(std::size_t position) const noexcept
+        {
+            return m_cameras.handle_at(position);
+        }
+
         /**
          * @brief The camera this frame renders with: the highest-priority
          *        enabled camera proxy (a priority tie goes to the camera
@@ -311,20 +318,23 @@ namespace rendering_engine
         }
 
         /**
-         * @brief Adds @p h to the helper list the debug UI walks to toggle
-         *        visibility and @ref debug_draw::update_helpers to rebuild
-         *        the gizmos. Called by @ref debug_draw::helper's
-         *        constructor; not for callers to use directly.
+         * @brief What the debug-draw functions (debug_draw/debug_draw.hpp)
+         *        recorded into this world and has not yet expired.
+         *
+         * The engine ages it once per tick (@ref debug_draw::draw_list::advance);
+         * in Debug builds the renderer draws its segments through its debug
+         * line proxies and the editor draws its text labels. It stays empty
+         * in other builds, where the functions compile to nothing.
          */
-        void add_helper(debug_draw::helper& h);
-
-        /** @brief Removes @p h from the helper list. No-op if absent. */
-        void remove_helper(debug_draw::helper& h);
-
-        /** @brief The helpers alive right now, in construction order. */
-        const std::vector<debug_draw::helper*>& helpers() const noexcept
+        debug_draw::draw_list& debug_draw_list() noexcept
         {
-            return m_helpers;
+            return m_debug_draw;
+        }
+
+        /** @copydoc debug_draw_list() */
+        const debug_draw::draw_list& debug_draw_list() const noexcept
+        {
+            return m_debug_draw;
         }
 
         /**
@@ -368,7 +378,7 @@ namespace rendering_engine
         core::dense_pool<light_proxy, light_proxy_tag> m_lights;
         std::vector<light_proxy_handle> m_enabled_lights;
         core::dense_pool<camera_proxy, camera_proxy_tag> m_cameras;
-        std::vector<debug_draw::helper*> m_helpers;
+        debug_draw::draw_list m_debug_draw;
 
         // The last value handed to set_drawable_aspect; 0 when none is
         // known yet (see drawable_aspect).

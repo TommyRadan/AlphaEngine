@@ -45,7 +45,8 @@ namespace rendering_engine
 
     namespace debug_draw
     {
-        struct helper;
+        struct infinite_grid;
+        struct line_batches;
     } // namespace debug_draw
 
     namespace gpu
@@ -178,8 +179,8 @@ namespace rendering_engine
 
         /**
          * @brief The GPU device @ref init was handed, which the passes, the
-         *        materials, the render targets and the built-in debug
-         *        helpers are built on. Valid between @ref init and
+         *        materials, the render targets and the debug grid and line
+         *        batches are built on. Valid between @ref init and
          *        @ref quit.
          */
         gpu::device& device() const;
@@ -299,6 +300,13 @@ namespace rendering_engine
 
         /** @brief @ref material_library::get_ui_material. Valid between @ref init and @ref quit. */
         ui_material& get_ui_material();
+
+        /**
+         * @brief The editor's ground grid, created in @ref init for Debug
+         *        builds and shown or hidden from the editor's Helpers panel;
+         *        null in other builds and outside @ref init / @ref quit.
+         */
+        debug_draw::infinite_grid* editor_grid() noexcept;
 
         /**
          * @brief Sets the runtime-tunable post-processing chain parameters.
@@ -471,8 +479,8 @@ namespace rendering_engine
         render_services m_services{};
 
         // What is drawn (see @ref world). Owns no GPU resource; declared
-        // first so every pass and helper below that points into it is gone
-        // before it.
+        // first so every pass and debug batch below that points into it is
+        // gone before it.
         render_world m_world;
 
         // Off-screen HDR target the scene pass renders into.
@@ -541,16 +549,15 @@ namespace rendering_engine
         // @ref quit. Surfaced via @ref get_gpu_profiler.
         gpu_profiler m_gpu_profiler;
 
-        // Built-in debug gizmos (ground grid + world axes) created in
-        // @ref init for debug builds and toggled from the debug UI. They
-        // draw through mesh proxies over the material library's line and
-        // grid materials, so they go (in @ref quit, and by declaration
-        // order) before both.
-        // Empty in release builds, where the debug pass is dropped
-        // entirely.
-        std::vector<std::unique_ptr<debug_draw::helper>> m_debug_helpers;
-
 #if _DEBUG
+        // Debug builds: the editor's ground grid, and the batches that draw
+        // the world's debug-draw list, created in @ref init. They draw
+        // through mesh proxies over the material library's grid and line
+        // materials, so they go (in @ref quit, and by declaration order)
+        // before both.
+        std::unique_ptr<debug_draw::infinite_grid> m_editor_grid;
+        std::unique_ptr<debug_draw::line_batches> m_debug_lines;
+
         // Debug-build shader hot reload over the shader library's
         // override root (see gpu/shader_hot_reload.hpp). Installed in
         // @ref init right after the device, before any pass or template

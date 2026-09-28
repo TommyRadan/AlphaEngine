@@ -6,7 +6,8 @@
  * @brief The debug editor: a Dear ImGui + ImGuizmo overlay over the
  *        running engine (hierarchy, inspector and transform gizmo,
  *        console, render-target viewer, profiler, scene statistics,
- *        settings, post-processing and debug-helper panels).
+ *        settings, post-processing and debug-visualisation (Helpers)
+ *        panels).
  *
  * The editor sits above @c runtime, @c rendering_engine and
  * @c platform: it reads and edits the world through the engine it is

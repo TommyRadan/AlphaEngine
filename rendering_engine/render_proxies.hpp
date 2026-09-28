@@ -27,13 +27,13 @@ namespace rendering_engine
     // bit, so nothing is excluded until a caller narrows either side.
     constexpr uint32_t layer_default = 1u << 0;
 
-    // Editor-only geometry: the debug helpers drawn by the scene pass (the
-    // infinite ground grid) carry this bit instead of @ref layer_default.
-    // It is included in @ref layer_all, so a fresh camera still renders it
-    // and nothing changes visually by default; a game builds a camera whose
-    // @ref camera::set_culling_mask clears this bit to hide editor gizmos
-    // from gameplay views while an editor viewport (the default mask) keeps
-    // seeing them.
+    // Editor-only geometry: the debug geometry (the editor's ground grid and
+    // the debug-draw line batches) carries this bit instead of
+    // @ref layer_default. It is included in @ref layer_all, so a fresh
+    // camera still renders it and nothing changes visually by default; a
+    // game builds a camera whose @ref camera::set_culling_mask clears this
+    // bit to hide editor gizmos from gameplay views while an editor viewport
+    // (the default mask) keeps seeing them.
     constexpr uint32_t layer_editor = 1u << 31;
 
     // Every layer bit set: the default @ref camera::culling_mask and the
