@@ -70,7 +70,9 @@ namespace rendering_engine
         // @p settings supplies the map resolution, the shadow distance,
         // the cascade count, the receiver and slope biases and the PCF
         // kernel; they are fixed for the pass's lifetime.
-        shadow_pass(const std::vector<renderable*>* registry, const rendering_engine::shadow_settings& settings);
+        shadow_pass(gpu::device& device,
+                    const std::vector<renderable*>* registry,
+                    const rendering_engine::shadow_settings& settings);
         ~shadow_pass() override;
 
         shadow_pass(const shadow_pass&) = delete;
@@ -161,6 +163,10 @@ namespace rendering_engine
         uint32_t caster_mask() const noexcept;
 
     private:
+        // The device this pass creates its resources on and releases them
+        // through; handed in by the renderer and outlives the pass.
+        gpu::device* m_device{nullptr};
+
         // One shadow caster's slice of @ref m_items and the cascades its
         // bounds reach (bit n for cascade n), recorded once per frame so
         // each cascade draws only its own casters without re-walking the

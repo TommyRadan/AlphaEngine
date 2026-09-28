@@ -18,7 +18,6 @@
 #include <rendering_engine/lighting/point_light.hpp>
 #include <rendering_engine/renderables/per_draw_ubo.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
-#include <runtime/engine.hpp>
 
 namespace
 {
@@ -75,11 +74,12 @@ namespace
 
 namespace rendering_engine
 {
-    point_shadow_pass::point_shadow_pass(const std::vector<renderable*>* registry,
+    point_shadow_pass::point_shadow_pass(gpu::device& device,
+                                         const std::vector<renderable*>* registry,
                                          const rendering_engine::shadow_settings& settings)
-        : m_registry(registry)
+        : m_device(&device), m_registry(registry)
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
 
         // Per-face resolution: half the configured shadow resolution,
         // because six faces are kept resident (the default 2048 gives
@@ -188,13 +188,13 @@ namespace rendering_engine
 
         // Instanced casters rasterize with the same state (back-face culling
         // included) through the pipeline that reads their transform stream.
-        m_instanced = create_instanced_shadow_pipeline(m_light_layout, depth, blend, rasterizer, depth_bias);
+        m_instanced = create_instanced_shadow_pipeline(*m_device, m_light_layout, depth, blend, rasterizer, depth_bias);
     }
 
     point_shadow_pass::~point_shadow_pass()
     {
-        auto& gpu = *runtime::current_engine().gpu;
-        destroy_instanced_shadow_pipeline(m_instanced);
+        auto& gpu = *m_device;
+        destroy_instanced_shadow_pipeline(*m_device, m_instanced);
         if (m_pipeline.valid())
         {
             gpu.destroy(m_pipeline);
@@ -304,7 +304,7 @@ namespace rendering_engine
         // are fixed 90-degree views from the light, independent of the
         // camera, so the pass reads only the light registry and the
         // renderable registry.
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
         m_culled = 0;
 
         // Locate the first shadow-casting point light, tracking its index in

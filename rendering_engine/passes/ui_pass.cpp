@@ -14,7 +14,6 @@
 #include <rendering_engine/materials/ui_material.hpp>
 #include <rendering_engine/renderables/per_draw_ubo.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
-#include <runtime/engine.hpp>
 
 namespace rendering_engine
 {
@@ -32,10 +31,10 @@ namespace rendering_engine
         static_assert(sizeof(ui_frame_block) == 80, "UiFrame block must be a std140 mat4 and a vec4");
     } // namespace
 
-    ui_pass::ui_pass(const std::vector<renderable*>* registry, uint32_t width, uint32_t height)
-        : m_registry(registry), m_width(width), m_height(height)
+    ui_pass::ui_pass(gpu::device& device, const std::vector<renderable*>* registry, uint32_t width, uint32_t height)
+        : m_device(&device), m_registry(registry), m_width(width), m_height(height)
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
         m_frame_layout = gpu.create_bind_group_layout(ui_material::frame_layout_descriptor());
 
         gpu::buffer_descriptor ubo_descriptor{};
@@ -56,7 +55,7 @@ namespace rendering_engine
 
     ui_pass::~ui_pass()
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
         if (m_frame_bind_group.valid())
         {
             gpu.destroy(m_frame_bind_group);
@@ -102,7 +101,7 @@ namespace rendering_engine
         block.viewport[1] = height;
         block.viewport[2] = 1.0f / width;
         block.viewport[3] = 1.0f / height;
-        runtime::current_engine().gpu->write_buffer(m_frame_ubo, &block, sizeof(block), 0);
+        m_device->write_buffer(m_frame_ubo, &block, sizeof(block), 0);
     }
 
     void ui_pass::prepare(const frame_context& /*ctx*/)

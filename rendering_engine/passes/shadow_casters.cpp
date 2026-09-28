@@ -11,7 +11,6 @@
 #include <rendering_engine/gpu/shader_hot_reload.hpp>
 #include <rendering_engine/materials/instanced_material.hpp>
 #include <rendering_engine/renderables/per_draw_ubo.hpp>
-#include <runtime/engine.hpp>
 
 namespace
 {
@@ -25,17 +24,17 @@ namespace
 
 namespace rendering_engine
 {
-    instanced_shadow_pipeline create_instanced_shadow_pipeline(gpu::bind_group_layout light_layout,
+    instanced_shadow_pipeline create_instanced_shadow_pipeline(gpu::device& device,
+                                                               gpu::bind_group_layout light_layout,
                                                                const gpu::depth_state& depth,
                                                                const gpu::blend_state& blend,
                                                                const gpu::rasterizer_state& rasterizer,
                                                                const gpu::depth_bias_state& depth_bias)
     {
-        auto& gpu = *runtime::current_engine().gpu;
         instanced_shadow_pipeline instanced{};
 
         instanced.vertex_shader =
-            gpu::create_library_shader_module(gpu, "passes/shadow_instanced.vert.glsl", gpu::shader_stage::vertex);
+            gpu::create_library_shader_module(device, "passes/shadow_instanced.vert.glsl", gpu::shader_stage::vertex);
 
         // Slot 0: the shared geometry, position only, stride supplied per
         // draw (the renderables' records differ in width).
@@ -68,22 +67,21 @@ namespace rendering_engine
         // Only the light group: the model matrices come from the vertex
         // stream, so there is no per-draw set.
         pipeline_descriptor.bind_group_layouts.push_back(light_layout);
-        instanced.pipeline = gpu.create_pipeline(pipeline_descriptor);
+        instanced.pipeline = device.create_pipeline(pipeline_descriptor);
 
         return instanced;
     }
 
-    void destroy_instanced_shadow_pipeline(instanced_shadow_pipeline& instanced)
+    void destroy_instanced_shadow_pipeline(gpu::device& device, instanced_shadow_pipeline& instanced)
     {
-        auto& gpu = *runtime::current_engine().gpu;
         if (instanced.pipeline.valid())
         {
-            gpu.destroy(instanced.pipeline);
+            device.destroy(instanced.pipeline);
             instanced.pipeline = {};
         }
         if (instanced.vertex_shader.valid())
         {
-            gpu.destroy(instanced.vertex_shader);
+            device.destroy(instanced.vertex_shader);
             instanced.vertex_shader = {};
         }
     }

@@ -70,7 +70,7 @@ namespace rendering_engine
         // arrives every frame as @ref frame_context::scene_depth_texture,
         // and the bind groups sampling it are rebuilt whenever that handle
         // changes.
-        volumetric_fog_pass(gpu::bind_group_layout frame_layout, uint32_t width, uint32_t height);
+        volumetric_fog_pass(gpu::device& device, gpu::bind_group_layout frame_layout, uint32_t width, uint32_t height);
         ~volumetric_fog_pass() override;
 
         volumetric_fog_pass(const volumetric_fog_pass&) = delete;
@@ -108,6 +108,10 @@ namespace rendering_engine
         void resize(uint32_t width, uint32_t height) override;
 
     private:
+        // The device this pass creates its resources on and releases them
+        // through; handed in by the renderer and outlives the pass.
+        gpu::device* m_device{nullptr};
+
         // Allocates the march target at ceil(size / 2) and the upsample
         // target at @p width x @p height, both rgba16f without depth.
         void create_targets(uint32_t width, uint32_t height);

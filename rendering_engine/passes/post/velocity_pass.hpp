@@ -60,7 +60,7 @@ namespace rendering_engine
         // group is (re)built whenever that handle differs from the one it
         // was last built against, so a resized scene target is picked up
         // without any re-plumbing.
-        velocity_pass(uint32_t width, uint32_t height);
+        velocity_pass(gpu::device& device, uint32_t width, uint32_t height);
         ~velocity_pass() override;
 
         velocity_pass(const velocity_pass&) = delete;
@@ -98,6 +98,10 @@ namespace rendering_engine
         gpu::texture velocity_texture() const;
 
     private:
+        // The device this pass creates its resources on and releases them
+        // through; handed in by the renderer and outlives the pass.
+        gpu::device* m_device{nullptr};
+
         // Rebuild the input bind group against @p scene_depth and the
         // reprojection UBO, remembering the handle in @ref m_bound_depth.
         void rebuild_bind_group(gpu::texture scene_depth);

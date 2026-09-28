@@ -14,7 +14,6 @@
 #include <rendering_engine/gpu/shader.hpp>
 #include <rendering_engine/gpu/shader_hot_reload.hpp>
 #include <rendering_engine/passes/post/fullscreen_triangle.hpp>
-#include <runtime/engine.hpp>
 
 namespace
 {
@@ -32,9 +31,9 @@ namespace
 
 namespace rendering_engine
 {
-    taa_pass::taa_pass(uint32_t width, uint32_t height)
+    taa_pass::taa_pass(gpu::device& device, uint32_t width, uint32_t height) : m_device(&device)
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
 
         // Degenerate backbuffer (no settings, zero-sized window): leave the
         // pass disabled so output_texture() reports invalid and the caller
@@ -120,7 +119,7 @@ namespace rendering_engine
 
     void taa_pass::create_targets(uint32_t width, uint32_t height)
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
 
         // Both rgba8, no depth: the post chain runs depth-disabled and the
         // image is already tonemapped LDR at this point.
@@ -138,7 +137,7 @@ namespace rendering_engine
 
     void taa_pass::destroy_resolve_bind_groups()
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
         for (auto& half : m_targets)
         {
             if (half.resolve_bind_group.valid())
@@ -151,7 +150,7 @@ namespace rendering_engine
 
     void taa_pass::rebuild_resolve_bind_groups(gpu::texture current_color, gpu::texture velocity)
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
 
         // Safe mid-frame: the device defers the destroy until the command
         // buffer that may still reference the old groups has retired.
@@ -195,7 +194,7 @@ namespace rendering_engine
 
     void taa_pass::write_params(float feedback)
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
         // Rewrite the whole vec4 so the texel step (xy) travels with the
         // feedback weight (z).
         const std::array<float, 4> params = {m_inv_width, m_inv_height, feedback, 0.0f};
@@ -209,7 +208,7 @@ namespace rendering_engine
         {
             return;
         }
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
 
         // Create the replacements before releasing the old targets so the
         // handle published through frame_context::taa_resolve_texture
@@ -251,7 +250,7 @@ namespace rendering_engine
 
     taa_pass::~taa_pass()
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
 
         destroy_resolve_bind_groups();
         // Each render target owns its colour attachment, so destroying the

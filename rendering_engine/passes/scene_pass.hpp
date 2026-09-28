@@ -13,6 +13,11 @@
 #include <rendering_engine/render_stats.hpp>
 #include <rendering_engine/renderables/draw_item.hpp>
 
+namespace core
+{
+    struct job_pool;
+}
+
 namespace rendering_engine
 {
     struct renderable;
@@ -102,8 +107,12 @@ namespace rendering_engine
         // twin of its per-frame bind group (see @ref overlay_frame_bind_group).
         // @p parallel_draw_threshold is the draw count above which a frame
         // is recorded in parallel, and the fewest draws per chunk (see the
-        // class comment); 0 keeps every frame serial.
-        scene_pass(const std::vector<renderable*>* registry,
+        // class comment); 0 keeps every frame serial. The chunks record on
+        // @p jobs, whose workers set how many there are; null keeps every
+        // frame serial too.
+        scene_pass(gpu::device& device,
+                   core::job_pool* jobs,
+                   const std::vector<renderable*>* registry,
                    render_stats* stats,
                    bool taa_jitter,
                    uint32_t parallel_draw_threshold);
@@ -189,6 +198,14 @@ namespace rendering_engine
         // through frame_context already scaled to the live target size.
 
     private:
+        // The device this pass creates its resources on and releases them
+        // through; handed in by the renderer and outlives the pass.
+        gpu::device* m_device{nullptr};
+
+        // The pool a parallel dispatch records its chunks on (null: none);
+        // handed in by the renderer and outlives the pass.
+        core::job_pool* m_jobs{nullptr};
+
         // Which of the two passes a @ref dispatch walk records for.
         enum class draw_phase
         {

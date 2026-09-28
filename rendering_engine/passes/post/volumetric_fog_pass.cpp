@@ -21,7 +21,6 @@
 #include <rendering_engine/gpu/shader_hot_reload.hpp>
 #include <rendering_engine/passes/post/fullscreen_triangle.hpp>
 #include <rendering_engine/passes/scene_pass.hpp>
-#include <runtime/engine.hpp>
 
 namespace
 {
@@ -78,9 +77,13 @@ namespace
 
 namespace rendering_engine
 {
-    volumetric_fog_pass::volumetric_fog_pass(gpu::bind_group_layout frame_layout, uint32_t width, uint32_t height)
+    volumetric_fog_pass::volumetric_fog_pass(gpu::device& device,
+                                             gpu::bind_group_layout frame_layout,
+                                             uint32_t width,
+                                             uint32_t height)
+        : m_device(&device)
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
 
         // Degenerate backbuffer (no settings, zero-sized window): leave the
         // pass disabled so the scene colour flows through untouched.
@@ -196,7 +199,7 @@ namespace rendering_engine
 
     volumetric_fog_pass::~volumetric_fog_pass()
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
 
         // Bind groups first, then the targets and buffers they reference,
         // then the pipelines, layouts and shaders.
@@ -278,7 +281,7 @@ namespace rendering_engine
 
     void volumetric_fog_pass::create_targets(uint32_t width, uint32_t height)
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
 
         m_march_target = gpu.create_render_target(gpu::render_target_descriptor::single_color(
             gpu::texture_format::rgba16_float, half_extent(width), half_extent(height)));
@@ -295,7 +298,7 @@ namespace rendering_engine
         {
             return;
         }
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
 
         // Every consumer of the two targets is one of this pass's own bind
         // groups, so they go first and the next drawn frame rebuilds them
@@ -319,7 +322,7 @@ namespace rendering_engine
 
     void volumetric_fog_pass::release_bind_groups()
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
 
         // Safe mid-frame as well as between frames: the device defers each
         // destroy until the command buffer that may still reference the
@@ -344,7 +347,7 @@ namespace rendering_engine
 
     void volumetric_fog_pass::rebuild_bind_groups(gpu::texture scene_depth)
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
 
         release_bind_groups();
 
@@ -388,7 +391,7 @@ namespace rendering_engine
 
     void volumetric_fog_pass::upload_params(const frame_context& ctx)
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
 
         // The noise only moves while temporal AA is there to average it;
         // without it a static dither reads better than one that crawls

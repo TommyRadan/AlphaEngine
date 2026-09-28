@@ -17,7 +17,6 @@
 #include <rendering_engine/gpu/shader.hpp>
 #include <rendering_engine/gpu/shader_hot_reload.hpp>
 #include <rendering_engine/passes/post/fullscreen_triangle.hpp>
-#include <runtime/engine.hpp>
 
 namespace
 {
@@ -37,9 +36,9 @@ namespace
 
 namespace rendering_engine
 {
-    auto_exposure_pass::auto_exposure_pass()
+    auto_exposure_pass::auto_exposure_pass(gpu::device& device) : m_device(&device)
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
 
         // -- Shaders --------------------------------------------------
         const auto fragment_module = [&gpu](const char* path, const gpu::shader_defines& defines) {
@@ -164,7 +163,7 @@ namespace rendering_engine
 
     auto_exposure_pass::~auto_exposure_pass()
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
 
         // Bind groups first, then the targets and buffers they reference,
         // then the pipelines, layouts and shaders.
@@ -237,9 +236,9 @@ namespace rendering_engine
         }
     }
 
-    gpu::render_target auto_exposure_pass::create_target(uint32_t size)
+    gpu::render_target auto_exposure_pass::create_target(uint32_t size) const
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
         gpu::render_target_descriptor descriptor{};
         descriptor.color = {{gpu::texture_format::rgba16_float}};
         descriptor.width = size;
@@ -250,7 +249,7 @@ namespace rendering_engine
 
     gpu::bind_group auto_exposure_pass::create_texture_bind_group(gpu::texture texture) const
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
         gpu::bind_group_descriptor descriptor{};
         descriptor.layout = m_texture_layout;
         gpu::binding_value slot{};
@@ -273,7 +272,7 @@ namespace rendering_engine
 
     void auto_exposure_pass::upload_params(const frame_context& ctx, bool reset)
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
         const auto_exposure_settings& settings = ctx.post.auto_exposure;
 
         // A reversed range is read as the range it spans rather than
@@ -327,7 +326,7 @@ namespace rendering_engine
             // command buffer that may still reference the group retired.
             if (first.source_bind_group.valid())
             {
-                runtime::current_engine().gpu->destroy(first.source_bind_group);
+                m_device->destroy(first.source_bind_group);
             }
             first.source_bind_group = create_texture_bind_group(ctx.hdr_color_texture);
             m_bound_input = ctx.hdr_color_texture;

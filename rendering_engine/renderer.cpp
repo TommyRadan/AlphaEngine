@@ -186,29 +186,29 @@ void rendering_engine::renderer::init(const render_services& services)
     // fitted matrices through the frame context (render() publishes the
     // passes there), so no pass is handed another at construction.
     const shadow_settings shadow_config = services.shadows != nullptr ? *services.shadows : shadow_settings{};
-    auto shadow = std::make_unique<shadow_pass>(&m_world.scene_renderables(), shadow_config);
+    auto shadow = std::make_unique<shadow_pass>(device, &m_world.scene_renderables(), shadow_config);
     m_shadow = shadow.get();
     // The omni shadow pass renders six depth faces from the first shadow-casting
     // point light; like the directional shadow it runs before the scene pass so
     // its maps are ready for the per-frame bind group.
-    auto point_shadow = std::make_unique<point_shadow_pass>(&m_world.scene_renderables(), shadow_config);
+    auto point_shadow = std::make_unique<point_shadow_pass>(device, &m_world.scene_renderables(), shadow_config);
     m_point_shadow = point_shadow.get();
     // The spot shadow pass renders a single perspective depth map from the
     // first shadow-casting spot light; also runs before the scene pass.
-    auto spot_shadow = std::make_unique<spot_shadow_pass>(&m_world.scene_renderables(), shadow_config);
+    auto spot_shadow = std::make_unique<spot_shadow_pass>(device, &m_world.scene_renderables(), shadow_config);
     m_spot_shadow = spot_shadow.get();
     // Above the parallel draw threshold the scene pass records its draws
     // from the job pool's workers (Vulkan only); 0 keeps it serial.
     const uint32_t parallel_draw_threshold = graphics.parallel_draw_threshold;
     auto scene = std::make_unique<scene_pass>(
-        &m_world.scene_renderables(), &m_render_stats, taa_enabled, parallel_draw_threshold);
+        device, services.jobs, &m_world.scene_renderables(), &m_render_stats, taa_enabled, parallel_draw_threshold);
     m_scene = scene.get();
     // The optional depth pre-pass runs right before the scene pass, over
     // the scene pass's own draw list and per-frame group (reached through
     // frame_context::scene), and lays the opaque depth into the scene
     // target for it to load. It is always in the pass list and records
     // nothing while disabled, so set_depth_prepass can flip it at runtime.
-    auto depth_pre = std::make_unique<depth_prepass>();
+    auto depth_pre = std::make_unique<depth_prepass>(device);
     m_depth_prepass_enabled = graphics.depth_prepass;
     // The material library below is built against the same per-frame
     // layout the scene pass binds at slot 0.
@@ -216,7 +216,7 @@ void rendering_engine::renderer::init(const render_services& services)
     // The skybox pass runs after the scene pass and composites the cube-map
     // background into the HDR target where no geometry was drawn. It stays
     // dormant until set_environment supplies a cube map.
-    auto skybox = std::make_unique<skybox_pass>();
+    auto skybox = std::make_unique<skybox_pass>(device);
     m_skybox = skybox.get();
     // Volumetric fog marches the height-fog medium toward the finalised
     // scene depth and blends its lit haze and light shafts over the HDR
@@ -225,14 +225,14 @@ void rendering_engine::renderer::init(const render_services& services)
     // view the depth was rasterised with, the lights, the shadow maps),
     // read through frame_context::scene, and draws nothing until
     // post_settings::volumetric enables it.
-    auto volumetric_fog = std::make_unique<volumetric_fog_pass>(scene_frame_layout, width, height);
+    auto volumetric_fog = std::make_unique<volumetric_fog_pass>(device, scene_frame_layout, width, height);
     // Per-pixel motion vectors are reconstructed from the scene depth
     // buffer: the velocity pass samples the HDR target's depth attachment
     // through frame_context::scene_depth_texture each frame. They drive
     // the TAA history reprojection and motion blur; the pass is always
     // built, since motion blur can be switched on at runtime, and draws
     // only while one of the two consumes it.
-    auto velocity = std::make_unique<velocity_pass>(width, height);
+    auto velocity = std::make_unique<velocity_pass>(device, width, height);
     m_velocity = velocity.get();
     // Motion blur smears the HDR image along those vectors, after the
     // volumetric fog (so the haze smears with the scene) and before bloom
@@ -240,7 +240,7 @@ void rendering_engine::renderer::init(const render_services& services)
     // meters, the blurred image). It writes a target of its own; render()
     // publishes it as frame_context::hdr_color_target / _texture while
     // the pass draws, and the scene colour otherwise.
-    auto motion_blur = std::make_unique<motion_blur_pass>(width, height);
+    auto motion_blur = std::make_unique<motion_blur_pass>(device, width, height);
     m_motion_blur = motion_blur.get();
     // Bloom runs between the scene and tonemap passes: it reads the HDR
     // image, blurs the bright pixels and additively composites the glow
@@ -249,13 +249,13 @@ void rendering_engine::renderer::init(const render_services& services)
     // frame_context::hdr_color_texture every frame and rebind when the
     // handle changes, so a resize that recreates the target (or motion
     // blur switching on) reaches them without re-plumbing.
-    auto bloom = std::make_unique<bloom_pass>(width, height);
+    auto bloom = std::make_unique<bloom_pass>(device, width, height);
     // Eye adaptation meters the bloomed HDR image tonemap is about to map
     // and leaves the adapted exposure in a 1x1 texture tonemap samples
     // (frame_context::exposure_texture) while it is enabled.
-    auto auto_exposure = std::make_unique<auto_exposure_pass>();
+    auto auto_exposure = std::make_unique<auto_exposure_pass>(device);
     m_auto_exposure = auto_exposure.get();
-    auto post = std::make_unique<tonemap_pass>();
+    auto post = std::make_unique<tonemap_pass>(device);
     m_tonemap = post.get();
     // Temporal AA optionally slots in between tonemap and FXAA: it
     // accumulates the projection-jittered frames the scene pass produces
@@ -271,7 +271,7 @@ void rendering_engine::renderer::init(const render_services& services)
     std::unique_ptr<taa_pass> taa;
     if (taa_enabled)
     {
-        taa = std::make_unique<taa_pass>(width, height);
+        taa = std::make_unique<taa_pass>(device, width, height);
         m_taa = taa.get();
     }
     // Start the post chain from the persisted values core::load_settings
@@ -285,10 +285,10 @@ void rendering_engine::renderer::init(const render_services& services)
     // published (else the LDR target) and writes the anti-aliased image to
     // the swapchain. It declares whichever of the two it will actually
     // read so the pass list validation checks the real wiring.
-    auto fxaa = std::make_unique<fxaa_pass>(width, height, taa_enabled);
+    auto fxaa = std::make_unique<fxaa_pass>(device, width, height, taa_enabled);
     // The UI pass owns the pixel-space projection the ui template reads at
     // slot 0; it follows the drawable through pass::resize.
-    auto ui = std::make_unique<ui_pass>(&m_world.ui_renderables(), width, height);
+    auto ui = std::make_unique<ui_pass>(device, &m_world.ui_renderables(), width, height);
     const gpu::bind_group_layout ui_frame_layout = ui->frame_bind_group_layout();
 #if _DEBUG
     // The debug pass binds the scene pass's per-frame camera group at

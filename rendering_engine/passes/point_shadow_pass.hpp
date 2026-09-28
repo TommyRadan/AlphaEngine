@@ -58,7 +58,9 @@ namespace rendering_engine
         // @p settings supplies the face resolution (half the configured
         // shadow resolution) and the rasteriser slope bias; both are fixed
         // for the pass's lifetime.
-        point_shadow_pass(const std::vector<renderable*>* registry, const rendering_engine::shadow_settings& settings);
+        point_shadow_pass(gpu::device& device,
+                          const std::vector<renderable*>* registry,
+                          const rendering_engine::shadow_settings& settings);
         ~point_shadow_pass() override;
 
         point_shadow_pass(const point_shadow_pass&) = delete;
@@ -126,6 +128,10 @@ namespace rendering_engine
         uint32_t caster_mask() const noexcept;
 
     private:
+        // The device this pass creates its resources on and releases them
+        // through; handed in by the renderer and outlives the pass.
+        gpu::device* m_device{nullptr};
+
         // One shadow caster's slice of @ref m_items plus the world bounds it
         // reported, recorded once per frame so each face culls against its
         // own frustum without re-walking the registry, and the faces that

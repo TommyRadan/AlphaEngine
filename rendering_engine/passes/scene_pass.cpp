@@ -27,7 +27,6 @@
 #include <rendering_engine/passes/view_globals.hpp>
 #include <rendering_engine/renderables/per_draw_ubo.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
-#include <runtime/engine.hpp>
 
 namespace rendering_engine
 {
@@ -81,14 +80,16 @@ namespace rendering_engine
         constexpr size_t spot_shadow_ubo_size = sizeof(core::math::mat4) + 4 * sizeof(float);
     } // namespace
 
-    scene_pass::scene_pass(const std::vector<renderable*>* registry,
+    scene_pass::scene_pass(gpu::device& device,
+                           core::job_pool* jobs,
+                           const std::vector<renderable*>* registry,
                            render_stats* stats,
                            bool taa_jitter,
                            uint32_t parallel_draw_threshold)
-        : m_registry(registry), m_stats(stats), m_taa_jitter(taa_jitter),
+        : m_device(&device), m_jobs(jobs), m_registry(registry), m_stats(stats), m_taa_jitter(taa_jitter),
           m_parallel_draw_threshold(parallel_draw_threshold)
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
 
         if (m_parallel_draw_threshold != 0)
         {
@@ -160,7 +161,7 @@ namespace rendering_engine
 
     scene_pass::~scene_pass()
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
         if (m_overlay_frame_bind_group.valid())
         {
             gpu.destroy(m_overlay_frame_bind_group);
@@ -248,7 +249,7 @@ namespace rendering_engine
             return;
         }
 
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
         if (m_overlay_frame_bind_group.valid())
         {
             gpu.destroy(m_overlay_frame_bind_group);
@@ -371,8 +372,7 @@ namespace rendering_engine
         const point_shadow_pass* point_shadow = ctx.point_shadow;
         const spot_shadow_pass* spot_shadow = ctx.spot_shadow;
 
-        auto& eng = runtime::current_engine();
-        auto& gpu = *eng.gpu;
+        auto& gpu = *m_device;
 
         // Reset this frame's stats up front. The renderable count is known
         // regardless of whether a camera is attached; the draw totals stay
@@ -664,8 +664,7 @@ namespace rendering_engine
         // One recording thread per chunk at most: the pool's workers plus
         // this thread, which helps while it waits on the fork. Without
         // workers there is nobody to hand a chunk to.
-        const core::job_pool* jobs = runtime::current_engine().jobs.get();
-        const size_t lanes = jobs != nullptr ? static_cast<size_t>(jobs->worker_count()) + 1 : 1;
+        const size_t lanes = m_jobs != nullptr ? static_cast<size_t>(m_jobs->worker_count()) + 1 : 1;
         if (lanes < 2)
         {
             return 1;
@@ -713,8 +712,8 @@ namespace rendering_engine
             secondaries.push_back(pass_encoder->begin_secondary(chunk));
         }
 
-        auto& jobs = *runtime::current_engine().jobs;
-        jobs.parallel_for(
+        // More than one chunk means plan_chunks found the pool's workers.
+        m_jobs->parallel_for(
             chunks,
             [&](size_t chunk)
             {

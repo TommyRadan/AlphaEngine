@@ -65,7 +65,7 @@ namespace rendering_engine
      */
     struct auto_exposure_pass : pass
     {
-        auto_exposure_pass();
+        explicit auto_exposure_pass(gpu::device& device);
         ~auto_exposure_pass() override;
 
         auto_exposure_pass(const auto_exposure_pass&) = delete;
@@ -103,6 +103,10 @@ namespace rendering_engine
         gpu::texture exposure_texture() const;
 
     private:
+        // The device this pass creates its resources on and releases them
+        // through; handed in by the renderer and outlives the pass.
+        gpu::device* m_device{nullptr};
+
         // One level of the log2 luminance reduction: its target, and the
         // bind group that samples the level before it (the HDR input for
         // level 0, which prepare() rebuilds on a new handle instead).
@@ -114,7 +118,7 @@ namespace rendering_engine
         };
 
         // A 1x1-or-larger rgba16f target without depth.
-        static gpu::render_target create_target(uint32_t size);
+        gpu::render_target create_target(uint32_t size) const;
 
         // A {texture @0} bind group on @ref m_texture_layout.
         gpu::bind_group create_texture_bind_group(gpu::texture texture) const;

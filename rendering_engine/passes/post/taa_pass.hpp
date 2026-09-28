@@ -75,7 +75,7 @@ namespace rendering_engine
         // @ref frame_context::velocity_texture, and the resolve bind groups
         // are (re)built whenever either handle differs from the one they
         // were last built against.
-        taa_pass(uint32_t width, uint32_t height);
+        taa_pass(gpu::device& device, uint32_t width, uint32_t height);
         ~taa_pass() override;
 
         taa_pass(const taa_pass&) = delete;
@@ -125,6 +125,10 @@ namespace rendering_engine
         gpu::texture output_texture() const;
 
     private:
+        // The device this pass creates its resources on and releases them
+        // through; handed in by the renderer and outlives the pass.
+        gpu::device* m_device{nullptr};
+
         // One half of the ping-pong pair: the target, its colour texture,
         // and the resolve bind group that writes into it while sampling the
         // *other* half as history ({currentColor @0, historyColor @1,

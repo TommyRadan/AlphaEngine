@@ -65,7 +65,7 @@ namespace rendering_engine
         // publishes a TAA resolve for this pass to sample (see
         // @ref declare_io); the per-frame choice still follows the handle's
         // validity.
-        fxaa_pass(uint32_t width, uint32_t height, bool taa_enabled);
+        fxaa_pass(gpu::device& device, uint32_t width, uint32_t height, bool taa_enabled);
         ~fxaa_pass() override;
 
         fxaa_pass(const fxaa_pass&) = delete;
@@ -97,6 +97,10 @@ namespace rendering_engine
         void resize(uint32_t width, uint32_t height) override;
 
     private:
+        // The device this pass creates its resources on and releases them
+        // through; handed in by the renderer and outlives the pass.
+        gpu::device* m_device{nullptr};
+
         // One cached input: the texture and the bind group built against
         // it plus the rcp_frame UBO.
         struct bound_input

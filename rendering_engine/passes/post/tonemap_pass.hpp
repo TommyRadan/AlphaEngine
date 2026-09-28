@@ -69,7 +69,7 @@ namespace rendering_engine
         // the exposure texture differs from the one it was last built
         // against, so a resize that recreates a target or a toggled effect
         // is picked up without any re-plumbing.
-        tonemap_pass();
+        explicit tonemap_pass(gpu::device& device);
         ~tonemap_pass() override;
 
         tonemap_pass(const tonemap_pass&) = delete;
@@ -111,6 +111,10 @@ namespace rendering_engine
         }
 
     private:
+        // The device this pass creates its resources on and releases them
+        // through; handed in by the renderer and outlives the pass.
+        gpu::device* m_device{nullptr};
+
         // Pipeline variants, indexed by these bits: the fragment stage is
         // compiled with USE_COLOR_GRADING and / or USE_AUTO_EXPOSURE.
         static constexpr size_t variant_grading = 1;

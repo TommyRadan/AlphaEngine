@@ -16,7 +16,6 @@
 #include <rendering_engine/gpu/shader.hpp>
 #include <rendering_engine/gpu/shader_hot_reload.hpp>
 #include <rendering_engine/passes/post/fullscreen_triangle.hpp>
-#include <runtime/engine.hpp>
 
 namespace
 {
@@ -37,9 +36,9 @@ namespace
 
 namespace rendering_engine
 {
-    motion_blur_pass::motion_blur_pass(uint32_t width, uint32_t height)
+    motion_blur_pass::motion_blur_pass(gpu::device& device, uint32_t width, uint32_t height) : m_device(&device)
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
 
         // Degenerate backbuffer (no settings, zero-sized window): leave the
         // pass disabled so draws() is false and the chain reads the scene
@@ -117,7 +116,7 @@ namespace rendering_engine
 
     motion_blur_pass::~motion_blur_pass()
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
 
         if (m_bind_group.valid())
         {
@@ -166,7 +165,7 @@ namespace rendering_engine
 
     void motion_blur_pass::create_target()
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
 
         // Same format as the scene colour it stands in for; no depth, the
         // post chain runs depth-disabled.
@@ -200,7 +199,7 @@ namespace rendering_engine
             // Not allocated yet: prepare() creates it at this size.
             return;
         }
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
 
         // Create the replacement before releasing the old target so the
         // handle published through frame_context::hdr_color_texture changes
@@ -234,7 +233,7 @@ namespace rendering_engine
 
     void motion_blur_pass::rebuild_bind_group(gpu::texture scene_color, gpu::texture velocity)
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
 
         // Safe mid-frame: the device defers the destroy until the command
         // buffer that may still reference the old group has retired.
@@ -272,7 +271,7 @@ namespace rendering_engine
 
     void motion_blur_pass::upload_params(const frame_context& ctx)
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
         const motion_blur_settings& settings = ctx.post.motion_blur;
 
         // The noise only moves while temporal AA is there to average it;
