@@ -6,12 +6,15 @@
 #include <cstdio>
 #include <cstring>
 #include <fstream>
+#include <string>
 #include <string_view>
 #include <system_error>
 #include <utility>
 
 #include <core/hash.hpp>
 #include <core/log.hpp>
+#include <rendering_engine/gpu/backend/vulkan/vk_check.hpp>
+#include <rendering_engine/gpu/shader_compiler.hpp>
 
 namespace rendering_engine::gpu::backend::vulkan
 {
@@ -171,5 +174,117 @@ namespace rendering_engine::gpu::backend::vulkan
             return false;
         }
         return true;
+    }
+
+    void vk_pipeline_cache::create(VkPhysicalDevice physical_device, VkDevice device)
+    {
+        VkPhysicalDeviceProperties properties{};
+        vkGetPhysicalDeviceProperties(physical_device, &properties);
+
+        std::vector<uint8_t> seed;
+        m_pipeline_cache = VK_NULL_HANDLE;
+        m_pipeline_cache_digest = 0;
+        m_pipeline_cache_file.clear();
+        // The shader cache switch covers this cache too: with the
+        // SPIR-V cache off, every pipeline is built from scratch.
+        const std::filesystem::path& directory = gpu::shader_cache_directory();
+        if (directory.empty())
+        {
+            LOG_INF("Vulkan pipeline cache: disabled with the shader cache");
+            return;
+        }
+
+        m_pipeline_cache_file = pipeline_cache_path(directory, properties);
+        const std::string file = m_pipeline_cache_file.string();
+        switch (read_pipeline_cache(m_pipeline_cache_file, properties, seed))
+        {
+        case pipeline_cache_read::loaded:
+            m_pipeline_cache_digest = pipeline_cache_digest(seed);
+            LOG_INF("Vulkan pipeline cache: read %zu bytes from %s", seed.size(), file.c_str());
+            break;
+        case pipeline_cache_read::missing:
+            LOG_INF("Vulkan pipeline cache: %s does not exist yet; starting empty", file.c_str());
+            break;
+        case pipeline_cache_read::corrupt:
+            LOG_WRN("Vulkan pipeline cache: %s is truncated or malformed; ignoring it", file.c_str());
+            break;
+        case pipeline_cache_read::foreign:
+            LOG_INF("Vulkan pipeline cache: %s was written by another GPU or driver; ignoring it", file.c_str());
+            break;
+        }
+
+        VkPipelineCacheCreateInfo info{};
+        info.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
+        info.initialDataSize = seed.size();
+        info.pInitialData = seed.empty() ? nullptr : seed.data();
+        VkResult result = vkCreatePipelineCache(device, &info, nullptr, &m_pipeline_cache);
+        if (result != VK_SUCCESS && !seed.empty())
+        {
+            // The header matched, yet the driver refused the rest; an
+            // empty cache is always accepted.
+            LOG_WRN("Vulkan pipeline cache: the driver refused the stored data (%s); starting empty",
+                    vk_result_to_string(result));
+            m_pipeline_cache_digest = 0;
+            info.initialDataSize = 0;
+            info.pInitialData = nullptr;
+            result = vkCreatePipelineCache(device, &info, nullptr, &m_pipeline_cache);
+        }
+        if (result != VK_SUCCESS)
+        {
+            LOG_WRN("Vulkan pipeline cache: vkCreatePipelineCache failed (%s); pipelines are built without one",
+                    vk_result_to_string(result));
+            m_pipeline_cache = VK_NULL_HANDLE;
+            m_pipeline_cache_file.clear();
+        }
+    }
+
+    void vk_pipeline_cache::save_and_destroy(VkDevice device, bool device_lost)
+    {
+        if (m_pipeline_cache == VK_NULL_HANDLE)
+        {
+            return;
+        }
+        // After a device loss the cache may hold whatever the driver was
+        // building when it died; the file from the last good run stays.
+        if (!m_pipeline_cache_file.empty() && !device_lost)
+        {
+            const std::string file = m_pipeline_cache_file.string();
+            size_t size = 0;
+            VkResult result = vkGetPipelineCacheData(device, m_pipeline_cache, &size, nullptr);
+            std::vector<uint8_t> data;
+            if (result == VK_SUCCESS && size > 0)
+            {
+                data.resize(size);
+                result = vkGetPipelineCacheData(device, m_pipeline_cache, &size, data.data());
+                data.resize(size);
+            }
+            if (result != VK_SUCCESS)
+            {
+                LOG_WRN("Vulkan pipeline cache: vkGetPipelineCacheData failed (%s); %s not updated",
+                        vk_result_to_string(result),
+                        file.c_str());
+            }
+            else if (data.empty())
+            {
+                LOG_INF("Vulkan pipeline cache: the driver returned no data; %s not updated", file.c_str());
+            }
+            else if (m_pipeline_cache_digest != 0 && pipeline_cache_digest(data) == m_pipeline_cache_digest)
+            {
+                LOG_INF("Vulkan pipeline cache: unchanged (%zu bytes); %s left as it is", data.size(), file.c_str());
+            }
+            else if (write_pipeline_cache(m_pipeline_cache_file, data))
+            {
+                LOG_INF("Vulkan pipeline cache: wrote %zu bytes to %s", data.size(), file.c_str());
+            }
+        }
+        vkDestroyPipelineCache(device, m_pipeline_cache, nullptr);
+        m_pipeline_cache = VK_NULL_HANDLE;
+        m_pipeline_cache_file.clear();
+        m_pipeline_cache_digest = 0;
+    }
+
+    VkPipelineCache vk_pipeline_cache::handle() const noexcept
+    {
+        return m_pipeline_cache;
     }
 } // namespace rendering_engine::gpu::backend::vulkan

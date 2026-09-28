@@ -92,7 +92,7 @@ namespace rendering_engine::gpu::backend::vulkan
         // alignments. A stream_data buffer is one copy the caller
         // partitions itself.
         const bool host_visible = descriptor.hint != buffer_usage_hint::static_data;
-        record.region_count = descriptor.hint == buffer_usage_hint::dynamic_data ? m_frames_in_flight : 1;
+        record.region_count = descriptor.hint == buffer_usage_hint::dynamic_data ? m_frame.frames_in_flight() : 1;
         record.region_stride = descriptor.size;
         if (record.region_count > 1)
         {
@@ -109,8 +109,9 @@ namespace rendering_engine::gpu::backend::vulkan
 
         const VmaAllocationCreateInfo alloc = host_visible ? host_mapped_allocation(false) : device_local_allocation();
         VmaAllocationInfo alloc_info{};
-        if (!vk_check(vmaCreateBuffer(m_allocator, &info, &alloc, &record.object, &record.allocation, &alloc_info),
-                      "vmaCreateBuffer"))
+        if (!vk_check(
+                vmaCreateBuffer(m_device.allocator(), &info, &alloc, &record.object, &record.allocation, &alloc_info),
+                "vmaCreateBuffer"))
         {
             return {};
         }
@@ -122,7 +123,7 @@ namespace rendering_engine::gpu::backend::vulkan
             if (record.mapped == nullptr)
             {
                 LOG_ERR("vk_device::create_buffer: host-visible buffer allocation is not mapped");
-                vmaDestroyBuffer(m_allocator, record.object, record.allocation);
+                vmaDestroyBuffer(m_device.allocator(), record.object, record.allocation);
                 return {};
             }
         }
@@ -146,10 +147,10 @@ namespace rendering_engine::gpu::backend::vulkan
                 // the open transfer batch. A failed staging step leaves
                 // the buffer allocated but unfilled, with the failure
                 // logged.
-                staged_upload source{};
-                if (stage_upload(descriptor.initial_data, descriptor.size, source))
+                vk_transfer::staged_upload source{};
+                if (m_transfer.stage_upload(descriptor.initial_data, descriptor.size, source))
                 {
-                    record_buffer_copy(source, record.object, 0, descriptor.size);
+                    m_transfer.record_buffer_copy(source, record.object, 0, descriptor.size);
                 }
                 else
                 {
@@ -175,7 +176,7 @@ namespace rendering_engine::gpu::backend::vulkan
         // The handle pool slot is freed immediately so the engine can
         // recycle handle ids. The persistent map goes with the
         // allocation.
-        const VmaAllocator allocator = m_allocator;
+        const VmaAllocator allocator = m_device.allocator();
         const VkBuffer obj = record->object;
         const VmaAllocation allocation = record->allocation;
         enqueue_destroy(
@@ -225,8 +226,8 @@ namespace rendering_engine::gpu::backend::vulkan
             // reads: first whatever it has missed since it was last
             // written (bar the span this write replaces), then the new
             // bytes. The other copies now lag by this span.
-            wait_slot_before_host_write();
-            const uint32_t slot = m_frame_slot;
+            m_frame.wait_slot_before_host_write();
+            const uint32_t slot = m_frame.frame_slot();
             const VkDeviceSize begin = offset;
             const VkDeviceSize end = offset + size;
             sync_host_region(*record, slot, begin, end);
@@ -244,13 +245,13 @@ namespace rendering_engine::gpu::backend::vulkan
         // Device-local: through the staging ring into the open transfer
         // batch, which submit() queues ahead of the frame that reads
         // the buffer.
-        staged_upload source{};
-        if (!stage_upload(data, size, source))
+        vk_transfer::staged_upload source{};
+        if (!m_transfer.stage_upload(data, size, source))
         {
             LOG_ERR("vk_device::write_buffer: %zu bytes not written (staging failed)", size);
             return;
         }
-        record_buffer_copy(source, record->object, offset, size);
+        m_transfer.record_buffer_copy(source, record->object, offset, size);
     }
 
     void vk_device::sync_host_region(vk_buffer& record, uint32_t slot, VkDeviceSize skip_begin, VkDeviceSize skip_end)
@@ -289,7 +290,7 @@ namespace rendering_engine::gpu::backend::vulkan
 
     VkDeviceSize vk_device::host_region_offset(const vk_buffer& record) const noexcept
     {
-        return record.region_count > 1 ? m_frame_slot * record.region_stride : 0;
+        return record.region_count > 1 ? m_frame.frame_slot() * record.region_stride : 0;
     }
 
     void vk_device::ensure_host_region_current(vk_buffer& record)
@@ -305,12 +306,12 @@ namespace rendering_engine::gpu::backend::vulkan
         // exactly once. The host writes that widen a gap happen on the
         // main thread outside any fork.
         const std::lock_guard<std::mutex> lock(m_host_region_mutex);
-        if (record.gaps[m_frame_slot].empty())
+        if (record.gaps[m_frame.frame_slot()].empty())
         {
             return;
         }
-        wait_slot_before_host_write();
-        sync_host_region(record, m_frame_slot, 0, 0);
+        m_frame.wait_slot_before_host_write();
+        sync_host_region(record, m_frame.frame_slot(), 0, 0);
     }
 
     void vk_device::prepare_bind_group(vk_bind_group& group)

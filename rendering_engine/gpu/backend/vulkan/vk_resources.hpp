@@ -30,7 +30,7 @@ namespace rendering_engine::gpu::backend::vulkan
     // (sync objects, command pools, swapchain depth images, the copies
     // of a dynamic buffer, a bind group's descriptor sets) are sized by
     // it and the runtime count device::init is given is clamped to it.
-    // Equal to gpu::max_frames_in_flight (checked in vk_device.cpp).
+    // Equal to gpu::max_frames_in_flight (checked in vk_frame.cpp).
     inline constexpr uint32_t k_max_frames_in_flight = 2;
 
     struct vk_buffer
@@ -104,7 +104,7 @@ namespace rendering_engine::gpu::backend::vulkan
 
         // Single-level, single-layer 2D views a framebuffer attaches
         // the texture through, indexed @c layer * mip_levels + mip and
-        // built lazily by @c vk_device::attachment_image_view. Every
+        // built lazily by @c vk_render_pass_cache::attachment_image_view. Every
         // aspect of the format, since an attachment writes them all.
         // Released alongside the texture.
         std::vector<VkImageView> attachment_views;
@@ -194,7 +194,7 @@ namespace rendering_engine::gpu::backend::vulkan
         // value, so a handle-only match could return a pipeline
         // built against a freed pass. When a render pass is retired
         // the device purges every variant carrying its generation
-        // (@c vk_device::retire_render_pass_variants), so nothing
+        // (@c vk_render_pass_cache::retire_render_pass_variants), so nothing
         // here ever outlives the pass it was built for.
         struct variant
         {
@@ -297,7 +297,7 @@ namespace rendering_engine::gpu::backend::vulkan
         // Variants are only ever retired wholesale — when the
         // swapchain is rebuilt (its framebuffers point at the old
         // images) or the target is destroyed — and retirement goes
-        // through @c vk_device::retire_render_pass_variants, which
+        // through @c vk_render_pass_cache::retire_render_pass_variants, which
         // also purges every pipeline variant built against the
         // retired passes. The pipeline cache keys on the generation
         // stamped here, not on the VkRenderPass handle alone, so a
