@@ -141,7 +141,7 @@ namespace rendering_engine::gpu::backend::vulkan
         m_physical_device.resolve_depth_formats();
         m_device.create_logical_device(m_features);
         query_capabilities();
-        create_pipeline_cache();
+        m_pipeline_cache.create(m_physical_device.handle(), m_device.handle());
         m_device.create_allocator();
         create_command_pools();
         if (!create_staging_ring())
@@ -238,7 +238,7 @@ namespace rendering_engine::gpu::backend::vulkan
         }
         // Every pipeline this run built is in the cache by now; write it
         // out before anything is torn down.
-        save_and_destroy_pipeline_cache();
+        m_pipeline_cache.save_and_destroy(m_device.handle(), m_device.device_lost());
         // Idle or lost: nothing executes any more, so every deferred
         // destroy — including those stamped with a submission that
         // never happened — may run.
@@ -2940,7 +2940,7 @@ namespace rendering_engine::gpu::backend::vulkan
     }
     VkPipelineCache vk_device::pipeline_cache() const noexcept
     {
-        return m_pipeline_cache;
+        return m_pipeline_cache.handle();
     }
     bool vk_device::device_lost() const noexcept
     {
