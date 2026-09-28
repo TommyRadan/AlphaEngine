@@ -284,8 +284,8 @@ namespace rendering_engine::gpu::backend::vulkan
         // on a format without linear blit support falls back to one
         // level rather than leaving the chain undefined; an explicit
         // count is honoured, and generate_mipmaps refuses the blit.
-        record.blit_capable =
-            !record.is_depth && !record.is_3d && format_supports_linear_blit(m_physical_device, record.vk_format);
+        record.blit_capable = !record.is_depth && !record.is_3d &&
+                              format_supports_linear_blit(m_physical_device.handle(), record.vk_format);
         const uint32_t requested_levels = effective_mip_level_count(descriptor);
         if (requested_levels > 1 && (descriptor.mip_level_count != 0 || record.blit_capable))
         {
@@ -300,7 +300,7 @@ namespace rendering_engine::gpu::backend::vulkan
         // (the IBL convolution outputs) pay for the extra bit, and
         // only when the format can back one.
         record.storage = (descriptor.usage & texture_usage_storage) != 0u && !record.is_depth &&
-                         format_supports_storage_image(m_physical_device, record.vk_format);
+                         format_supports_storage_image(m_physical_device.handle(), record.vk_format);
         texture_usage image_usage = descriptor.usage & ~texture_usage_storage;
         if (record.storage)
         {
