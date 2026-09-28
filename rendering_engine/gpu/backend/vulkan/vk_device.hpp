@@ -61,25 +61,14 @@
 
 #include <rendering_engine/gpu/backend/handle_pool.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_allocator.hpp>
+#include <rendering_engine/gpu/backend/vulkan/vk_check.hpp>
+#include <rendering_engine/gpu/backend/vulkan/vk_instance.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_resources.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_staging_ring.hpp>
 #include <rendering_engine/gpu/device.hpp>
 
 namespace rendering_engine::gpu::backend::vulkan
 {
-    // Best-effort VkResult → human-readable string, used in error
-    // logs so the user can pinpoint a failing call without validation
-    // layers.
-    const char* vk_result_to_string(VkResult r);
-
-    // True for VK_SUCCESS. Anything else logs "<what> failed: <result>"
-    // at error level and returns false, so a call site reads
-    // `if (!vk_check(vkFoo(...), "vkFoo")) { bail; }` instead of
-    // discarding the result. Only for calls whose every non-success
-    // code is a failure; a call with informational codes
-    // (VK_SUBOPTIMAL_KHR, VK_INCOMPLETE) inspects its result itself.
-    bool vk_check(VkResult result, const char* what);
-
     // The optional core features the backend asks for are requested
     // only when vkGetPhysicalDeviceFeatures reports them, and the
     // grants land in the base class's device_features (see
@@ -541,15 +530,7 @@ namespace rendering_engine::gpu::backend::vulkan
         texture default_texture(texture_dimension dim) const noexcept;
 
     private:
-        void create_instance(const std::vector<const char*>& window_extensions);
         void create_default_textures();
-        void create_debug_messenger();
-        void destroy_debug_messenger();
-        // Resolve the VK_EXT_debug_utils label / object-name entry
-        // points once the instance exists; leaves them null (and the
-        // debug_labels feature off) when the extension is not enabled.
-        void load_debug_utils_functions();
-        void create_surface(const surface_desc& surface);
         void pick_physical_device();
         void create_logical_device();
         // Fill the base class's device_features / device_limits from
@@ -606,10 +587,6 @@ namespace rendering_engine::gpu::backend::vulkan
         // that code goes through mark_device_lost, any other failure is
         // logged through vk_check. Returns true on VK_SUCCESS.
         bool check_queue_result(VkResult result, const char* what);
-        // Name @p object_handle of @p type for debuggers and validation
-        // messages through vkSetDebugUtilsObjectNameEXT; no-op without
-        // the extension.
-        void name_object(VkObjectType type, uint64_t object_handle, const char* name);
         // Build the swapchain for @p extent plus everything hanging off
         // it (image views, one depth buffer per frame slot, the
         // per-image render-finished semaphores). The previous swapchain, if any,
@@ -738,19 +715,14 @@ namespace rendering_engine::gpu::backend::vulkan
         handle_pool<vk_render_target> m_render_targets;
         handle_pool<vk_query_set> m_query_sets;
 
-        VkInstance m_instance{VK_NULL_HANDLE};
-        VkDebugUtilsMessengerEXT m_debug_messenger{VK_NULL_HANDLE};
-        VkSurfaceKHR m_surface{VK_NULL_HANDLE};
-        // Releases m_surface through the window system that created it
-        // (surface_desc::destroy_vulkan_surface).
-        destroy_vulkan_surface_fn m_destroy_surface{nullptr};
+        // The components, in bring-up order; quit shuts them down in
+        // reverse (see quit), and their destructors release nothing.
+        vk_instance m_instance;
+
         // Whether presentation waits for vertical sync
         // (surface_desc::vsync), read at every swapchain build.
         bool m_vsync{false};
         VkPhysicalDevice m_physical_device{VK_NULL_HANDLE};
-        // The API version the instance was created with (what VMA is
-        // told, capped by the physical device's own version).
-        uint32_t m_api_version{VK_API_VERSION_1_1};
         VkDevice m_device{VK_NULL_HANDLE};
         VkQueue m_graphics_queue{VK_NULL_HANDLE};
         VkQueue m_present_queue{VK_NULL_HANDLE};
@@ -938,13 +910,6 @@ namespace rendering_engine::gpu::backend::vulkan
         // starts at 1 so 0 can mean "no render pass".
         uint64_t m_next_render_pass_generation{1};
 
-        bool m_validation_enabled{false};
-        // VK_EXT_debug_utils is enabled on the instance: labels and
-        // object names reach validation messages and debuggers.
-        bool m_debug_utils_enabled{false};
-        PFN_vkCmdBeginDebugUtilsLabelEXT m_cmd_begin_debug_label{nullptr};
-        PFN_vkCmdEndDebugUtilsLabelEXT m_cmd_end_debug_label{nullptr};
-        PFN_vkSetDebugUtilsObjectNameEXT m_set_debug_object_name{nullptr};
         bool m_initialised{false};
 
         // Placeholder textures for unset sampler bindings; see
