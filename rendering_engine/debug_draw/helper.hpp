@@ -9,6 +9,11 @@
 #include <core/math/math.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
 
+namespace rendering_engine
+{
+    struct renderer;
+}
+
 namespace rendering_engine::debug_draw
 {
     // Which pass a helper draws in.
@@ -28,11 +33,12 @@ namespace rendering_engine::debug_draw
     // A helper carries a display name and a
     // visibility flag, and on construction registers itself twice: into
     // the process-wide helper registry the debug UI walks to toggle
-    // visibility, and into one of the engine's renderable registries
-    // (chosen by @ref helper_layer) so the matching pass draws it.
-    // Destroying it unregisters from both. Every helper's
-    // @ref renderable::layer_mask is set to @ref layer_editor, so a
-    // scene-layer helper (@ref infinite_grid) can be hidden from a
+    // visibility, and into one of the renderable registries of the
+    // @ref renderer it is constructed with (chosen by @ref helper_layer)
+    // so the matching pass draws it. Destroying it unregisters from both,
+    // so it must go before that renderer's @ref renderer::quit. Every
+    // helper's @ref renderable::layer_mask is set to @ref layer_editor, so
+    // a scene-layer helper (@ref infinite_grid) can be hidden from a
     // gameplay camera by clearing that bit from its culling mask, without
     // affecting anything by default.
     //
@@ -43,7 +49,7 @@ namespace rendering_engine::debug_draw
     // inert in release where the debug pass is dropped.
     struct helper : public renderable
     {
-        helper(const char* name, helper_layer layer);
+        helper(renderer& owner, const char* name, helper_layer layer);
         ~helper() override;
 
         helper(const helper&) = delete;
@@ -71,6 +77,7 @@ namespace rendering_engine::debug_draw
         static core::math::vec3 to_rgb(const assets::color& c);
 
     private:
+        renderer* m_renderer;
         const char* m_name;
         helper_layer m_layer;
     };

@@ -13,14 +13,14 @@
 namespace rendering_engine::debug_draw
 {
     // A helper whose geometry is a list of independent line segments
-    // (vertex pairs) drawn through the shared depth-disabled debug line
-    // material, in the always-on-top overlay pass. The line-based gizmos
+    // (vertex pairs) drawn through its renderer's shared depth-disabled
+    // debug line material, in the always-on-top overlay pass. The line-based gizmos
     // (axes, bounding box, light and camera wireframes) derive from this;
     // they fill geometry via @ref set_segments and optionally follow a
     // moving target via @ref refresh.
     struct line_helper : public helper
     {
-        explicit line_helper(const char* name);
+        line_helper(renderer& owner, const char* name);
         ~line_helper() override;
 
         // World placement of the gizmo. Helpers that bake their geometry

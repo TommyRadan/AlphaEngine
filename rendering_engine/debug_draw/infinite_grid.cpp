@@ -13,20 +13,19 @@
 #include <rendering_engine/renderables/draw_item.hpp>
 #include <rendering_engine/renderables/per_draw_ubo.hpp>
 #include <rendering_engine/renderer.hpp>
-#include <runtime/engine.hpp>
 
 namespace rendering_engine::debug_draw
 {
-    infinite_grid::infinite_grid(float fade_distance)
-        : helper("Grid (infinite)", helper_layer::scene),
-          m_material(runtime::current_engine().renderer->create_grid_material(fade_distance))
+    infinite_grid::infinite_grid(renderer& owner, float fade_distance)
+        : helper(owner, "Grid (infinite)", helper_layer::scene), m_device(&owner.device()),
+          m_material(owner.create_grid_material(fade_distance))
     {
         upload();
     }
 
     infinite_grid::~infinite_grid()
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
         if (m_vertex_buffer.valid())
         {
             gpu.destroy(m_vertex_buffer);
@@ -37,7 +36,7 @@ namespace rendering_engine::debug_draw
 
     void infinite_grid::upload()
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
 
         // A single fullscreen triangle in clip space; the grid material's
         // vertex shader unprojects these corners to reconstruct the view

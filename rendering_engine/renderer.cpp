@@ -402,8 +402,8 @@ void rendering_engine::renderer::init(const render_services& services)
     // box / light / camera helpers against its own objects the same way.
     // The debug pass is dropped in release, so this whole block compiles
     // out there.
-    m_debug_helpers.push_back(std::make_unique<debug_draw::infinite_grid>());
-    m_debug_helpers.push_back(std::make_unique<debug_draw::axes_helper>());
+    m_debug_helpers.push_back(std::make_unique<debug_draw::infinite_grid>(*this));
+    m_debug_helpers.push_back(std::make_unique<debug_draw::axes_helper>(*this));
 #endif
 }
 
@@ -750,6 +750,12 @@ void rendering_engine::renderer::release_color_targets()
     }
     m_target_width = 0;
     m_target_height = 0;
+}
+
+rendering_engine::gpu::device& rendering_engine::renderer::device() const
+{
+    assert(m_services.device != nullptr && "renderer::device is only valid between init and quit");
+    return *m_services.device;
 }
 
 void rendering_engine::renderer::register_scene_renderable(renderable* r)

@@ -22,8 +22,8 @@ namespace rendering_engine::debug_draw
         }
     } // namespace
 
-    point_light_helper::point_light_helper(const point_light* light, float size)
-        : line_helper("Point light"), m_light(light), m_size(size)
+    point_light_helper::point_light_helper(renderer& owner, const point_light* light, float size)
+        : line_helper(owner, "Point light"), m_light(light), m_size(size)
     {
     }
 

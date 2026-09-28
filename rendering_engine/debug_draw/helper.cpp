@@ -6,7 +6,6 @@
 #include <algorithm>
 
 #include <rendering_engine/renderer.hpp>
-#include <runtime/engine.hpp>
 
 namespace rendering_engine::debug_draw
 {
@@ -23,7 +22,8 @@ namespace rendering_engine::debug_draw
         }
     } // namespace
 
-    helper::helper(const char* name, helper_layer layer) : m_name(name), m_layer(layer)
+    helper::helper(renderer& owner, const char* name, helper_layer layer)
+        : m_renderer(&owner), m_name(name), m_layer(layer)
     {
         helper_registry().push_back(this);
 
@@ -33,27 +33,25 @@ namespace rendering_engine::debug_draw
         // bit to hide them from gameplay views.
         layer_mask = layer_editor;
 
-        auto& renderer = *runtime::current_engine().renderer;
         if (m_layer == helper_layer::scene)
         {
-            renderer.register_scene_renderable(this);
+            m_renderer->register_scene_renderable(this);
         }
         else
         {
-            renderer.register_debug_renderable(this);
+            m_renderer->register_debug_renderable(this);
         }
     }
 
     helper::~helper()
     {
-        auto& renderer = *runtime::current_engine().renderer;
         if (m_layer == helper_layer::scene)
         {
-            renderer.unregister_scene_renderable(this);
+            m_renderer->unregister_scene_renderable(this);
         }
         else
         {
-            renderer.unregister_debug_renderable(this);
+            m_renderer->unregister_debug_renderable(this);
         }
 
         auto& helpers = helper_registry();

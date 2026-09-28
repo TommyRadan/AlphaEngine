@@ -222,7 +222,7 @@ namespace runtime
 #if _DEBUG
         // After the renderer and the world: the line helper that draws the
         // world's colliders.
-        m_physics_debug = std::make_unique<runtime::physics::debug_draw>(*physics);
+        m_physics_debug = std::make_unique<runtime::physics::debug_draw>(*renderer, *physics);
 #endif
         // Before the scenes, so the game modules' bootstraps and scene files
         // can attach scripted behaviours; scripts read through the VFS

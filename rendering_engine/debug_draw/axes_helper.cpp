@@ -9,7 +9,7 @@
 
 namespace rendering_engine::debug_draw
 {
-    axes_helper::axes_helper(float size) : line_helper("Axes")
+    axes_helper::axes_helper(renderer& owner, float size) : line_helper(owner, "Axes")
     {
         namespace math = core::math;
 

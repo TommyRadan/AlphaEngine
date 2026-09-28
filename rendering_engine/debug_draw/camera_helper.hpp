@@ -25,7 +25,7 @@ namespace rendering_engine::debug_draw
     // the screen); this is meant for a secondary / inactive camera.
     struct camera_helper : public line_helper
     {
-        explicit camera_helper(const camera* cam, assets::color color = assets::color{200, 200, 80, 255});
+        camera_helper(renderer& owner, const camera* cam, assets::color color = assets::color{200, 200, 80, 255});
 
     protected:
         void refresh() override;
