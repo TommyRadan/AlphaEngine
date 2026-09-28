@@ -117,6 +117,21 @@ add_executable(AlphaEngine)
 # modules it links PUBLIC, so those reach its dependents as well: the
 # world sees the gpu:: interface through the renderer. The third-party
 # libraries are linked where each is fetched, below.
+#
+# The build holds every module's #include lines to these links (see
+# cmake/module_includes.cmake): a module may include the headers of the
+# modules it links and of those they link PUBLIC, and a header of any
+# other module fails the build. A module owns the headers under its
+# directories.
+include(module_includes)
+alpha_module_directories(alpha_core core)
+alpha_module_directories(alpha_platform platform)
+alpha_module_directories(alpha_rhi rendering_engine/gpu)
+alpha_module_directories(alpha_assets assets)
+alpha_module_directories(alpha_render rendering_engine)
+alpha_module_directories(alpha_world runtime)
+alpha_module_directories(alpha_editor editor)
+alpha_module_directories(alpha_game external)
 target_link_libraries(alpha_platform PUBLIC alpha_core)
 target_link_libraries(alpha_rhi PUBLIC alpha_core)
 target_link_libraries(alpha_assets PUBLIC alpha_core)
@@ -586,3 +601,6 @@ set_source_files_properties(
 if(APPLE)
     target_link_libraries(alpha_platform PRIVATE "-framework CoreFoundation -framework IOKit -framework CoreVideo")
 endif(APPLE)
+
+# Every module's sources and links are in place: add the include checks.
+alpha_add_module_include_checks()
