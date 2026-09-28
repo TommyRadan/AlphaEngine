@@ -18,4 +18,3 @@ target_sources(alpha_render PRIVATE
 )
 
 add_subdirectory(premade_2d)
-add_subdirectory(premade_3d)

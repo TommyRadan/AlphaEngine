@@ -70,14 +70,13 @@ namespace
     {
         std::vector<assets::vertex_position_uv_normal> vertices;
         std::vector<uint32_t> indices;
-        const float pi = 3.14159265358979f;
 
         for (int stack = 0; stack <= stacks; ++stack)
         {
-            const float phi = pi * (static_cast<float>(stack) / stacks); // 0..pi from +Z pole
+            const float phi = math::pi * (static_cast<float>(stack) / stacks); // 0..pi from +Z pole
             for (int slice = 0; slice <= slices; ++slice)
             {
-                const float theta = 2.0f * pi * (static_cast<float>(slice) / slices);
+                const float theta = math::two_pi * (static_cast<float>(slice) / slices);
                 const math::vec3 p{std::sin(phi) * std::cos(theta), std::sin(phi) * std::sin(theta), std::cos(phi)};
                 const math::vec2 uv{static_cast<float>(slice) / slices, static_cast<float>(stack) / stacks};
                 vertices.push_back(assets::vertex_position_uv_normal{p, uv, p});

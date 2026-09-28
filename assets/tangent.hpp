@@ -25,10 +25,10 @@ namespace assets
     // Vertices are not split: a vertex shared across a UV seam or a
     // mirror boundary receives one averaged frame, which is wrong on
     // both sides. Meshes must duplicate such vertices before calling
-    // (every premade primitive already does, since a UV discontinuity
-    // needs distinct UVs and therefore distinct vertices). Premade
-    // primitive builders feed their existing vertex/index pair straight
-    // through this helper.
+    // (every shape of @ref mesh_generators already does, since a UV
+    // discontinuity needs distinct UVs and therefore distinct vertices).
+    // The mesh generators feed their vertex/index pair straight through
+    // this helper.
     std::vector<vertex_position_uv_normal_tangent>
     generate_tangents(const std::vector<vertex_position_uv_normal>& vertices, const std::vector<uint32_t>& indices);
 } // namespace assets

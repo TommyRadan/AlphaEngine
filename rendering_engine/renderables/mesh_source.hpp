@@ -3,8 +3,8 @@
 
 /**
  * @file mesh_source.hpp
- * @brief Base of the ready-made meshes a scene node draws: the premade_3d
- *        primitives, lines, point clouds and instanced meshes.
+ * @brief Base of the meshes a scene node draws that build their own
+ *        geometry: lines, point clouds and instanced meshes.
  */
 
 #pragma once
@@ -36,8 +36,8 @@ namespace rendering_engine
      * instance snapshot) whenever @ref revision moved, so a change made to a
      * source reaches the frame after it.
      *
-     * Geometry is uploaded when it is set, in the constructor for the
-     * shapes, so a source is ready to draw once built.
+     * Geometry is uploaded when it is set, so a source is ready to draw once
+     * built.
      */
     struct mesh_source
     {

@@ -4,7 +4,7 @@
 /**
  * @file cache_key.hpp
  * @brief Locale-independent, round-trip-exact text for the numbers that go
- *        into an @ref asset_cache structural key.
+ *        into an asset cache's structural key.
  */
 
 #pragma once
@@ -13,7 +13,7 @@
 #include <string>
 #include <type_traits>
 
-namespace rendering_engine
+namespace assets
 {
     /**
      * @brief The text a numeric shape parameter contributes to a cache key.
@@ -44,4 +44,4 @@ namespace rendering_engine
             return std::string{buffer, result.ptr};
         }
     }
-} // namespace rendering_engine
+} // namespace assets

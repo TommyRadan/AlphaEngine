@@ -4,6 +4,7 @@
 #include "api/game_module.hpp"
 
 #include <assets/color.hpp>
+#include <assets/mesh_generators.hpp>
 #include <core/math/math.hpp>
 #include <rendering_engine/gpu/bind_group.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
@@ -19,11 +20,10 @@
 #include <rendering_engine/passes/pass.hpp>
 #include <rendering_engine/passes/pass_list.hpp>
 #include <rendering_engine/passes/post/fullscreen_triangle.hpp>
-#include <rendering_engine/renderables/premade_3d/plane.hpp>
-#include <rendering_engine/renderables/premade_3d/sphere.hpp>
 #include <rendering_engine/renderer.hpp>
+#include <rendering_engine/resources/asset_cache.hpp>
 #include <runtime/components/light_component.hpp>
-#include <runtime/components/renderable_component.hpp>
+#include <runtime/components/mesh_component.hpp>
 #include <runtime/engine.hpp>
 
 #include <array>
@@ -222,14 +222,14 @@ GAME_MODULE()
     runtime::node& demo = scene.create_node("post_tint_demo");
     runtime::add_behavior<post_tint>(demo);
 
-    auto ball = std::make_unique<rendering_engine::sphere>(cache, &material);
+    auto ball = cache.get_or_create_mesh(assets::mesh_generators::sphere{});
     runtime::node& sphere = scene.create_node("sphere", &demo);
-    sphere.add_component(runtime::renderable_component{std::move(ball)});
+    sphere.add_component(runtime::mesh_component{&material, std::move(ball)});
 
-    auto plane = std::make_unique<rendering_engine::plane>(cache, &material, 30.0f, 30.0f);
+    auto plane = cache.get_or_create_mesh(assets::mesh_generators::plane{.width = 30.0f, .height = 30.0f});
     runtime::node& ground = scene.create_node("ground", &demo);
     ground.transform.set_position(core::math::vec3{0.0f, 0.0f, -1.5f});
-    ground.add_component(runtime::renderable_component{std::move(plane)});
+    ground.add_component(runtime::mesh_component{&material, std::move(plane)});
 
     auto ambient = std::make_unique<rendering_engine::ambient_light>();
     ambient->color = core::math::vec3{1.0f, 1.0f, 1.0f};

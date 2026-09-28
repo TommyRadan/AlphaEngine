@@ -33,6 +33,7 @@
 #pragma once
 
 #include <core/math/aabb.hpp>
+#include <core/math/constants.hpp>
 #include <core/math/frustum.hpp>
 #include <core/math/mat3.hpp>
 #include <core/math/mat4.hpp>

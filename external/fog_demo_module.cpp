@@ -4,16 +4,16 @@
 #include "api/game_module.hpp"
 
 #include <assets/color.hpp>
+#include <assets/mesh_generators.hpp>
 #include <core/math/math.hpp>
 #include <rendering_engine/fog.hpp>
 #include <rendering_engine/lighting/ambient_light.hpp>
 #include <rendering_engine/lighting/directional_light.hpp>
 #include <rendering_engine/materials/phong_material.hpp>
-#include <rendering_engine/renderables/premade_3d/plane.hpp>
-#include <rendering_engine/renderables/premade_3d/sphere.hpp>
 #include <rendering_engine/renderer.hpp>
+#include <rendering_engine/resources/asset_cache.hpp>
 #include <runtime/components/light_component.hpp>
-#include <runtime/components/renderable_component.hpp>
+#include <runtime/components/mesh_component.hpp>
 #include <runtime/engine.hpp>
 
 #include <memory>
@@ -55,16 +55,17 @@ namespace
         }
     };
 
-    // Hangs @p shape on a new child of @p parent at @p position.
-    template<typename Shape>
+    // Hangs @p mesh, drawn with @p material, on a new child of @p parent at
+    // @p position.
     void spawn_prop(runtime::scene& scene,
                     runtime::node& parent,
                     const core::math::vec3& position,
-                    std::unique_ptr<Shape> shape)
+                    rendering_engine::material* material,
+                    std::shared_ptr<rendering_engine::mesh_asset> mesh)
     {
         runtime::node& prop = scene.create_node({}, &parent);
         prop.transform.set_position(position);
-        prop.add_component(runtime::renderable_component{std::move(shape)});
+        prop.add_component(runtime::mesh_component{material, std::move(mesh)});
     }
 } // namespace
 
@@ -96,7 +97,8 @@ GAME_MODULE()
             spawn_prop(scene,
                        demo,
                        core::math::vec3{x, y, 0.0f},
-                       std::make_unique<rendering_engine::sphere>(cache, &material));
+                       &material,
+                       cache.get_or_create_mesh(assets::mesh_generators::sphere{}));
         }
     }
 
@@ -105,7 +107,8 @@ GAME_MODULE()
     spawn_prop(scene,
                demo,
                core::math::vec3{16.0f, 0.0f, -1.5f},
-               std::make_unique<rendering_engine::plane>(cache, &material, 120.0f, 120.0f));
+               &material,
+               cache.get_or_create_mesh(assets::mesh_generators::plane{.width = 120.0f, .height = 120.0f}));
 
     // The lights are components on nodes of their own; the light component
     // keeps the sun's direction on its node's forward (+X) axis.

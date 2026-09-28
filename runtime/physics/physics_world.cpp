@@ -83,7 +83,6 @@ namespace runtime::physics
 
         constexpr int k_circle_segments = 24;
         constexpr float k_contact_marker_size = 0.05f;
-        constexpr float k_pi = 3.14159265358979f;
 
         // Worlds sharing the process-wide Jolt state (allocator hooks, type
         // factory, collision dispatch tables).
@@ -516,7 +515,7 @@ namespace runtime::physics
                     break;
                 }
                 // Jolt's capsule runs along its Y axis; the engine's along Z.
-                rotation = JPH::Quat::sRotation(JPH::Vec3::sAxisX(), 0.5f * k_pi);
+                rotation = JPH::Quat::sRotation(JPH::Vec3::sAxisX(), math::half_pi);
                 JPH::CapsuleShapeSettings settings{desc.half_height, desc.radius};
                 shape = create_shape(settings, "capsule");
                 break;
@@ -1859,9 +1858,9 @@ namespace runtime::physics
             case collider_shape::sphere:
             {
                 const float r = shape.radius;
-                add_arc(positions, colors, center, x_axis, y_axis, r, 0.0f, 2.0f * k_pi, k_circle_segments, color);
-                add_arc(positions, colors, center, x_axis, z_axis, r, 0.0f, 2.0f * k_pi, k_circle_segments, color);
-                add_arc(positions, colors, center, y_axis, z_axis, r, 0.0f, 2.0f * k_pi, k_circle_segments, color);
+                add_arc(positions, colors, center, x_axis, y_axis, r, 0.0f, math::two_pi, k_circle_segments, color);
+                add_arc(positions, colors, center, x_axis, z_axis, r, 0.0f, math::two_pi, k_circle_segments, color);
+                add_arc(positions, colors, center, y_axis, z_axis, r, 0.0f, math::two_pi, k_circle_segments, color);
                 break;
             }
             case collider_shape::capsule:
@@ -1870,12 +1869,12 @@ namespace runtime::physics
                 const math::vec3 top = center + z_axis * shape.half_height;
                 const math::vec3 bottom = center - z_axis * shape.half_height;
                 const int half = k_circle_segments / 2;
-                add_arc(positions, colors, top, x_axis, y_axis, r, 0.0f, 2.0f * k_pi, k_circle_segments, color);
-                add_arc(positions, colors, bottom, x_axis, y_axis, r, 0.0f, 2.0f * k_pi, k_circle_segments, color);
-                add_arc(positions, colors, top, x_axis, z_axis, r, 0.0f, k_pi, half, color);
-                add_arc(positions, colors, top, y_axis, z_axis, r, 0.0f, k_pi, half, color);
-                add_arc(positions, colors, bottom, x_axis, z_axis, r, k_pi, 2.0f * k_pi, half, color);
-                add_arc(positions, colors, bottom, y_axis, z_axis, r, k_pi, 2.0f * k_pi, half, color);
+                add_arc(positions, colors, top, x_axis, y_axis, r, 0.0f, math::two_pi, k_circle_segments, color);
+                add_arc(positions, colors, bottom, x_axis, y_axis, r, 0.0f, math::two_pi, k_circle_segments, color);
+                add_arc(positions, colors, top, x_axis, z_axis, r, 0.0f, math::pi, half, color);
+                add_arc(positions, colors, top, y_axis, z_axis, r, 0.0f, math::pi, half, color);
+                add_arc(positions, colors, bottom, x_axis, z_axis, r, math::pi, math::two_pi, half, color);
+                add_arc(positions, colors, bottom, y_axis, z_axis, r, math::pi, math::two_pi, half, color);
                 for (const math::vec3& side : {x_axis, -x_axis, y_axis, -y_axis})
                 {
                     add_segment(positions, colors, top + side * r, bottom + side * r, color);

@@ -123,11 +123,10 @@ namespace runtime::physics
      * @ref fit_to_mesh set they are derived instead from the bounds, in the
      * node's local space, of what the node draws — its
      * @ref runtime::mesh_component, else its
-     * @ref runtime::renderable_component (a @c premade_3d shape) — whenever
-     * it draws something: a box matches the bounds, a sphere takes the
-     * largest half extent, a capsule the larger X / Y half extent as radius
-     * and the rest of the Z extent as cylinder, and a convex hull the eight
-     * corners.
+     * @ref runtime::renderable_component — whenever it draws something: a
+     * box matches the bounds, a sphere takes the largest half extent, a
+     * capsule the larger X / Y half extent as radius and the rest of the Z
+     * extent as cylinder, and a convex hull the eight corners.
      */
     struct collider_settings
     {
