@@ -7,6 +7,7 @@
 #include <cstdint>
 
 #include <rendering_engine/gpu/handle.hpp>
+#include <rendering_engine/passes/frame_resources.hpp>
 #include <rendering_engine/passes/pass.hpp>
 
 namespace rendering_engine
@@ -19,8 +20,9 @@ namespace rendering_engine
      * maps) and before @ref tonemap_pass, entirely in fullscreen-triangle
      * draws on tiny targets, with no CPU readback and no compute:
      *
-     *  1. Luminance: the HDR image (@ref frame_context::hdr_color_texture)
-     *     into a 64 x 64 target of log2 luminance, each texel metering a
+     *  1. Luminance: the HDR image (@ref frame_resources::scene_color, as
+     *     the passes before this one left it) into a 64 x 64 target of log2
+     *     luminance, each texel metering a
      *     4 x 4 grid of bilinear taps over its share of the frame. A tap
      *     with next to no light (below 2^-10: the cleared background
      *     where nothing was drawn) is left out of the average rather than
@@ -40,7 +42,7 @@ namespace rendering_engine
      *     @c compensation stops) into a 1 x 1 @c rgba16f target.
      *  4. Store: copies that texel into a second 1 x 1 target, the history
      *     the next frame's adaptation reads, so the result tonemap samples
-     *     (@ref exposure_texture) keeps one stable handle.
+     *     (@ref frame_resources::exposure) keeps one stable handle.
      *
      * The histogram route (a compute pass binning luminance) meters more
      * robustly but would add the engine's first mid-frame compute work and
@@ -51,17 +53,18 @@ namespace rendering_engine
      * @ref resize has nothing to rebuild: the adapted value (a property of
      * the scene's brightness, not of the window) carries over a resize
      * untouched, and only the luminance stage's input bind group is rebuilt
-     * when the frame context hands it a new HDR handle.
+     * when it looks up a new HDR handle.
      *
      * The first metered frame — at startup, or after auto exposure is
      * re-enabled — snaps to the target instead of easing in from an
      * undefined history, so nothing flashes. A frame without a camera
      * meters nothing and keeps the last adapted value (the scene pass
      * clears the HDR image to black then, which would otherwise drag the
-     * exposure to its limit). While disabled the pass records nothing and
-     * tonemap applies @ref post_settings::exposure; @ref produces_exposure
-     * is the rule @ref renderer::render publishes
-     * @ref frame_context::exposure_texture by.
+     * exposure to its limit). The pass publishes the result as
+     * @ref frame_resources::exposure on every frame it holds a valid one:
+     * auto exposure is enabled and either a camera is metered this frame
+     * or an earlier frame already adapted. While disabled the pass records
+     * and publishes nothing and tonemap applies @ref post_settings::exposure.
      */
     struct auto_exposure_pass : pass
     {
@@ -71,36 +74,23 @@ namespace rendering_engine
         auto_exposure_pass(const auto_exposure_pass&) = delete;
         auto_exposure_pass& operator=(const auto_exposure_pass&) = delete;
 
-        // Decides whether the frame meters, writes the adaptation params
-        // and rebinds the HDR input when its handle changed.
+        // Decides whether the frame meters, writes the adaptation params,
+        // rebinds the HDR input when its handle changed and publishes the
+        // adapted exposure when there is one.
         void prepare(const frame_context& ctx) override;
 
         void record(gpu::command_encoder& encoder, const frame_context& ctx) override;
 
         const char* name() const override
         {
-            return "auto_exposure";
+            return builtin_passes::auto_exposure;
         }
 
         void declare_io(pass_io_builder& io) const override
         {
-            io.read("scene_color");
-            io.write("exposure");
+            io.read(frame_resources::scene_color);
+            io.write(frame_resources::exposure);
         }
-
-        /**
-         * @brief Whether @ref exposure_texture holds a valid exposure once
-         *        this frame's @ref record has run: auto exposure is
-         *        enabled and either a camera is metered this frame or an
-         *        earlier frame already adapted. Asked by the renderer
-         *        before the passes prepare.
-         */
-        bool produces_exposure(const frame_context& ctx) const;
-
-        /// The 1x1 adaptation result tonemap samples (see
-        /// @ref frame_context::exposure_texture). Stable for the pass's
-        /// lifetime.
-        gpu::texture exposure_texture() const;
 
     private:
         // The device this pass creates its resources on and releases them

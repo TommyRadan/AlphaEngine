@@ -36,8 +36,8 @@ namespace rendering_engine
         auto& gpu = *m_device;
 
         // Degenerate backbuffer (no settings, zero-sized window): leave the
-        // pass disabled so output_texture() reports invalid and the caller
-        // keeps sampling the raw tonemap output.
+        // pass disabled so it publishes no resolve and FXAA keeps sampling
+        // the raw tonemap output.
         if (width == 0 || height == 0)
         {
             return;
@@ -111,9 +111,9 @@ namespace rendering_engine
         m_resolve_pipeline = gpu.create_pipeline(pipeline_descriptor);
 
         // The resolve bind groups sample the LDR image and the motion
-        // vectors, which arrive through the frame context; record() builds
-        // them on the first frame and rebuilds them whenever either handle
-        // changes.
+        // vectors, which are looked up in the frame's store; prepare()
+        // builds them on the first frame and rebuilds them whenever either
+        // handle changes.
         m_enabled = true;
     }
 
@@ -211,8 +211,7 @@ namespace rendering_engine
         auto& gpu = *m_device;
 
         // Create the replacements before releasing the old targets so the
-        // handle published through frame_context::taa_resolve_texture
-        // changes and FXAA rebinds. The releases are safe here: resize
+        // published resolve handle changes and FXAA rebinds. The releases are safe here: resize
         // runs between frames, and a deferred-execution backend retires
         // the attachments only once the last command buffer that sampled
         // them has finished.
@@ -296,15 +295,6 @@ namespace rendering_engine
         }
     }
 
-    gpu::texture taa_pass::output_texture() const
-    {
-        // The half the next prepare() assigns to this frame's resolve
-        // (the renderer asks before the passes prepare); prepare() swaps
-        // the index afterwards, so the next frame's query names the
-        // other half.
-        return m_targets[m_write_index].texture;
-    }
-
     void taa_pass::prepare(const frame_context& ctx)
     {
         if (!m_enabled)
@@ -329,11 +319,13 @@ namespace rendering_engine
         // built with and rebuild on change — the first frame included.
         m_draw_index = m_write_index;
         accumulation_target& write = m_targets[m_draw_index];
-        if (ctx.ldr_color_texture != m_bound_current || ctx.velocity_texture != m_bound_velocity ||
-            !write.resolve_bind_group.valid())
+        const gpu::texture current = ctx.resources->get(frame_resources::ldr_color).texture;
+        const gpu::texture velocity = ctx.resources->get(frame_resources::velocity);
+        if (current != m_bound_current || velocity != m_bound_velocity || !write.resolve_bind_group.valid())
         {
-            rebuild_resolve_bind_groups(ctx.ldr_color_texture, ctx.velocity_texture);
+            rebuild_resolve_bind_groups(current, velocity);
         }
+        ctx.resources->publish(frame_resources::taa_resolve, write.texture);
 
         // While the history is unusable the feedback is pinned to 0
         // (current frame only); every later frame accumulates with the

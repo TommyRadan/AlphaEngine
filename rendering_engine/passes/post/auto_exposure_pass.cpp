@@ -260,16 +260,6 @@ namespace rendering_engine
         return gpu.create_bind_group(descriptor);
     }
 
-    bool auto_exposure_pass::produces_exposure(const frame_context& ctx) const
-    {
-        return ctx.post.auto_exposure.enabled && (ctx.active_camera != nullptr || m_has_history);
-    }
-
-    gpu::texture auto_exposure_pass::exposure_texture() const
-    {
-        return m_adapted_texture;
-    }
-
     void auto_exposure_pass::upload_params(const frame_context& ctx, bool reset)
     {
         auto& gpu = *m_device;
@@ -305,9 +295,13 @@ namespace rendering_engine
 
         // No camera: the scene pass cleared the HDR image to black, which
         // says nothing about the scene's brightness. Keep the last adapted
-        // value (tonemap keeps sampling it, see produces_exposure).
+        // value, which tonemap keeps sampling once there is one.
         if (ctx.active_camera == nullptr)
         {
+            if (m_has_history)
+            {
+                ctx.resources->publish(frame_resources::exposure, m_adapted_texture);
+            }
             return;
         }
 
@@ -319,8 +313,9 @@ namespace rendering_engine
         // changes when motion blur is toggled or a resize recreates the
         // target, so compare against the one level 0's group was built
         // with and rebuild on change — the first metered frame included.
+        const gpu::texture hdr = ctx.resources->get(frame_resources::scene_color).texture;
         reduction_level& first = m_levels.front();
-        if (ctx.hdr_color_texture != m_bound_input || !first.source_bind_group.valid())
+        if (hdr != m_bound_input || !first.source_bind_group.valid())
         {
             // Safe mid-frame: the device defers the destroy until the
             // command buffer that may still reference the group retired.
@@ -328,13 +323,15 @@ namespace rendering_engine
             {
                 m_device->destroy(first.source_bind_group);
             }
-            first.source_bind_group = create_texture_bind_group(ctx.hdr_color_texture);
-            m_bound_input = ctx.hdr_color_texture;
+            first.source_bind_group = create_texture_bind_group(hdr);
+            m_bound_input = hdr;
         }
 
-        // record() meters this frame, so the history it leaves is real.
+        // record() meters this frame, so the history it leaves is real and
+        // tonemap takes its exposure from it.
         m_meters = true;
         m_has_history = true;
+        ctx.resources->publish(frame_resources::exposure, m_adapted_texture);
     }
 
     void auto_exposure_pass::record(gpu::command_encoder& encoder, const frame_context& /*ctx*/)

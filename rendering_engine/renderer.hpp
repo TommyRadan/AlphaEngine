@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <core/math/math.hpp>
@@ -21,6 +22,7 @@
 #include <rendering_engine/material_library.hpp>
 #include <rendering_engine/mesh_draws.hpp>
 #include <rendering_engine/passes/pass_list.hpp>
+#include <rendering_engine/passes/resource_store.hpp>
 #include <rendering_engine/post_settings.hpp>
 #include <rendering_engine/render_services.hpp>
 #include <rendering_engine/render_stats.hpp>
@@ -29,17 +31,7 @@
 
 namespace rendering_engine
 {
-    struct scene_pass;
-    struct skybox_pass;
-    struct tonemap_pass;
-    struct velocity_pass;
-    struct motion_blur_pass;
-    struct auto_exposure_pass;
-    struct taa_pass;
     struct texture_asset;
-    struct shadow_pass;
-    struct point_shadow_pass;
-    struct spot_shadow_pass;
     struct environment_probe;
     struct material_template;
     struct basic_material;
@@ -53,7 +45,6 @@ namespace rendering_engine
 
     namespace debug_draw
     {
-        struct debug_pass;
         struct helper;
     } // namespace debug_draw
 
@@ -87,11 +78,14 @@ namespace rendering_engine
      * the renderer reads (see @ref render_services), brings the window and
      * the GPU device up before @ref init and takes them down after
      * @ref quit. @ref init constructs the built-in passes (which own their
-     * per-frame bind-group layouts) and then the material library (which
-     * reads those layouts when building its pipelines); @ref quit tears
-     * them down in reverse order, and the members are declared so that
-     * their destruction follows the same order. All methods must be called
-     * from the main thread.
+     * per-frame bind-group layouts), then the material library (which
+     * reads those layouts when building its pipelines), and registers the
+     * passes through @ref add_pass — the same call engine, game or tool
+     * code uses to add a pass of its own, next to @ref remove_pass and
+     * @ref set_pass_enabled; the renderer keeps no pointer to any pass.
+     * @ref quit tears them down in reverse order, and the members are
+     * declared so that their destruction follows the same order. All
+     * methods must be called from the main thread.
      */
     struct renderer
     {
@@ -115,34 +109,34 @@ namespace rendering_engine
         /**
          * @brief Renders one frame.
          *
-         * Walks the ordered pass list registered in @ref init twice —
-         * every pass's @ref pass::prepare, then every pass's
-         * @ref pass::record — giving each pass the same per-frame
-         * @ref frame_context (active camera, swapchain and off-screen
-         * targets, viewport, frame index, this frame's and the previous
-         * frame's temporal-AA jitter, and the previous frame's unjittered
-         * view-projection) so they cannot disagree mid-frame. The
+         * Validates the pass list first when a pass was added or removed since
+         * the last frame. Then walks the enabled passes twice — every pass's
+         * @ref pass::prepare, then every pass's @ref pass::record — giving each
+         * pass the same per-frame @ref frame_context (active camera, lights,
+         * draw lists, viewport, frame index, this frame's and the previous
+         * frame's temporal-AA jitter, the previous frame's unjittered
+         * view-projection, the settings, and the frame's @ref resource_store,
+         * cleared and seeded with the swapchain and the off-screen targets
+         * before any pass prepares) so they cannot disagree mid-frame. The
          * active camera is the world's arbitration result
          * (@ref render_world::active_camera: the highest-priority enabled
-         * camera proxy) evaluated once here, so a camera destroyed or
-         * disabled since the last frame is replaced by the runner-up
-         * without any owner bookkeeping, and the enabled light proxies are
-         * gathered once here in packing order. The mesh and UI proxies
-         * become the frame's draw lists once here too
-         * (@ref mesh_draw_builder, @ref ui_draw_builder, which also upload
-         * the instance snapshots, joint palettes and UI quads the proxies
-         * carry), before any pass prepares. Everything a pass reads about
-         * the world is a proxy its owner wrote before the frame; the world
-         * refuses to create or destroy a proxy until the frame ends
-         * (@ref render_world::begin_frame). The renderer is the only place
-         * that advances the frame index, the jitter sequence and the
-         * previous-frame matrix, and it drops the latter across a
-         * no-camera frame or a change of arbitrated camera. Every draw a
-         * pass records comes from those lists (plus, for the debug pass,
-         * the ImGui draw data built before the walk); no event is
-         * broadcast while a pass is recording, so debug / gizmo callers
-         * create an overlay mesh proxy rather than subscribe. The walk is
-         * bracketed by @c gpu::device::begin_frame / @c end_frame: the
+         * camera proxy) evaluated once here, so a camera destroyed or disabled
+         * since the last frame is replaced by the runner-up without any owner
+         * bookkeeping, and the enabled light proxies are gathered once here in
+         * packing order. The mesh and UI proxies become the frame's draw lists
+         * once here too (@ref mesh_draw_builder, @ref ui_draw_builder, which
+         * also upload the instance snapshots, joint palettes and UI quads the
+         * proxies carry), before any pass prepares. Everything a pass reads
+         * about the world is a proxy its owner wrote before the frame; the
+         * world refuses to create or destroy a proxy until the frame ends
+         * (@ref render_world::begin_frame). The renderer is the only place that
+         * advances the frame index, the jitter sequence and the previous-frame
+         * matrix, and it drops the latter across a no-camera frame or a change
+         * of arbitrated camera. Every draw a pass records comes from those
+         * lists (plus, for the debug pass, the ImGui draw data built before the
+         * walk); no event is broadcast while a pass is recording, so debug /
+         * gizmo callers create an overlay mesh proxy rather than subscribe. The
+         * walk is bracketed by @c gpu::device::begin_frame / @c end_frame: the
          * device waits for the previous frame before any pass writes its
          * per-frame buffers and presents inside @c end_frame.
          */
@@ -160,21 +154,21 @@ namespace rendering_engine
          *
          * A zero dimension (a minimised window; the main loop skips frames
          * until it is restored) and a size equal to the current one are
-         * ignored. Otherwise it recreates the HDR scene-colour target (and
-         * its depth) and the LDR target at the new size — new targets
-         * first, then the old ones are released, so every handle the
-         * passes compare against changes — calls @ref pass::resize on
-         * every pass in order so they rebuild their own full-resolution
-         * targets and size-dependent UBOs, and reports the new aspect to
-         * the world (@ref render_world::set_drawable_aspect), whose camera
-         * owners hand it to their cameras (@ref camera::set_aspect_ratio)
-         * before the next frame, so the projection matches the new
-         * drawable. Passes that sample a texture owned by
-         * the renderer or another pass rebind on the next frame through
-         * the handle comparison they make in @c record, and the
+         * ignored. Otherwise it recreates the HDR scene-colour target (and its
+         * depth) and the LDR target at the new size — new targets first, then
+         * the old ones are released, so every handle the passes compare against
+         * changes — calls @ref pass::resize on every pass in order so they
+         * rebuild their own full-resolution targets and size-dependent UBOs,
+         * drops what the last frame published (it names released targets), and
+         * reports the new aspect to the world
+         * (@ref render_world::set_drawable_aspect), whose camera owners hand it
+         * to their cameras (@ref camera::set_aspect_ratio) before the next
+         * frame, so the projection matches the new drawable. Passes that sample
+         * a texture owned by the renderer or another pass rebind on the next
+         * frame through the handle comparison they make in @c prepare, and the
          * temporal-AA jitter is derived from the recorded size on every
-         * @ref render, so it needs no notification. Shadow maps are
-         * fixed-size by design and unaffected.
+         * @ref render, so it needs no notification. Shadow maps are fixed-size
+         * by design and unaffected.
          *
          * Releasing the old targets is safe here: the device defers the
          * free until the last command buffer that referenced them has
@@ -212,14 +206,53 @@ namespace rendering_engine
         }
 
         /**
-         * @brief Hands the debug pass the overlay it records after the
-         *        debug geometry every frame (see
-         *        @ref debug_draw::debug_pass::set_overlay), or null to stop.
-         *        Non-owning: the caller clears it before the overlay
-         *        renderer goes. Does nothing without a debug pass (release
-         *        builds).
+         * @brief Sets the overlay the debug pass records after the debug
+         *        geometry every frame (@ref frame_context::overlay), or null
+         *        to stop. Non-owning: the caller clears it before the
+         *        overlay renderer goes. Nothing draws it without a debug
+         *        pass (release builds).
          */
         void set_overlay(gpu::overlay_renderer* overlay);
+
+        /**
+         * @brief Adds @p p to the pass list at @p placement: at the end of
+         *        a @ref render_stage, or right before or after a pass
+         *        already in the list, named as its @ref pass::name returns
+         *        it (@ref builtin_passes names the built-in ones).
+         *
+         * The built-in passes are registered through this call in
+         * @ref init; engine, game or tool code adds its own the same way,
+         * at any time between @ref init and @ref quit outside a frame. The
+         * renderer owns the pass from here on and destroys it in
+         * @ref remove_pass or @ref quit, before the GPU device; a pass that
+         * owns GPU resources builds them on @ref device. The pass joins
+         * the next frame: the list is validated (see
+         * @ref pass_list::validate) and the GPU profiler resized before it
+         * records. Returns the pass, or null when it is refused (logged):
+         * a pass of the same name is in the list, or the placement's
+         * anchor is not.
+         */
+        pass* add_pass(std::unique_ptr<pass> p, const pass_placement& placement);
+
+        /**
+         * @brief Removes and destroys the pass named @p name — a built-in
+         *        one as much as any other; false when there is none. Not
+         *        during a frame. The GPU resources the pass owned are
+         *        released once the frames using them have retired.
+         */
+        bool remove_pass(std::string_view name);
+
+        /**
+         * @brief Enables or disables the pass named @p name from the next
+         *        frame; false when there is none. A disabled pass keeps its
+         *        place and follows resizes, but neither prepares nor
+         *        records, so it publishes nothing and the passes after it
+         *        fall back as they would without it. Not during a frame.
+         */
+        bool set_pass_enabled(std::string_view name, bool enabled);
+
+        /** @brief Whether a pass named @p name is in the list and enabled. */
+        bool pass_enabled(std::string_view name) const;
 
         /** @brief @ref material_library::get_basic_material. Valid between @ref init and @ref quit. */
         basic_material& get_basic_material();
@@ -268,31 +301,18 @@ namespace rendering_engine
         ui_material& get_ui_material();
 
         /**
-         * @brief The tonemap post pass, for live tuning of its exposure
-         *        and operator (@ref tonemap_pass::set_exposure /
-         *        @ref tonemap_pass::set_operator). Constructed in
-         *        @ref init; valid between @ref init and @ref quit.
-         */
-        tonemap_pass& tonemap();
-
-        /**
          * @brief Sets the runtime-tunable post-processing chain parameters.
          *
          * Stored and copied into @ref frame_context::post every
-         * @ref render so @ref volumetric_fog_pass, @ref bloom_pass,
-         * @ref taa_pass and @ref fxaa_pass can read the fields they own
-         * (the latter three rewriting their own UBO only when a value
-         * actually changed). @c exposure and @c tonemap_op are the
-         * exception: they are forwarded immediately to
-         * @ref tonemap_pass::set_exposure / @ref tonemap_pass::set_operator
-         * (already live-tunable the same way), so a caller reading
-         * @ref tonemap right after this call sees the new values without
-         * waiting for a frame. @c taa.enabled is read-only in practice:
-         * whether @ref taa_pass exists is decided once in @ref init from
-         * @c rendering_engine::graphics_settings::temporal_aa and the drawable size, so
-         * whatever this is called with is overwritten with the pass's real
-         * presence before it is stored — @ref get_post_settings always
-         * reports the truth. A new @c grading.lut path is loaded through
+         * @ref render so each post pass can read the fields it owns
+         * (rewriting its own UBO only when a value actually changed; the
+         * tonemap pass takes @c exposure and @c tonemap_op from here too).
+         * @c taa.enabled is read-only in practice: it reports whether the
+         * TAA pass is in the list and enabled (@ref init registers it from
+         * @c rendering_engine::graphics_settings::temporal_aa and the
+         * drawable size), so whatever this is called with is overwritten
+         * with the truth before it is stored — @ref get_post_settings always
+         * reports it. A new @c grading.lut path is loaded through
          * the asset cache at the top of the next @ref render (the cache is
          * only up once the engine has finished initialising). See
          * @ref post_settings for why scene-wide fog (@ref set_fog) is not
@@ -322,8 +342,8 @@ namespace rendering_engine
          * the scene pass, which then loads it and shades each pre-passed
          * surface once (see @ref depth_prepass). Seeded in @ref init from
          * @c rendering_engine::graphics_settings::depth_prepass (off by default). The
-         * pass itself is always in the pass list, so this never rebuilds
-         * it.
+         * pass itself is always registered, so this never rebuilds the
+         * list.
          */
         void set_depth_prepass(bool enabled);
 
@@ -362,7 +382,7 @@ namespace rendering_engine
 
         /**
          * @brief Depth attachment of the HDR scene-colour target; see
-         *        @ref frame_context::scene_depth_texture for the encoding.
+         *        @ref frame_resources::scene_depth for the encoding.
          *        Valid between @ref init and @ref quit.
          */
         gpu::texture scene_depth_texture() const;
@@ -374,31 +394,33 @@ namespace rendering_engine
         gpu::texture ldr_color_texture() const;
 
         /**
-         * @brief Per-pixel motion vectors from the velocity pass, or an
-         *        invalid handle on a degenerate drawable. Only rewritten
+         * @brief Per-pixel motion vectors the velocity pass published for
+         *        the last frame (@ref frame_resources::velocity), or an
+         *        invalid handle when it published none. Only rewritten
          *        while temporal AA or motion blur consumes it.
          */
         gpu::texture velocity_texture() const;
 
         /**
-         * @brief This frame's temporal-AA resolve output, or an invalid
-         *        handle while temporal AA is off.
+         * @brief The last frame's temporal-AA resolve output, or an
+         *        invalid handle while temporal AA is off.
          */
         gpu::texture taa_resolve_texture() const;
 
         /**
-         * @brief Directional-light cascaded shadow map: a depth 2D-array
-         *        texture, one layer per cascade (see
-         *        @ref shadow_pass::cascade_count). Valid between
-         *        @ref init and @ref quit; holds cleared, unused depth
-         *        while no shadow-casting directional light is present
-         *        (see @ref shadow_pass::has_shadow).
+         * @brief Directional-light cascaded shadow map the shadow pass
+         *        published for the last frame: a depth 2D-array texture,
+         *        one layer per cascade, holding cleared, unused depth while
+         *        no shadow-casting directional light is present (see
+         *        @ref directional_shadow_data). Invalid before the first
+         *        frame, after a resize or a change to the pass list until
+         *        the next frame, and without a shadow pass.
          */
         gpu::texture directional_shadow_map() const;
 
         /**
-         * @brief Spot-light shadow map. Valid between @ref init and
-         *        @ref quit; see @ref directional_shadow_map.
+         * @brief Spot-light shadow map the spot shadow pass published for
+         *        the last frame; see @ref directional_shadow_map.
          */
         gpu::texture spot_shadow_map() const;
 
@@ -409,8 +431,8 @@ namespace rendering_engine
          * @brief Sets (or clears) the scene's image-based-lighting
          *        environment plus background.
          *
-         * Stores @p env in the @ref world, points the skybox pass at its
-         * cube map so it draws as the background, and attaches the same
+         * Stores @p env in the @ref world, whose cube map the skybox pass
+         * draws as the background from the next frame, and attaches the same
          * environment to every live @ref standard_material instance — the
          * built-in one and each one made by @ref create_standard_material,
          * whenever it was created — so their surfaces pick up image-based
@@ -455,17 +477,18 @@ namespace rendering_engine
 
         // Off-screen HDR target the scene pass renders into.
         // Created in @ref init at the current backbuffer size, recreated
-        // by @ref on_resize and released in @ref quit. Surfaced to passes
-        // via @ref frame_context::scene_color_target / @c scene_color_texture
-        // so the post chain can sample it as input.
+        // by @ref on_resize and released in @ref quit. Published to the
+        // passes every frame as @ref frame_resources::scene_color (and its
+        // depth as @ref frame_resources::scene_depth) so the post chain can
+        // sample it as input.
         gpu::render_target m_scene_color_target{};
         gpu::texture m_scene_color_texture{};
 
         // Off-screen LDR target the tonemap pass resolves into and the
         // FXAA pass samples. rgba8, no depth; created alongside the HDR
         // target in @ref init, recreated by @ref on_resize and released in
-        // @ref quit. Surfaced via @ref frame_context::ldr_color_target /
-        // @c ldr_color_texture.
+        // @ref quit. Published every frame as
+        // @ref frame_resources::ldr_color.
         gpu::render_target m_ldr_color_target{};
         gpu::texture m_ldr_color_texture{};
 
@@ -489,59 +512,29 @@ namespace rendering_engine
         render_stats m_render_stats{};
 
         // Ordered pass list recorded once per frame in @ref render.
-        // Populated by @ref init with the built-in passes in render order,
-        // which validates the resources each declares, and torn down in
-        // @ref quit before the materials and the GPU device the passes
-        // reference.
+        // Populated through @ref add_pass: by @ref init with the built-in
+        // passes, and by whatever code adds its own later. Validated
+        // whenever it changed, and torn down in @ref quit before the
+        // materials and the GPU device the passes reference.
         pass_list m_passes;
 
-        // Non-owning back-pointer to the skybox pass owned by
-        // @ref m_passes. Kept so @ref set_environment can swap its cube
-        // map after construction. Null until @ref init runs.
-        skybox_pass* m_skybox{nullptr};
+        // The frame's resource store, handed to every pass as
+        // @ref frame_context::resources: cleared and seeded with the
+        // renderer's targets at the top of every @ref render, filled by
+        // the passes as they prepare, and kept until the next frame so the
+        // tooling accessors (@ref velocity_texture and the others) read
+        // the last frame's values. It holds plain values only, so it
+        // references nothing it could outlive; @ref quit clears it with
+        // the passes.
+        resource_store m_resources;
 
-        // Non-owning back-pointer to the tonemap pass owned by
-        // @ref m_passes, surfaced through @ref tonemap so its exposure
-        // and operator can be tuned live. Null until @ref init runs.
-        tonemap_pass* m_tonemap{nullptr};
+        // Set by @ref add_pass and @ref remove_pass; @ref render validates
+        // the list and resizes the GPU profiler before the next frame.
+        bool m_pass_list_changed{false};
 
-        // Non-owning back-pointers to the velocity pass and the optional
-        // TAA pass owned by @ref m_passes (the latter null when temporal
-        // AA is off). Kept so @ref render can publish the textures they own
-        // (motion vectors, the TAA resolve) through @ref frame_context
-        // every frame; their consumers compare those handles and rebind on
-        // change, which is how a resize that recreates the targets reaches
-        // them.
-        velocity_pass* m_velocity{nullptr};
-        taa_pass* m_taa{nullptr};
-
-        // Non-owning back-pointers to the motion-blur and auto-exposure
-        // passes owned by @ref m_passes. @ref render asks them, before any
-        // pass records, whether they produce output this frame, and
-        // publishes it (@ref frame_context::hdr_color_target /
-        // @c hdr_color_texture, @ref frame_context::exposure_texture) for
-        // the passes after them only when they do.
-        motion_blur_pass* m_motion_blur{nullptr};
-        auto_exposure_pass* m_auto_exposure{nullptr};
-
-        // Non-owning back-pointers to the scene pass and the three shadow
-        // passes owned by @ref m_passes. @ref render publishes them through
-        // @ref frame_context (@c scene, @c directional_shadow,
-        // @c point_shadow, @c spot_shadow) every frame for the passes that
-        // consume their output, so no pass holds another; the directional
-        // and spot maps are also surfaced through
-        // @ref directional_shadow_map / @ref spot_shadow_map for tooling
-        // (the debug overlay's render-target viewer). Null until
-        // @ref init runs.
-        scene_pass* m_scene{nullptr};
-        shadow_pass* m_shadow{nullptr};
-        point_shadow_pass* m_point_shadow{nullptr};
-        spot_shadow_pass* m_spot_shadow{nullptr};
-
-        // Non-owning back-pointer to the debug pass owned by
-        // @ref m_passes, which @ref set_overlay forwards to. Null until
-        // @ref init runs, and in release builds, which have no debug pass.
-        debug_draw::debug_pass* m_debug{nullptr};
+        // The overlay the debug pass records (see @ref set_overlay),
+        // handed to it as @ref frame_context::overlay. Non-owning.
+        gpu::overlay_renderer* m_overlay{nullptr};
 
         // Per-pass GPU timer over the pass list, brought up after the list
         // is validated in @ref init and released before the device in
@@ -638,6 +631,15 @@ namespace rendering_engine
         // Releases the two targets (and their attachments) and resets the
         // members. No-op for invalid handles.
         void release_color_targets();
+
+        // Validates the pass list, logging the order, and sizes the GPU
+        // profiler to it. Called by @ref init and, after a change, by
+        // @ref render ahead of the frame.
+        void rebuild_pass_list();
+
+        // Whether temporal AA runs: the TAA pass is in the list and
+        // enabled. Gates the projection jitter and post_settings::taa.
+        bool temporal_aa_active() const;
 
         // Loads the colour-grading LUT @c m_post_settings.grading.lut
         // names through the asset cache (as linear data) when it differs

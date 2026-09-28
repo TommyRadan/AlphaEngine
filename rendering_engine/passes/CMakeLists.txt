@@ -4,6 +4,7 @@
 target_sources(alpha_render PRIVATE
     depth_prepass.cpp
     depth_prepass.hpp
+    frame_resources.hpp
     pass.hpp
     pass_list.cpp
     pass_list.hpp
@@ -11,6 +12,8 @@ target_sources(alpha_render PRIVATE
     point_shadow_pass.hpp
     projection_jitter.cpp
     projection_jitter.hpp
+    resource_store.cpp
+    resource_store.hpp
     scene_pass.cpp
     scene_pass.hpp
     shadow_casters.cpp

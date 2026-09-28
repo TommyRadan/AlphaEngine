@@ -19,7 +19,6 @@
 #include <rendering_engine/gpu/shader_bindings.hpp>
 #include <rendering_engine/gpu/shader_hot_reload.hpp>
 #include <rendering_engine/passes/post/fullscreen_triangle.hpp>
-#include <rendering_engine/passes/scene_pass.hpp>
 
 namespace
 {
@@ -187,10 +186,9 @@ namespace rendering_engine
         m_composite_pipeline = make_pipeline(m_composite_shader, composite_blend, {m_composite_layout});
 
         // -- Targets --------------------------------------------------
-        // The bind groups are built lazily by record(): the march and the
-        // upsample sample the scene depth, which arrives through
-        // frame_context::scene_depth_texture and is rebound whenever that
-        // handle changes.
+        // The bind groups are built lazily by prepare(): the march and the
+        // upsample sample the scene depth, which is looked up in the
+        // frame's store and rebound whenever that handle changes.
         create_targets(width, height);
 
         m_enabled = true;
@@ -413,26 +411,30 @@ namespace rendering_engine
         // draw nothing, leaving the scene colour exactly as the scene and
         // skybox passes wrote it. The medium is the height fog, so a zero
         // height density means empty air.
-        m_draws = m_enabled && volumetric_fog_active(settings) && ctx.active_camera != nullptr &&
-                  ctx.scene != nullptr && ctx.scene_depth_texture.valid() && ctx.fog.height_density > 0.0f;
+        const scene_view_data* view = ctx.resources->find(frame_resources::scene_view);
+        const gpu::texture scene_depth = ctx.resources->get(frame_resources::scene_depth);
+        m_draws = m_enabled && volumetric_fog_active(settings) && ctx.active_camera != nullptr && view != nullptr &&
+                  scene_depth.valid() && ctx.fog.height_density > 0.0f;
         if (!m_draws)
         {
             return;
         }
+        m_frame_group = view->frame_group;
+        m_target = ctx.resources->get(frame_resources::scene_color).target;
 
         upload_params(ctx);
 
         // Rebind when the scene depth changes (a resize recreates it) or a
         // resize dropped the groups — the first drawn frame included.
-        if (ctx.scene_depth_texture != m_bound_depth || !m_march_bind_group.valid())
+        if (scene_depth != m_bound_depth || !m_march_bind_group.valid())
         {
-            rebuild_bind_groups(ctx.scene_depth_texture);
+            rebuild_bind_groups(scene_depth);
         }
     }
 
-    void volumetric_fog_pass::record(gpu::command_encoder& encoder, const frame_context& ctx)
+    void volumetric_fog_pass::record(gpu::command_encoder& encoder, const frame_context& /*ctx*/)
     {
-        if (!m_draws || ctx.scene == nullptr)
+        if (!m_draws)
         {
             return;
         }
@@ -455,7 +457,7 @@ namespace rendering_engine
 
             auto pass_encoder = encoder.begin_render_pass(descriptor);
             pass_encoder->set_pipeline(m_march_pipeline);
-            pass_encoder->set_bind_group(0, ctx.scene->frame_bind_group());
+            pass_encoder->set_bind_group(0, m_frame_group);
             pass_encoder->set_bind_group(1, m_march_bind_group);
             draw_fullscreen(*pass_encoder);
             pass_encoder->end();
@@ -481,7 +483,7 @@ namespace rendering_engine
         //    the scene target's depth attachment alone.
         {
             gpu::render_pass_descriptor descriptor{};
-            descriptor.target = ctx.scene_color_target;
+            descriptor.target = m_target;
             descriptor.color[0].load = gpu::load_op::load;
             descriptor.use_depth = false;
 

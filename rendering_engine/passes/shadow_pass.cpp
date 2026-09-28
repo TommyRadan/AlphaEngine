@@ -458,61 +458,6 @@ namespace rendering_engine
         }
     }
 
-    gpu::texture shadow_pass::shadow_map() const
-    {
-        return m_depth_texture;
-    }
-
-    gpu::sampler shadow_pass::shadow_sampler() const
-    {
-        return m_compare_sampler;
-    }
-
-    int shadow_pass::cascade_count() const
-    {
-        return m_active_cascades;
-    }
-
-    const core::math::mat4& shadow_pass::light_view_projection(int cascade) const
-    {
-        return m_light_view_projections[cascade];
-    }
-
-    float shadow_pass::split_depth(int cascade) const
-    {
-        return m_split_depths[cascade];
-    }
-
-    float shadow_pass::depth_bias(int cascade) const
-    {
-        return m_depth_biases[cascade];
-    }
-
-    float shadow_pass::cascade_blend() const
-    {
-        return cascade_blend_fraction;
-    }
-
-    uint32_t shadow_pass::pcf_kernel() const
-    {
-        return m_pcf_kernel;
-    }
-
-    bool shadow_pass::has_shadow() const
-    {
-        return m_has_shadow;
-    }
-
-    int shadow_pass::shadow_light_index() const
-    {
-        return m_shadow_light_index;
-    }
-
-    uint32_t shadow_pass::culled_count() const
-    {
-        return m_culled;
-    }
-
     void shadow_pass::set_caster_mask(uint32_t mask) noexcept
     {
         m_caster_mask = mask;
@@ -661,6 +606,23 @@ namespace rendering_engine
                     m_light_ubos[cascade], m_light_view_projections[cascade].data(), sizeof(math::mat4), 0);
             }
         }
+
+        // Published every frame, caster or not: the scene pass binds the
+        // map either way, and the active flag tells the lit shaders
+        // whether to sample it.
+        directional_shadow_data published{};
+        published.map = m_depth_texture;
+        published.sampler = m_compare_sampler;
+        published.active = m_has_shadow;
+        published.cascade_count = m_active_cascades;
+        published.light_index = m_shadow_light_index;
+        published.pcf_kernel = m_pcf_kernel;
+        published.cascade_blend = cascade_blend_fraction;
+        published.light_view_projection = m_light_view_projections;
+        published.split_depth = m_split_depths;
+        published.depth_bias = m_depth_biases;
+        published.culled = m_culled;
+        ctx.resources->publish(frame_resources::directional_shadow, published);
     }
 
     void shadow_pass::record(gpu::command_encoder& encoder, const frame_context& /*ctx*/)

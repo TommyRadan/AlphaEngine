@@ -22,6 +22,7 @@
 #include <rendering_engine/materials/grid_material.hpp>
 #include <rendering_engine/materials/standard_material.hpp>
 #include <rendering_engine/passes/depth_prepass.hpp>
+#include <rendering_engine/passes/frame_resources.hpp>
 #include <rendering_engine/passes/pass.hpp>
 #include <rendering_engine/passes/point_shadow_pass.hpp>
 #include <rendering_engine/passes/post/auto_exposure_pass.hpp>
@@ -185,135 +186,94 @@ void rendering_engine::renderer::init(const render_services& services)
     // at the current backbuffer size (on_resize recreates them later).
     create_color_targets(width, height);
 
-    // Temporal AA is decided once, up front: it gates the projection jitter
-    // the scene pass applies (and the unjittered overlay group it builds
-    // for the debug pass), the velocity and TAA passes below, and which
-    // input FXAA declares. Off when the setting is off or the drawable is
-    // degenerate, in which case the LDR target flows straight into FXAA.
+    // Temporal AA is decided once, up front: it decides whether the TAA
+    // pass is registered, which gates the projection jitter the scene pass
+    // applies (and the unjittered overlay group it builds for the debug
+    // pass) and the velocity pass. Off when the setting is off or the
+    // drawable is degenerate, in which case the LDR target flows straight
+    // into FXAA.
     const graphics_settings graphics = services.graphics != nullptr ? *services.graphics : graphics_settings{};
     const bool taa_enabled = graphics.temporal_aa && width != 0 && height != 0;
 
     // Construct the built-in passes first — each pass owns the
     // per-frame bind-group layout its matching material reads at
-    // pipeline-create time. The shadow passes cull the frame's mesh
-    // draws, like the scene pass, and size their maps and biases from the
-    // shadow settings, fixed at startup. They run ahead of the scene pass,
-    // which reads their maps and each frame's fitted matrices through the
-    // frame context (render() publishes the passes there), so no pass is
-    // handed another at construction.
+    // pipeline-create time. No pass is handed another: everything one
+    // hands the next (the shadow maps and fits, the scene pass's view and
+    // draw list, the motion vectors, the TAA resolve, the eye adaptation,
+    // the HDR image motion blur replaces) travels through the frame's
+    // resource store (see passes/frame_resources.hpp), and the targets
+    // they draw into are the renderer's, published there every frame.
+    //
+    // The shadow passes cull the frame's mesh draws, like the scene pass,
+    // and size their maps and biases from the shadow settings, fixed at
+    // startup: the directional cascades, the first shadow-casting point
+    // light's cube and the first shadow-casting spot light's map, which
+    // the scene pass samples the same frame.
     const shadow_settings shadow_config = services.shadows != nullptr ? *services.shadows : shadow_settings{};
     auto shadow = std::make_unique<shadow_pass>(device, shadow_config);
-    m_shadow = shadow.get();
-    // The omni shadow pass renders six depth faces from the first shadow-casting
-    // point light; like the directional shadow it runs before the scene pass so
-    // its maps are ready for the per-frame bind group.
     auto point_shadow = std::make_unique<point_shadow_pass>(device, shadow_config);
-    m_point_shadow = point_shadow.get();
-    // The spot shadow pass renders a single perspective depth map from the
-    // first shadow-casting spot light; also runs before the scene pass.
     auto spot_shadow = std::make_unique<spot_shadow_pass>(device, shadow_config);
-    m_spot_shadow = spot_shadow.get();
     // Above the parallel draw threshold the scene pass records its draws
     // from the job pool's workers (Vulkan only); 0 keeps it serial.
     const uint32_t parallel_draw_threshold = graphics.parallel_draw_threshold;
     auto scene =
         std::make_unique<scene_pass>(device, services.jobs, &m_render_stats, taa_enabled, parallel_draw_threshold);
-    m_scene = scene.get();
-    // The optional depth pre-pass runs right before the scene pass, over
-    // the scene pass's own draw list and per-frame group (reached through
-    // frame_context::scene), and lays the opaque depth into the scene
-    // target for it to load. It is always in the pass list and records
-    // nothing while disabled, so set_depth_prepass can flip it at runtime.
+    // The optional depth pre-pass lays the opaque depth down over the
+    // scene pass's own draw list and per-frame group. It is always
+    // registered and records nothing while disabled, so set_depth_prepass
+    // can flip it at runtime.
     auto depth_pre = std::make_unique<depth_prepass>(device);
     m_depth_prepass_enabled = graphics.depth_prepass;
     // The material library below is built against the same per-frame
-    // layout the scene pass binds at slot 0.
+    // layout the scene pass binds at slot 0, and so is the volumetric
+    // fog's march.
     const gpu::bind_group_layout scene_frame_layout = scene->frame_bind_group_layout();
-    // The skybox pass runs after the scene pass and composites the cube-map
-    // background into the HDR target where no geometry was drawn. It stays
-    // dormant until set_environment supplies a cube map.
+    // The skybox composites the environment cube map into the HDR target
+    // where no geometry was drawn; dormant while the world has none.
     auto skybox = std::make_unique<skybox_pass>(device);
-    m_skybox = skybox.get();
     // Volumetric fog marches the height-fog medium toward the finalised
     // scene depth and blends its lit haze and light shafts over the HDR
     // target, ahead of bloom and tonemap so they treat it like the rest of
-    // the scene. It binds the scene pass's jittered per-frame group (the
-    // view the depth was rasterised with, the lights, the shadow maps),
-    // read through frame_context::scene, and draws nothing until
-    // post_settings::volumetric enables it.
+    // the scene; it draws nothing until post_settings::volumetric enables
+    // it.
     auto volumetric_fog = std::make_unique<volumetric_fog_pass>(device, scene_frame_layout, width, height);
-    // Per-pixel motion vectors are reconstructed from the scene depth
-    // buffer: the velocity pass samples the HDR target's depth attachment
-    // through frame_context::scene_depth_texture each frame. They drive
+    // Per-pixel motion vectors, reconstructed from the scene depth, drive
     // the TAA history reprojection and motion blur; the pass is always
     // built, since motion blur can be switched on at runtime, and draws
     // only while one of the two consumes it.
     auto velocity = std::make_unique<velocity_pass>(device, width, height);
-    m_velocity = velocity.get();
-    // Motion blur smears the HDR image along those vectors, after the
-    // volumetric fog (so the haze smears with the scene) and before bloom
-    // and auto exposure (so the glow spreads from, and the exposure
-    // meters, the blurred image). It writes a target of its own; render()
-    // publishes it as frame_context::hdr_color_target / _texture while
-    // the pass draws, and the scene colour otherwise.
+    // Motion blur smears the HDR image along those vectors into a target
+    // of its own, which it hands the passes after it in place of the scene
+    // colour; bloom blurs the bright pixels of that image back into it,
+    // auto exposure meters it and tonemap maps it (exposed, graded) to the
+    // LDR target.
     auto motion_blur = std::make_unique<motion_blur_pass>(device, width, height);
-    m_motion_blur = motion_blur.get();
-    // Bloom runs between the scene and tonemap passes: it reads the HDR
-    // image, blurs the bright pixels and additively composites the glow
-    // back into the same target, so tonemap maps the bloomed result.
-    // Neither pass takes the HDR texture here: both read it from
-    // frame_context::hdr_color_texture every frame and rebind when the
-    // handle changes, so a resize that recreates the target (or motion
-    // blur switching on) reaches them without re-plumbing.
     auto bloom = std::make_unique<bloom_pass>(device, width, height);
-    // Eye adaptation meters the bloomed HDR image tonemap is about to map
-    // and leaves the adapted exposure in a 1x1 texture tonemap samples
-    // (frame_context::exposure_texture) while it is enabled.
     auto auto_exposure = std::make_unique<auto_exposure_pass>(device);
-    m_auto_exposure = auto_exposure.get();
-    auto post = std::make_unique<tonemap_pass>(device);
-    m_tonemap = post.get();
+    auto tonemap = std::make_unique<tonemap_pass>(device);
     // Temporal AA optionally slots in between tonemap and FXAA: it
     // accumulates the projection-jittered frames the scene pass produces
     // (Halton sub-pixel offsets from frame_context::jitter, published only
-    // while this is enabled) into a stable, supersampled LDR image, then
-    // FXAA cleans up whatever spatial edges remain. The TAA resolve
-    // becomes FXAA's input so the swapchain still receives a single
-    // anti-aliased image. The textures the passes hand each other (scene
-    // depth, motion vectors, the resolve) travel through frame_context
-    // rather than constructor arguments: render() publishes them from the
-    // owning pass each frame and the consumer rebinds when the handle
-    // changes.
+    // while this is registered) into a stable, supersampled LDR image,
+    // then FXAA cleans up whatever spatial edges remain.
     std::unique_ptr<taa_pass> taa;
     if (taa_enabled)
     {
         taa = std::make_unique<taa_pass>(device, width, height);
-        m_taa = taa.get();
     }
-    // Start the post chain from the persisted values core::load_settings
-    // resolved (settings.json, ALPHAENGINE_* variables, command line).
-    // set_post_settings forwards exposure / operator to the tonemap pass
-    // just built and overwrites post_settings::taa.enabled with the TAA
-    // pass's real presence: temporal AA is only ever decided here, at
-    // init, from graphics.temporal_aa.
-    set_post_settings(startup_post_settings(services.post != nullptr ? *services.post : post_process_settings{}));
-    // FXAA closes the post chain: it samples the TAA resolve when one is
+    // FXAA closes the post chain: it samples the TAA resolve while one is
     // published (else the LDR target) and writes the anti-aliased image to
-    // the swapchain. It declares whichever of the two it will actually
-    // read so the pass list validation checks the real wiring.
-    auto fxaa = std::make_unique<fxaa_pass>(device, width, height, taa_enabled);
+    // the swapchain.
+    auto fxaa = std::make_unique<fxaa_pass>(device, width, height);
     // The UI pass owns the pixel-space projection the ui template reads at
     // slot 0; it follows the drawable through pass::resize.
     auto ui = std::make_unique<ui_pass>(device, width, height);
     const gpu::bind_group_layout ui_frame_layout = ui->frame_bind_group_layout();
 #if _DEBUG
-    // The debug pass binds the scene pass's per-frame camera group at
-    // slot 0 so the line-based debug gizmos project with the same camera.
-    // It uses the unjittered overlay group: the debug pass paints after the
-    // TAA resolve, so the projection jitter would otherwise show up as a
-    // sub-pixel wobble on the gizmos rather than being averaged away.
+    // The debug pass draws the overlay mesh proxies and the editor's ImGui
+    // frame on top of the game UI, binding the scene pass's unjittered
+    // camera group so the gizmos project without the TAA jitter.
     auto debug = std::make_unique<debug_draw::debug_pass>();
-    m_debug = debug.get();
 #endif
 
     // Build the material library: one template per built-in type against
@@ -332,81 +292,50 @@ void rendering_engine::renderer::init(const render_services& services)
                 gpu::shader_cache_directory().empty() ? " (cache disabled)" : "");
     }
 
-    // Register the built-in passes in render order: scene writes into
-    // the HDR target, the skybox pass fills the untouched background of
-    // that target with the environment cube map, the velocity pass
-    // reconstructs per-pixel motion vectors from the finalised depth for
-    // the TAA reprojection and motion blur, the volumetric fog pass blends
-    // the lit medium over it, the motion blur pass smears the result along
-    // the motion vectors, the bloom post pass blurs its bright pixels back
-    // into that image, the auto-exposure pass meters it, the tonemap post
-    // pass maps it to LDR in the off-screen LDR target (exposed, graded),
-    // the optional TAA post pass accumulates the jittered LDR frames into
-    // a supersampled image, the FXAA post pass anti-aliases that result
-    // onto the swapchain, and the UI pass composites on top. The
-    // debug pass is appended in debug builds only so debug visuals read on
-    // top of the game UI; release builds drop it entirely so the
-    // overlay mesh draws have no consumer and the stage costs nothing.
-    // Further post effects insert between scene and ui by pushing into
-    // this list; future debug consumers (wireframe, gizmos, frustum
-    // visualisations) create overlay mesh proxies rather than adding new
-    // passes.
-    // The shadow pass renders the light's depth map first so the scene
-    // pass can sample it the same frame. The depth pre-pass follows the
-    // shadow passes (the scene pass's per-frame uploads, which the
-    // pre-pass triggers, read their matrices) and precedes the scene pass
-    // that loads its depth.
-    m_passes.add(std::move(shadow));
-    m_passes.add(std::move(point_shadow));
-    m_passes.add(std::move(spot_shadow));
-    m_passes.add(std::move(depth_pre));
-    m_passes.add(std::move(scene));
-    m_passes.add(std::move(skybox));
+    // Register the built-in passes, stage by stage, through the same
+    // add_pass anything else uses: the default chain is these
+    // registrations, and within a stage the passes run in the order they
+    // are added. Game or tool code places its own passes relative to
+    // these stages and names (builtin_passes), and disables or removes
+    // built-in ones, without an edit here.
+    add_pass(std::move(shadow), pass_placement::in(render_stage::shadow));
+    add_pass(std::move(point_shadow), pass_placement::in(render_stage::shadow));
+    add_pass(std::move(spot_shadow), pass_placement::in(render_stage::shadow));
+    add_pass(std::move(depth_pre), pass_placement::in(render_stage::scene));
+    add_pass(std::move(scene), pass_placement::in(render_stage::scene));
+    add_pass(std::move(skybox), pass_placement::in(render_stage::scene));
     // Motion vectors are computed from the finalised scene depth, before
-    // the post chain consumes the colour, so the velocity pass sits right
-    // after the geometry and skybox.
-    m_passes.add(std::move(velocity));
-    m_passes.add(std::move(volumetric_fog));
-    m_passes.add(std::move(motion_blur));
-    m_passes.add(std::move(bloom));
-    m_passes.add(std::move(auto_exposure));
-    m_passes.add(std::move(post));
+    // the post chain consumes the colour.
+    add_pass(std::move(velocity), pass_placement::in(render_stage::post));
+    add_pass(std::move(volumetric_fog), pass_placement::in(render_stage::post));
+    add_pass(std::move(motion_blur), pass_placement::in(render_stage::post));
+    add_pass(std::move(bloom), pass_placement::in(render_stage::post));
+    add_pass(std::move(auto_exposure), pass_placement::in(render_stage::post));
+    add_pass(std::move(tonemap), pass_placement::in(render_stage::post));
     if (taa)
     {
-        m_passes.add(std::move(taa));
+        add_pass(std::move(taa), pass_placement::in(render_stage::post));
     }
-    m_passes.add(std::move(fxaa));
-    m_passes.add(std::move(ui));
+    add_pass(std::move(fxaa), pass_placement::in(render_stage::post));
+    add_pass(std::move(ui), pass_placement::in(render_stage::ui));
 #if _DEBUG
-    m_passes.add(std::move(debug));
+    add_pass(std::move(debug), pass_placement::in(render_stage::overlay));
 #endif
 
-    // Validate the now-final pass list. The swapchain image and, with
-    // temporal AA on, the TAA history are valid at frame start without an
-    // in-frame producer, so import them as external; every other resource
-    // is produced by a pass. Each pass declares its reads/writes (those
-    // that override declare_io) and the list checks the ordering; it
-    // records in the order the passes were added either way.
-    m_passes.import_external("swapchain");
-    if (taa_enabled)
-    {
-        m_passes.import_external("taa_history");
-    }
-    // A hazard is a pass reading a resource nothing before it produced: a
-    // mis-ordered or mis-declared pass list, i.e. a programming error. It
-    // stops a debug build here; a release build logs it (the list already
-    // reported each offending read) and renders in the declared order.
-    const bool hazard_free = m_passes.validate();
-    assert(hazard_free && "pass list: a pass reads a resource before any pass produces it");
-    if (!hazard_free)
-    {
-        LOG_ERR("Rendering Engine: the pass list has hazards; it is mis-declared or mis-ordered (see the pass_list "
-                "errors above)");
-    }
+    // Start the post chain from the persisted values core::load_settings
+    // resolved (settings.json, ALPHAENGINE_* variables, command line).
+    // set_post_settings overwrites post_settings::taa.enabled with whether
+    // the TAA pass runs.
+    set_post_settings(startup_post_settings(services.post != nullptr ? *services.post : post_process_settings{}));
 
-    // Per-pass GPU timings over the pass list; disabled on a device
-    // without timestamp queries.
-    m_gpu_profiler.init(device, m_passes.pass_names());
+    // The swapchain image and the colour-grading table are valid at frame
+    // start without an in-frame producer, so they are imported; every
+    // other resource a pass reads is produced by a pass before it. The
+    // list is validated, and the GPU profiler sized to it, now and again
+    // before the first frame after any later change.
+    m_passes.import_external(frame_resources::swapchain.name);
+    m_passes.import_external(frame_resources::grading_lut.name);
+    rebuild_pass_list();
 
 #if _DEBUG
     // Provide a couple of always-available reference gizmos (the infinite
@@ -452,21 +381,13 @@ void rendering_engine::renderer::quit()
         m_gpu_profiler.shutdown(*m_services.device);
     }
 
-    // Drop the passes first; their record() bodies reach for the
-    // event bus we're about to release, and the passes own per-frame
+    // Drop the passes first — the built-in ones and any other code
+    // registered — and what they published; the passes own per-frame
     // bind-group layouts referenced by the materials' pipelines.
     m_passes.clear();
-    m_skybox = nullptr;
-    m_tonemap = nullptr;
-    m_velocity = nullptr;
-    m_motion_blur = nullptr;
-    m_auto_exposure = nullptr;
-    m_taa = nullptr;
-    m_scene = nullptr;
-    m_shadow = nullptr;
-    m_point_shadow = nullptr;
-    m_spot_shadow = nullptr;
-    m_debug = nullptr;
+    m_resources.clear();
+    m_pass_list_changed = false;
+    m_overlay = nullptr;
     m_prev_camera = {};
     m_has_prev_view_projection = false;
     m_frame_lights.clear();
@@ -522,16 +443,18 @@ void rendering_engine::renderer::render()
     }
 #endif
 
+    // A pass added or removed since the last frame: validate the new
+    // list and resize the GPU profiler to it before anything records.
+    if (m_pass_list_changed)
+    {
+        rebuild_pass_list();
+    }
+
     // Resolve a changed colour-grading LUT path through the asset cache
     // first, outside the frame like any other asset load (the upload is
     // ordered ahead of the frame that samples it). A no-op while the path
-    // is unchanged. Motion blur likewise allocates its full-resolution
-    // target here, the first time it is switched on.
+    // is unchanged.
     update_grading_lut();
-    if (m_motion_blur != nullptr)
-    {
-        m_motion_blur->ensure_target(m_post_settings.motion_blur);
-    }
 
     // Open the device frame before anything below touches GPU-visible
     // memory. The device blocks here until the frame that last recorded
@@ -573,7 +496,6 @@ void rendering_engine::renderer::render()
     // frame: the highest-priority enabled camera proxy. The enabled
     // lights are gathered once, in the order the scene pass packs them.
     frame_context ctx{};
-    ctx.swapchain_target = gpu.swapchain_target();
     ctx.active_camera_handle = m_world.active_camera();
     ctx.active_camera = m_world.camera(ctx.active_camera_handle);
     m_world.collect_enabled_lights(m_frame_lights);
@@ -581,7 +503,9 @@ void rendering_engine::renderer::render()
     ctx.scene_draws = m_mesh_draws.scene_draws();
     ctx.overlay_draws = m_mesh_draws.overlay_draws();
     ctx.ui_draws = m_ui_draws.draws();
+    ctx.overlay = m_overlay;
     ctx.world = &m_world;
+    ctx.resources = &m_resources;
     ctx.viewport_width = m_target_width;
     ctx.viewport_height = m_target_height;
     ctx.frame_index = m_frame_index;
@@ -595,64 +519,46 @@ void rendering_engine::renderer::render()
     // The temporal-AA jitter is computed here from the live target size
     // (so a resize rescales it without any pass being told) and published
     // to every pass: the scene and skybox passes offset their projection
-    // by it, the velocity pass subtracts it. Zero while TAA is off.
-    ctx.jitter = (m_taa != nullptr) ? taa_jitter_ndc(m_frame_index, m_target_width, m_target_height)
-                                    : core::math::vec2{0.0f, 0.0f};
+    // by it, the velocity pass subtracts it. Zero while the TAA pass is
+    // not in the list or disabled.
+    const bool temporal_aa = temporal_aa_active();
+    ctx.jitter =
+        temporal_aa ? taa_jitter_ndc(m_frame_index, m_target_width, m_target_height) : core::math::vec2{0.0f, 0.0f};
     ctx.prev_jitter = m_prev_jitter;
     // The previous frame's unjittered view-projection is only meaningful
     // if that frame was drawn by this same camera.
     ctx.has_prev_view_projection =
         m_has_prev_view_projection && ctx.active_camera != nullptr && ctx.active_camera_handle == m_prev_camera;
     ctx.prev_view_projection = ctx.has_prev_view_projection ? m_prev_view_projection : core::math::mat4{};
-    ctx.scene_color_target = m_scene_color_target;
-    ctx.scene_color_texture = m_scene_color_texture;
-    // The depth attachment is looked up from the target every frame rather
-    // than cached at init, so a resize that recreates the target hands the
-    // new attachment to every depth consumer on the next frame.
-    ctx.scene_depth_texture = gpu.render_target_depth_texture(m_scene_color_target);
-    ctx.ldr_color_target = m_ldr_color_target;
-    ctx.ldr_color_texture = m_ldr_color_texture;
-    // The textures the velocity and temporal-AA passes own are published
-    // the same way: read from the owning pass every frame so the TAA
-    // resolve, motion blur and FXAA rebind after a resize recreated them.
-    // The TAA resolve is invalid while TAA is off.
-    ctx.velocity_texture = (m_velocity != nullptr) ? m_velocity->velocity_texture() : gpu::texture{};
-    ctx.taa_resolve_texture = (m_taa != nullptr) ? m_taa->output_texture() : gpu::texture{};
     ctx.fog = m_world.fog();
     ctx.depth_prepass = m_depth_prepass_enabled;
+    m_post_settings.taa.enabled = temporal_aa;
     ctx.post = m_post_settings;
-    // The passes whose output later passes consume, so none of them holds
-    // another: the scene pass reads the shadow passes, the depth pre-pass,
-    // the volumetric fog and the debug pass read the scene pass.
-    ctx.scene = m_scene;
-    ctx.directional_shadow = m_shadow;
-    ctx.point_shadow = m_point_shadow;
-    ctx.spot_shadow = m_spot_shadow;
-    // The HDR image the chain after motion blur works on: the blurred copy
-    // when the pass draws this frame, else the scene colour itself. Asked
-    // of the pass with the same frame context its record() will see, so
-    // producer and consumers never disagree.
-    const bool motion_blur = (m_motion_blur != nullptr) && m_motion_blur->draws(ctx);
-    ctx.hdr_color_target = motion_blur ? m_motion_blur->output_target() : m_scene_color_target;
-    ctx.hdr_color_texture = motion_blur ? m_motion_blur->output_texture() : m_scene_color_texture;
-    // Tonemap takes its exposure from the eye-adaptation result only
-    // while the pass leaves a valid one this frame, and grades only with
-    // a usable table and a visible blend; otherwise it draws the variant
-    // without that effect.
-    ctx.exposure_texture = (m_auto_exposure != nullptr && m_auto_exposure->produces_exposure(ctx))
-                               ? m_auto_exposure->exposure_texture()
-                               : gpu::texture{};
-    ctx.grading_lut_texture = (m_grading_lut != nullptr && m_post_settings.grading.intensity > 0.0f)
-                                  ? m_grading_lut->texture
-                                  : gpu::texture{};
+
+    // The frame's resources start with the renderer's own: the swapchain
+    // image, the HDR scene target with its depth, the LDR target and the
+    // grading table. The depth attachment is looked up from the target
+    // every frame rather than cached at init, so a resize that recreates
+    // the target hands the new attachment to every depth consumer on the
+    // next frame. The passes publish what they produce on top, as they
+    // prepare.
+    m_resources.clear();
+    m_resources.publish(frame_resources::swapchain, gpu.swapchain_target());
+    m_resources.publish(frame_resources::scene_color, color_target{m_scene_color_target, m_scene_color_texture});
+    m_resources.publish(frame_resources::scene_depth, gpu.render_target_depth_texture(m_scene_color_target));
+    m_resources.publish(frame_resources::ldr_color, color_target{m_ldr_color_target, m_ldr_color_texture});
+    if (m_grading_lut != nullptr)
+    {
+        m_resources.publish(frame_resources::grading_lut, m_grading_lut->texture);
+    }
 
     // Every pass prepares first, in list order: the per-frame uploads,
     // the culling and sorting, the bind-group rebuilds and every
-    // cross-pass read (the shadow fits the scene pass uploads, the
-    // pre-pass's announcement to the scene pass) happen here, on this
-    // thread, before anything is recorded — so the record walk below
-    // only encodes from finished state and the scene pass may hand its
-    // chunks to the job pool's workers.
+    // cross-pass publish and lookup (the shadow fits the scene pass
+    // uploads, the pre-pass's target the scene pass loads) happen here,
+    // on this thread, before anything is recorded — so the record walk
+    // below only encodes from finished state and the scene pass may hand
+    // its chunks to the job pool's workers.
     m_passes.prepare(ctx);
 
     // One encoder records the pass list in order — each pass in a debug
@@ -731,8 +637,10 @@ void rendering_engine::renderer::on_resize(uint32_t pixel_width, uint32_t pixel_
     // step and the UI's pixel-space projection. Fixed-size passes (shadow
     // maps, debug) keep the default no-op, and the scene pass needs
     // nothing: the jitter it applies is computed by render() from the
-    // size recorded above.
+    // size recorded above. What the last frame published names released
+    // targets now, so it is dropped until the next frame publishes again.
     m_passes.resize(pixel_width, pixel_height);
+    m_resources.clear();
 
     // The projection follows the drawable so the image is not stretched:
     // the world's camera owners hand the new aspect to their cameras before
@@ -804,10 +712,83 @@ rendering_engine::gpu::device& rendering_engine::renderer::device() const
 
 void rendering_engine::renderer::set_overlay(gpu::overlay_renderer* overlay)
 {
-    if (m_debug != nullptr)
+    m_overlay = overlay;
+}
+
+rendering_engine::pass* rendering_engine::renderer::add_pass(std::unique_ptr<pass> p, const pass_placement& placement)
+{
+    assert(!m_in_frame && "renderer::add_pass must not run while a frame is being recorded");
+    pass* added = m_passes.add(std::move(p), placement);
+    if (added != nullptr)
     {
-        m_debug->set_overlay(overlay);
+        m_pass_list_changed = true;
     }
+    return added;
+}
+
+bool rendering_engine::renderer::remove_pass(std::string_view name)
+{
+    assert(!m_in_frame && "renderer::remove_pass must not run while a frame is being recorded");
+    if (!m_passes.remove(name))
+    {
+        return false;
+    }
+    // What the pass published names resources it released.
+    m_resources.clear();
+    m_pass_list_changed = true;
+    return true;
+}
+
+bool rendering_engine::renderer::set_pass_enabled(std::string_view name, bool enabled)
+{
+    assert(!m_in_frame && "renderer::set_pass_enabled must not run while a frame is being recorded");
+    const bool was_enabled = m_passes.enabled(name);
+    if (!m_passes.set_enabled(name, enabled))
+    {
+        return false;
+    }
+    if (was_enabled != enabled)
+    {
+        LOG_INF("Rendering Engine: pass '%.*s' %s",
+                static_cast<int>(name.size()),
+                name.data(),
+                enabled ? "enabled" : "disabled");
+    }
+    return true;
+}
+
+bool rendering_engine::renderer::pass_enabled(std::string_view name) const
+{
+    return m_passes.enabled(name);
+}
+
+void rendering_engine::renderer::rebuild_pass_list()
+{
+    // A hazard is a pass reading a resource nothing before it produced: a
+    // mis-ordered or mis-declared pass list, i.e. a programming error. It
+    // stops a debug build here; a release build logs it (the list already
+    // reported each offending read) and renders in the list's order.
+    const bool hazard_free = m_passes.validate();
+    assert(hazard_free && "pass list: a pass reads a resource before any pass produces it");
+    if (!hazard_free)
+    {
+        LOG_ERR("Rendering Engine: the pass list has hazards; it is mis-declared or mis-ordered (see the pass_list "
+                "errors above)");
+    }
+
+    // Per-pass GPU timings over the list, one slot per pass; disabled on
+    // a device without timestamp queries. The old query sets are released
+    // through the device's deferred destruction, so a frame still in
+    // flight keeps writing its own.
+    gpu::device& device = *m_services.device;
+    m_gpu_profiler.shutdown(device);
+    m_gpu_profiler.init(device, m_passes.pass_names());
+    m_pass_list_changed = false;
+}
+
+bool rendering_engine::renderer::temporal_aa_active() const
+{
+    return m_passes.enabled(builtin_passes::taa);
 }
 
 rendering_engine::basic_material& rendering_engine::renderer::get_basic_material()
@@ -860,31 +841,15 @@ rendering_engine::ui_material& rendering_engine::renderer::get_ui_material()
     return m_materials.get_ui_material();
 }
 
-rendering_engine::tonemap_pass& rendering_engine::renderer::tonemap()
-{
-    assert(m_tonemap != nullptr && "renderer::tonemap is only valid between init and quit");
-    return *m_tonemap;
-}
-
 void rendering_engine::renderer::set_post_settings(const post_settings& settings)
 {
     m_post_settings = settings;
 
-    // Temporal AA's presence is fixed at init (see renderer::init): a
-    // caller cannot flip it from here, so the stored value always mirrors
-    // reality rather than whatever was requested.
-    m_post_settings.taa.enabled = (m_taa != nullptr);
-
-    // The tonemap pass already exposes live-tunable exposure / operator
-    // setters that rewrite its UBO immediately and only on change; forward
-    // to them now rather than waiting for the pass to read frame_context
-    // on the next record(), so a caller reading renderer::tonemap() right
-    // after this call sees the new values.
-    if (m_tonemap != nullptr)
-    {
-        m_tonemap->set_exposure(settings.exposure);
-        m_tonemap->set_operator(settings.tonemap_op);
-    }
+    // Whether temporal AA runs follows the TAA pass (registered at init
+    // from graphics.temporal_aa, and enabled): a caller cannot flip it
+    // from here, so the stored value always mirrors reality rather than
+    // whatever was requested.
+    m_post_settings.taa.enabled = temporal_aa_active();
 }
 
 const rendering_engine::post_settings& rendering_engine::renderer::get_post_settings() const
@@ -994,22 +959,22 @@ rendering_engine::gpu::texture rendering_engine::renderer::ldr_color_texture() c
 
 rendering_engine::gpu::texture rendering_engine::renderer::velocity_texture() const
 {
-    return m_velocity != nullptr ? m_velocity->velocity_texture() : gpu::texture{};
+    return m_resources.get(frame_resources::velocity);
 }
 
 rendering_engine::gpu::texture rendering_engine::renderer::taa_resolve_texture() const
 {
-    return m_taa != nullptr ? m_taa->output_texture() : gpu::texture{};
+    return m_resources.get(frame_resources::taa_resolve);
 }
 
 rendering_engine::gpu::texture rendering_engine::renderer::directional_shadow_map() const
 {
-    return m_shadow != nullptr ? m_shadow->shadow_map() : gpu::texture{};
+    return m_resources.get(frame_resources::directional_shadow).map;
 }
 
 rendering_engine::gpu::texture rendering_engine::renderer::spot_shadow_map() const
 {
-    return m_spot_shadow != nullptr ? m_spot_shadow->shadow_map() : gpu::texture{};
+    return m_resources.get(frame_resources::spot_shadow).map;
 }
 
 rendering_engine::gpu::texture rendering_engine::renderer::environment_brdf_lut() const
@@ -1030,15 +995,10 @@ rendering_engine::renderer::get_standard_material_template() const
 
 void rendering_engine::renderer::set_environment(const environment_probe* env)
 {
+    // The skybox pass follows the world's environment from its next
+    // prepare; mirror the choice onto every live standard material, so all
+    // their surfaces pick up the matching image-based ambient.
     m_world.set_environment(env);
-
-    // Point the skybox pass at the cube map (or clear it) and mirror the
-    // choice onto every live standard material, so all their surfaces
-    // pick up the matching image-based ambient.
-    if (m_skybox != nullptr)
-    {
-        m_skybox->set_cubemap(env != nullptr ? env->skybox() : gpu::texture{});
-    }
     m_materials.set_environment(env);
 }
 

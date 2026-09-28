@@ -25,8 +25,7 @@ namespace
 
 namespace rendering_engine
 {
-    fxaa_pass::fxaa_pass(gpu::device& device, uint32_t width, uint32_t height, bool taa_enabled)
-        : m_device(&device), m_taa_enabled(taa_enabled)
+    fxaa_pass::fxaa_pass(gpu::device& device, uint32_t width, uint32_t height) : m_device(&device)
     {
         auto& gpu = *m_device;
 
@@ -68,9 +67,9 @@ namespace rendering_engine
         input_layout.entries.push_back({1, gpu::binding_kind::uniform_buffer});
         m_input_layout = gpu.create_bind_group_layout(input_layout);
 
-        // The input bind groups are built lazily by record(): the image it
-        // samples (the TAA resolve or the LDR target) arrives through the
-        // frame context and a group is built the first time a handle is
+        // The input bind groups are built lazily by prepare(): the image it
+        // samples (the TAA resolve or the LDR target) is looked up in the
+        // frame's store and a group is built the first time a handle is
         // seen.
 
         // Fullscreen triangle: depth disabled, blend disabled, no culling
@@ -223,8 +222,10 @@ namespace rendering_engine
         // the TAA pass's two ping-pong targets and either handle changes
         // when its target is recreated (a resize), so look the group up by
         // handle and build one on a miss — the first frame included.
-        const gpu::texture input = ctx.taa_resolve_texture.valid() ? ctx.taa_resolve_texture : ctx.ldr_color_texture;
+        const gpu::texture resolve = ctx.resources->get(frame_resources::taa_resolve);
+        const gpu::texture input = resolve.valid() ? resolve : ctx.resources->get(frame_resources::ldr_color).texture;
         m_input_bind_group = bind_group_for(input);
+        m_target = ctx.resources->get(frame_resources::swapchain);
 
         // Apply a resize's edge step and/or a fxaa.enabled flip, now that
         // begin_frame has waited for the frame that may still have been
@@ -248,10 +249,10 @@ namespace rendering_engine
         }
     }
 
-    void fxaa_pass::record(gpu::command_encoder& encoder, const frame_context& ctx)
+    void fxaa_pass::record(gpu::command_encoder& encoder, const frame_context& /*ctx*/)
     {
         gpu::render_pass_descriptor descriptor{};
-        descriptor.target = ctx.swapchain_target;
+        descriptor.target = m_target;
         // The fullscreen triangle covers every pixel; clearing is strictly
         // redundant but cheap and keeps the swapchain in a known state.
         descriptor.color[0].load = gpu::load_op::clear;

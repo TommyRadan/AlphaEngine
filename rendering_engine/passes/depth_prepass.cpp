@@ -6,7 +6,6 @@
 #include <core/log.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/gpu/render_target.hpp>
-#include <rendering_engine/passes/scene_pass.hpp>
 
 namespace rendering_engine
 {
@@ -41,26 +40,27 @@ namespace rendering_engine
         // Off, or nothing to draw the scene with: record nothing at all.
         // The scene pass, told nothing, clears the depth itself, exactly
         // as it does with the pre-pass disabled.
-        if (!ctx.depth_prepass || ctx.active_camera == nullptr || ctx.scene == nullptr)
+        if (!ctx.depth_prepass || ctx.active_camera == nullptr)
         {
             return;
         }
 
         // Follow the scene depth attachment: a resize recreates it, and
         // the handle comparison catches any other swap too.
-        if (m_target.valid() && m_target_depth != ctx.scene_depth_texture)
+        const gpu::texture scene_depth = ctx.resources->get(frame_resources::scene_depth);
+        if (m_target.valid() && m_target_depth != scene_depth)
         {
             release_target();
         }
         if (!m_target.valid())
         {
-            if (!ctx.scene_depth_texture.valid())
+            if (!scene_depth.valid())
             {
                 return;
             }
             gpu::render_target_descriptor descriptor = gpu::render_target_descriptor::depth_only(
                 gpu::texture_format::depth24, ctx.viewport_width, ctx.viewport_height);
-            descriptor.depth.texture = ctx.scene_depth_texture;
+            descriptor.depth.texture = scene_depth;
             m_target = m_device->create_render_target(descriptor);
             if (!m_target.valid())
             {
@@ -68,22 +68,25 @@ namespace rendering_engine
                         "clears and writes depth itself");
                 return;
             }
-            m_target_depth = ctx.scene_depth_texture;
+            m_target_depth = scene_depth;
         }
 
         // The culling, sorting and per-frame uploads are the scene pass's,
-        // which prepares right after this one: told that the pre-pass runs,
-        // it resolves each pre-passed item's depth-only twin, and its
-        // record() loads the depth this pass leaves instead of clearing it.
-        // The pre-pass then draws the very items, per-draw blocks and order
-        // the scene pass will shade.
+        // which prepares right after this one: finding the pre-pass's
+        // target published, it resolves each pre-passed item's depth-only
+        // twin, and its record() loads the depth this pass leaves instead
+        // of clearing it. The pre-pass then draws the very items, per-draw
+        // blocks and order the scene pass will shade.
         m_active = true;
-        ctx.scene->expect_depth_prepass();
+        ctx.resources->publish(frame_resources::depth_prepass, m_target);
     }
 
     void depth_prepass::record(gpu::command_encoder& encoder, const frame_context& ctx)
     {
-        if (!m_active || ctx.scene == nullptr)
+        // The scene pass's list, published while it prepared after this
+        // pass; without a scene pass there is nothing to lay down.
+        const scene_view_data* view = m_active ? ctx.resources->find(frame_resources::scene_view) : nullptr;
+        if (view == nullptr || view->depth_prepass == nullptr)
         {
             return;
         }
@@ -98,6 +101,6 @@ namespace rendering_engine
         descriptor.depth.load = gpu::load_op::clear;
         descriptor.depth.store = gpu::store_op::store;
         descriptor.depth.clear_depth = 1.0f;
-        ctx.scene->record_depth_prepass(encoder, descriptor);
+        view->depth_prepass->record_depth_prepass(encoder, descriptor);
     }
 } // namespace rendering_engine

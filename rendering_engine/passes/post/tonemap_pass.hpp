@@ -7,6 +7,7 @@
 #include <cstddef>
 
 #include <rendering_engine/gpu/handle.hpp>
+#include <rendering_engine/passes/frame_resources.hpp>
 #include <rendering_engine/passes/pass.hpp>
 #include <rendering_engine/post_settings.hpp>
 
@@ -18,15 +19,14 @@ namespace rendering_engine
      *
      * Reads the rgba16f scene target produced by @ref scene_pass (or
      * @ref motion_blur_pass's blurred copy of it, whichever
-     * @ref frame_context::hdr_color_texture names this frame),
-     * applies @c exposure as a pre-curve scale, runs the operator
-     * selected via @ref set_operator (ACES filmic by default,
-     * Reinhard, or a clamp-only linear path), and gamma-2.2 encodes
-     * the result before writing to the off-screen LDR target. Without
-     * this pass HDR luminance > 1.0 saturates to white as soon as it
-     * hits the 8-bit backbuffer.
+     * @ref frame_resources::scene_color holds when this pass prepares),
+     * applies @c exposure as a pre-curve scale, runs the selected
+     * operator (ACES filmic by default, Reinhard, or a clamp-only linear
+     * path), and gamma-2.2 encodes the result before writing to the
+     * off-screen LDR target. Without this pass HDR luminance > 1.0
+     * saturates to white as soon as it hits the 8-bit backbuffer.
      *
-     * It resolves into @ref frame_context::ldr_color_target rather
+     * It resolves into @ref frame_resources::ldr_color rather
      * than straight to the swapchain so the trailing @ref fxaa_pass
      * can sample the tonemapped result as a shader input (the
      * swapchain is not sampleable). Slots into the post chain between
@@ -39,9 +39,10 @@ namespace rendering_engine
      *
      * @c exposure and the operator default to 1.0 / @ref
      * tonemap_operator::aces and are baked into the @c Tonemap UBO at
-     * construction. Both are live-tunable: @ref set_exposure and
-     * @ref set_operator rewrite the UBO immediately (the change lands
-     * on the next recorded frame).
+     * construction. Both are live-tunable through
+     * @ref post_settings::exposure and @ref post_settings::tonemap_op:
+     * @ref prepare rewrites the UBO when either differs from what it last
+     * uploaded.
      *
      * Two optional stages ride on the same draw, each selected per frame
      * by picking one of four pipeline variants (the @c USE_AUTO_EXPOSURE /
@@ -49,21 +50,21 @@ namespace rendering_engine
      * rather than by a runtime branch, so an effect that is off costs
      * nothing:
      *
-     *  - Eye adaptation: while @ref frame_context::exposure_texture is
-     *    valid, the exposure comes from @ref auto_exposure_pass's 1x1
-     *    result instead of @ref set_exposure's value, which applies again
-     *    as soon as auto exposure is off.
-     *  - Colour grading: while @ref frame_context::grading_lut_texture is
-     *    valid and @ref color_grading_settings::intensity is positive, the
-     *    display-referred colour (after the curve and the gamma encode) is
-     *    looked up in that strip LUT and blended with the ungraded colour
-     *    by the intensity, which @ref record rewrites into the UBO when it
-     *    changes.
+     *  - Eye adaptation: while @ref frame_resources::exposure is
+     *    published, the exposure comes from @ref auto_exposure_pass's 1x1
+     *    result instead of @ref post_settings::exposure, which applies
+     *    again as soon as auto exposure is off.
+     *  - Colour grading: while @ref frame_resources::grading_lut is
+     *    published and @ref color_grading_settings::intensity is positive,
+     *    the display-referred colour (after the curve and the gamma encode)
+     *    is looked up in that strip LUT and blended with the ungraded
+     *    colour by the intensity, which @ref prepare rewrites into the UBO
+     *    when it changes.
      */
     struct tonemap_pass : pass
     {
-        // The HDR image it maps is not a constructor input: it arrives
-        // every frame as @ref frame_context::hdr_color_texture (the scene
+        // The HDR image it maps is not a constructor input: it is looked
+        // up every frame (@ref frame_resources::scene_color: the scene
         // colour, or motion blur's output while that runs), and the input
         // bind group is (re)built whenever that handle, the grading LUT or
         // the exposure texture differs from the one it was last built
@@ -75,39 +76,24 @@ namespace rendering_engine
         tonemap_pass(const tonemap_pass&) = delete;
         tonemap_pass& operator=(const tonemap_pass&) = delete;
 
-        // Picks the variant the frame draws with, rewrites the grading
-        // blend when it changed and rebinds the inputs whose handles
-        // changed.
+        // Picks the variant the frame draws with, rewrites the exposure,
+        // the operator and the grading blend when one changed and rebinds
+        // the inputs whose handles changed.
         void prepare(const frame_context& ctx) override;
 
         void record(gpu::command_encoder& encoder, const frame_context& ctx) override;
 
         const char* name() const override
         {
-            return "tonemap";
+            return builtin_passes::tonemap;
         }
 
         void declare_io(pass_io_builder& io) const override
         {
-            io.read("scene_color");
-            io.read("exposure");
-            io.write("ldr_color");
-        }
-
-        /// @brief Sets the pre-curve exposure scale; rewrites the UBO.
-        void set_exposure(float exposure);
-        /// @brief The current pre-curve exposure scale.
-        float exposure() const
-        {
-            return m_exposure;
-        }
-
-        /// @brief Selects the tonemap curve; rewrites the UBO.
-        void set_operator(tonemap_operator op);
-        /// @brief The currently selected tonemap curve.
-        tonemap_operator operator_kind() const
-        {
-            return m_operator;
+            io.read(frame_resources::scene_color);
+            io.read_optional(frame_resources::exposure);
+            io.read_optional(frame_resources::grading_lut);
+            io.write(frame_resources::ldr_color);
         }
 
     private:
@@ -122,8 +108,8 @@ namespace rendering_engine
         static constexpr size_t variant_count = 4;
 
         // Repacks the { exposure, operator, grading intensity } block and
-        // writes it to the Tonemap UBO; called by the setters and prepare()
-        // whenever a value changes.
+        // writes it to the Tonemap UBO; called by prepare() whenever a
+        // value changes.
         void upload_uniforms();
 
         // The pipeline variant this frame draws with, picked by prepare().
@@ -157,5 +143,8 @@ namespace rendering_engine
         gpu::texture m_bound_input{};
         gpu::texture m_bound_grading_lut{};
         gpu::texture m_bound_exposure{};
+
+        // The LDR target this frame resolves into, looked up by prepare().
+        gpu::render_target m_target{};
     };
 } // namespace rendering_engine

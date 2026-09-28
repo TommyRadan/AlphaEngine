@@ -55,6 +55,7 @@ set(ALPHAENGINE_SHADER_SOURCES
     passes/skybox.frag.glsl
     passes/skybox.vert.glsl
     passes/taa_resolve.frag.glsl
+    passes/tint.frag.glsl
     passes/tonemap.frag.glsl
     passes/velocity.frag.glsl
     passes/volumetric_fog.frag.glsl

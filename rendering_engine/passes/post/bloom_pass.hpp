@@ -7,6 +7,7 @@
 #include <vector>
 
 #include <rendering_engine/gpu/handle.hpp>
+#include <rendering_engine/passes/frame_resources.hpp>
 #include <rendering_engine/passes/pass.hpp>
 #include <rendering_engine/post_settings.hpp>
 
@@ -36,9 +37,9 @@ namespace rendering_engine
      * the subsequent @ref tonemap_pass needs no changes: it maps the
      * bloomed HDR result to LDR exactly as before. While
      * @ref motion_blur_pass runs, "the scene colour" is its blurred copy:
-     * the pass reads and composites into
-     * @ref frame_context::hdr_color_texture / @c hdr_color_target, which
-     * name whichever of the two the frame uses. Every pass uses the
+     * the pass reads and composites into whichever image
+     * @ref frame_resources::scene_color holds when it prepares. Every pass
+     * uses the
      * shared fullscreen-triangle pattern (depth off, no culling, no
      * vertex buffers beyond the @ref fullscreen_triangle_vertices).
      *
@@ -58,12 +59,11 @@ namespace rendering_engine
     {
         // @p width / @p height are the backbuffer dimensions the mip
         // pyramid is sized against. The HDR image the bright-pass samples
-        // is not a constructor input: it arrives every frame as
-        // @ref frame_context::hdr_color_texture (the scene colour, or
-        // motion blur's output while that runs), and the threshold bind
-        // group is (re)built whenever that handle differs from the one it
-        // was last built against. The composite target is taken from the
-        // matching @ref frame_context::hdr_color_target each frame.
+        // is not a constructor input: it is looked up every frame
+        // (@ref frame_resources::scene_color: the scene colour, or motion
+        // blur's output while that runs), and the threshold bind group is
+        // (re)built whenever that handle differs from the one it was last
+        // built against. The composite target is the same image's target.
         bloom_pass(gpu::device& device, uint32_t width, uint32_t height);
         ~bloom_pass() override;
 
@@ -78,20 +78,20 @@ namespace rendering_engine
 
         const char* name() const override
         {
-            return "bloom";
+            return builtin_passes::bloom;
         }
 
         void declare_io(pass_io_builder& io) const override
         {
-            io.read("scene_color");
-            io.write("scene_color");
+            io.read(frame_resources::scene_color);
+            io.write(frame_resources::scene_color);
         }
 
         // Rebuilds the bright-pass target and the whole blur pyramid (its
         // targets, per-level texel-step UBOs and bind groups) for the new
         // drawable size. Every consumer of the pyramid textures is this
         // pass's own bind groups, so they are rebuilt here directly; the
-        // threshold bind group is rebound by record() when the scene
+        // threshold bind group is rebound by prepare() when the scene
         // colour handle changes. No-op while the pass is disabled.
         void resize(uint32_t width, uint32_t height) override;
 
@@ -198,5 +198,9 @@ namespace rendering_engine
         // Whether this frame's record() draws (the pass is live and bloom
         // is enabled), decided by prepare().
         bool m_draws{false};
+
+        // The HDR target the composite blends into this frame, looked up
+        // by prepare().
+        gpu::render_target m_target{};
     };
 } // namespace rendering_engine

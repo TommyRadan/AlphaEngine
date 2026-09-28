@@ -113,6 +113,7 @@ namespace rendering_engine
             m_frame_dirty = false;
         }
 
+        m_target = ctx.resources->get(frame_resources::swapchain);
         m_items.assign(ctx.ui_draws.begin(), ctx.ui_draws.end());
         // Sorted by (pipeline, material instance) so instances sharing
         // a pipeline sit together; the per-material group is rebound
@@ -134,10 +135,10 @@ namespace rendering_engine
                          });
     }
 
-    void ui_pass::record(gpu::command_encoder& encoder, const frame_context& ctx)
+    void ui_pass::record(gpu::command_encoder& encoder, const frame_context& /*ctx*/)
     {
         gpu::render_pass_descriptor descriptor{};
-        descriptor.target = ctx.swapchain_target;
+        descriptor.target = m_target;
         // The scene pass already cleared the framebuffer (or there
         // was no camera and we're drawing UI on a fresh black
         // backbuffer); either way the UI overlay is drawn on top

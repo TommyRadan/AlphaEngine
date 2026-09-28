@@ -39,7 +39,7 @@ namespace rendering_engine
         auto& gpu = *m_device;
 
         // Degenerate backbuffer (no settings, zero-sized window): leave the
-        // pass disabled so velocity_texture() reports invalid.
+        // pass disabled so it publishes no motion vectors.
         if (width == 0 || height == 0)
         {
             return;
@@ -99,9 +99,9 @@ namespace rendering_engine
         pipeline_descriptor.bind_group_layouts.push_back(m_layout);
         m_pipeline = gpu.create_pipeline(pipeline_descriptor);
 
-        // The input bind group is built lazily by record(): the scene depth
-        // it samples arrives through frame_context::scene_depth_texture and
-        // is rebound whenever that handle changes.
+        // The input bind group is built lazily by prepare(): the scene depth
+        // it samples is looked up in the frame's store and rebound whenever
+        // that handle changes.
         m_enabled = true;
     }
 
@@ -152,11 +152,6 @@ namespace rendering_engine
         }
     }
 
-    gpu::texture velocity_pass::velocity_texture() const
-    {
-        return m_velocity_texture;
-    }
-
     void velocity_pass::create_target(uint32_t width, uint32_t height)
     {
         auto& gpu = *m_device;
@@ -181,7 +176,7 @@ namespace rendering_engine
         auto& gpu = *m_device;
 
         // Create the replacement before releasing the old target so the
-        // TAA resolve, which compares frame_context::velocity_texture
+        // TAA resolve, which compares the published velocity texture
         // against the handle it bound, sees a different handle. The
         // release is safe here: resize runs between frames, and a
         // deferred-execution backend retires the attachment only once the
@@ -236,6 +231,10 @@ namespace rendering_engine
             return;
         }
 
+        // Published every frame, drawn or not: a consumer only samples it on
+        // frames that make this pass draw.
+        ctx.resources->publish(frame_resources::velocity, m_velocity_texture);
+
         // Only the TAA resolve and motion blur read the motion vectors;
         // with neither running this frame there is nothing to write.
         if (!ctx.post.taa.enabled && !motion_blur_active(ctx.post.motion_blur))
@@ -250,7 +249,8 @@ namespace rendering_engine
         // history. The renderer drops the previous view-projection across
         // such a frame, so the next camera frame starts fresh (zero motion)
         // rather than reprojecting across the gap.
-        if (ctx.active_camera == nullptr || !ctx.scene_depth_texture.valid())
+        const gpu::texture scene_depth = ctx.resources->get(frame_resources::scene_depth);
+        if (ctx.active_camera == nullptr || !scene_depth.valid())
         {
             m_action = frame_action::clear;
             return;
@@ -278,9 +278,9 @@ namespace rendering_engine
         // resized scene target swaps its attachment, so compare against the
         // one the bind group was built with and rebuild on change (the first
         // camera frame included).
-        if (ctx.scene_depth_texture != m_bound_depth)
+        if (scene_depth != m_bound_depth)
         {
-            rebuild_bind_group(ctx.scene_depth_texture);
+            rebuild_bind_group(scene_depth);
         }
         m_action = frame_action::draw;
     }

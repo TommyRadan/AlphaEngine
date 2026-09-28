@@ -238,51 +238,6 @@ namespace rendering_engine
         }
     }
 
-    gpu::texture point_shadow_pass::shadow_map() const
-    {
-        return m_depth_texture;
-    }
-
-    const core::math::mat4& point_shadow_pass::light_view_projection(int face) const
-    {
-        return m_light_view_projections[face];
-    }
-
-    const core::math::vec3& point_shadow_pass::light_position() const
-    {
-        return m_light_position;
-    }
-
-    float point_shadow_pass::shadow_near() const
-    {
-        return light_near;
-    }
-
-    float point_shadow_pass::shadow_far() const
-    {
-        return m_light_far;
-    }
-
-    bool point_shadow_pass::has_shadow() const
-    {
-        return m_has_shadow;
-    }
-
-    int point_shadow_pass::shadow_point_index() const
-    {
-        return m_shadow_point_index;
-    }
-
-    float point_shadow_pass::depth_bias() const
-    {
-        return shadow_bias;
-    }
-
-    uint32_t point_shadow_pass::culled_count() const
-    {
-        return m_culled;
-    }
-
     void point_shadow_pass::set_caster_mask(uint32_t mask) noexcept
     {
         m_caster_mask = mask;
@@ -348,6 +303,7 @@ namespace rendering_engine
         m_casters.clear();
         if (!m_has_shadow)
         {
+            publish(ctx);
             return;
         }
         for (const mesh_draw& draw : ctx.scene_draws)
@@ -395,6 +351,25 @@ namespace rendering_engine
                 caster.faces |= bit;
             }
         }
+        publish(ctx);
+    }
+
+    void point_shadow_pass::publish(const frame_context& ctx) const
+    {
+        // Published every frame, caster or not: the scene pass binds the
+        // cube either way, and the active flag tells the lit shader whether
+        // to sample it.
+        point_shadow_data published{};
+        published.map = m_depth_texture;
+        published.active = m_has_shadow;
+        published.light_index = m_shadow_point_index;
+        published.face_view_projection = m_light_view_projections;
+        published.light_position = m_light_position;
+        published.near_plane = light_near;
+        published.far_plane = m_light_far;
+        published.depth_bias = shadow_bias;
+        published.culled = m_culled;
+        ctx.resources->publish(frame_resources::point_shadow, published);
     }
 
     void point_shadow_pass::record(gpu::command_encoder& encoder, const frame_context& /*ctx*/)

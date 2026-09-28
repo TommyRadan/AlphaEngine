@@ -127,9 +127,9 @@ namespace rendering_engine
 
         // -- Threshold params -----------------------------------------
         // Size-independent, so baked once here from m_settings' compiled-in
-        // defaults (record() rewrites it in place on a runtime change); the
+        // defaults (prepare() rewrites it in place on a runtime change); the
         // bright-pass bind group that pairs it with the scene colour is
-        // built by record() when the frame context hands the handle over.
+        // built by prepare() once it looks the handle up.
         const float knee = m_settings.threshold * m_settings.knee;
         m_threshold_ubo =
             create_params_ubo({m_settings.threshold, knee, 2.0f * knee, 1.0f / (4.0f * knee + bloom_epsilon)});
@@ -441,18 +441,20 @@ namespace rendering_engine
         }
 
         // Bind this frame's HDR image for the bright pass: the scene
-        // colour, or motion blur's output while that runs (see
-        // frame_context::hdr_color_texture). The handle only changes when
-        // a target is recreated (a resize) or motion blur is toggled, so
+        // colour, or motion blur's output while that runs (it republishes
+        // frame_resources::scene_color). The handle only changes when a
+        // target is recreated (a resize) or motion blur is toggled, so
         // compare against the one the bind group was built with and
         // rebuild on change — the first frame included.
-        if (ctx.hdr_color_texture != m_bound_scene_color || !m_threshold_bind_group.valid())
+        const color_target hdr = ctx.resources->get(frame_resources::scene_color);
+        m_target = hdr.target;
+        if (hdr.texture != m_bound_scene_color || !m_threshold_bind_group.valid())
         {
-            rebuild_threshold_bind_group(ctx.hdr_color_texture);
+            rebuild_threshold_bind_group(hdr.texture);
         }
     }
 
-    void bloom_pass::record(gpu::command_encoder& encoder, const frame_context& ctx)
+    void bloom_pass::record(gpu::command_encoder& encoder, const frame_context& /*ctx*/)
     {
         if (!m_draws)
         {
@@ -517,7 +519,7 @@ namespace rendering_engine
         //    each mip to full resolution as it is composited.
         {
             gpu::render_pass_descriptor descriptor{};
-            descriptor.target = ctx.hdr_color_target;
+            descriptor.target = m_target;
             descriptor.color[0].load = gpu::load_op::load;
             descriptor.use_depth = false;
 

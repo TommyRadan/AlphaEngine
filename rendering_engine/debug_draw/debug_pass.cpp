@@ -9,18 +9,18 @@
 #include <rendering_engine/gpu/overlay_renderer.hpp>
 #include <rendering_engine/gpu/render_target.hpp>
 #include <rendering_engine/materials/material.hpp>
-#include <rendering_engine/passes/scene_pass.hpp>
 #include <rendering_engine/renderables/per_draw_ubo.hpp>
 
 namespace rendering_engine::debug_draw
 {
-    void debug_pass::set_overlay(gpu::overlay_renderer* overlay)
-    {
-        m_overlay = overlay;
-    }
-
     void debug_pass::prepare(const frame_context& ctx)
     {
+        // The scene pass's unjittered camera group (see the header note),
+        // or nothing without a scene view.
+        const scene_view_data* view = ctx.resources->find(frame_resources::scene_view);
+        m_frame_group = view != nullptr ? view->overlay_frame_group : gpu::bind_group{};
+        m_target = ctx.resources->get(frame_resources::swapchain);
+
         // Every overlay draw, in proxy order: the overlay is never culled.
         m_items.clear();
         for (const mesh_draw& draw : ctx.overlay_draws)
@@ -50,7 +50,7 @@ namespace rendering_engine::debug_draw
     void debug_pass::record(gpu::command_encoder& encoder, const frame_context& ctx)
     {
         gpu::render_pass_descriptor descriptor{};
-        descriptor.target = ctx.swapchain_target;
+        descriptor.target = m_target;
         // The UI pass already composited on top of the tonemapped
         // backbuffer; debug overlays paint on top of that without
         // re-clearing, and depth is disabled so they always win.
@@ -58,11 +58,6 @@ namespace rendering_engine::debug_draw
         descriptor.use_depth = false;
 
         auto pass_encoder = encoder.begin_render_pass(descriptor);
-
-        // The scene pass's unjittered camera group (see the header note),
-        // or nothing without a scene pass.
-        const gpu::bind_group frame_bind_group =
-            ctx.scene != nullptr ? ctx.scene->overlay_frame_bind_group() : gpu::bind_group{};
 
         uint64_t last_pipeline_id = 0;
         const material* last_material = nullptr;
@@ -78,9 +73,9 @@ namespace rendering_engine::debug_draw
                 // pipeline change so the line gizmos project with the
                 // scene camera; it sticks across later set_pipeline calls.
                 // Skipped when absent (no scene pass / camera).
-                if (first_iter && frame_bind_group.valid())
+                if (first_iter && m_frame_group.valid())
                 {
-                    pass_encoder->set_bind_group(0, frame_bind_group);
+                    pass_encoder->set_bind_group(0, m_frame_group);
                     first_iter = false;
                 }
                 last_pipeline_id = pid;
@@ -114,9 +109,9 @@ namespace rendering_engine::debug_draw
         // before the passes ran; replaying it here is pure GPU recording
         // against the still-open pass, so no event listener runs inside
         // record(). No overlay without ImGui.
-        if (m_overlay != nullptr)
+        if (ctx.overlay != nullptr)
         {
-            m_overlay->render(*pass_encoder);
+            ctx.overlay->render(*pass_encoder);
         }
         pass_encoder->end();
     }

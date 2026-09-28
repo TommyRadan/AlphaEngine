@@ -7,6 +7,7 @@
 
 #include <core/math/math.hpp>
 #include <rendering_engine/gpu/handle.hpp>
+#include <rendering_engine/passes/frame_resources.hpp>
 #include <rendering_engine/passes/pass.hpp>
 #include <rendering_engine/passes/shadow_casters.hpp>
 #include <rendering_engine/passes/shadow_settings.hpp>
@@ -26,10 +27,11 @@ namespace rendering_engine
      * The vertical field of view is twice the caster's outer cone
      * half-angle, so the map exactly covers the cone, and the far plane
      * follows the caster's @ref spot_light::range (a fixed default when
-     * the range is 0, "no cutoff"). The @ref scene_pass exposes the depth
-     * texture plus the light-space view-projection matrix to the lit
-     * materials through its per-frame bind group, and the lit fragment
-     * shaders sample it to occlude that light's contribution.
+     * the range is 0, "no cutoff"). It publishes the depth texture with
+     * the light-space view-projection matrix as
+     * @ref frame_resources::spot_shadow, which the @ref scene_pass hands
+     * the lit materials through its per-frame bind group, and the lit
+     * fragment shaders sample it to occlude that light's contribution.
      *
      * Like @ref shadow_pass and @ref point_shadow_pass it culls the
      * frame's mesh draws (@ref frame_context::scene_draws) and pushes the
@@ -38,9 +40,9 @@ namespace rendering_engine
      * so every mesh proxy casts with no per-proxy wiring; only the
      * depth-only pipeline (vertex stage only, rasteriser depth bias
      * against acne) and the light-space matrix differ. When no spot light
-     * has @c cast_shadow set the pass still clears the map and reports
-     * @ref has_shadow as false so the lit shaders fall back to unshadowed
-     * lighting. A draw also needs @ref mesh_draw::casts_shadow and a
+     * has @c cast_shadow set the pass still clears the map and publishes
+     * it as inactive (@ref spot_shadow_data::active) so the lit shaders
+     * fall back to unshadowed lighting. A draw also needs @ref mesh_draw::casts_shadow and a
      * @ref mesh_draw::layer_mask that overlaps @ref caster_mask to reach
      * the map; both default to "every mesh casts".
      */
@@ -54,10 +56,10 @@ namespace rendering_engine
         spot_shadow_pass(const spot_shadow_pass&) = delete;
         spot_shadow_pass& operator=(const spot_shadow_pass&) = delete;
 
-        // Finds the caster, builds and uploads its light-space matrix
-        // and culls and collects the casters; every accessor below
-        // reports this frame from here on. Runs ahead of the scene
-        // pass's prepare.
+        // Finds the caster, builds and uploads its light-space matrix,
+        // culls and collects the casters and publishes the map and the
+        // matrix (@ref frame_resources::spot_shadow) for the scene pass,
+        // which prepares after it.
         void prepare(const frame_context& ctx) override;
 
         // Clears the map and draws the casters @ref prepare collected.
@@ -65,41 +67,13 @@ namespace rendering_engine
 
         const char* name() const override
         {
-            return "spot_shadow";
+            return builtin_passes::spot_shadow;
         }
 
         void declare_io(pass_io_builder& io) const override
         {
-            io.write("spot_shadow");
+            io.write(frame_resources::spot_shadow);
         }
-
-        // Depth texture the shadow map is rendered into. Stable for the
-        // pass's lifetime so the @ref scene_pass can bake it into its
-        // per-frame bind group once at construction.
-        gpu::texture shadow_map() const;
-
-        // Light-space view-projection matrix for the active caster,
-        // refreshed every @ref prepare. Only meaningful when
-        // @ref has_shadow is true.
-        const core::math::mat4& light_view_projection() const;
-
-        // Whether a shadow-casting spot light was found this frame and
-        // the shadow map holds usable depth.
-        bool has_shadow() const;
-
-        // Index of the caster within the packed spot-light array (matching
-        // @ref pack_lights ordering) so the lit shader only shadows that
-        // one light. -1 when @ref has_shadow is false.
-        int shadow_spot_index() const;
-
-        // Base depth-comparison bias the lit shader slope-scales to
-        // suppress shadow acne.
-        float depth_bias() const;
-
-        // Casters skipped by the last @ref prepare because their world
-        // bounds fell outside the light's perspective frustum. Zero on
-        // no-caster frames.
-        uint32_t culled_count() const;
 
         // Layer bits this pass accepts casters from, on top of the
         // existing @ref mesh_draw::casts_shadow filter: a mesh draw
@@ -113,6 +87,10 @@ namespace rendering_engine
         // The device this pass creates its resources on and releases them
         // through; handed in by the renderer and outlives the pass.
         gpu::device* m_device{nullptr};
+
+        // Publishes this frame's map and matrix
+        // (@ref frame_resources::spot_shadow); the end of every prepare().
+        void publish(const frame_context& ctx) const;
 
         // Off-screen depth-only shadow-map target (the sampled
         // @c depth32_float attachment is its only attachment) and the

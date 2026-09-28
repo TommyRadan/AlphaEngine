@@ -5,6 +5,7 @@
 
 #include <core/math/math.hpp>
 #include <rendering_engine/gpu/handle.hpp>
+#include <rendering_engine/passes/frame_resources.hpp>
 #include <rendering_engine/passes/pass.hpp>
 
 namespace rendering_engine
@@ -43,7 +44,8 @@ namespace rendering_engine
      * Runs after the scene/skybox passes (so the depth buffer is final) and
      * before its consumers, @ref motion_blur_pass and @ref taa_pass. The
      * result is an @c rgba16f target with the signed motion in @c xy; it
-     * is exposed via @ref velocity_texture so they can sample it. The pass
+     * is published as @ref frame_resources::velocity so they can sample
+     * it. The pass
      * is always in the chain, but @ref record draws only while one of them
      * runs (temporal AA is on or @ref motion_blur_active holds), so with
      * both off it costs nothing. Pipeline state mirrors the other
@@ -55,8 +57,8 @@ namespace rendering_engine
     struct velocity_pass : pass
     {
         // @p width / @p height size the velocity target. The scene depth the
-        // pass samples is not a constructor input: it arrives every frame
-        // as @ref frame_context::scene_depth_texture, and the input bind
+        // pass samples is not a constructor input: it is looked up every
+        // frame (@ref frame_resources::scene_depth), and the input bind
         // group is (re)built whenever that handle differs from the one it
         // was last built against, so a resized scene target is picked up
         // without any re-plumbing.
@@ -66,36 +68,30 @@ namespace rendering_engine
         velocity_pass(const velocity_pass&) = delete;
         velocity_pass& operator=(const velocity_pass&) = delete;
 
-        // Decides what the frame does (nothing, a clear to zero motion, or
-        // the reprojection draw), uploads the reprojection block and
-        // rebinds the scene depth when its handle changed.
+        // Publishes the motion-vector texture, decides what the frame does
+        // (nothing, a clear to zero motion, or the reprojection draw),
+        // uploads the reprojection block and rebinds the scene depth when
+        // its handle changed.
         void prepare(const frame_context& ctx) override;
 
         void record(gpu::command_encoder& encoder, const frame_context& ctx) override;
 
         const char* name() const override
         {
-            return "velocity";
+            return builtin_passes::velocity;
         }
 
         void declare_io(pass_io_builder& io) const override
         {
-            io.read("scene_depth");
-            io.write("velocity");
+            io.read(frame_resources::scene_depth);
+            io.write(frame_resources::velocity);
         }
 
         // Recreates the velocity target at the new drawable size. The new
         // target is created before the old one is released so the handle
-        // published through frame_context::velocity_texture changes and the
-        // TAA resolve and motion blur rebind. No-op while the pass is
-        // disabled.
+        // published as frame_resources::velocity changes and the TAA
+        // resolve and motion blur rebind. No-op while the pass is disabled.
         void resize(uint32_t width, uint32_t height) override;
-
-        // The motion-vector texture the TAA resolve and motion blur sample
-        // (signed UV displacement in xy). The engine publishes it every frame as
-        // @ref frame_context::velocity_texture; it changes on @ref resize.
-        // Invalid when the pass is disabled (degenerate backbuffer).
-        gpu::texture velocity_texture() const;
 
     private:
         // The device this pass creates its resources on and releases them
@@ -129,8 +125,8 @@ namespace rendering_engine
         gpu::texture m_bound_depth{};
 
         // False when the backbuffer dimensions are degenerate (no settings,
-        // zero-sized window); record() then no-ops and velocity_texture()
-        // returns an invalid handle.
+        // zero-sized window); record() then no-ops and nothing is
+        // published.
         bool m_enabled{false};
 
         // What this frame's record() does, decided by prepare(): nothing

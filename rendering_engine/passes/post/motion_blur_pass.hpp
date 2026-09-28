@@ -6,6 +6,7 @@
 #include <cstdint>
 
 #include <rendering_engine/gpu/handle.hpp>
+#include <rendering_engine/passes/frame_resources.hpp>
 #include <rendering_engine/passes/pass.hpp>
 
 namespace rendering_engine
@@ -33,26 +34,23 @@ namespace rendering_engine
      *
      * A blur cannot sample the image it writes, so the pass draws into a
      * full-resolution @c rgba16f target of its own rather than back into
-     * the scene colour. @ref renderer::render asks @ref draws before any
-     * pass records and, when it does, publishes that target as
-     * @ref frame_context::hdr_color_target / @c hdr_color_texture, which
-     * bloom, auto exposure and tonemap read instead of the scene colour.
-     * When it does not (disabled — the default — or no motion vectors),
-     * @ref record returns at once and they read the scene colour: the
-     * previous stage, at no cost. In the declared pass I/O both are the logical
-     * "scene_color", which this pass reads and writes like bloom does.
+     * the scene colour. On a frame it draws, @ref prepare republishes
+     * @ref frame_resources::scene_color with that target, so bloom, auto
+     * exposure and tonemap, which prepare after it, read the blurred copy
+     * instead of the scene colour, while the passes before it keep the
+     * original. When it does not draw (disabled — the default — or no
+     * motion vectors), it publishes nothing, @ref record returns at once
+     * and they read the scene colour: the previous stage, at no cost.
      *
      * The output target is only allocated the first time motion blur is
-     * switched on (@ref ensure_target, called by @ref renderer::render
-     * outside the frame), so the default configuration does not pay for
-     * a full-resolution target it never draws; once allocated it stays for
-     * the pass's lifetime. The inputs arrive through the frame context and
-     * the bind group is rebuilt whenever either handle differs from the one
-     * it was built against; @ref resize recreates an allocated output
-     * target (new before old, so the published handle changes for its
-     * consumers). The params UBO is rewritten every frame the pass draws,
-     * inside the frame bracket. A degenerate backbuffer leaves the pass
-     * disabled.
+     * switched on, so the default configuration does not pay for a
+     * full-resolution target it never draws; once allocated it stays for
+     * the pass's lifetime. The inputs are looked up every frame and the
+     * bind group is rebuilt whenever either handle differs from the one it
+     * was built against; @ref resize recreates an allocated output target
+     * (new before old, so the published handle changes for its consumers).
+     * The params UBO is rewritten every frame the pass draws, inside the
+     * frame bracket. A degenerate backbuffer leaves the pass disabled.
      */
     struct motion_blur_pass : pass
     {
@@ -63,57 +61,36 @@ namespace rendering_engine
         motion_blur_pass(const motion_blur_pass&) = delete;
         motion_blur_pass& operator=(const motion_blur_pass&) = delete;
 
-        // Decides whether the frame blurs (@ref draws), writes the params
-        // block and rebinds the inputs when their handles changed.
+        // Allocates the output target the first time motion blur is on,
+        // decides whether the frame blurs — the pass is live, the settings
+        // enable it (@ref motion_blur_active) and motion vectors are
+        // published — and, when it does, writes the params block, rebinds
+        // the inputs when their handles changed and republishes the scene
+        // colour with its output.
         void prepare(const frame_context& ctx) override;
 
         void record(gpu::command_encoder& encoder, const frame_context& ctx) override;
 
         const char* name() const override
         {
-            return "motion_blur";
+            return builtin_passes::motion_blur;
         }
 
         void declare_io(pass_io_builder& io) const override
         {
-            io.read("scene_color");
-            io.read("velocity");
-            io.write("scene_color");
+            io.read(frame_resources::scene_color);
+            io.read_optional(frame_resources::velocity);
+            io.write(frame_resources::scene_color);
         }
 
         // Notes the new drawable size and, once the output target exists,
         // recreates it at that size (new before old, so bloom, auto
         // exposure and tonemap see a different handle and rebind); the new
-        // size reaches the params UBO on the next drawn record(). The bind
-        // group samples only the inputs, whose new handles the frame
-        // context republishes, so it needs no work here. No-op while the
-        // pass is disabled.
+        // size reaches the params UBO on the next drawn prepare(). The bind
+        // group samples only the inputs, whose new handles their owners
+        // publish, so it needs no work here. No-op while the pass is
+        // disabled.
         void resize(uint32_t width, uint32_t height) override;
-
-        /**
-         * @brief Allocates the output target the first time @p settings
-         *        make the pass active (@ref motion_blur_active). Called by
-         *        @ref renderer::render ahead of each frame, outside the
-         *        frame bracket; a no-op once the target exists or while
-         *        motion blur stays off.
-         */
-        void ensure_target(const motion_blur_settings& settings);
-
-        /**
-         * @brief Whether the frame @p ctx describes blurs: the pass is live
-         *        and its target allocated, @ref frame_context::post enables
-         *        motion blur (@ref motion_blur_active) and motion vectors
-         *        are published. @ref renderer::render decides
-         *        @ref frame_context::hdr_color_target by it, and
-         *        @ref prepare whether @ref record draws.
-         */
-        bool draws(const frame_context& ctx) const;
-
-        /// The blurred HDR image's target and texture (see the class
-        /// comment); invalid until @ref ensure_target allocates them, and
-        /// they change on @ref resize.
-        gpu::render_target output_target() const;
-        gpu::texture output_texture() const;
 
     private:
         // The device this pass creates its resources on and releases them
@@ -159,8 +136,7 @@ namespace rendering_engine
         // settings, zero-sized window); record() then no-ops.
         bool m_enabled{false};
 
-        // Whether this frame's record() draws (@ref draws held in
-        // prepare()).
+        // Whether this frame's record() draws, decided by prepare().
         bool m_draws{false};
     };
 } // namespace rendering_engine

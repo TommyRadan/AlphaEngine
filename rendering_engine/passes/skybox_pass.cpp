@@ -13,8 +13,10 @@
 #include <rendering_engine/gpu/render_target.hpp>
 #include <rendering_engine/gpu/shader.hpp>
 #include <rendering_engine/gpu/shader_hot_reload.hpp>
+#include <rendering_engine/lighting/environment_probe.hpp>
 #include <rendering_engine/passes/post/fullscreen_triangle.hpp>
 #include <rendering_engine/passes/projection_jitter.hpp>
+#include <rendering_engine/render_world.hpp>
 
 namespace
 {
@@ -129,12 +131,6 @@ namespace rendering_engine
         }
     }
 
-    void skybox_pass::set_cubemap(gpu::texture cubemap)
-    {
-        m_cubemap = cubemap;
-        rebuild_bind_group();
-    }
-
     void skybox_pass::rebuild_bind_group()
     {
         auto& gpu = *m_device;
@@ -164,8 +160,19 @@ namespace rendering_engine
 
     void skybox_pass::prepare(const frame_context& ctx)
     {
-        // Dormant until a cube map is supplied, and a no-camera frame has
-        // no view ray to reconstruct — leave the scene colour untouched.
+        // Follow the world's environment: a new probe, or none, swaps the
+        // cube map the input bind group samples.
+        const environment_probe* environment = ctx.world != nullptr ? ctx.world->environment() : nullptr;
+        const gpu::texture cubemap = environment != nullptr ? environment->skybox() : gpu::texture{};
+        if (cubemap != m_cubemap)
+        {
+            m_cubemap = cubemap;
+            rebuild_bind_group();
+        }
+        m_target = ctx.resources->get(frame_resources::scene_color).target;
+
+        // Dormant without a cube map, and a no-camera frame has no view ray
+        // to reconstruct — leave the scene colour untouched.
         m_draws = m_cubemap.valid() && ctx.active_camera != nullptr;
         if (!m_draws)
         {
@@ -192,7 +199,7 @@ namespace rendering_engine
         gpu.write_buffer(m_sky_ubo, inv_view_proj.data(), sky_ubo_size, 0);
     }
 
-    void skybox_pass::record(gpu::command_encoder& encoder, const frame_context& ctx)
+    void skybox_pass::record(gpu::command_encoder& encoder, const frame_context& /*ctx*/)
     {
         if (!m_draws)
         {
@@ -200,7 +207,7 @@ namespace rendering_engine
         }
 
         gpu::render_pass_descriptor descriptor{};
-        descriptor.target = ctx.scene_color_target;
+        descriptor.target = m_target;
         // Load the scene pass's colour and depth: the sky composites behind
         // the geometry it already drew rather than wiping it.
         descriptor.color[0].load = gpu::load_op::load;
