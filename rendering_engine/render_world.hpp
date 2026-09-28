@@ -3,19 +3,22 @@
 
 /**
  * @file render_world.hpp
- * @brief What the renderer draws: renderables, light and camera proxies, the
- *        environment probe and the scene-wide fog.
+ * @brief What the renderer draws: mesh, light and camera proxies, the UI and
+ *        debug renderables, the environment probe and the scene-wide fog.
  */
 
 #pragma once
 
 #include <cstddef>
 #include <cstdint>
+#include <span>
 #include <vector>
 
 #include <core/dense_pool.hpp>
+#include <core/math/mat4.hpp>
 #include <rendering_engine/fog.hpp>
 #include <rendering_engine/gpu/handle.hpp>
+#include <rendering_engine/mesh_proxy.hpp>
 #include <rendering_engine/render_proxies.hpp>
 
 namespace rendering_engine
@@ -35,7 +38,10 @@ namespace rendering_engine
      * @ref frame_context and hands its renderable registries to the passes
      * that draw them. It owns:
      *
-     * - the scene, UI and debug renderable registries — non-owning, in
+     * - the mesh proxies (@ref mesh_proxy) the scene, depth pre-pass and
+     *   shadow passes draw, in creation order, which is the order the
+     *   passes walk them in (@ref meshes);
+     * - the UI and debug renderable registries — non-owning, in
      *   registration order, which is the dispatch order within a pass;
      * - the light proxies (@ref light_proxy), and the order the enabled ones
      *   are packed into the lights UBO in (@ref enabled_lights);
@@ -47,12 +53,14 @@ namespace rendering_engine
      * - the scene-wide atmospheric fog.
      *
      * A proxy is a plain copy the world owns, addressed by a handle: its
-     * creator (a runtime light or camera component) creates it, enables it,
-     * writes it once per frame, before the renderer reads it, and destroys
-     * it. The renderer and its passes read only the proxies, never the
-     * objects they were copied from, so everything a frame draws with is
-     * fixed before the frame starts. Proxies are created and destroyed
-     * between frames only (see @ref begin_frame). The renderable and helper
+     * creator (a runtime mesh, renderable, light or camera component, or a
+     * renderer-owned debug helper) creates it, enables it, writes it before
+     * the renderer reads it, and destroys it. The renderer and its passes
+     * read only the proxies, never the objects they were copied from, so
+     * everything a frame draws with is fixed before the frame starts: a mesh
+     * proxy's instance records and joint palette are copies too, which the
+     * renderer uploads from here. Proxies are created and destroyed between
+     * frames only (see @ref begin_frame). The renderable and helper
      * entries are non-owning back-pointers: a renderable joins through the
      * register calls and a helper through its constructor, and each leaves
      * through the matching unregister call / destructor. Passes read the
@@ -84,19 +92,13 @@ namespace rendering_engine
         void end_frame() noexcept;
 
         /**
-         * @brief Adds @p r to the scene-pass registry.
+         * @brief Adds @p r to the UI-pass registry.
          *
          * The pointer is non-owning; callers must
-         * @ref unregister_scene_renderable before destroying the
-         * renderable. Registration order is preserved and is the dispatch
-         * order during the scene pass.
+         * @ref unregister_ui_renderable before destroying the renderable.
+         * Registration order is preserved and is the dispatch order within
+         * a material.
          */
-        void register_scene_renderable(renderable* r);
-
-        /** @brief Removes @p r from the scene-pass registry; no-op if absent. */
-        void unregister_scene_renderable(renderable* r);
-
-        /** @brief Adds @p r to the UI-pass registry; same ownership rules as the scene variant. */
         void register_ui_renderable(renderable* r);
 
         /** @brief Removes @p r from the UI-pass registry; no-op if absent. */
@@ -108,18 +110,12 @@ namespace rendering_engine
          * Renderables registered here are drawn after the UI pass in
          * debug builds; release builds drop the debug pass from the pass
          * list entirely so registrations are inert. Same ownership rules
-         * as the scene variant.
+         * as the UI variant.
          */
         void register_debug_renderable(renderable* r);
 
         /** @brief Removes @p r from the debug-pass registry; no-op if absent. */
         void unregister_debug_renderable(renderable* r);
-
-        /** @brief The scene-pass registry, which the shadow passes walk too. */
-        const std::vector<renderable*>& scene_renderables() const noexcept
-        {
-            return m_scene_renderables;
-        }
 
         /** @brief The UI-pass registry. */
         const std::vector<renderable*>& ui_renderables() const noexcept
@@ -131,6 +127,81 @@ namespace rendering_engine
         const std::vector<renderable*>& debug_renderables() const noexcept
         {
             return m_debug_renderables;
+        }
+
+        /**
+         * @brief Adds a mesh proxy drawing @p source at @p world and returns
+         *        its handle. It is the last in draw order.
+         */
+        mesh_proxy_handle create_mesh(const mesh_description& source, const core::math::mat4& world);
+
+        /** @brief Removes the mesh proxy @p mesh names. No-op for a stale handle. */
+        void destroy_mesh(mesh_proxy_handle mesh);
+
+        /**
+         * @brief Replaces what @p mesh draws.
+         *
+         * Checks the geometry's vertex format against the material's
+         * (@ref validate_vertex_format) when the description asks for it,
+         * logging a mismatch once per geometry and material, and a missing
+         * material once, and recomputes the world bounds.
+         */
+        void set_mesh_source(mesh_proxy_handle mesh, const mesh_description& source);
+
+        /**
+         * @brief Places @p mesh at @p world: rebuilds its PerDraw block
+         *        (@ref make_per_draw_payload), its mirror flag and its world
+         *        bounds.
+         */
+        void set_mesh_world(mesh_proxy_handle mesh, const core::math::mat4& world);
+
+        /**
+         * @brief Shows or hides @p mesh. A hidden proxy draws nothing but
+         *        keeps its place in the draw order.
+         */
+        void set_mesh_visible(mesh_proxy_handle mesh, bool visible);
+
+        /**
+         * @brief Replaces the joint palette a skinning material draws @p mesh
+         *        with (see @ref mesh_proxy::joints).
+         */
+        void set_mesh_joints(mesh_proxy_handle mesh, std::span<const core::math::mat4> joints);
+
+        /**
+         * @brief Captures an instance source's records and draw arguments
+         *        into @p mesh's instance snapshot.
+         *
+         * @p records is every instance slot of the source, of which the first
+         * @p args.instance_count are drawn, and [@p changed_begin,
+         * @p changed_end) the slots written since the last capture; only
+         * those are copied. A change in the number of slots copies them all.
+         * The copied range joins the ones the renderer has yet to upload.
+         */
+        void write_mesh_instances(mesh_proxy_handle mesh,
+                                  std::span<const mesh_instance> records,
+                                  uint32_t changed_begin,
+                                  uint32_t changed_end,
+                                  const mesh_indirect_args& args);
+
+        /** @brief The proxy @p mesh names, or @c nullptr for a stale handle. */
+        mesh_proxy* mesh(mesh_proxy_handle mesh) noexcept;
+
+        /** @copydoc mesh(mesh_proxy_handle) */
+        const mesh_proxy* mesh(mesh_proxy_handle mesh) const noexcept;
+
+        /**
+         * @brief Every mesh proxy, in creation order — the order the scene,
+         *        depth pre-pass and shadow passes walk them in.
+         */
+        std::span<const mesh_proxy> meshes() const noexcept
+        {
+            return m_meshes.values();
+        }
+
+        /** @brief The handle of the proxy at @p position of @ref meshes. */
+        mesh_proxy_handle mesh_at(std::size_t position) const noexcept
+        {
+            return m_meshes.handle_at(position);
         }
 
         /**
@@ -299,7 +370,7 @@ namespace rendering_engine
         }
 
     private:
-        std::vector<renderable*> m_scene_renderables;
+        core::dense_pool<mesh_proxy, mesh_proxy_tag> m_meshes;
         std::vector<renderable*> m_ui_renderables;
         std::vector<renderable*> m_debug_renderables;
 

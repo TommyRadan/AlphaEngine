@@ -138,10 +138,11 @@ namespace runtime
          * @brief Enables or disables this node (and, by inheritance, its subtree).
          *
          * A disabled subtree is skipped by @ref update_subtree and its components
-         * are told to hide via @c on_active_changed (a @c mesh_component
-         * unregisters its model, a @c light_component takes its light out of
-         * the registry, a @c camera_component detaches its camera), so it stops
-         * both updating and drawing. Re-enabling restores it, provided every
+         * are told to hide via @c on_active_changed (a @c mesh_component or
+         * @c renderable_component destroys its mesh proxy, a
+         * @c light_component takes its light out of the enabled lights, a
+         * @c camera_component disables its camera), so it stops both updating
+         * and drawing. Re-enabling restores it, provided every
          * ancestor is active. Detaching a node from a disabled parent (via
          * @ref remove or the parent's destruction) likewise restores it: a root
          * is effectively active whenever its own flag is.
@@ -302,8 +303,8 @@ namespace runtime
             m_components.push_back(component_entry{std::type_index(typeid(C)), handle});
 
             C* component = m_store->get<C>(handle);
-            // Components that bridge to a subsystem (e.g. registering a
-            // renderable) wire themselves up here, now that they know their
+            // Components that bridge to a subsystem (e.g. creating a render
+            // proxy) wire themselves up here, now that they know their
             // owning node. Plain-data components define no on_attach and skip
             // this. The pooled component may be relocated later, so on_attach
             // must key any external registration off stable state (its owned

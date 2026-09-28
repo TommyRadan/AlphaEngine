@@ -3,18 +3,12 @@
 
 #pragma once
 
-#include <memory>
-
-#include <core/math/transform.hpp>
-#include <rendering_engine/gpu/handle.hpp>
-#include <rendering_engine/renderables/per_draw_ubo.hpp>
-#include <rendering_engine/renderables/renderable.hpp>
+#include <rendering_engine/renderables/mesh_source.hpp>
 
 namespace rendering_engine
 {
     struct asset_cache;
     struct material;
-    struct mesh_asset;
 
     // Parameterized box centered at the origin: per-axis dimensions plus
     // per-axis segment counts.
@@ -23,7 +17,7 @@ namespace rendering_engine
     // textured and normal-mapped. Vertex format is
     // position + uv + normal + tangent; tangents are derived from the
     // position/uv/normal channels via @ref generate_tangents.
-    struct box : public renderable
+    struct box : public mesh_source
     {
         box(asset_cache& cache,
             material* mat,
@@ -33,42 +27,16 @@ namespace rendering_engine
             unsigned int width_segments = 1,
             unsigned int height_segments = 1,
             unsigned int depth_segments = 1);
-        ~box() override;
-
-        core::transform transform;
-
-        void upload() final;
-        void collect_draw_items(std::vector<draw_item>& out) final;
-
-        // The cached mesh's object-space box under @ref transform (its world
-        // matrix, or its own matrix only for local_bounds); false until
-        // @ref upload has fetched the geometry.
-        bool world_bounds(core::math::aabb& out) const final;
-        bool local_bounds(core::math::aabb& out) const final;
-
-        gpu::buffer get_vertex_buffer() const;
-        gpu::buffer get_index_buffer() const;
-        unsigned int get_index_count() const;
 
     private:
-        // The cache @ref upload fetches the shared geometry through; it
-        // outlives the shape.
-        asset_cache* m_cache{nullptr};
-        material* m_material{nullptr};
+        // Fetches the geometry through @p cache; called by the constructor.
+        void fetch_mesh(asset_cache& cache);
+
         float m_width;
         float m_height;
         float m_depth;
         unsigned int m_width_segments;
         unsigned int m_height_segments;
         unsigned int m_depth_segments;
-        unsigned int m_index_count{0};
-        uint32_t m_vertex_stride{0};
-        bool m_vertex_format_reported{false};
-
-        // Shared geometry from the asset cache, keyed by dimensions and
-        // segment counts; freed when the last box referencing it is destroyed.
-        std::shared_ptr<mesh_asset> m_mesh;
-        // The PerDraw block the pass pushes; no buffer of its own.
-        per_draw_binding m_per_draw;
     };
 } // namespace rendering_engine

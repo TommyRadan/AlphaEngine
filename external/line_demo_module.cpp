@@ -65,7 +65,6 @@ GAME_MODULE()
     auto strip = std::make_unique<rendering_engine::line>(*runtime::current_engine().gpu, &material);
     strip->set_mode(rendering_engine::line_mode::strip);
     strip->set_positions(positions, colors);
-    strip->upload();
 
     // The helix turns with its node.
     runtime::node& helix = scene.create_node("helix");

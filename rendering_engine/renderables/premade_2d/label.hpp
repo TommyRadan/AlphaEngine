@@ -88,11 +88,6 @@ namespace rendering_engine
         void upload() final;
         void collect_draw_items(std::vector<draw_item>& out) final;
 
-        bool casts_shadow() const override
-        {
-            return false;
-        }
-
     private:
         // One glyph's quad and atlas rect, in pixels from the block's
         // top-left corner.

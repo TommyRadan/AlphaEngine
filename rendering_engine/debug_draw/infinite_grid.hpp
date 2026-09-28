@@ -5,31 +5,27 @@
 
 #include <memory>
 
-#include <core/math/transform.hpp>
 #include <rendering_engine/debug_draw/helper.hpp>
-#include <rendering_engine/gpu/handle.hpp>
-#include <rendering_engine/renderables/per_draw_ubo.hpp>
+#include <rendering_engine/render_proxies.hpp>
 
 namespace rendering_engine
 {
-    namespace gpu
-    {
-        struct device;
-    }
-
     struct grid_material;
+    struct mesh_asset;
+    struct render_world;
 } // namespace rendering_engine
 
 namespace rendering_engine::debug_draw
 {
     // The CAD-style infinite ground grid — an unbounded grid.
-    // Unlike the line-based @ref grid_helper it is a
-    // scene-pass renderable: a single fullscreen triangle fronts the
-    // analytic @ref grid_material, whose fragment shader reconstructs the
-    // ground plane (z = 0, the engine is Z-up), draws minor / major lines
-    // plus the coloured world axes, fades with distance and depth-tests
-    // against the scene, so it stretches to the horizon and is occluded by
-    // scene geometry.
+    // Unlike the line-based @ref grid_helper it is a mesh proxy the scene
+    // pass draws: a single fullscreen triangle fronts the analytic
+    // @ref grid_material, whose fragment shader reconstructs the ground
+    // plane (z = 0, the engine is Z-up), draws minor / major lines plus the
+    // coloured world axes, fades with distance and depth-tests against the
+    // scene, so it stretches to the horizon and is occluded by scene
+    // geometry. The proxy sits at the world origin, on @ref layer_editor,
+    // with no bounds (it is never culled) and no shadow.
     //
     // Created as a built-in gizmo in debug builds and toggled from the
     // debug UI like the other helpers.
@@ -40,26 +36,23 @@ namespace rendering_engine::debug_draw
         // the grid builds its own material on a template for that distance
         // through @p owner's @ref renderer::create_grid_material (the
         // shaders are served from the SPIR-V cache after the first
-        // compile), and its vertex buffer on @p owner's device.
+        // compile), its vertex buffer on @p owner's device and its proxy in
+        // @p owner's world.
         explicit infinite_grid(renderer& owner, float fade_distance = 100.0f);
         ~infinite_grid() override;
 
-        void upload() final;
-        void collect_draw_items(std::vector<draw_item>& out) final;
+        // Shows or hides the grid's proxy.
+        void set_visible(bool visible) override;
 
     private:
-        // The device the vertex buffer is created on and released through.
-        gpu::device* m_device;
-
         // The material (and the grid template it keeps alive) at this
-        // grid's fade distance; released with the grid, before the device.
+        // grid's fade distance, and the fullscreen triangle it draws;
+        // released with the grid, before the device.
         std::unique_ptr<grid_material> m_material;
-        gpu::buffer m_vertex_buffer{};
+        std::shared_ptr<mesh_asset> m_mesh;
 
-        // The grid sits at the world origin: an identity transform whose
-        // PerDraw block is computed once and pushed each frame the grid
-        // draws.
-        core::transform m_transform;
-        per_draw_binding m_per_draw;
+        // The grid's proxy in its renderer's world.
+        render_world* m_world{nullptr};
+        mesh_proxy_handle m_proxy{};
     };
 } // namespace rendering_engine::debug_draw

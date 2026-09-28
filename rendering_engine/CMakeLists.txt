@@ -9,6 +9,9 @@ target_sources(alpha_render PRIVATE
     gpu_profiler.hpp
     material_library.cpp
     material_library.hpp
+    mesh_draws.cpp
+    mesh_draws.hpp
+    mesh_proxy.hpp
     post_process_settings.cpp
     post_process_settings.hpp
     post_settings.hpp

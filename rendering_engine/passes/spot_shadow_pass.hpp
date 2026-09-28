@@ -10,13 +10,11 @@
 #include <rendering_engine/passes/pass.hpp>
 #include <rendering_engine/passes/shadow_casters.hpp>
 #include <rendering_engine/passes/shadow_settings.hpp>
+#include <rendering_engine/render_proxies.hpp>
 #include <rendering_engine/renderables/draw_item.hpp>
-#include <rendering_engine/renderables/renderable.hpp>
 
 namespace rendering_engine
 {
-    struct renderable;
-
     /**
      * @brief Spot-light shadow-map pass.
      *
@@ -33,26 +31,24 @@ namespace rendering_engine
      * materials through its per-frame bind group, and the lit fragment
      * shaders sample it to occlude that light's contribution.
      *
-     * Like @ref shadow_pass and @ref point_shadow_pass it reuses the
-     * scene-renderable registry and each renderable's existing per-draw
-     * model-matrix bind group (or, for an instanced batch, its
+     * Like @ref shadow_pass and @ref point_shadow_pass it culls the
+     * frame's mesh draws (@ref frame_context::scene_draws) and pushes the
+     * PerDraw block each carries (or, for an instanced batch, reads its
      * per-instance transform stream through the instanced pipeline twin),
-     * so every scene renderable casts with no per-renderable wiring; only
-     * the depth-only pipeline (vertex stage only, rasteriser depth bias
+     * so every mesh proxy casts with no per-proxy wiring; only the
+     * depth-only pipeline (vertex stage only, rasteriser depth bias
      * against acne) and the light-space matrix differ. When no spot light
      * has @c cast_shadow set the pass still clears the map and reports
      * @ref has_shadow as false so the lit shaders fall back to unshadowed
-     * lighting. A renderable also needs @ref renderable::casts_shadow and
-     * a @ref renderable::layer_mask that overlaps @ref caster_mask to
-     * reach the map; both default to "every renderable casts".
+     * lighting. A draw also needs @ref mesh_draw::casts_shadow and a
+     * @ref mesh_draw::layer_mask that overlaps @ref caster_mask to reach
+     * the map; both default to "every mesh casts".
      */
     struct spot_shadow_pass : pass
     {
         // @p settings supplies the map resolution and the rasteriser slope
         // bias; both are fixed for the pass's lifetime.
-        spot_shadow_pass(gpu::device& device,
-                         const std::vector<renderable*>* registry,
-                         const rendering_engine::shadow_settings& settings);
+        spot_shadow_pass(gpu::device& device, const rendering_engine::shadow_settings& settings);
         ~spot_shadow_pass() override;
 
         spot_shadow_pass(const spot_shadow_pass&) = delete;
@@ -106,7 +102,7 @@ namespace rendering_engine
         uint32_t culled_count() const;
 
         // Layer bits this pass accepts casters from, on top of the
-        // existing @ref renderable::casts_shadow filter: a renderable
+        // existing @ref mesh_draw::casts_shadow filter: a mesh draw
         // whose layer_mask shares no bit with this mask casts no shadow
         // through it. Defaults to @ref layer_all, so nothing changes until
         // a caller narrows it.
@@ -117,11 +113,6 @@ namespace rendering_engine
         // The device this pass creates its resources on and releases them
         // through; handed in by the renderer and outlives the pass.
         gpu::device* m_device{nullptr};
-
-        // Non-owning back-pointer to the render world's
-        // scene-renderable registry — the same one the scene and other
-        // shadow passes walk. The world outlives every pass.
-        const std::vector<renderable*>* m_registry;
 
         // Off-screen depth-only shadow-map target (the sampled
         // @c depth32_float attachment is its only attachment) and the

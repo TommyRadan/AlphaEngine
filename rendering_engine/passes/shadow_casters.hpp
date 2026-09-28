@@ -25,11 +25,10 @@ namespace rendering_engine
      * @brief The instanced twin of a shadow pass's depth-only pipeline.
      *
      * The single-draw shadow pipeline takes each caster's model matrix from
-     * the PerDraw block its renderable pushes or binds at slot 1. An
-     * @ref instanced_mesh has none: its transforms travel in the
-     * per-instance vertex stream it binds at vertex slot 1 (four vec4 model
-     * columns, then a tint; see @ref instanced_material) and it draws
-     * indexed-indirect. The instanced pipeline declares no push-constant
+     * the PerDraw block its draw pushes or binds at slot 1. An instanced
+     * draw has none: its transforms travel in the per-instance vertex
+     * stream it binds at vertex slot 1 (four vec4 model columns, then a
+     * tint; see @ref mesh_instance) and it draws indexed-indirect. The instanced pipeline declares no push-constant
      * range, which is fine because the dispatch rebinds the light group on
      * every pipeline switch. This
      * pipeline reads the same stream through

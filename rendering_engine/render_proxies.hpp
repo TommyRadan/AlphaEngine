@@ -4,8 +4,9 @@
 /**
  * @file render_proxies.hpp
  * @brief The renderer's copies of what the world places: light and camera
- *        proxies, the handles that name them in a @ref render_world, and the
- *        layer bits drawables and cameras filter each other by.
+ *        proxies (mesh proxies are in mesh_proxy.hpp), the handles that name
+ *        every proxy in a @ref render_world, and the layer bits drawables
+ *        and cameras filter each other by.
  */
 
 #pragma once
@@ -19,19 +20,19 @@
 
 namespace rendering_engine
 {
-    // Bit 0: the layer every renderable is on by default (@ref
-    // renderable::layer_mask). A pass or camera that does not care about
-    // layers filters with @ref layer_all, which includes this bit, so
-    // nothing is excluded until a caller narrows either side.
+    // Bit 0: the layer every mesh proxy is on by default
+    // (@ref mesh_description::layer_mask). A pass or camera that does not
+    // care about layers filters with @ref layer_all, which includes this
+    // bit, so nothing is excluded until a caller narrows either side.
     constexpr uint32_t layer_default = 1u << 0;
 
-    // Editor-only geometry: the debug helpers registered as scene
-    // renderables (e.g. the infinite ground grid) carry this bit instead
-    // of @ref layer_default. It is included in @ref layer_all, so a fresh
-    // camera still renders it and nothing changes visually by default; a
-    // game builds a camera whose @ref camera::set_culling_mask clears this
-    // bit to hide editor gizmos from gameplay views while an editor
-    // viewport (the default mask) keeps seeing them.
+    // Editor-only geometry: the debug helpers drawn by the scene pass (the
+    // infinite ground grid) carry this bit instead of @ref layer_default.
+    // It is included in @ref layer_all, so a fresh camera still renders it
+    // and nothing changes visually by default; a game builds a camera whose
+    // @ref camera::set_culling_mask clears this bit to hide editor gizmos
+    // from gameplay views while an editor viewport (the default mask) keeps
+    // seeing them.
     constexpr uint32_t layer_editor = 1u << 31;
 
     // Every layer bit set: the default @ref camera::culling_mask and the
@@ -52,12 +53,16 @@ namespace rendering_engine
 
     struct light_proxy_tag;
     struct camera_proxy_tag;
+    struct mesh_proxy_tag;
 
     /** @brief Names a @ref light_proxy in the @ref render_world that created it. */
     using light_proxy_handle = core::pool_handle<light_proxy_tag>;
 
     /** @brief Names a @ref camera_proxy in the @ref render_world that created it. */
     using camera_proxy_handle = core::pool_handle<camera_proxy_tag>;
+
+    /** @brief Names a @ref mesh_proxy in the @ref render_world that created it. */
+    using mesh_proxy_handle = core::pool_handle<mesh_proxy_tag>;
 
     /**
      * @brief Everything the renderer reads about one light: its kind, its

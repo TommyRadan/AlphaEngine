@@ -64,7 +64,6 @@ GAME_MODULE()
     runtime::node& demo = scene.create_node("phong_demo");
 
     auto ball = std::make_unique<rendering_engine::sphere>(cache, &material);
-    ball->upload();
     runtime::node& sphere = scene.create_node("sphere", &demo);
     sphere.add_component(runtime::renderable_component{std::move(ball)});
     runtime::add_behavior<turntable>(sphere);
@@ -73,7 +72,6 @@ GAME_MODULE()
     // up is +Z here, so the plane's default +Z normal already faces the
     // sky; drop it just under the unit sphere and scale it out.
     auto plane = std::make_unique<rendering_engine::plane>(cache, &material, 30.0f, 30.0f);
-    plane->upload();
     runtime::node& ground = scene.create_node("ground", &demo);
     ground.transform.set_position(core::math::vec3{0.0f, 0.0f, -1.5f});
     ground.add_component(runtime::renderable_component{std::move(plane)});

@@ -28,7 +28,6 @@
 #include <rendering_engine/lighting/point_light.hpp>
 #include <rendering_engine/lighting/spot_light.hpp>
 #include <rendering_engine/materials/material.hpp>
-#include <rendering_engine/renderables/model.hpp>
 #include <runtime/components/camera_component.hpp>
 #include <runtime/components/light_component.hpp>
 #include <runtime/components/mesh_component.hpp>
@@ -194,14 +193,13 @@ namespace editor
 
         void draw_inspector(runtime::mesh_component& component)
         {
-            rendering_engine::model* model = component.model();
-            if (model == nullptr)
+            if (component.is_empty())
             {
                 ImGui::TextDisabled("empty");
                 return;
             }
 
-            rendering_engine::material* material = model->get_material();
+            rendering_engine::material* material = component.material();
             if (material == nullptr)
             {
                 ImGui::TextDisabled("no material");

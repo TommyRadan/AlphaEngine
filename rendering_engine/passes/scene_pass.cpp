@@ -24,7 +24,6 @@
 #include <rendering_engine/passes/spot_shadow_pass.hpp>
 #include <rendering_engine/passes/view_globals.hpp>
 #include <rendering_engine/renderables/per_draw_ubo.hpp>
-#include <rendering_engine/renderables/renderable.hpp>
 
 namespace rendering_engine
 {
@@ -80,11 +79,10 @@ namespace rendering_engine
 
     scene_pass::scene_pass(gpu::device& device,
                            core::job_pool* jobs,
-                           const std::vector<renderable*>* registry,
                            render_stats* stats,
                            bool taa_jitter,
                            uint32_t parallel_draw_threshold)
-        : m_device(&device), m_jobs(jobs), m_registry(registry), m_stats(stats), m_taa_jitter(taa_jitter),
+        : m_device(&device), m_jobs(jobs), m_stats(stats), m_taa_jitter(taa_jitter),
           m_parallel_draw_threshold(parallel_draw_threshold)
     {
         auto& gpu = *m_device;
@@ -372,13 +370,13 @@ namespace rendering_engine
 
         auto& gpu = *m_device;
 
-        // Reset this frame's stats up front. The renderable count is known
+        // Reset this frame's stats up front. The mesh proxy count is known
         // regardless of whether a camera is attached; the draw totals stay
         // zero on no-camera frames (nothing is collected below).
         if (m_stats != nullptr)
         {
             *m_stats = render_stats{};
-            m_stats->scene_renderables = static_cast<uint32_t>(m_registry->size());
+            m_stats->scene_renderables = static_cast<uint32_t>(ctx.scene_draws.size());
             // The shadow passes prepared ahead of this one this frame; carry
             // their culling tallies over so the overlay reads one struct.
             m_stats->shadow_culled = shadow != nullptr ? shadow->culled_count() : 0u;
@@ -493,45 +491,44 @@ namespace rendering_engine
         }
         gpu.write_buffer(m_spot_shadow_ubo, spot_shadow_payload.data(), spot_shadow_ubo_size, 0);
 
-        // Layer-filter, frustum-cull, then collect. A renderable whose
+        // Layer-filter, frustum-cull, then collect. A mesh draw whose
         // layer_mask shares no bit with the camera's culling mask is
         // skipped outright, the same as a frustum cull below it, so an
         // editor-only helper never reaches a gameplay camera that has
-        // narrowed its mask. A renderable that reports world bounds is
-        // then tested against the camera frustum and skipped when it lies
-        // wholly outside, so it never builds a draw item or refreshes its
-        // per-draw block; one with no bounds (fullscreen effects, gizmos) is
+        // narrowed its mask. One with world bounds is then tested against
+        // the camera frustum and skipped when it lies wholly outside; one
+        // with no bounds (fullscreen effects, gizmos, skinned meshes) is
         // always collected. The frustum is the camera's unjittered one —
         // the TAA offset is a sub-pixel shift that no plane test could
-        // tell apart.
+        // tell apart. A survivor that has nothing to draw this frame (a
+        // hidden helper, missing geometry) still counts as submitted.
         //
-        // Every survivor's items get a sort key from @ref make_sort_key
-        // right after they are collected: the queue from the item's
-        // material (opaque or transparent), the view-space depth to the
-        // renderable's world bounds centre (0 for a renderable with no
-        // bounds), and the item's own pipeline id. The single per-frame
-        // list is then sorted by that key ascending, which — by
-        // construction of the key — sorts opaque items front-to-back for
-        // early-Z rejection and transparent ones back-to-front so blending
-        // composites correctly, with the pipeline id as a further
-        // tie-break within equal depth; the material instance breaks any
-        // remaining tie so a run of identical keys still shares one
-        // bind-group rebind. The sort is stable, so within equal keys
-        // submission order still applies.
+        // Every survivor's item gets a sort key from @ref make_sort_key
+        // right after it is collected: the queue from the item's material
+        // (opaque or transparent), the view-space depth to the draw's world
+        // bounds centre (0 for a draw with no bounds), and the item's own
+        // pipeline id. The single per-frame list is then sorted by that
+        // key ascending, which — by construction of the key — sorts
+        // opaque items front-to-back for early-Z rejection and transparent
+        // ones back-to-front so blending composites correctly, with the
+        // pipeline id as a further tie-break within equal depth; the
+        // material instance breaks any remaining tie so a run of identical
+        // keys still shares one bind-group rebind. The sort is stable, so
+        // within equal keys submission order still applies.
         const core::math::frustum& view_frustum = ctx.active_camera->frustum;
         const core::math::mat4& view_matrix = ctx.active_camera->view;
         const uint32_t camera_mask = ctx.active_camera->culling_mask;
         uint32_t submitted = 0;
         uint32_t culled = 0;
-        for (auto* r : *m_registry)
+        for (const mesh_draw& draw : ctx.scene_draws)
         {
-            if ((r->layer_mask & camera_mask) == 0)
+            if ((draw.layer_mask & camera_mask) == 0)
             {
                 ++culled;
                 continue;
             }
-            core::math::aabb bounds;
-            const bool has_bounds = r->world_bounds(bounds);
+            const bool has_bounds = draw.bounded;
+            const core::math::aabb& bounds = draw.bounds;
             if (has_bounds && !view_frustum.intersects(bounds))
             {
                 ++culled;
@@ -539,7 +536,10 @@ namespace rendering_engine
             }
             ++submitted;
             const std::size_t first_item = m_items.size();
-            r->collect_draw_items(m_items);
+            if (draw.drawable)
+            {
+                m_items.push_back(draw.item);
+            }
 
             float view_depth = 0.0f;
             if (has_bounds)
@@ -791,11 +791,11 @@ namespace rendering_engine
                 last_material = item.mat;
             }
 
-            // Instanced renderables keep their per-instance data in a
-            // vertex stream (slot 1), not a PerDraw block, so the per-draw
-            // data is optional. A renderable's block is pushed, in the
-            // pre-pass as in the shading pass, and a skinned one also binds
-            // its joint-palette group.
+            // Instanced draws keep their per-instance data in a vertex
+            // stream (slot 1), not a PerDraw block, so the per-draw data is
+            // optional. A mesh proxy's block is pushed, in the pre-pass as in
+            // the shading pass, and a skinned one also binds its
+            // joint-palette group.
             bind_per_draw(pass_encoder, item, item.mat->per_draw_slot());
             pass_encoder.set_vertex_buffer(0, item.vertex_buffer, 0, item.vertex_stride);
             if (item.instance_buffer.valid())
@@ -808,7 +808,7 @@ namespace rendering_engine
                 if (item.indirect_buffer.valid())
                 {
                     // Instanced draw: index and instance counts come from
-                    // the indirect command record (see @ref instanced_mesh).
+                    // the indirect command record (see @ref mesh_draw_builder).
                     pass_encoder.draw_indexed_indirect(item.indirect_buffer, 0);
                 }
                 else

@@ -18,12 +18,17 @@ namespace runtime
      *        the @ref rendering_engine::render_world that scene feeds.
      *
      * For each loaded scene, one pass over each component pool with a
-     * render representation — @ref light_component and
-     * @ref camera_component — hands every component its node, and the
-     * component writes its proxy: its settings every frame, and its pose
-     * only when the node's world matrix (and, for a camera, its offset)
-     * moved since the last extraction, so a static light or camera costs no
-     * matrix work.
+     * render representation — @ref light_component, @ref camera_component,
+     * @ref mesh_component and @ref renderable_component — hands every
+     * component its node, and the component writes its proxy: a light's or
+     * camera's settings every frame; a pose only when the node's world
+     * matrix (and, for a camera, its offset) moved since the last
+     * extraction, so a static object costs no matrix work; a mesh source's
+     * description, with an instanced source's changed instance records and
+     * draw arguments, only when the source changed; and a skinned mesh's
+     * joint palette only when a new one was set. The renderer reads these
+     * copies (and the materials and mesh assets they name), never a
+     * component, a mesh source or a node.
      *
      * @ref runtime::engine::tick calls it once per rendered frame, after
      * every update that can move a node — the fixed steps, physics and its

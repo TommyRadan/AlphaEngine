@@ -7,10 +7,8 @@ target_sources(alpha_render PRIVATE
     instanced_mesh.hpp
     line.cpp
     line.hpp
-    mesh_bounds.cpp
-    mesh_bounds.hpp
-    model.cpp
-    model.hpp
+    mesh_source.cpp
+    mesh_source.hpp
     per_draw_ubo.cpp
     per_draw_ubo.hpp
     points.cpp

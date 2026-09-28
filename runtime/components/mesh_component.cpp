@@ -3,51 +3,50 @@
 
 #include <runtime/components/mesh_component.hpp>
 
+#include <utility>
+
 #include <assets/mesh_data.hpp>
 #include <core/log.hpp>
 #include <rendering_engine/gpu/device.hpp>
-#include <rendering_engine/renderer.hpp>
+#include <rendering_engine/mesh_proxy.hpp>
+#include <rendering_engine/render_world.hpp>
 #include <rendering_engine/resources/mesh_asset.hpp>
 #include <runtime/engine.hpp>
 #include <runtime/node.hpp>
+#include <runtime/scene.hpp>
 
 runtime::mesh_component::mesh_component(rendering_engine::material* material, const assets::mesh_data& mesh)
-    : m_model{std::make_unique<rendering_engine::model>(*runtime::current_engine().gpu, material)}, m_material{material}
+    : m_material{material}, m_private{true}, m_drawn{true}
 {
-    m_model->upload_mesh(mesh);
-    // Geometry with no complete record uploads nothing, so it has no box.
-    if (mesh.vertex_stride != 0 && mesh.vertex_bytes.size() >= mesh.vertex_stride)
+    m_private_mesh = rendering_engine::upload_mesh(*runtime::current_engine().gpu, mesh, mesh.format);
+    if (m_private_mesh == nullptr)
     {
-        m_bounds = mesh.bounds.has_value() ? mesh.bounds : mesh.compute_bounds();
+        LOG_WRN("runtime::mesh_component: mesh has no vertices; nothing uploaded");
+        return;
     }
+    m_bounds = mesh.bounds.has_value() ? mesh.bounds : mesh.compute_bounds();
 }
 
 runtime::mesh_component::mesh_component(rendering_engine::material* material,
                                         std::shared_ptr<rendering_engine::mesh_asset> mesh)
-    : m_model{std::make_unique<rendering_engine::model>(*runtime::current_engine().gpu, material)},
-      m_material{material}, m_mesh{mesh}
+    : m_material{material}, m_mesh{std::move(mesh)}, m_drawn{true}
 {
-    m_model->set_mesh(std::move(mesh));
 }
 
 runtime::mesh_component::mesh_component(std::shared_ptr<rendering_engine::material> material,
                                         std::shared_ptr<rendering_engine::mesh_asset> mesh)
-    : m_owned_material{std::move(material)}, m_material{m_owned_material.get()}, m_mesh{std::move(mesh)}
+    : m_owned_material{std::move(material)}, m_material{m_owned_material.get()}, m_mesh{std::move(mesh)},
+      m_drawn{m_material != nullptr}
 {
-    if (m_material != nullptr)
-    {
-        m_model = std::make_unique<rendering_engine::model>(*runtime::current_engine().gpu, m_material);
-        m_model->set_mesh(m_mesh);
-    }
 }
 
 runtime::mesh_component runtime::mesh_component::clone() const
 {
-    if (!m_model)
+    if (!m_drawn)
     {
         return mesh_component{};
     }
-    if (m_mesh == nullptr)
+    if (m_private)
     {
         LOG_WRN("runtime::mesh_component::clone: a privately uploaded mesh cannot be copied; the clone draws nothing");
         return mesh_component{};
@@ -59,68 +58,109 @@ runtime::mesh_component runtime::mesh_component::clone() const
 
 std::optional<core::math::aabb> runtime::mesh_component::local_bounds() const
 {
-    if (!m_model)
+    if (!m_drawn)
     {
         return std::nullopt;
     }
-    if (m_mesh != nullptr)
+    if (m_private)
     {
-        return m_mesh->bounds;
+        return m_bounds;
     }
-    return m_bounds;
+    if (m_mesh == nullptr)
+    {
+        return std::nullopt;
+    }
+    return m_mesh->bounds;
+}
+
+void runtime::mesh_component::set_joint_matrices(std::span<const core::math::mat4> matrices)
+{
+    m_joints.assign(matrices.begin(), matrices.end());
+    ++m_joints_revision;
 }
 
 void runtime::mesh_component::on_attach(node& owner)
 {
-    if (!m_model)
+    if (!m_drawn)
     {
         return;
     }
-
-    // Draw at the node's world transform: the model's local transform stays
-    // identity and inherits the node pose through the transform parent chain.
-    m_model->transform.set_parent(&owner.transform);
-    register_model();
+    runtime::scene* scene = owner.scene();
+    m_world = scene != nullptr ? scene->world() : nullptr;
+    if (m_world == nullptr)
+    {
+        LOG_WRN("runtime::mesh_component::on_attach: node has no scene render_world; the mesh has no proxy");
+        return;
+    }
+    create_proxy(owner);
 }
 
 void runtime::mesh_component::on_destroy()
 {
-    unregister_model();
-    // The owning node may outlive this component (remove_component, store
-    // teardown); do not leave the model's transform pointing at it.
-    if (m_model)
-    {
-        m_model->transform.set_parent(nullptr);
-    }
+    destroy_proxy();
+    m_world = nullptr;
 }
 
 void runtime::mesh_component::on_active_changed(node& owner, bool active)
 {
-    (void)owner;
     if (active)
     {
-        register_model();
+        create_proxy(owner);
     }
     else
     {
-        unregister_model();
+        destroy_proxy();
     }
 }
 
-void runtime::mesh_component::register_model()
+void runtime::mesh_component::extract(const node& owner)
 {
-    if (m_model && !m_registered)
+    if (m_world == nullptr || !m_proxy.valid())
     {
-        runtime::current_engine().renderer->register_scene_renderable(m_model.get());
-        m_registered = true;
+        return;
+    }
+
+    if (m_joints_revision != m_written_joints_revision)
+    {
+        m_world->set_mesh_joints(m_proxy, m_joints);
+        m_written_joints_revision = m_joints_revision;
+    }
+
+    const uint64_t version = owner.transform.get_world_version();
+    if (version != m_placed_version)
+    {
+        m_world->set_mesh_world(m_proxy, owner.transform.get_world_matrix());
+        m_placed_version = version;
     }
 }
 
-void runtime::mesh_component::unregister_model()
+void runtime::mesh_component::create_proxy(const node& owner)
 {
-    if (m_model && m_registered)
+    if (m_world == nullptr || !m_drawn || m_proxy.valid())
     {
-        runtime::current_engine().renderer->unregister_scene_renderable(m_model.get());
-        m_registered = false;
+        return;
     }
+
+    rendering_engine::mesh_description description{};
+    description.mesh = m_private ? m_private_mesh : m_mesh;
+    description.mat = m_material;
+    if (description.mesh != nullptr)
+    {
+        description.bounds = m_private ? m_bounds : std::optional<core::math::aabb>{description.mesh->bounds};
+    }
+    description.name = "mesh_component";
+
+    m_proxy = m_world->create_mesh(description, owner.transform.get_world_matrix());
+    m_placed_version = owner.transform.get_world_version();
+    // The first extraction hands a new proxy the current palette.
+    m_written_joints_revision = 0;
+}
+
+void runtime::mesh_component::destroy_proxy()
+{
+    if (m_world != nullptr && m_proxy.valid())
+    {
+        m_world->destroy_mesh(m_proxy);
+    }
+    m_proxy = {};
 }

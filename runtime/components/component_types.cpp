@@ -496,7 +496,7 @@ namespace
 
     std::string mesh_placeholder_reason(const mesh_component& component)
     {
-        if (component.model() != nullptr && component.mesh() == nullptr)
+        if (component.has_private_mesh())
         {
             return "its mesh is a private upload with no asset to reference";
         }

@@ -3,18 +3,12 @@
 
 #pragma once
 
-#include <memory>
-
-#include <core/math/transform.hpp>
-#include <rendering_engine/gpu/handle.hpp>
-#include <rendering_engine/renderables/per_draw_ubo.hpp>
-#include <rendering_engine/renderables/renderable.hpp>
+#include <rendering_engine/renderables/mesh_source.hpp>
 
 namespace rendering_engine
 {
     struct asset_cache;
     struct material;
-    struct mesh_asset;
 
     // Cylinder (or truncated cone) primitive. Centered at the origin with its axis along +Y;
     // the height spans [-height/2, +height/2]. The torso (side wall) is
@@ -24,7 +18,7 @@ namespace rendering_engine
     // appended with flat normals. A cap whose radius is 0 is skipped, so
     // a top radius of 0 yields a cone. Vertex format is position + uv +
     // normal + tangent with CCW outward winding.
-    struct cylinder : public renderable
+    struct cylinder : public mesh_source
     {
         cylinder(asset_cache& cache,
                  material* mat,
@@ -34,40 +28,16 @@ namespace rendering_engine
                  unsigned int radial_segments = 32,
                  unsigned int height_segments = 1,
                  bool open_ended = false);
-        ~cylinder() override;
-
-        core::transform transform;
-
-        void upload() override;
-        void collect_draw_items(std::vector<draw_item>& out) override;
-
-        // The cached mesh's object-space box under @ref transform (its world
-        // matrix, or its own matrix only for local_bounds); false until
-        // @ref upload has fetched the geometry.
-        bool world_bounds(core::math::aabb& out) const override;
-        bool local_bounds(core::math::aabb& out) const override;
-
-        gpu::buffer get_vertex_buffer() const;
-        gpu::buffer get_index_buffer() const;
-        unsigned int get_index_count() const;
 
     private:
-        // The cache @ref upload fetches the shared geometry through; it
-        // outlives the shape.
-        asset_cache* m_cache{nullptr};
-        material* m_material{nullptr};
+        // Fetches the geometry through @p cache; called by the constructor.
+        void fetch_mesh(asset_cache& cache);
+
         float m_radius_top;
         float m_radius_bottom;
         float m_height;
         unsigned int m_radial_segments;
         unsigned int m_height_segments;
         bool m_open_ended;
-        unsigned int m_index_count{0};
-        uint32_t m_vertex_stride{0};
-        bool m_vertex_format_reported{false};
-
-        std::shared_ptr<mesh_asset> m_mesh;
-        // The PerDraw block the pass pushes; no buffer of its own.
-        per_draw_binding m_per_draw;
     };
 } // namespace rendering_engine

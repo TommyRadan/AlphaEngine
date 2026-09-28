@@ -43,9 +43,9 @@ namespace rendering_engine
         geometry_layout.step_mode = gpu::vertex_step_mode::vertex;
         geometry_layout.attributes.push_back({position_location, 3, gpu::scalar_type::float32, 0});
 
-        // Slot 1: the per-instance stream instanced_mesh uploads, laid out
-        // exactly as instanced_material declares it — a mat4 as four vec4
-        // columns at the front of each record.
+        // Slot 1: the per-instance stream of mesh_instance records, laid
+        // out exactly as instanced_material declares it — a mat4 as four
+        // vec4 columns at the front of each record.
         gpu::vertex_buffer_layout instance_layout{};
         instance_layout.stride = instanced_material::instance_buffer_stride;
         instance_layout.step_mode = gpu::vertex_step_mode::instance;

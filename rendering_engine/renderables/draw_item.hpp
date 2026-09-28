@@ -50,7 +50,8 @@ namespace rendering_engine
         return (uint64_t{static_cast<uint8_t>(queue)} << 56) | (uint64_t{depth_bits} << 24) | (pipeline_id & 0xFFFFFFu);
     }
 
-    // One draw the pass can dispatch. Renderables fill this struct in
+    // One draw the pass can dispatch. The renderer fills this struct from a
+    // mesh proxy (@ref mesh_draw_builder), and UI and debug renderables in
     // @ref renderable::collect_draw_items; a pass that cares about draw
     // order (the scene pass) fills @ref sort_key from it afterwards and
     // sorts the collected items by that key, falling back to the material
@@ -62,8 +63,8 @@ namespace rendering_engine
     // draw — the pass calls @c draw(vertex_count) instead of
     // @c draw_indexed(index_count).
     //
-    // @ref mirrored is set by the renderable when its model matrix has a
-    // negative determinant (see @ref is_mirrored): the transform
+    // @ref mirrored is set by whoever fills the item when its model matrix
+    // has a negative determinant (see @ref is_mirrored): the transform
     // reverses every triangle's winding, so the pass draws the item with
     // @c mat->pipeline(true), the same variant with a clockwise front
     // face, and the mesh's outside stays visible.
@@ -79,15 +80,15 @@ namespace rendering_engine
     // A valid @ref instance_buffer is bound to vertex slot 1 as the
     // per-instance stream (one record per instanced draw copy, stepped
     // by the pipeline's per-instance vertex layout); @ref instance_stride
-    // is its record size. Used together with @ref indirect_buffer by
-    // @ref instanced_mesh.
+    // is its record size. Used together with @ref indirect_buffer by an
+    // instanced mesh proxy (see @ref instanced_mesh).
     //
     // @ref per_draw_push, when set, is the draw's PerDraw block (see
     // per_draw_ubo.hpp): the pass pushes it right before the draw as
-    // push constants. It points at the block the renderable caches,
-    // which stays put until the renderable collects again, so it stays
-    // valid while the frame records from the list it was collected into
-    // (the depth pre-pass and the scene pass share one); the bytes are
+    // push constants. It points at the block a mesh proxy (or a debug
+    // renderable) carries, which stays put until the frame ends, so it
+    // stays valid while the frame records from the list it was collected
+    // into (the depth pre-pass and the scene pass share one); the bytes are
     // copied when pushed.
     //
     // @ref per_draw_bind_group, when valid, is bound at the material's
@@ -118,8 +119,8 @@ namespace rendering_engine
         uint32_t instance_stride{0};
         // Instances drawn by this item: what a direct draw is issued with,
         // 1 for ordinary draws. An indirect draw takes its count from the
-        // command record instead; the renderable mirrors that count here
-        // so render-stats accounting matches what the GPU draws.
+        // command record instead; whoever fills the item mirrors that count
+        // here so render-stats accounting matches what the GPU draws.
         uint32_t instance_count{1};
         gpu::index_format index_format{gpu::index_format::uint32};
         uint32_t first_index{0};

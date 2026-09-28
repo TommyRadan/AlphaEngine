@@ -196,29 +196,29 @@ void rendering_engine::renderer::init(const render_services& services)
 
     // Construct the built-in passes first — each pass owns the
     // per-frame bind-group layout its matching material reads at
-    // pipeline-create time. The shadow passes walk the world's
-    // scene-renderable registry, like the scene pass, and size their maps
-    // and biases from the shadow settings, fixed at startup. They run
-    // ahead of the scene pass, which reads their maps and each frame's
-    // fitted matrices through the frame context (render() publishes the
-    // passes there), so no pass is handed another at construction.
+    // pipeline-create time. The shadow passes cull the frame's mesh
+    // draws, like the scene pass, and size their maps and biases from the
+    // shadow settings, fixed at startup. They run ahead of the scene pass,
+    // which reads their maps and each frame's fitted matrices through the
+    // frame context (render() publishes the passes there), so no pass is
+    // handed another at construction.
     const shadow_settings shadow_config = services.shadows != nullptr ? *services.shadows : shadow_settings{};
-    auto shadow = std::make_unique<shadow_pass>(device, &m_world.scene_renderables(), shadow_config);
+    auto shadow = std::make_unique<shadow_pass>(device, shadow_config);
     m_shadow = shadow.get();
     // The omni shadow pass renders six depth faces from the first shadow-casting
     // point light; like the directional shadow it runs before the scene pass so
     // its maps are ready for the per-frame bind group.
-    auto point_shadow = std::make_unique<point_shadow_pass>(device, &m_world.scene_renderables(), shadow_config);
+    auto point_shadow = std::make_unique<point_shadow_pass>(device, shadow_config);
     m_point_shadow = point_shadow.get();
     // The spot shadow pass renders a single perspective depth map from the
     // first shadow-casting spot light; also runs before the scene pass.
-    auto spot_shadow = std::make_unique<spot_shadow_pass>(device, &m_world.scene_renderables(), shadow_config);
+    auto spot_shadow = std::make_unique<spot_shadow_pass>(device, shadow_config);
     m_spot_shadow = spot_shadow.get();
     // Above the parallel draw threshold the scene pass records its draws
     // from the job pool's workers (Vulkan only); 0 keeps it serial.
     const uint32_t parallel_draw_threshold = graphics.parallel_draw_threshold;
-    auto scene = std::make_unique<scene_pass>(
-        device, services.jobs, &m_world.scene_renderables(), &m_render_stats, taa_enabled, parallel_draw_threshold);
+    auto scene =
+        std::make_unique<scene_pass>(device, services.jobs, &m_render_stats, taa_enabled, parallel_draw_threshold);
     m_scene = scene.get();
     // The optional depth pre-pass runs right before the scene pass, over
     // the scene pass's own draw list and per-frame group (reached through
@@ -412,11 +412,12 @@ void rendering_engine::renderer::init(const render_services& services)
 #if _DEBUG
     // Provide a couple of always-available reference gizmos (the infinite
     // ground grid + world axes) so a fresh debug build has something to
-    // toggle from the overlay's Helpers panel. They auto-register into the
-    // matching renderable registry and the helper registry on
-    // construction: the infinite grid into the scene pass (depth-tested),
-    // the axes into the always-on-top debug pass. Game code can add the
-    // box / light / camera helpers against its own objects the same way.
+    // toggle from the overlay's Helpers panel. They join the world's
+    // helper list on construction, and the world itself: the infinite grid
+    // as a mesh proxy the scene pass draws (depth-tested), the axes in the
+    // debug-renderable registry of the always-on-top debug pass. Game code
+    // can add the box / light / camera helpers against its own objects the
+    // same way.
     // The debug pass is dropped in release, so this whole block compiles
     // out there.
     m_debug_helpers.push_back(std::make_unique<debug_draw::infinite_grid>(*this));
@@ -441,8 +442,8 @@ void rendering_engine::renderer::quit()
 #endif
 
     // Release the built-in debug helpers before the line material and the
-    // GPU device they reference; their destructors unregister from the
-    // world's registries and free their line buffers. Empty in release.
+    // GPU device they reference; their destructors leave the world (the
+    // grid destroys its proxy) and free their geometry. Empty in release.
     // Game-owned helpers must likewise be released before quit.
     m_debug_helpers.clear();
 
@@ -471,6 +472,13 @@ void rendering_engine::renderer::quit()
     m_prev_camera = {};
     m_has_prev_view_projection = false;
     m_frame_lights.clear();
+
+    // The per-proxy buffers and bind groups the mesh draws bind; the
+    // skinned groups were built against layouts the materials own.
+    if (m_services.device != nullptr)
+    {
+        m_mesh_draws.release(*m_services.device);
+    }
 
     // The grading LUT is a cached asset whose texture this handle keeps
     // alive; drop it while the device it is freed through is still up.
@@ -551,6 +559,11 @@ void rendering_engine::renderer::render()
     // without waiting), so its per-pass timestamps can be read now.
     m_gpu_profiler.resolve(gpu);
 
+    // The mesh proxies become this frame's draw list, in proxy order: the
+    // instance snapshots and joint palettes the extraction captured are
+    // uploaded here, with the frame open and before any pass prepares.
+    m_mesh_draws.build(m_world, gpu);
+
     // Capture per-frame state once so passes cannot disagree about
     // which camera or backbuffer is active mid-frame, and so they
     // do not have to re-run the camera arbitration on every entry.
@@ -563,6 +576,7 @@ void rendering_engine::renderer::render()
     ctx.active_camera = m_world.camera(ctx.active_camera_handle);
     m_world.collect_enabled_lights(m_frame_lights);
     ctx.lights = m_frame_lights;
+    ctx.scene_draws = m_mesh_draws.draws();
     ctx.world = &m_world;
     ctx.viewport_width = m_target_width;
     ctx.viewport_height = m_target_height;
@@ -782,16 +796,6 @@ rendering_engine::gpu::device& rendering_engine::renderer::device() const
 {
     assert(m_services.device != nullptr && "renderer::device is only valid between init and quit");
     return *m_services.device;
-}
-
-void rendering_engine::renderer::register_scene_renderable(renderable* r)
-{
-    m_world.register_scene_renderable(r);
-}
-
-void rendering_engine::renderer::unregister_scene_renderable(renderable* r)
-{
-    m_world.unregister_scene_renderable(r);
 }
 
 void rendering_engine::renderer::register_ui_renderable(renderable* r)

@@ -69,7 +69,6 @@ GAME_MODULE()
 
     auto dots = std::make_unique<rendering_engine::points>(*runtime::current_engine().gpu, &material);
     dots->set_positions(positions, colors);
-    dots->upload();
 
     // The cloud turns with its node.
     runtime::node& cloud = scene.create_node("point_cloud");

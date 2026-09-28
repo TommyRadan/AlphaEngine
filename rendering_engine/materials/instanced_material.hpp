@@ -24,8 +24,9 @@ namespace rendering_engine
     // (location 5); see @ref instance_buffer_stride. It is fed through a
     // per-instance vertex binding (@c VK_VERTEX_INPUT_RATE_INSTANCE), so
     // the shader reads ordinary attributes rather than indexing by
-    // @c gl_InstanceIndex. @ref instanced_mesh builds a matching buffer;
-    // this material is meant to be fronted by it.
+    // @c gl_InstanceIndex. An instanced mesh proxy's @ref mesh_instance
+    // records are this layout; the material is meant to be fronted by
+    // @ref instanced_mesh.
     //
     // Slot layout: per-frame group at slot 0 (camera, owned by the
     // @ref scene_pass) and the per-material group at slot 2 (a flat tint
@@ -45,8 +46,7 @@ namespace rendering_engine
                                                                   gpu::bind_group_layout frame_layout);
 
         // Byte stride of one per-instance record: a mat4 model (64 bytes)
-        // followed by a vec4 colour (16 bytes). @ref instanced_mesh lays out
-        // its instance buffer to match.
+        // followed by a vec4 colour (16 bytes): one @ref mesh_instance.
         static constexpr uint32_t instance_buffer_stride = 16u * sizeof(float) + 4u * sizeof(float);
 
         // Flat tint multiplied onto every instance's own colour (white

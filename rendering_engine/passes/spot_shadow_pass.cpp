@@ -14,7 +14,6 @@
 #include <rendering_engine/gpu/shader_hot_reload.hpp>
 #include <rendering_engine/lighting/lights_ubo.hpp>
 #include <rendering_engine/renderables/per_draw_ubo.hpp>
-#include <rendering_engine/renderables/renderable.hpp>
 
 namespace
 {
@@ -54,10 +53,8 @@ namespace
 
 namespace rendering_engine
 {
-    spot_shadow_pass::spot_shadow_pass(gpu::device& device,
-                                       const std::vector<renderable*>* registry,
-                                       const rendering_engine::shadow_settings& settings)
-        : m_device(&device), m_registry(registry)
+    spot_shadow_pass::spot_shadow_pass(gpu::device& device, const rendering_engine::shadow_settings& settings)
+        : m_device(&device)
     {
         auto& gpu = *m_device;
 
@@ -104,7 +101,7 @@ namespace rendering_engine
         m_light_bind_group = gpu.create_bind_group(light_bind_group_descriptor);
 
         // Depth-only opaque draw: position-only vertex stream (offset 0
-        // of every renderable's vertex record), depth tested and
+        // of every mesh's vertex record), depth tested and
         // written, no blend, no culling so single-sided geometry such
         // as the ground plane still occludes. The rasteriser's
         // slope-scaled depth bias pushes each caster's stored depth
@@ -233,8 +230,8 @@ namespace rendering_engine
     {
         // Nothing but the light list shapes a spot map: it is a fixed
         // perspective view from the light, independent of the camera, so
-        // the pass reads only the world's lights and the renderable
-        // registry, like point_shadow_pass.
+        // the pass reads only the world's lights and the frame's mesh
+        // draws, like point_shadow_pass.
         auto& gpu = *m_device;
         m_culled = 0;
         m_items.clear();
@@ -284,28 +281,29 @@ namespace rendering_engine
 
         gpu.write_buffer(m_light_ubo, m_light_view_projection.data(), sizeof(math::mat4), 0);
 
-        // Every scene renderable casts. Reuse the per-draw model-matrix
-        // bind group each renderable already built (or, for an instanced
-        // batch, its per-instance transform stream); the depth-only
-        // pipelines read only position so the differing vertex strides
-        // are absorbed by the per-draw stride override. Casters whose
-        // bounds lie outside the light's perspective frustum could never
-        // rasterize into the map, so they are skipped before their items
-        // are even built; a renderable without bounds always casts.
+        // Every mesh draw casts. Reuse the PerDraw block each carries (or,
+        // for an instanced batch, its per-instance transform stream); the
+        // depth-only pipelines read only position so the differing vertex
+        // strides are absorbed by the per-draw stride override. Casters
+        // whose bounds lie outside the light's perspective frustum could
+        // never rasterize into the map, so they are skipped; a draw
+        // without bounds always casts.
         const math::frustum light_frustum = math::frustum::from_view_projection(m_light_view_projection);
-        for (auto* r : *m_registry)
+        for (const mesh_draw& draw : ctx.scene_draws)
         {
-            if (!r->casts_shadow() || (r->layer_mask & m_caster_mask) == 0)
+            if (!draw.casts_shadow || (draw.layer_mask & m_caster_mask) == 0)
             {
                 continue;
             }
-            math::aabb bounds;
-            if (r->world_bounds(bounds) && !light_frustum.intersects(bounds))
+            if (draw.bounded && !light_frustum.intersects(draw.bounds))
             {
                 ++m_culled;
                 continue;
             }
-            r->collect_draw_items(m_items);
+            if (draw.drawable)
+            {
+                m_items.push_back(draw.item);
+            }
         }
     }
 

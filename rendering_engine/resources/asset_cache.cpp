@@ -807,7 +807,7 @@ namespace rendering_engine
         // Miss: build the geometry (outside the lock — a builder may reach
         // back into the cache) and upload it once.
         const assets::mesh_data data = builder();
-        if (data.vertex_stride == 0 || data.vertex_bytes.empty())
+        if (data.vertex_stride == 0 || data.vertex_bytes.size() < data.vertex_stride)
         {
             LOG_ERR("asset_cache: mesh builder for '%s' produced no geometry (stride %u, %zu bytes); nothing uploaded",
                     key.c_str(),
@@ -831,40 +831,10 @@ namespace rendering_engine
             format = assets::vertex_format::custom;
         }
 
-        auto& gpu = device();
-        auto asset = std::make_shared<mesh_asset>(gpu);
-        asset->key = key;
-
-        gpu::buffer_descriptor vertex_descriptor{};
-        vertex_descriptor.size = data.vertex_bytes.size();
-        vertex_descriptor.usage = gpu::buffer_usage_vertex;
-        vertex_descriptor.initial_data = data.vertex_bytes.data();
-        asset->vertex_buffer = gpu.create_buffer(vertex_descriptor);
-        asset->vertex_stride = data.vertex_stride;
-        asset->format = format;
-        asset->vertex_count = static_cast<uint32_t>(data.vertex_bytes.size() / data.vertex_stride);
-
-        // Object-space bounds for frustum culling: trust the builder's box
-        // when it supplied one (an importer's record may not lead with the
-        // position), otherwise derive it from the positions once here so
-        // every renderable sharing this upload shares the box too.
-        if (data.bounds.has_value())
+        std::shared_ptr<mesh_asset> asset = upload_mesh(device(), data, format, key);
+        if (asset == nullptr)
         {
-            asset->bounds = *data.bounds;
-        }
-        else if (const auto computed = data.compute_bounds(); computed.has_value())
-        {
-            asset->bounds = *computed;
-        }
-
-        if (!data.indices.empty())
-        {
-            gpu::buffer_descriptor index_descriptor{};
-            index_descriptor.size = data.indices.size() * sizeof(uint32_t);
-            index_descriptor.usage = gpu::buffer_usage_index;
-            index_descriptor.initial_data = data.indices.data();
-            asset->index_buffer = gpu.create_buffer(index_descriptor);
-            asset->index_count = static_cast<uint32_t>(data.indices.size());
+            return nullptr;
         }
 
         std::unique_lock lock{m_mutex};

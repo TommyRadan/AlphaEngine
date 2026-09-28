@@ -5,13 +5,15 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include <assets/color.hpp>
 #include <assets/vertex.hpp>
+#include <core/math/aabb.hpp>
 #include <core/math/math.hpp>
-#include <rendering_engine/gpu/handle.hpp>
-#include <rendering_engine/renderables/renderable.hpp>
+#include <rendering_engine/mesh_proxy.hpp>
+#include <rendering_engine/renderables/mesh_source.hpp>
 
 namespace rendering_engine
 {
@@ -26,54 +28,57 @@ namespace rendering_engine
     // Draws one shared mesh many times in a single instanced draw, each
     // copy with its own world transform and tint. The geometry (vertex +
     // index buffers) and the material are shared across every instance; a
-    // per-instance vertex stream of @c {mat4 model; vec4 color;} records
-    // supplies what varies.
+    // per-instance vertex stream of @ref mesh_instance records supplies what
+    // varies.
     //
-    // The renderable emits a single indexed-indirect @ref draw_item: the
-    // command record carries the instance count, and the per-instance
-    // stream is bound to vertex slot 1 and stepped once per instance
-    // (@c VK_VERTEX_INPUT_RATE_INSTANCE), so the whole batch costs one
-    // draw call without relying on @c gl_InstanceIndex.
-    // It must be fronted by an @ref instanced_material; pass that material
-    // to the constructor.
-    struct instanced_mesh : public renderable
+    // The source describes a single indexed-indirect draw: the indirect
+    // record carries the instance count, and the per-instance stream is
+    // bound to vertex slot 1 and stepped once per instance
+    // (@c VK_VERTEX_INPUT_RATE_INSTANCE), so the whole batch costs one draw
+    // call without relying on @c gl_InstanceIndex. The records live here, on
+    // the CPU; the render extraction captures the ones changed since the
+    // last frame, with the draw's arguments, into the proxy's snapshot
+    // (@ref write_instances), and the renderer uploads them from there. The
+    // instances carry world transforms, so the proxy's own placement is
+    // ignored. It must be fronted by an @ref instanced_material; pass that
+    // material to the constructor.
+    struct instanced_mesh : public mesh_source
     {
         // @p mat is non-owning and is expected to be an
         // @ref instanced_material. @p instance_count is the initial
-        // capacity of the per-instance buffer (see @ref reserve_instances);
+        // capacity of the per-instance records (see @ref reserve_instances);
         // the active draw count starts equal to it and can be lowered via
-        // @ref set_instance_count.
+        // @ref set_instance_count. Geometry given to @ref upload_geometry is
+        // uploaded to @p device.
         instanced_mesh(gpu::device& device, material* mat, uint32_t instance_count);
-        ~instanced_mesh() override;
 
-        // Upload the shared geometry drawn once per instance. Vertices use
-        // the position+uv+normal record (the instanced material reads only
-        // the position); indices are 32-bit. Call once after construction,
-        // before the first frame. Allocates buffers owned by this renderable;
-        // prefer @ref set_geometry to share a cached upload between several
-        // instanced meshes.
+        // Upload the shared geometry drawn once per instance, as a private
+        // mesh this instanced mesh alone draws. Vertices use the
+        // position+uv+normal record (the instanced material reads only the
+        // position); indices are 32-bit. Prefer @ref set_geometry to share a
+        // cached upload between several instanced meshes.
         void upload_geometry(const std::vector<assets::vertex_position_uv_normal>& vertices,
                              const std::vector<uint32_t>& indices);
 
         // Draw a mesh cached by @ref asset_cache instead of uploading a private
         // copy. The shared geometry's lifetime is tied to the handle: this
-        // renderable holds a reference for as long as it draws it, and the GPU
-        // buffers are released when the last instanced mesh referencing them is
-        // destroyed. Mutually exclusive with @ref upload_geometry — use one.
+        // source holds a reference for as long as it draws it, and the GPU
+        // buffers are released when the last holder is gone.
         void set_geometry(std::shared_ptr<mesh_asset> mesh);
 
-        // Geometry uploads through @ref upload_geometry; this is a no-op so
-        // @ref instanced_mesh still satisfies the @ref renderable interface.
-        void upload() final {}
+        // The geometry, the material, an indexed-indirect draw of the
+        // instance snapshot, and the world-space union of the geometry's box
+        // under every active instance transform (none until geometry is set
+        // or while the instance count is zero).
+        mesh_description describe() const override;
 
-        void collect_draw_items(std::vector<draw_item>& out) final;
+        // None: the instances carry world transforms, so there is no box in
+        // the space of whoever places the source.
+        std::optional<core::math::aabb> local_bounds() const override;
 
-        // Union of the geometry's object-space box under every active
-        // instance transform. Cached and rebuilt only after an instance
-        // transform, the instance count or the geometry changes, so a
-        // static lattice costs nothing per frame. False until geometry is
-        // set or while the instance count is zero.
-        bool world_bounds(core::math::aabb& out) const final;
+        // Captures the records changed since the last call, and the draw's
+        // arguments, into @p proxy's snapshot in @p world.
+        void write_instances(render_world& world, mesh_proxy_handle proxy) override;
 
         // Per-instance record capacity: the construction count, raised by
         // @ref reserve_instances.
@@ -81,12 +86,11 @@ namespace rendering_engine
 
         // Grow the capacity to at least @p capacity records (never
         // shrinks). New records start as an identity transform with a
-        // white tint. The per-instance buffer is reallocated at the next
-        // draw and refilled whole; the active count is left alone, so
-        // raise it with @ref set_instance_count.
+        // white tint; the active count is left alone, so raise it with
+        // @ref set_instance_count.
         void reserve_instances(uint32_t capacity);
 
-        // Number of instances drawn this frame. Clamped to the capacity.
+        // Number of instances drawn. Clamped to the capacity.
         void set_instance_count(uint32_t count);
         uint32_t instance_count() const;
 
@@ -98,72 +102,23 @@ namespace rendering_engine
         void set_instance_color(uint32_t index, const assets::color& color);
 
     private:
-        // Per-instance record mirrored on the CPU and uploaded into the
-        // per-instance vertex stream. Layout matches the instanced
-        // material's slot-1 vertex attributes: a mat4 model (four vec4
-        // columns, 64 bytes) followed by a vec4 colour (16 bytes), 80 bytes
-        // with no trailing padding.
-        struct instance_record
-        {
-            core::math::mat4 model{};
-            core::math::vec4 color{1.0f, 1.0f, 1.0f, 1.0f};
-        };
+        // Widen the changed span to cover record @p index.
+        void mark_dirty(uint32_t index);
 
-        // The device this renderable's GPU resources are created on and
-        // released through; it outlives the renderable.
+        // The device private geometry is uploaded to; it outlives the source.
         gpu::device* m_device{nullptr};
-        material* m_material{nullptr};
-        uint32_t m_capacity{0};
         uint32_t m_instance_count{0};
 
-        // CPU mirror of the per-instance vertex stream. Only the span of
-        // records changed since the last upload, [m_dirty_begin,
-        // m_dirty_end), is re-uploaded; an empty span uploads nothing.
-        std::vector<instance_record> m_instances;
+        // The records, one per instance slot. Only the span changed since
+        // the last capture, [m_dirty_begin, m_dirty_end), is copied into the
+        // proxy's snapshot; an empty span copies nothing.
+        std::vector<mesh_instance> m_instances;
         uint32_t m_dirty_begin{0};
         uint32_t m_dirty_end{0};
 
-        // Records the GPU-side per-instance buffer has room for; below
-        // @ref m_capacity after @ref reserve_instances, which makes the
-        // next draw reallocate it.
-        uint32_t m_buffer_capacity{0};
-
-        // Widen the dirty span to cover record @p index.
-        void mark_dirty(uint32_t index);
-
-        // Whether the indirect command must be (re)written before the next
-        // draw. Set whenever either field it carries changes: the index count
-        // (a geometry swap via @ref set_geometry / @ref upload_geometry) or
-        // the active instance count (@ref set_instance_count).
-        bool m_indirect_dirty{true};
-
-        // Shared geometry from @ref asset_cache, set via @ref set_geometry. When
-        // present its buffers are drawn instead of the privately-owned
-        // @ref m_vertex_buffer / @ref m_index_buffer, and it is not freed here —
-        // the shared_ptr releases it once no instanced mesh references it.
-        std::shared_ptr<mesh_asset> m_mesh;
-
-        gpu::buffer m_vertex_buffer{};
-        gpu::buffer m_index_buffer{};
-        gpu::buffer m_instance_buffer{};
-        gpu::buffer m_indirect_buffer{};
-
-        uint32_t m_index_count{0};
-        uint32_t m_vertex_stride{0};
-
-        // Object-space bounds of whichever geometry is drawn (the cached
-        // asset's box or the one computed at upload_geometry) and the cached
-        // world-space union over the active instances that
-        // @ref world_bounds serves. @c m_world_bounds_dirty is raised by
-        // every mutation the union depends on.
-        core::math::aabb m_local_bounds{};
-        bool m_has_local_bounds{false};
+        // The world-space union @ref describe reports, rebuilt only after an
+        // instance transform, the instance count or the geometry changed.
         mutable core::math::aabb m_world_bounds{};
         mutable bool m_world_bounds_dirty{true};
-
-        // Record layout of whichever vertex buffer is drawn, checked against
-        // the material before every draw (see @ref validate_vertex_format).
-        assets::vertex_format m_vertex_format{assets::vertex_format::custom};
-        bool m_vertex_format_reported{false};
     };
 } // namespace rendering_engine

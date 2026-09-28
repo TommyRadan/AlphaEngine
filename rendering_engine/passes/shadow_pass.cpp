@@ -18,7 +18,6 @@
 #include <rendering_engine/gpu/texture.hpp>
 #include <rendering_engine/lighting/lights_ubo.hpp>
 #include <rendering_engine/renderables/per_draw_ubo.hpp>
-#include <rendering_engine/renderables/renderable.hpp>
 
 namespace
 {
@@ -262,10 +261,8 @@ namespace
 
 namespace rendering_engine
 {
-    shadow_pass::shadow_pass(gpu::device& device,
-                             const std::vector<renderable*>* registry,
-                             const rendering_engine::shadow_settings& settings)
-        : m_device(&device), m_registry(registry), m_resolution(std::max(settings.resolution, 1u)),
+    shadow_pass::shadow_pass(gpu::device& device, const rendering_engine::shadow_settings& settings)
+        : m_device(&device), m_resolution(std::max(settings.resolution, 1u)),
           m_cascade_count(std::clamp(static_cast<int>(settings.cascade_count), 1, max_shadow_cascades)),
           m_distance(std::max(settings.distance, min_log_split_near)), m_bias(std::max(settings.bias, 0.0f)),
           m_pcf_kernel(std::clamp(settings.pcf_kernel, 1u, rendering_engine::shadow_settings::max_pcf_kernel))
@@ -358,7 +355,7 @@ namespace rendering_engine
         }
 
         // Depth-only opaque draw: position-only vertex stream (offset 0
-        // of every renderable's vertex record), depth tested and
+        // of every mesh's vertex record), depth tested and
         // written, no blend, no culling so single-sided geometry such
         // as the ground plane still occludes. The rasteriser's
         // slope-scaled depth bias pushes each caster's stored depth
@@ -598,8 +595,8 @@ namespace rendering_engine
                 boxes[cascade] = light_space_box(spheres[cascade], light_rotation, m_resolution);
             }
 
-            // Walk the registry once per frame, not once per cascade.
-            // A caster that reports bounds is tested against each
+            // Walk the draws once per frame, not once per cascade.
+            // A caster with bounds is tested against each
             // cascade's box in light space: one that cannot reach a
             // cascade is culled there, one that cannot reach any never
             // builds its draw items, and every one that does reach a
@@ -608,17 +605,16 @@ namespace rendering_engine
             // still casts into the near cascades. A caster without bounds
             // casts into every cascade.
             const uint32_t all_cascades = (1u << static_cast<uint32_t>(m_active_cascades)) - 1u;
-            for (auto* r : *m_registry)
+            for (const mesh_draw& draw : ctx.scene_draws)
             {
-                if (!r->casts_shadow() || (r->layer_mask & m_caster_mask) == 0)
+                if (!draw.casts_shadow || (draw.layer_mask & m_caster_mask) == 0)
                 {
                     continue;
                 }
                 uint32_t reached = all_cascades;
-                math::aabb bounds;
-                if (r->world_bounds(bounds))
+                if (draw.bounded)
                 {
-                    const math::aabb light_bounds = math::transform(bounds, light_rotation);
+                    const math::aabb light_bounds = math::transform(draw.bounds, light_rotation);
                     reached = 0;
                     for (int cascade = 0; cascade < m_active_cascades; ++cascade)
                     {
@@ -640,7 +636,10 @@ namespace rendering_engine
                 caster_range range{};
                 range.first = m_items.size();
                 range.cascades = reached;
-                r->collect_draw_items(m_items);
+                if (draw.drawable)
+                {
+                    m_items.push_back(draw.item);
+                }
                 range.count = m_items.size() - range.first;
                 if (range.count != 0)
                 {
@@ -688,11 +687,10 @@ namespace rendering_engine
             }
 
             // Only the casters that reach this cascade. Reuse the
-            // per-draw block each renderable already built, pushed or in
-            // its per-draw group (or, for an instanced batch, its
-            // per-instance transform stream); the depth-only pipelines
-            // read only position so the differing vertex strides are
-            // absorbed by the per-draw stride override.
+            // per-draw block each mesh proxy carries (or, for an
+            // instanced batch, its per-instance transform stream); the
+            // depth-only pipelines read only position so the differing
+            // vertex strides are absorbed by the per-draw stride override.
             const uint32_t bit = 1u << static_cast<uint32_t>(cascade);
             shadow_caster_dispatch dispatch(
                 *pass_encoder, m_pipeline, m_instanced.pipeline, m_light_bind_groups[cascade]);

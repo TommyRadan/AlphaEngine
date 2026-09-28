@@ -3,73 +3,55 @@
 
 #include <rendering_engine/debug_draw/infinite_grid.hpp>
 
-#include <array>
-#include <cstdint>
+#include <vector>
 
+#include <assets/mesh_data.hpp>
 #include <core/math/math.hpp>
-#include <rendering_engine/gpu/buffer.hpp>
-#include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/materials/grid_material.hpp>
-#include <rendering_engine/renderables/draw_item.hpp>
-#include <rendering_engine/renderables/per_draw_ubo.hpp>
+#include <rendering_engine/mesh_proxy.hpp>
+#include <rendering_engine/render_world.hpp>
 #include <rendering_engine/renderer.hpp>
+#include <rendering_engine/resources/mesh_asset.hpp>
 
 namespace rendering_engine::debug_draw
 {
     infinite_grid::infinite_grid(renderer& owner, float fade_distance)
-        : helper(owner, "Grid (infinite)", helper_layer::scene), m_device(&owner.device()),
-          m_material(owner.create_grid_material(fade_distance))
+        : helper(owner, "Grid (infinite)"), m_material(owner.create_grid_material(fade_distance)),
+          m_world(&owner.world())
     {
-        upload();
+        // A single fullscreen triangle in clip space; the grid material's
+        // vertex shader unprojects these corners to reconstruct the view
+        // rays, so no transform is applied to the positions themselves.
+        const std::vector<core::math::vec3> vertices{core::math::vec3{-1.0f, -1.0f, 0.0f},
+                                                     core::math::vec3{3.0f, -1.0f, 0.0f},
+                                                     core::math::vec3{-1.0f, 3.0f, 0.0f}};
+        m_mesh = upload_mesh(owner.device(), assets::mesh_data::from_vertices(vertices), assets::vertex_format::custom);
+
+        // The proxy carries the identity model of the origin grid (see
+        // per_draw_ubo.hpp); the shader references the model matrix when
+        // reconstructing depth. Its clip-space triangle has no world box to
+        // cull by, and fed to the depth-only shadow pipelines it would write
+        // a phantom occluder.
+        mesh_description description{};
+        description.mesh = m_mesh;
+        description.mat = m_material.get();
+        description.layer_mask = layer_editor;
+        description.casts_shadow = false;
+        description.check_format = false;
+        description.name = "infinite_grid";
+        m_proxy = m_world->create_mesh(description, core::math::mat4{});
     }
 
     infinite_grid::~infinite_grid()
     {
-        auto& gpu = *m_device;
-        if (m_vertex_buffer.valid())
-        {
-            gpu.destroy(m_vertex_buffer);
-            m_vertex_buffer = {};
-        }
+        m_world->destroy_mesh(m_proxy);
+        m_mesh.reset();
         m_material.reset();
     }
 
-    void infinite_grid::upload()
+    void infinite_grid::set_visible(bool visible)
     {
-        auto& gpu = *m_device;
-
-        // A single fullscreen triangle in clip space; the grid material's
-        // vertex shader unprojects these corners to reconstruct the view
-        // rays, so no transform is applied to the positions themselves.
-        const std::array<core::math::vec3, 3> vertices{core::math::vec3{-1.0f, -1.0f, 0.0f},
-                                                       core::math::vec3{3.0f, -1.0f, 0.0f},
-                                                       core::math::vec3{-1.0f, 3.0f, 0.0f}};
-
-        gpu::buffer_descriptor vertex_descriptor{};
-        vertex_descriptor.size = vertices.size() * sizeof(core::math::vec3);
-        vertex_descriptor.usage = gpu::buffer_usage_vertex;
-        vertex_descriptor.hint = gpu::buffer_usage_hint::static_data;
-        vertex_descriptor.initial_data = vertices.data();
-        m_vertex_buffer = gpu.create_buffer(vertex_descriptor);
-    }
-
-    void infinite_grid::collect_draw_items(std::vector<draw_item>& out)
-    {
-        if (!visible || m_material == nullptr || !m_vertex_buffer.valid())
-        {
-            return;
-        }
-
-        draw_item item{};
-        item.mat = m_material.get();
-        // Per-draw block (the identity model of the origin grid, see
-        // per_draw_ubo.hpp); the shader references the model matrix when
-        // reconstructing depth. The grid never moves, so the block is
-        // built once and then only pushed per frame.
-        m_per_draw.bind(m_transform, item);
-        item.vertex_buffer = m_vertex_buffer;
-        item.vertex_stride = sizeof(core::math::vec3);
-        item.vertex_count = 3;
-        out.push_back(item);
+        helper::set_visible(visible);
+        m_world->set_mesh_visible(m_proxy, visible);
     }
 } // namespace rendering_engine::debug_draw

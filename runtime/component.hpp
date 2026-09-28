@@ -272,8 +272,8 @@ namespace runtime
          * @brief Type-erased active/visible toggle used by @ref node::set_active.
          *
          * Dispatches to the component's @c on_active_changed(node&, bool) if it
-         * defines one, so components that own external state (a renderable's
-         * registration) can show or hide it when a subtree is enabled/disabled.
+         * defines one, so components that own external state (a render
+         * proxy) can show or hide it when a subtree is enabled/disabled.
          */
         void set_active(std::type_index type, component_handle handle, node& owner, bool active) noexcept
         {
@@ -360,8 +360,8 @@ namespace runtime
             void erase(component_handle handle) noexcept override
             {
                 auto h = make_handle<C>(handle);
-                // Give components that manage external state (e.g. a renderer
-                // registration) a chance to unwind it before the slot — and the
+                // Give components that manage external state (e.g. a render
+                // proxy) a chance to unwind it before the slot — and the
                 // data it owns — is freed. Plain-data components define no
                 // on_destroy and skip this entirely.
                 if constexpr (requires(C& c) { c.on_destroy(); })
