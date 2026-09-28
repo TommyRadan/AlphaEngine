@@ -14,7 +14,6 @@
 #include <rendering_engine/gpu/shader.hpp>
 #include <rendering_engine/gpu/shader_hot_reload.hpp>
 #include <rendering_engine/passes/post/fullscreen_triangle.hpp>
-#include <runtime/engine.hpp>
 
 namespace
 {
@@ -26,9 +25,10 @@ namespace
 
 namespace rendering_engine
 {
-    fxaa_pass::fxaa_pass(uint32_t width, uint32_t height, bool taa_enabled) : m_taa_enabled(taa_enabled)
+    fxaa_pass::fxaa_pass(gpu::device& device, uint32_t width, uint32_t height, bool taa_enabled)
+        : m_device(&device), m_taa_enabled(taa_enabled)
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
 
         m_vertex_shader =
             gpu::create_library_shader_module(gpu, "passes/fullscreen.vert.glsl", gpu::shader_stage::vertex);
@@ -107,7 +107,7 @@ namespace rendering_engine
 
     fxaa_pass::~fxaa_pass()
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
         if (m_pipeline.valid())
         {
             gpu.destroy(m_pipeline);
@@ -158,7 +158,7 @@ namespace rendering_engine
             }
         }
 
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
 
         // Miss: build into the rotating slot. Releasing what it held is
         // safe mid-frame — the device defers the destroy until the command
@@ -195,7 +195,7 @@ namespace rendering_engine
 
     void fxaa_pass::write_rcp_frame(uint32_t width, uint32_t height)
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
         // Same encoding as the construction-time bake: a zero dimension
         // writes a zero step so the pass degrades to a straight copy.
         const float rcp_x = (width != 0) ? 1.0f / static_cast<float>(width) : 0.0f;

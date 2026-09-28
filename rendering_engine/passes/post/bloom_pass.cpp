@@ -15,7 +15,6 @@
 #include <rendering_engine/gpu/shader.hpp>
 #include <rendering_engine/gpu/shader_hot_reload.hpp>
 #include <rendering_engine/passes/post/fullscreen_triangle.hpp>
-#include <runtime/engine.hpp>
 
 namespace
 {
@@ -46,9 +45,9 @@ namespace
 
 namespace rendering_engine
 {
-    bloom_pass::bloom_pass(uint32_t width, uint32_t height)
+    bloom_pass::bloom_pass(gpu::device& device, uint32_t width, uint32_t height) : m_device(&device)
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
 
         // Degenerate backbuffer (no settings, zero-sized window): leave
         // the pass disabled so the scene target flows straight through to
@@ -143,7 +142,7 @@ namespace rendering_engine
 
     gpu::render_target bloom_pass::create_target(uint32_t width, uint32_t height) const
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
         gpu::render_target_descriptor descriptor{};
         descriptor.color = {{gpu::texture_format::rgba16_float}};
         descriptor.width = width;
@@ -154,7 +153,7 @@ namespace rendering_engine
 
     gpu::buffer bloom_pass::create_params_ubo(const std::array<float, 4>& values) const
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
         gpu::buffer_descriptor descriptor{};
         descriptor.size = params_ubo_size;
         descriptor.usage = gpu::buffer_usage_uniform | gpu::buffer_usage_copy_dst;
@@ -165,7 +164,7 @@ namespace rendering_engine
 
     gpu::bind_group bloom_pass::create_bind_group(gpu::texture input, gpu::buffer ubo) const
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
         gpu::bind_group_descriptor descriptor{};
         descriptor.layout = m_io_layout;
 
@@ -186,7 +185,7 @@ namespace rendering_engine
 
     void bloom_pass::create_pyramid(uint32_t width, uint32_t height)
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
 
         // -- Bright pass: half-resolution threshold output ------------
         const uint32_t base_width = std::max(1u, width / 2);
@@ -242,7 +241,7 @@ namespace rendering_engine
 
     void bloom_pass::release_pyramid()
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
 
         // Bind groups first, then the buffers / targets they reference.
         for (auto& level : m_levels)
@@ -294,7 +293,7 @@ namespace rendering_engine
 
     void bloom_pass::rebuild_threshold_bind_group(gpu::texture scene_color)
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
 
         // Safe mid-frame: the device defers the destroy until the command
         // buffer that may still reference the old group has retired.
@@ -309,7 +308,7 @@ namespace rendering_engine
 
     void bloom_pass::write_threshold_ubo(float threshold, float knee)
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
         const float knee_width = threshold * knee;
         const std::array<float, 4> bytes = {
             threshold, knee_width, 2.0f * knee_width, 1.0f / (4.0f * knee_width + bloom_epsilon)};
@@ -318,7 +317,7 @@ namespace rendering_engine
 
     void bloom_pass::write_weights(float strength)
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
         float weight_total = 0.0f;
         for (uint32_t i = 0; i < bloom_mip_count; ++i)
         {
@@ -351,7 +350,7 @@ namespace rendering_engine
 
     bloom_pass::~bloom_pass()
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
 
         // The pyramid (bind groups first, then the buffers / targets they
         // reference), then the threshold resources, then the pipelines.

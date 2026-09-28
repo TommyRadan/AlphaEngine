@@ -17,7 +17,6 @@
 #include <rendering_engine/lighting/spot_light.hpp>
 #include <rendering_engine/renderables/per_draw_ubo.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
-#include <runtime/engine.hpp>
 
 namespace
 {
@@ -57,11 +56,12 @@ namespace
 
 namespace rendering_engine
 {
-    spot_shadow_pass::spot_shadow_pass(const std::vector<renderable*>* registry,
+    spot_shadow_pass::spot_shadow_pass(gpu::device& device,
+                                       const std::vector<renderable*>* registry,
                                        const rendering_engine::shadow_settings& settings)
-        : m_registry(registry)
+        : m_device(&device), m_registry(registry)
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
 
         // Square map of the configured shadow resolution (the same edge
         // as each directional cascade): a single map, unlike the six the
@@ -149,13 +149,13 @@ namespace rendering_engine
 
         // Instanced casters rasterize with the same state through the
         // pipeline that reads their per-instance transform stream.
-        m_instanced = create_instanced_shadow_pipeline(m_light_layout, depth, blend, rasterizer, depth_bias);
+        m_instanced = create_instanced_shadow_pipeline(*m_device, m_light_layout, depth, blend, rasterizer, depth_bias);
     }
 
     spot_shadow_pass::~spot_shadow_pass()
     {
-        auto& gpu = *runtime::current_engine().gpu;
-        destroy_instanced_shadow_pipeline(m_instanced);
+        auto& gpu = *m_device;
+        destroy_instanced_shadow_pipeline(*m_device, m_instanced);
         if (m_pipeline.valid())
         {
             gpu.destroy(m_pipeline);
@@ -237,7 +237,7 @@ namespace rendering_engine
         // perspective view from the light, independent of the camera, so
         // the pass reads only the light registry and the renderable
         // registry, like point_shadow_pass.
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
         m_culled = 0;
         m_items.clear();
 

@@ -57,7 +57,7 @@ namespace rendering_engine
     struct motion_blur_pass : pass
     {
         // @p width / @p height size the output target.
-        motion_blur_pass(uint32_t width, uint32_t height);
+        motion_blur_pass(gpu::device& device, uint32_t width, uint32_t height);
         ~motion_blur_pass() override;
 
         motion_blur_pass(const motion_blur_pass&) = delete;
@@ -116,6 +116,10 @@ namespace rendering_engine
         gpu::texture output_texture() const;
 
     private:
+        // The device this pass creates its resources on and releases them
+        // through; handed in by the renderer and outlives the pass.
+        gpu::device* m_device{nullptr};
+
         // Allocates the rgba16f output target at @ref m_width x
         // @ref m_height.
         void create_target();

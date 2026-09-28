@@ -22,7 +22,6 @@
 #include <rendering_engine/lighting/lights_ubo.hpp>
 #include <rendering_engine/renderables/per_draw_ubo.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
-#include <runtime/engine.hpp>
 
 namespace
 {
@@ -266,14 +265,15 @@ namespace
 
 namespace rendering_engine
 {
-    shadow_pass::shadow_pass(const std::vector<renderable*>* registry,
+    shadow_pass::shadow_pass(gpu::device& device,
+                             const std::vector<renderable*>* registry,
                              const rendering_engine::shadow_settings& settings)
-        : m_registry(registry), m_resolution(std::max(settings.resolution, 1u)),
+        : m_device(&device), m_registry(registry), m_resolution(std::max(settings.resolution, 1u)),
           m_cascade_count(std::clamp(static_cast<int>(settings.cascade_count), 1, max_shadow_cascades)),
           m_distance(std::max(settings.distance, min_log_split_near)), m_bias(std::max(settings.bias, 0.0f)),
           m_pcf_kernel(std::clamp(settings.pcf_kernel, 1u, rendering_engine::shadow_settings::max_pcf_kernel))
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
 
         // Every cascade is a full square layer, so the configured size
         // must fit the device's 2D limit.
@@ -404,13 +404,13 @@ namespace rendering_engine
 
         // Instanced casters rasterize with the same state through the
         // pipeline that reads their per-instance transform stream.
-        m_instanced = create_instanced_shadow_pipeline(m_light_layout, depth, blend, rasterizer, depth_bias);
+        m_instanced = create_instanced_shadow_pipeline(*m_device, m_light_layout, depth, blend, rasterizer, depth_bias);
     }
 
     shadow_pass::~shadow_pass()
     {
-        auto& gpu = *runtime::current_engine().gpu;
-        destroy_instanced_shadow_pipeline(m_instanced);
+        auto& gpu = *m_device;
+        destroy_instanced_shadow_pipeline(*m_device, m_instanced);
         if (m_pipeline.valid())
         {
             gpu.destroy(m_pipeline);
@@ -531,7 +531,7 @@ namespace rendering_engine
 
     void shadow_pass::prepare(const frame_context& ctx)
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
         m_culled = 0;
 
         // Locate the first shadow-casting directional light, tracking

@@ -50,7 +50,9 @@ namespace rendering_engine
     {
         // @p settings supplies the map resolution and the rasteriser slope
         // bias; both are fixed for the pass's lifetime.
-        spot_shadow_pass(const std::vector<renderable*>* registry, const rendering_engine::shadow_settings& settings);
+        spot_shadow_pass(gpu::device& device,
+                         const std::vector<renderable*>* registry,
+                         const rendering_engine::shadow_settings& settings);
         ~spot_shadow_pass() override;
 
         spot_shadow_pass(const spot_shadow_pass&) = delete;
@@ -112,6 +114,10 @@ namespace rendering_engine
         uint32_t caster_mask() const noexcept;
 
     private:
+        // The device this pass creates its resources on and releases them
+        // through; handed in by the renderer and outlives the pass.
+        gpu::device* m_device{nullptr};
+
         // Non-owning back-pointer to the render world's
         // scene-renderable registry — the same one the scene and other
         // shadow passes walk. The world outlives every pass.

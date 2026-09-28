@@ -29,7 +29,7 @@ namespace rendering_engine
      */
     struct skybox_pass : pass
     {
-        skybox_pass();
+        explicit skybox_pass(gpu::device& device);
         ~skybox_pass() override;
 
         skybox_pass(const skybox_pass&) = delete;
@@ -64,6 +64,10 @@ namespace rendering_engine
         void set_cubemap(gpu::texture cubemap);
 
     private:
+        // The device this pass creates its resources on and releases them
+        // through; handed in by the renderer and outlives the pass.
+        gpu::device* m_device{nullptr};
+
         // Rebuild the input bind group against @ref m_cubemap and the
         // sky UBO. Called by @ref set_cubemap.
         void rebuild_bind_group();

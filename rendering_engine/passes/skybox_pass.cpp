@@ -16,7 +16,6 @@
 #include <rendering_engine/gpu/shader_hot_reload.hpp>
 #include <rendering_engine/passes/post/fullscreen_triangle.hpp>
 #include <rendering_engine/passes/projection_jitter.hpp>
-#include <runtime/engine.hpp>
 
 namespace
 {
@@ -30,9 +29,9 @@ namespace
 
 namespace rendering_engine
 {
-    skybox_pass::skybox_pass()
+    skybox_pass::skybox_pass(gpu::device& device) : m_device(&device)
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
 
         m_vertex_shader = gpu::create_library_shader_module(gpu, "passes/skybox.vert.glsl", gpu::shader_stage::vertex);
         m_fragment_shader =
@@ -93,7 +92,7 @@ namespace rendering_engine
 
     skybox_pass::~skybox_pass()
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
         if (m_pipeline.valid())
         {
             gpu.destroy(m_pipeline);
@@ -139,7 +138,7 @@ namespace rendering_engine
 
     void skybox_pass::rebuild_bind_group()
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
         if (m_input_bind_group.valid())
         {
             gpu.destroy(m_input_bind_group);
@@ -174,7 +173,7 @@ namespace rendering_engine
             return;
         }
 
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
 
         // Strip the translation from the view matrix so the sky rotates
         // with the camera but never translates, then invert

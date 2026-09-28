@@ -17,7 +17,6 @@
 #include <rendering_engine/gpu/shader.hpp>
 #include <rendering_engine/gpu/shader_hot_reload.hpp>
 #include <rendering_engine/passes/post/fullscreen_triangle.hpp>
-#include <runtime/engine.hpp>
 
 namespace
 {
@@ -46,9 +45,9 @@ namespace
 
 namespace rendering_engine
 {
-    tonemap_pass::tonemap_pass()
+    tonemap_pass::tonemap_pass(gpu::device& device) : m_device(&device)
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
 
         m_vertex_shader =
             gpu::create_library_shader_module(gpu, "passes/fullscreen.vert.glsl", gpu::shader_stage::vertex);
@@ -144,7 +143,7 @@ namespace rendering_engine
 
     tonemap_pass::~tonemap_pass()
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
         for (auto& pipeline : m_pipelines)
         {
             if (pipeline.valid())
@@ -190,7 +189,7 @@ namespace rendering_engine
 
     void tonemap_pass::rebuild_bind_group(gpu::texture input_color, gpu::texture grading_lut, gpu::texture exposure)
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
 
         // Safe mid-frame: the device defers the destroy until the command
         // buffer that may still reference the old group has retired.
@@ -311,7 +310,7 @@ namespace rendering_engine
 
     void tonemap_pass::upload_uniforms()
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
         const std::array<std::byte, tonemap_ubo_size> bytes =
             pack_uniforms(m_exposure, m_operator, m_grading_intensity);
         gpu.write_buffer(m_tonemap_ubo, bytes.data(), bytes.size(), 0);

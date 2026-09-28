@@ -17,7 +17,6 @@
 #include <rendering_engine/gpu/shader.hpp>
 #include <rendering_engine/gpu/shader_hot_reload.hpp>
 #include <rendering_engine/passes/post/fullscreen_triangle.hpp>
-#include <runtime/engine.hpp>
 
 namespace
 {
@@ -36,9 +35,9 @@ namespace
 
 namespace rendering_engine
 {
-    velocity_pass::velocity_pass(uint32_t width, uint32_t height)
+    velocity_pass::velocity_pass(gpu::device& device, uint32_t width, uint32_t height) : m_device(&device)
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
 
         // Degenerate backbuffer (no settings, zero-sized window): leave the
         // pass disabled so velocity_texture() reports invalid.
@@ -109,7 +108,7 @@ namespace rendering_engine
 
     velocity_pass::~velocity_pass()
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
 
         if (m_bind_group.valid())
         {
@@ -161,7 +160,7 @@ namespace rendering_engine
 
     void velocity_pass::create_target(uint32_t width, uint32_t height)
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
 
         // Two-channel signed motion needs a float target; the engine has no
         // RG format, so rgba16f carries the vector in xy and leaves zw at 0.
@@ -180,7 +179,7 @@ namespace rendering_engine
         {
             return;
         }
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
 
         // Create the replacement before releasing the old target so the
         // TAA resolve, which compares frame_context::velocity_texture
@@ -201,7 +200,7 @@ namespace rendering_engine
 
     void velocity_pass::rebuild_bind_group(gpu::texture scene_depth)
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
 
         // Safe mid-frame: the device defers the destroy until the command
         // buffer that may still reference the old group has retired.
@@ -245,7 +244,7 @@ namespace rendering_engine
             return;
         }
 
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
 
         // No camera, or no scene depth to reconstruct positions from: clear
         // the motion to zero so the TAA resolve falls back to same-pixel

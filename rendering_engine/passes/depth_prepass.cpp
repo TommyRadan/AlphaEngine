@@ -7,11 +7,10 @@
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/gpu/render_target.hpp>
 #include <rendering_engine/passes/scene_pass.hpp>
-#include <runtime/engine.hpp>
 
 namespace rendering_engine
 {
-    depth_prepass::depth_prepass() = default;
+    depth_prepass::depth_prepass(gpu::device& device) : m_device(&device) {}
 
     depth_prepass::~depth_prepass()
     {
@@ -29,7 +28,7 @@ namespace rendering_engine
         // the renderer's scene-colour target.
         if (m_target.valid())
         {
-            runtime::current_engine().gpu->destroy(m_target);
+            m_device->destroy(m_target);
         }
         m_target = {};
         m_target_depth = {};
@@ -62,7 +61,7 @@ namespace rendering_engine
             gpu::render_target_descriptor descriptor = gpu::render_target_descriptor::depth_only(
                 gpu::texture_format::depth24, ctx.viewport_width, ctx.viewport_height);
             descriptor.depth.texture = ctx.scene_depth_texture;
-            m_target = runtime::current_engine().gpu->create_render_target(descriptor);
+            m_target = m_device->create_render_target(descriptor);
             if (!m_target.valid())
             {
                 LOG_ERR("depth_prepass: could not build a depth-only target over the scene depth; the scene pass "

@@ -63,7 +63,7 @@ namespace rendering_engine
      */
     struct depth_prepass : pass
     {
-        depth_prepass();
+        explicit depth_prepass(gpu::device& device);
         ~depth_prepass() override;
 
         depth_prepass(const depth_prepass&) = delete;
@@ -94,6 +94,10 @@ namespace rendering_engine
         void resize(uint32_t width, uint32_t height) override;
 
     private:
+        // The device this pass creates its resources on and releases them
+        // through; handed in by the renderer and outlives the pass.
+        gpu::device* m_device{nullptr};
+
         void release_target();
 
         // Depth-only target over @ref m_target_depth, the scene depth

@@ -39,7 +39,7 @@ namespace rendering_engine
     {
         // @p width x @p height is the drawable's pixel size at
         // construction; @ref resize follows it from then on.
-        ui_pass(const std::vector<renderable*>* registry, uint32_t width, uint32_t height);
+        ui_pass(gpu::device& device, const std::vector<renderable*>* registry, uint32_t width, uint32_t height);
         ~ui_pass() override;
 
         ui_pass(const ui_pass&) = delete;
@@ -70,6 +70,10 @@ namespace rendering_engine
         gpu::bind_group_layout frame_bind_group_layout() const;
 
     private:
+        // The device this pass creates its resources on and releases them
+        // through; handed in by the renderer and outlives the pass.
+        gpu::device* m_device{nullptr};
+
         // Rewrites the UiFrame block for m_width x m_height.
         void write_frame_block();
 

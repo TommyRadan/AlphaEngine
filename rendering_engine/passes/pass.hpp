@@ -21,6 +21,11 @@
 
 namespace rendering_engine
 {
+    namespace gpu
+    {
+        struct device;
+    }
+
     struct camera;
     struct scene_pass;
     struct shadow_pass;
@@ -279,6 +284,11 @@ namespace rendering_engine
      * (post-process, shadow, depth pre-pass, debug overlay) is a
      * registration call at startup, not an edit to the engine's render
      * loop.
+     *
+     * A pass that owns GPU resources takes the @ref gpu::device they live
+     * on as its first constructor argument, handed in by the renderer that
+     * builds the pass list; the device outlives the pass. Everything that
+     * changes from frame to frame reaches it through @ref frame_context.
      *
      * Names follow the industry-standard "pass" terminology even
      * though @ref gpu::render_pass_encoder shares the word; the two

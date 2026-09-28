@@ -64,7 +64,7 @@ namespace rendering_engine
         // group is (re)built whenever that handle differs from the one it
         // was last built against. The composite target is taken from the
         // matching @ref frame_context::hdr_color_target each frame.
-        bloom_pass(uint32_t width, uint32_t height);
+        bloom_pass(gpu::device& device, uint32_t width, uint32_t height);
         ~bloom_pass() override;
 
         bloom_pass(const bloom_pass&) = delete;
@@ -96,6 +96,10 @@ namespace rendering_engine
         void resize(uint32_t width, uint32_t height) override;
 
     private:
+        // The device this pass creates its resources on and releases them
+        // through; handed in by the renderer and outlives the pass.
+        gpu::device* m_device{nullptr};
+
         // One mip of the blur pyramid. @c horizontal holds the result of
         // the horizontal Gaussian (and the implicit downsample from the
         // previous level); @c vertical holds the fully blurred mip that

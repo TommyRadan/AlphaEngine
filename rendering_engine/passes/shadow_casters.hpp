@@ -15,8 +15,9 @@
 
 namespace rendering_engine::gpu
 {
+    struct device;
     struct render_pass_encoder;
-}
+} // namespace rendering_engine::gpu
 
 namespace rendering_engine
 {
@@ -42,19 +43,21 @@ namespace rendering_engine
         gpu::pipeline pipeline{};
     };
 
-    // Builds the instanced pipeline (vertex stage only: the depth-only
-    // target has no colour attachment) over @p light_layout at slot 0 and
-    // the given depth / blend / rasterizer / depth-bias state, which the
-    // caller passes unchanged from its single-draw pipeline so both
-    // rasterize identically.
-    instanced_shadow_pipeline create_instanced_shadow_pipeline(gpu::bind_group_layout light_layout,
+    // Builds the instanced pipeline on @p device (vertex stage only: the
+    // depth-only target has no colour attachment) over @p light_layout at
+    // slot 0 and the given depth / blend / rasterizer / depth-bias state,
+    // which the caller passes unchanged from its single-draw pipeline so
+    // both rasterize identically.
+    instanced_shadow_pipeline create_instanced_shadow_pipeline(gpu::device& device,
+                                                               gpu::bind_group_layout light_layout,
                                                                const gpu::depth_state& depth,
                                                                const gpu::blend_state& blend,
                                                                const gpu::rasterizer_state& rasterizer,
                                                                const gpu::depth_bias_state& depth_bias);
 
-    // Releases the pipeline and its vertex shader; no-op for invalid handles.
-    void destroy_instanced_shadow_pipeline(instanced_shadow_pipeline& instanced);
+    // Releases the pipeline and its vertex shader on @p device, the one
+    // they were built on; no-op for invalid handles.
+    void destroy_instanced_shadow_pipeline(gpu::device& device, instanced_shadow_pipeline& instanced);
 
     /**
      * @brief Records caster draw items into an open shadow render pass.
