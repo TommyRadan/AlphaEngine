@@ -101,9 +101,19 @@
  *   @c wake_up(); an audio source: @c play(), @c stop(), @c playing,
  *   @c gain, @c pitch.
  * - @c input — @c is_action_down(name), @c was_action_pressed(name),
- *   @c was_action_released(name), @c get_axis(name), @c mouse_position(),
+ *   @c was_action_released(name), @c get_axis(name) (player 0), @c mouse_position(),
  *   @c mouse_delta(), @c mouse_wheel_delta(), over the actions and axes
- *   bound through @c core::input.
+ *   bound through @c core::input; @c max_players(), @c assign_keyboard(n),
+ *   @c assign_mouse(n), @c keyboard_player(), @c mouse_player(); and
+ *   @c player(n), an @c input_player handle over local player @c n (errors
+ *   for @c n outside @c [0, max_players())) with @c action(name),
+ *   @c pressed(name), @c released(name), @c axis(name) (that player's own,
+ *   evaluated only from the devices assigned to it), @c assign_gamepad(id),
+ *   @c unassign_gamepad(), @c gamepad_id() (@c nil when none), @c listen(name,
+ *   is_axis) (rebinds @c name to the next input one of the player's own
+ *   devices reports; poll @c listening() rather than a callback, since the
+ *   capture can land long after the script that started it returned) and
+ *   @c cancel_listen().
  * - @c log — @c info, @c warn and @c error, each taking any values as
  *   @c print does, logged under the @c "script" category with the calling
  *   script's file and line; @c print is @c log.info.

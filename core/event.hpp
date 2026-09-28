@@ -418,4 +418,17 @@ namespace core
         gamepad_axis_code m_axis;
         float m_value;
     };
+
+    /**
+     * @brief A gamepad's owning local player changed: assigned (on connect or through
+     *        @c core::input::assign_gamepad), reassigned, or unassigned (on disconnect or through
+     *        @c core::input::unassign_gamepad). Either player field is -1 when the gamepad had, or now has,
+     *        no player.
+     */
+    struct gamepad_assignment_changed
+    {
+        std::uint32_t m_id;
+        int m_previous_player;
+        int m_player;
+    };
 } // namespace core

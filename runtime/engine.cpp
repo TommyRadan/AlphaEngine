@@ -236,6 +236,14 @@ namespace runtime
         // Subscribes to the raw input events the window will start emitting once it is up, and picks up any
         // `input.bindings` rebind from settings ahead of the game modules' bind_action / bind_axis calls below.
         input->init(*events, settings->input);
+        // The per-user rebinds a player saved at runtime (core::input::save_user_bindings), read back the same
+        // way before any bind_action / bind_axis call so they land on top of the compiled and settings.json
+        // defaults as each name is registered.
+        if (const std::filesystem::path pref_path = platform::pref_path("AlphaEngine", "AlphaEngine");
+            !pref_path.empty())
+        {
+            input->load_user_bindings(pref_path / "input_bindings.json");
+        }
 
         // Mount the content root before anything loads a file: the configured
         // directory when one is set, else the discovered default beside the

@@ -43,6 +43,7 @@ namespace editor
             ImGui::Text("Field of view: %.1f", static_cast<double>(settings.camera.field_of_view));
             ImGui::Text("Mouse sensitivity: %.4f", static_cast<double>(settings.input.mouse_sensitivity));
             ImGui::Text("Mouse reversed: %s", settings.input.mouse_reversed ? "yes" : "no");
+            ImGui::Text("Max players: %u", settings.input.max_players);
 
             ImGui::SeparatorText("GPU");
             ImGui::Text("Backend: %s", rendering_engine::graphics_backend_name(settings.graphics.backend));
