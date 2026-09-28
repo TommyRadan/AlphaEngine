@@ -6,7 +6,6 @@
 #include <cmath>
 
 #include <core/math/mat3.hpp>
-#include <core/math/transform.hpp>
 #include <rendering_engine/gpu/bind_group.hpp>
 #include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/command_encoder.hpp>
@@ -136,21 +135,5 @@ namespace rendering_engine
             return;
         }
         device.write_buffer(joints, matrices.data(), matrices.size() * joint_matrix_size, 0);
-    }
-
-    void per_draw_binding::bind(const core::transform& transform, draw_item& item)
-    {
-        const uint64_t version = transform.get_world_version();
-        if (version != m_world_version)
-        {
-            m_payload = make_per_draw_payload(transform.get_world_matrix());
-            m_mirrored = is_mirrored(m_payload.model);
-            m_world_version = version;
-        }
-        // The pass pushes the cached block right before the draw; the
-        // bytes are copied into the command stream there, so a draw an
-        // earlier pass recorded keeps the block it pushed.
-        item.per_draw_push = &m_payload;
-        item.mirrored = m_mirrored;
     }
 } // namespace rendering_engine

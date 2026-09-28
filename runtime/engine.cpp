@@ -20,6 +20,7 @@
 #include <platform/audio_device.hpp>
 #include <platform/platform.hpp>
 #include <platform/window.hpp>
+#include <rendering_engine/debug_draw/helper.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/gpu/shader_compiler.hpp>
 #include <rendering_engine/gpu/surface.hpp>
@@ -440,9 +441,13 @@ namespace runtime
                 m_overlay->begin_frame();
             }
             // Every node has its final pose for the frame (the overlay edits
-            // them too): write the lights and cameras the renderer reads into
-            // its world, once, from that final state.
+            // them too): write the meshes, UI elements, lights and cameras
+            // the renderer reads into its world, once, from that final
+            // state. The debug helpers then rebuild what they follow from
+            // it — the proxies just written, the physics world's lines —
+            // so the renderer reads neither the scene nor the physics world.
             extract_render_proxies(*scenes);
+            rendering_engine::debug_draw::update_helpers(renderer->world());
             renderer->render();
 
             // Counts rendered frames only, so a run stuck minimized never reaches its limit.

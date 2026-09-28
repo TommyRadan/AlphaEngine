@@ -89,6 +89,10 @@ namespace rendering_engine
         // Whether the shadow passes draw it as an occluder.
         bool casts_shadow{true};
 
+        // Whether the debug-overlay pass draws it, always on top and never
+        // culled, instead of the scene, depth pre-pass and shadow passes.
+        bool overlay{false};
+
         // Whether the geometry is placed by the proxy's world matrix. An
         // instanced draw carries world transforms per instance instead, and
         // ignores the proxy's placement.

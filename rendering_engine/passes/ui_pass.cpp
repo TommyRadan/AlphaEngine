@@ -13,7 +13,6 @@
 #include <rendering_engine/materials/material_template.hpp>
 #include <rendering_engine/materials/ui_material.hpp>
 #include <rendering_engine/renderables/per_draw_ubo.hpp>
-#include <rendering_engine/renderables/renderable.hpp>
 
 namespace rendering_engine
 {
@@ -31,8 +30,8 @@ namespace rendering_engine
         static_assert(sizeof(ui_frame_block) == 80, "UiFrame block must be a std140 mat4 and a vec4");
     } // namespace
 
-    ui_pass::ui_pass(gpu::device& device, const std::vector<renderable*>* registry, uint32_t width, uint32_t height)
-        : m_device(&device), m_registry(registry), m_width(width), m_height(height)
+    ui_pass::ui_pass(gpu::device& device, uint32_t width, uint32_t height)
+        : m_device(&device), m_width(width), m_height(height)
     {
         auto& gpu = *m_device;
         m_frame_layout = gpu.create_bind_group_layout(ui_material::frame_layout_descriptor());
@@ -104,7 +103,7 @@ namespace rendering_engine
         m_device->write_buffer(m_frame_ubo, &block, sizeof(block), 0);
     }
 
-    void ui_pass::prepare(const frame_context& /*ctx*/)
+    void ui_pass::prepare(const frame_context& ctx)
     {
         // Inside the frame bracket: the frame that last read the block has
         // retired, so a resize's new projection can be written now.
@@ -114,16 +113,13 @@ namespace rendering_engine
             m_frame_dirty = false;
         }
 
-        m_items.clear();
-        for (auto* r : *m_registry)
-        {
-            r->collect_draw_items(m_items);
-        }
+        m_items.assign(ctx.ui_draws.begin(), ctx.ui_draws.end());
         // Sorted by (pipeline, material instance) so instances sharing
         // a pipeline sit together; the per-material group is rebound
         // when the instance changes, not only when the pipeline does.
         // The sort is stable, so the draws of one material keep the
-        // registry's order: an element registered later paints on top.
+        // paint order: an element whose proxy was created later paints
+        // on top.
         std::stable_sort(m_items.begin(),
                          m_items.end(),
                          [](const draw_item& a, const draw_item& b)
@@ -180,8 +176,8 @@ namespace rendering_engine
             }
 
             // The per-draw data pushed or bound, as in the scene pass: a
-            // sprite batch's texture group here; a renderable without
-            // per-draw resources records nothing.
+            // quad group's texture group here; a draw without per-draw
+            // resources records nothing.
             bind_per_draw(*pass_encoder, item, item.mat->per_draw_slot());
             pass_encoder->set_vertex_buffer(0, item.vertex_buffer, 0, item.vertex_stride);
             if (item.index_buffer.valid())

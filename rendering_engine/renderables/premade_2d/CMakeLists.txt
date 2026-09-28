@@ -10,4 +10,5 @@ target_sources(alpha_render PRIVATE
     rect_transform.hpp
     sprite_batch.cpp
     sprite_batch.hpp
+    ui_element.hpp
 )

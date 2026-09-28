@@ -3,9 +3,10 @@
 
 /**
  * @file mesh_draws.hpp
- * @brief The per-frame draw list the scene, depth pre-pass and shadow passes
- *        cull, built once per frame from the render_world's mesh proxies, and
- *        the GPU resources the renderer keeps per proxy to draw it.
+ * @brief The per-frame draw lists built once per frame from the
+ *        render_world's mesh proxies — the one the scene, depth pre-pass and
+ *        shadow passes cull, and the debug overlay's — and the GPU resources
+ *        the renderer keeps per proxy to draw them.
  */
 
 #pragma once
@@ -33,7 +34,8 @@ namespace rendering_engine
      * @brief One mesh proxy's part of the frame: its draw, and what the
      *        passes cull it by.
      *
-     * There is one per proxy, in the world's proxy order, whether or not it
+     * There is one per proxy, in the world's proxy order, in the list of the
+     * passes that draw it (@ref mesh_description::overlay), whether or not it
      * draws this frame, so every pass counts and walks the proxies exactly as
      * they are ordered.
      */
@@ -64,7 +66,7 @@ namespace rendering_engine
     };
 
     /**
-     * @brief Builds the frame's @ref mesh_draw list from a world's mesh
+     * @brief Builds the frame's @ref mesh_draw lists from a world's mesh
      *        proxies and keeps the GPU resources those draws bind.
      *
      * Owned by the renderer, which calls @ref build once per frame inside the
@@ -88,14 +90,23 @@ namespace rendering_engine
 
         /**
          * @brief Updates the per-proxy resources on @p device from @p world's
-         *        proxies and rebuilds the draw list, one entry per proxy.
+         *        proxies and rebuilds the draw lists, one entry per proxy.
          */
         void build(render_world& world, gpu::device& device);
 
-        /** @brief This frame's draws, in the world's proxy order. */
-        std::span<const mesh_draw> draws() const noexcept
+        /**
+         * @brief This frame's draws for the scene, depth pre-pass and shadow
+         *        passes, in the world's proxy order.
+         */
+        std::span<const mesh_draw> scene_draws() const noexcept
         {
-            return m_draws;
+            return m_scene_draws;
+        }
+
+        /** @brief This frame's debug-overlay draws, in the world's proxy order. */
+        std::span<const mesh_draw> overlay_draws() const noexcept
+        {
+            return m_overlay_draws;
         }
 
         /** @brief Releases every per-proxy resource on @p device. */
@@ -140,6 +151,7 @@ namespace rendering_engine
         static void release(gpu::device& device, proxy_resources& resources);
 
         std::vector<proxy_resources> m_resources;
-        std::vector<mesh_draw> m_draws;
+        std::vector<mesh_draw> m_scene_draws;
+        std::vector<mesh_draw> m_overlay_draws;
     };
 } // namespace rendering_engine

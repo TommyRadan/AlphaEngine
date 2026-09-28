@@ -28,8 +28,8 @@ namespace rendering_engine
     };
 
     // Packs @p queue, the item's @p view_depth (view-space depth — camera-
-    // forward positive — to its world bounds centre, or 0 for a renderable
-    // that reports no bounds) and @p pipeline_id into the 64-bit key a
+    // forward positive — to its world bounds centre, or 0 for a draw with
+    // no bounds) and @p pipeline_id into the 64-bit key a
     // pass sorts draw_item by: [63:56] the queue, [55:24] a monotonic
     // 32-bit encoding of the depth, [23:0] the pipeline id. A negative
     // depth (behind the camera) is clamped to 0 first, so the encoding —
@@ -51,8 +51,8 @@ namespace rendering_engine
     }
 
     // One draw the pass can dispatch. The renderer fills this struct from a
-    // mesh proxy (@ref mesh_draw_builder), and UI and debug renderables in
-    // @ref renderable::collect_draw_items; a pass that cares about draw
+    // mesh proxy (@ref mesh_draw_builder) or a UI proxy's quad group
+    // (@ref ui_draw_builder); a pass that cares about draw
     // order (the scene pass) fills @ref sort_key from it afterwards and
     // sorts the collected items by that key, falling back to the material
     // instance on a tie, then walks them, issuing @c set_pipeline only
@@ -85,14 +85,13 @@ namespace rendering_engine
     //
     // @ref per_draw_push, when set, is the draw's PerDraw block (see
     // per_draw_ubo.hpp): the pass pushes it right before the draw as
-    // push constants. It points at the block a mesh proxy (or a debug
-    // renderable) carries, which stays put until the frame ends, so it
-    // stays valid while the frame records from the list it was collected
-    // into (the depth pre-pass and the scene pass share one); the bytes are
-    // copied when pushed.
+    // push constants. It points at the block a mesh proxy carries, which
+    // stays put until the frame ends, so it stays valid while the frame
+    // records from the list it was collected into (the depth pre-pass and
+    // the scene pass share one); the bytes are copied when pushed.
     //
     // @ref per_draw_bind_group, when valid, is bound at the material's
-    // per-draw slot: a sprite batch's texture group, or a skinned draw's
+    // per-draw slot: a UI quad group's texture group, or a skinned draw's
     // private group carrying its joint palette. A rigid 3D draw has none.
     // @ref bind_per_draw records the push and the group.
     //

@@ -89,7 +89,7 @@ namespace rendering_engine
         // the per-draw group holds the joint-matrix storage buffer the
         // vertex stage reads. Only the vertex stage declares it. Each
         // skinned draw binds a group of its own over its palette (see
-        // model::collect_draw_items).
+        // mesh_draw_builder).
         using skin_vertex = assets::vertex_position_uv_normal_tangent_skin;
         gpu::vertex_attribute joints_attribute{
             joints_location, 4, gpu::scalar_type::uint16, static_cast<uint32_t>(offsetof(skin_vertex, joints))};

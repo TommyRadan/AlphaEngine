@@ -3,8 +3,8 @@
 
 /**
  * @file render_world.hpp
- * @brief What the renderer draws: mesh, light and camera proxies, the UI and
- *        debug renderables, the environment probe and the scene-wide fog.
+ * @brief What the renderer draws: mesh, UI, light and camera proxies, the
+ *        environment probe and the scene-wide fog.
  */
 
 #pragma once
@@ -20,11 +20,11 @@
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/mesh_proxy.hpp>
 #include <rendering_engine/render_proxies.hpp>
+#include <rendering_engine/ui_proxy.hpp>
 
 namespace rendering_engine
 {
     struct environment_probe;
-    struct renderable;
 
     namespace debug_draw
     {
@@ -35,35 +35,34 @@ namespace rendering_engine
      * @brief The renderer's view of the world.
      *
      * Owned by the @ref renderer, which reads it once per frame to fill the
-     * @ref frame_context and hands its renderable registries to the passes
-     * that draw them. It owns:
+     * @ref frame_context. It owns:
      *
      * - the mesh proxies (@ref mesh_proxy) the scene, depth pre-pass and
-     *   shadow passes draw, in creation order, which is the order the
-     *   passes walk them in (@ref meshes);
-     * - the UI and debug renderable registries — non-owning, in
-     *   registration order, which is the dispatch order within a pass;
+     *   shadow passes draw, and the debug overlay's, in creation order,
+     *   which is the order the passes walk them in (@ref meshes);
+     * - the UI proxies (@ref ui_proxy), in creation order, which is the
+     *   order they paint in (@ref ui_elements);
      * - the light proxies (@ref light_proxy), and the order the enabled ones
      *   are packed into the lights UBO in (@ref enabled_lights);
      * - the camera proxies (@ref camera_proxy) and the arbitration that picks
      *   the camera a frame renders with (@ref active_camera);
      * - the debug-draw helper list the debug UI walks to toggle visibility
-     *   (@ref helpers);
+     *   and @ref debug_draw::update_helpers to rebuild the gizmos
+     *   (@ref helpers), which no pass reads;
      * - the environment probe the skybox and the standard materials use;
      * - the scene-wide atmospheric fog.
      *
      * A proxy is a plain copy the world owns, addressed by a handle: its
-     * creator (a runtime mesh, renderable, light or camera component, or a
-     * renderer-owned debug helper) creates it, enables it, writes it before
+     * creator (a runtime mesh, renderable, UI element, light or camera
+     * component, or a debug helper) creates it, enables it, writes it before
      * the renderer reads it, and destroys it. The renderer and its passes
      * read only the proxies, never the objects they were copied from, so
      * everything a frame draws with is fixed before the frame starts: a mesh
-     * proxy's instance records and joint palette are copies too, which the
-     * renderer uploads from here. Proxies are created and destroyed between
-     * frames only (see @ref begin_frame). The renderable and helper
-     * entries are non-owning back-pointers: a renderable joins through the
-     * register calls and a helper through its constructor, and each leaves
-     * through the matching unregister call / destructor. Passes read the
+     * proxy's instance records and joint palette and a UI proxy's quads are
+     * copies too, which the renderer uploads from here. Proxies are created
+     * and destroyed between frames only (see @ref begin_frame). The helper
+     * entries are non-owning back-pointers: a helper joins through its
+     * constructor and leaves through its destructor. Passes read the
      * world only through the one a frame's @ref frame_context carries,
      * never through a global, so more than one world can exist in a process
      * (an editor's preview viewport, a render-to-texture scene) without them
@@ -74,9 +73,9 @@ namespace rendering_engine
         /**
          * @brief Withdraws the drawable aspect reported to cameras: the
          *        renderer is going down, so there is no drawable to match.
-         *        The registries and proxies are left as they are — every
-         *        renderable and helper unregisters itself, and every proxy's
-         *        creator destroys it.
+         *        The proxies and the helper list are left as they are —
+         *        every proxy's creator destroys it, and every helper removes
+         *        itself.
          */
         void quit();
 
@@ -90,44 +89,6 @@ namespace rendering_engine
 
         /** @brief Ends the frame @ref begin_frame opened. */
         void end_frame() noexcept;
-
-        /**
-         * @brief Adds @p r to the UI-pass registry.
-         *
-         * The pointer is non-owning; callers must
-         * @ref unregister_ui_renderable before destroying the renderable.
-         * Registration order is preserved and is the dispatch order within
-         * a material.
-         */
-        void register_ui_renderable(renderable* r);
-
-        /** @brief Removes @p r from the UI-pass registry; no-op if absent. */
-        void unregister_ui_renderable(renderable* r);
-
-        /**
-         * @brief Adds @p r to the debug-pass registry.
-         *
-         * Renderables registered here are drawn after the UI pass in
-         * debug builds; release builds drop the debug pass from the pass
-         * list entirely so registrations are inert. Same ownership rules
-         * as the UI variant.
-         */
-        void register_debug_renderable(renderable* r);
-
-        /** @brief Removes @p r from the debug-pass registry; no-op if absent. */
-        void unregister_debug_renderable(renderable* r);
-
-        /** @brief The UI-pass registry. */
-        const std::vector<renderable*>& ui_renderables() const noexcept
-        {
-            return m_ui_renderables;
-        }
-
-        /** @brief The debug-pass registry. */
-        const std::vector<renderable*>& debug_renderables() const noexcept
-        {
-            return m_debug_renderables;
-        }
 
         /**
          * @brief Adds a mesh proxy drawing @p source at @p world and returns
@@ -202,6 +163,36 @@ namespace rendering_engine
         mesh_proxy_handle mesh_at(std::size_t position) const noexcept
         {
             return m_meshes.handle_at(position);
+        }
+
+        /**
+         * @brief Adds a UI proxy holding @p data and returns its handle. It
+         *        paints over every UI proxy created before it.
+         */
+        ui_proxy_handle create_ui_element(ui_element_data data);
+
+        /** @brief Removes the UI proxy @p element names. No-op for a stale handle. */
+        void destroy_ui_element(ui_proxy_handle element);
+
+        /**
+         * @brief Replaces what @p element draws with @p data and advances
+         *        its revision, so the renderer uploads the quads again.
+         */
+        void set_ui_element(ui_proxy_handle element, ui_element_data data);
+
+        /** @brief The proxy @p element names, or @c nullptr for a stale handle. */
+        const ui_proxy* ui_element(ui_proxy_handle element) const noexcept;
+
+        /** @brief Every UI proxy, in creation order — the order they paint in. */
+        std::span<const ui_proxy> ui_elements() const noexcept
+        {
+            return m_ui_elements.values();
+        }
+
+        /** @brief The handle of the proxy at @p position of @ref ui_elements. */
+        ui_proxy_handle ui_element_at(std::size_t position) const noexcept
+        {
+            return m_ui_elements.handle_at(position);
         }
 
         /**
@@ -321,7 +312,8 @@ namespace rendering_engine
 
         /**
          * @brief Adds @p h to the helper list the debug UI walks to toggle
-         *        visibility. Called by @ref debug_draw::helper's
+         *        visibility and @ref debug_draw::update_helpers to rebuild
+         *        the gizmos. Called by @ref debug_draw::helper's
          *        constructor; not for callers to use directly.
          */
         void add_helper(debug_draw::helper& h);
@@ -371,8 +363,7 @@ namespace rendering_engine
 
     private:
         core::dense_pool<mesh_proxy, mesh_proxy_tag> m_meshes;
-        std::vector<renderable*> m_ui_renderables;
-        std::vector<renderable*> m_debug_renderables;
+        core::dense_pool<ui_proxy, ui_proxy_tag> m_ui_elements;
 
         core::dense_pool<light_proxy, light_proxy_tag> m_lights;
         std::vector<light_proxy_handle> m_enabled_lights;

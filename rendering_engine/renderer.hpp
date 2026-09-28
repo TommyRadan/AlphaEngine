@@ -25,10 +25,10 @@
 #include <rendering_engine/render_services.hpp>
 #include <rendering_engine/render_stats.hpp>
 #include <rendering_engine/render_world.hpp>
+#include <rendering_engine/ui_draws.hpp>
 
 namespace rendering_engine
 {
-    struct renderable;
     struct scene_pass;
     struct skybox_pass;
     struct tonemap_pass;
@@ -76,15 +76,14 @@ namespace rendering_engine
      *
      * Owned by @ref runtime::engine. It owns two parts it hands out:
      *
-     * - a @ref render_world — what is drawn: the mesh, light and camera
-     *   proxies (and the camera arbitration), the UI and debug renderable
-     *   registries, the environment probe and the fog (@ref world);
+     * - a @ref render_world — what is drawn: the mesh, UI, light and
+     *   camera proxies (and the camera arbitration), the environment probe
+     *   and the fog (@ref world);
      * - a @ref material_library — the built-in material templates and
      *   instances (@ref materials).
      *
-     * The registration, material and environment calls below forward to
-     * those two, so renderables and game code keep reaching them through
-     * the renderer. The owner hands @ref init every subsystem and setting
+     * The material and environment calls below forward to those two, so
+     * game code keeps reaching them through the renderer. The owner hands @ref init every subsystem and setting
      * the renderer reads (see @ref render_services), brings the window and
      * the GPU device up before @ref init and takes them down after
      * @ref quit. @ref init constructs the built-in passes (which own their
@@ -128,24 +127,24 @@ namespace rendering_engine
          * camera proxy) evaluated once here, so a camera destroyed or
          * disabled since the last frame is replaced by the runner-up
          * without any owner bookkeeping, and the enabled light proxies are
-         * gathered once here in packing order. The mesh proxies become
-         * the frame's draw list once here too (@ref mesh_draw_builder,
-         * which also uploads the instance snapshots and joint palettes
-         * the proxies carry), before any pass prepares. Everything a pass
-         * reads about the world's meshes, cameras and lights is a proxy
-         * its owner wrote before the frame; the world refuses to create or
-         * destroy a proxy until the frame ends
+         * gathered once here in packing order. The mesh and UI proxies
+         * become the frame's draw lists once here too
+         * (@ref mesh_draw_builder, @ref ui_draw_builder, which also upload
+         * the instance snapshots, joint palettes and UI quads the proxies
+         * carry), before any pass prepares. Everything a pass reads about
+         * the world is a proxy its owner wrote before the frame; the world
+         * refuses to create or destroy a proxy until the frame ends
          * (@ref render_world::begin_frame). The renderer is the only place
          * that advances the frame index, the jitter sequence and the
          * previous-frame matrix, and it drops the latter across a
-         * no-camera frame or a change of arbitrated camera. Every other
-         * draw a pass records comes from its renderable registry (plus,
-         * for the debug pass, the ImGui draw data built before the walk);
-         * no event is broadcast while a pass is recording, so debug /
-         * gizmo callers register a renderable rather than subscribe. The
-         * walk is bracketed by @c gpu::device::begin_frame / @c end_frame:
-         * the device waits for the previous frame before any pass writes
-         * its per-frame buffers and presents inside @c end_frame.
+         * no-camera frame or a change of arbitrated camera. Every draw a
+         * pass records comes from those lists (plus, for the debug pass,
+         * the ImGui draw data built before the walk); no event is
+         * broadcast while a pass is recording, so debug / gizmo callers
+         * create an overlay mesh proxy rather than subscribe. The walk is
+         * bracketed by @c gpu::device::begin_frame / @c end_frame: the
+         * device waits for the previous frame before any pass writes its
+         * per-frame buffers and presents inside @c end_frame.
          */
         void render();
 
@@ -211,18 +210,6 @@ namespace rendering_engine
         {
             return m_materials;
         }
-
-        /** @brief @ref render_world::register_ui_renderable on @ref world. */
-        void register_ui_renderable(renderable* r);
-
-        /** @brief @ref render_world::unregister_ui_renderable on @ref world. */
-        void unregister_ui_renderable(renderable* r);
-
-        /** @brief @ref render_world::register_debug_renderable on @ref world. */
-        void register_debug_renderable(renderable* r);
-
-        /** @brief @ref render_world::unregister_debug_renderable on @ref world. */
-        void unregister_debug_renderable(renderable* r);
 
         /**
          * @brief Hands the debug pass the overlay it records after the
@@ -344,7 +331,7 @@ namespace rendering_engine
         bool depth_prepass_enabled() const;
 
         /**
-         * @brief This frame's scene / draw statistics (renderable count,
+         * @brief This frame's scene / draw statistics (mesh proxy count,
          *        draw calls, instances, triangles, vertices).
          *
          * Refreshed by the scene pass every @ref render; the debug overlay
@@ -449,10 +436,10 @@ namespace rendering_engine
     private:
         // The members are declared in dependency order: each is destroyed
         // (and @ref quit releases it) before the ones declared above it.
-        // Everything that registers into the world goes before it, the
-        // passes (which point into its registries, and whose per-frame
-        // layouts the materials were built against) go before the
-        // materials, and the materials before the targets. @ref quit walks
+        // Everything that keeps proxies in the world goes before it, the
+        // passes (which read it, and whose per-frame layouts the materials
+        // were built against) go before the materials, and the materials
+        // before the targets. @ref quit walks
         // the same order explicitly, since the GPU device the resources are
         // freed through goes down right after it, before this object is
         // destroyed.
@@ -462,8 +449,8 @@ namespace rendering_engine
         render_services m_services{};
 
         // What is drawn (see @ref world). Owns no GPU resource; declared
-        // first so every renderable, pass and helper below that points
-        // into its registries is gone before it.
+        // first so every pass and helper below that points into it is gone
+        // before it.
         render_world m_world;
 
         // Off-screen HDR target the scene pass renders into.
@@ -563,10 +550,9 @@ namespace rendering_engine
 
         // Built-in debug gizmos (ground grid + world axes) created in
         // @ref init for debug builds and toggled from the debug UI. They
-        // join the world on construction (the grid as a mesh proxy, the
-        // axes in the debug-renderable registry) and draw through the
-        // material library's line and grid materials, so
-        // they go (in @ref quit, and by declaration order) before both.
+        // draw through mesh proxies over the material library's line and
+        // grid materials, so they go (in @ref quit, and by declaration
+        // order) before both.
         // Empty in release builds, where the debug pass is dropped
         // entirely.
         std::vector<std::unique_ptr<debug_draw::helper>> m_debug_helpers;
@@ -632,10 +618,16 @@ namespace rendering_engine
         std::vector<const light_proxy*> m_frame_lights;
 
         // The frame's mesh draws, rebuilt by every @ref render from the
-        // world's mesh proxies and published as frame_context::scene_draws,
-        // and the GPU resources those draws bind; released in @ref quit
-        // before the materials.
+        // world's mesh proxies and published as frame_context::scene_draws
+        // and overlay_draws, and the GPU resources those draws bind;
+        // released in @ref quit before the materials.
         mesh_draw_builder m_mesh_draws;
+
+        // The frame's UI draws, rebuilt by every @ref render from the
+        // world's UI proxies and published as frame_context::ui_draws, and
+        // the GPU resources those draws bind; released in @ref quit before
+        // the materials.
+        ui_draw_builder m_ui_draws;
 
         // Allocates the HDR scene-colour target (+ depth) and the LDR
         // target at @p width x @p height, pointing the four target members

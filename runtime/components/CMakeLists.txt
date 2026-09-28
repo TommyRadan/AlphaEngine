@@ -27,4 +27,6 @@ target_sources(alpha_world PRIVATE
     renderable_component.hpp
     rigidbody_component.cpp
     rigidbody_component.hpp
+    ui_element_component.cpp
+    ui_element_component.hpp
 )
