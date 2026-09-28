@@ -5,10 +5,25 @@
  * @file vk_device.hpp
  * @brief Vulkan implementation of @ref gpu::device.
  *
- * The @c vk_device class is declared in full and member functions are
- * split across translation units by resource family (vk_device.cpp for
- * lifecycle / capabilities / swapchain / render targets / queries /
- * encoders / lookup_*, vk_device_buffer.cpp for buffers, etc.).
+ * @c vk_device is a facade over the backend's components, one header
+ * each: vk_instance (the instance, the debug messenger and the
+ * surface), vk_physical_device and vk_logical_device (GPU selection,
+ * feature and format negotiation, the queues, the memory allocator and
+ * device loss), vk_pipeline_cache, vk_transfer (the transfer batches
+ * and the staging ring), vk_frame (the frames in flight, their fences
+ * and command pools, the deferred-destroy queue), vk_descriptor_allocator
+ * (the descriptor pool chain), vk_query_pool (timestamp queries),
+ * vk_swapchain and vk_render_pass_cache. It owns them as members,
+ * declared in bring-up order; init brings them up and quit shuts them
+ * down explicitly, step by step, and no component releases anything
+ * in its destructor. vk_device.cpp holds that lifecycle and the frame
+ * boundary, submission and swapchain rebuild that order the
+ * components' work. The resource tables (vk_resources.hpp) stay
+ * vk_device members, with a translation unit per resource family
+ * (vk_device_buffer.cpp, vk_device_texture.cpp, vk_device_bind_group.cpp,
+ * vk_device_pipeline.cpp, vk_device_shader.cpp,
+ * vk_device_render_target.cpp) and one for the tables as a whole
+ * (vk_device_resources.cpp).
  *
  * The backend keeps up to k_max_frames_in_flight frames in flight
  * (rendering_engine::graphics_settings::frames_in_flight, 2 by default): each
@@ -200,7 +215,7 @@ namespace rendering_engine::gpu::backend::vulkan
 #endif
 
         // Internal accessors used by the encoder to map handles
-        // back to records. Definitions in vk_device.cpp.
+        // back to records.
         vk_buffer* lookup_buffer(buffer h);
         vk_texture* lookup_texture(texture h);
         vk_sampler* lookup_sampler(sampler h);
@@ -441,8 +456,8 @@ namespace rendering_engine::gpu::backend::vulkan
         handle_pool<vk_bind_group> m_bind_groups;
         handle_pool<vk_render_target> m_render_targets;
 
-        // The components, in bring-up order; quit shuts them down in
-        // reverse (see quit), and their destructors release nothing.
+        // The components, in bring-up order. quit shuts them down
+        // explicitly (see quit); their destructors release nothing.
         vk_instance m_instance;
         vk_physical_device m_physical_device;
         vk_logical_device m_device{m_instance, m_physical_device};

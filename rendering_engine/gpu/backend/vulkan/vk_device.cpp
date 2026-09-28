@@ -3,10 +3,11 @@
 
 /**
  * @file vk_device.cpp
- * @brief @c vk_device lifecycle, instance / surface / device /
- *        swapchain bring-up, command-encoder factory, and the
- *        @c lookup_* accessors. Per-resource @c vk_device member
- *        functions live in their own translation units
+ * @brief @c vk_device: the bring-up and teardown of its components,
+ *        the capabilities it reports, the frame boundary, submission
+ *        and swapchain rebuild that order the components' work, and the
+ *        accessors the encoder reaches them through. The resource
+ *        families live in their own translation units
  *        (vk_device_buffer.cpp, etc.).
  */
 
@@ -185,7 +186,7 @@ namespace rendering_engine::gpu::backend::vulkan
         LOG_INF("Quit gpu::backend::vulkan::vk_device");
     }
 
-    // -- Physical / logical device --------------------------------------
+    // -- Capabilities ----------------------------------------------------
 
     void vk_device::query_capabilities()
     {
