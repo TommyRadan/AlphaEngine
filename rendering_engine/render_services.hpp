@@ -8,18 +8,14 @@
 
 #pragma once
 
+#include <cstdint>
+
 namespace core
 {
     struct event_bus;
     struct job_pool;
     struct time;
 } // namespace core
-
-namespace platform
-{
-    struct window;
-    struct window_settings;
-} // namespace platform
 
 namespace rendering_engine
 {
@@ -38,24 +34,29 @@ namespace rendering_engine
      *        works through and read-only views of the settings it reads.
      *
      * Non-owning. The owner keeps every pointee alive from
-     * @ref renderer::init until @ref renderer::quit returns. The device,
-     * the window and the event bus are required; every other member may be
-     * null, with the effect its comment names.
+     * @ref renderer::init until @ref renderer::quit returns. The device and
+     * the event bus are required; every other pointer may be null, with the
+     * effect its comment names.
      */
     struct render_services
     {
         /** @brief The GPU device the passes, materials and targets are built on. */
         gpu::device* device{nullptr};
 
-        /** @brief The window whose drawable the swapchain and the off-screen targets are sized to. */
-        const platform::window* window{nullptr};
+        /**
+         * @brief The drawable's size in pixels at init: the swapchain and
+         *        the off-screen targets start at it. Later sizes arrive as
+         *        @c core::window_resized events on @ref events.
+         */
+        uint32_t drawable_width{0};
+        uint32_t drawable_height{0};
 
         /**
-         * @brief The window's settings, whose aspect stands in for the
-         *        drawable's while the window reports no drawable. Null
-         *        falls back to a square aspect.
+         * @brief The aspect ratio (width over height) that stands in for the
+         *        drawable's while the drawable is empty, such as the
+         *        window's logical size.
          */
-        const platform::window_settings* window_settings{nullptr};
+        float fallback_aspect{1.0f};
 
         /** @brief The bus whose @c core::window_resized events resize the swapchain and the targets. */
         core::event_bus* events{nullptr};

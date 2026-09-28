@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include <rendering_engine/gpu/types.hpp>
+
 namespace rendering_engine
 {
     /** @brief GPU backend selected by @ref graphics_settings. */
@@ -47,8 +49,8 @@ namespace rendering_engine
          */
         bool depth_prepass{false};
 
-        /** @brief Upper bound of @ref frames_in_flight; the Vulkan backend sizes its per-frame rings by it. */
-        static constexpr unsigned int max_frames_in_flight = 2;
+        /** @brief Upper bound of @ref frames_in_flight: the most frames the GPU device keeps in flight. */
+        static constexpr unsigned int max_frames_in_flight = gpu::max_frames_in_flight;
 
         /**
          * @brief Frames the Vulkan backend may have in flight at once, 1 to @ref max_frames_in_flight.

@@ -22,12 +22,9 @@
 #include <vector>
 
 #include <core/log.hpp>
-#include <core/os/os.hpp>
-#include <platform/platform.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_command_encoder.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_negotiate.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_translate.hpp>
-#include <rendering_engine/graphics_settings.hpp>
 
 namespace rendering_engine::gpu::backend::vulkan
 {
@@ -327,8 +324,8 @@ namespace rendering_engine::gpu::backend::vulkan
         // regions follow it, so it cannot change while the device is
         // up. The settings layer already clamps the value to the range;
         // the clamp here guards any other caller.
-        static_assert(rendering_engine::graphics_settings::max_frames_in_flight == k_max_frames_in_flight,
-                      "the settings range and the backend ring must agree");
+        static_assert(gpu::max_frames_in_flight == k_max_frames_in_flight,
+                      "the device interface's bound and the backend ring must agree");
         m_frames_in_flight = std::clamp<uint32_t>(frames_in_flight, 1, k_max_frames_in_flight);
         m_frame_slot = 0;
         m_in_frame = false;
@@ -680,39 +677,8 @@ namespace rendering_engine::gpu::backend::vulkan
 
     // -- Instance / debug messenger / surface ---------------------------
 
-    namespace
-    {
-        // The Vulkan loader does not look beside the executable for
-        // explicit-layer JSON manifests by default. CI ships the
-        // validation layer alongside @c AlphaEngine.exe (via the
-        // build-vulkan job in @c ci.yml); pointing @c VK_LAYER_PATH at
-        // the executable directory before @c vkCreateInstance lets the
-        // loader discover @c VkLayer_khronos_validation.json from
-        // there. Skip if @c VK_LAYER_PATH is already set so the user
-        // can override with their own SDK install.
-        void publish_layer_path_if_bundled()
-        {
-            if (core::os::environment_variable("VK_LAYER_PATH").has_value())
-            {
-                return;
-            }
-            // Without a trailing separator, so the loader's path
-            // concatenation produces a well-formed lookup.
-            const std::filesystem::path base_path = platform::base_path();
-            if (base_path.empty() || !core::os::file_exists(base_path / "VkLayer_khronos_validation.json"))
-            {
-                return;
-            }
-            const std::string layer_path = core::os::path_to_utf8(base_path);
-            platform::set_environment_variable("VK_LAYER_PATH", layer_path.c_str());
-            LOG_INF("Published VK_LAYER_PATH=%s for bundled validation layer", layer_path.c_str());
-        }
-    } // namespace
-
     void vk_device::create_instance(const std::vector<const char*>& window_extensions)
     {
-        publish_layer_path_if_bundled();
-
         // The backend needs the 1.1 core feature queries
         // (vkGetPhysicalDeviceFeatures2) and asks for up to 1.2, which
         // is what it was written against; a newer loader is asked for

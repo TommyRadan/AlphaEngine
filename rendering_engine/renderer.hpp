@@ -103,8 +103,8 @@ namespace rendering_engine
         ~renderer();
 
         /**
-         * @brief Initializes the built-in passes / materials against the live window and gpu device
-         *        @p services names, and keeps @p services for the frames that follow (see
+         * @brief Initializes the built-in passes / materials against the live gpu device @p services
+         *        names, sized to its drawable, and keeps @p services for the frames that follow (see
          *        @ref render_services for what each member is read for). Must be called once before
          *        @ref render.
          */
