@@ -2,7 +2,7 @@
 // Copyright (c) 2015-2026 Tomislav Radanovic
 
 // Helpers for passes that sample the scene depth
-// (frame_context::scene_depth_texture). The texture stores the non-linear
+// (frame_resources::scene_depth). The texture stores the non-linear
 // window-space depth the scene and skybox passes leave in the HDR
 // target's depth24 attachment. The engine's projections
 // (core::math::perspective / ortho) put clip-space depth in [0, w] and

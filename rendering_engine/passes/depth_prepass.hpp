@@ -6,6 +6,7 @@
 #include <cstdint>
 
 #include <rendering_engine/gpu/handle.hpp>
+#include <rendering_engine/passes/frame_resources.hpp>
 #include <rendering_engine/passes/pass.hpp>
 
 namespace rendering_engine
@@ -20,28 +21,28 @@ namespace rendering_engine
      * writes the scene depth itself as it always has; it stays in the
      * pass list either way so the setting can flip at runtime.
      *
-     * When it runs it lays the opaque queue's depth into the scene
-     * target's depth attachment, through a depth-only render target that
-     * imports that attachment (the depth-only targets the shadow passes
-     * use), before any colour is shaded. The draw list is the scene
-     * pass's own (@ref scene_pass::prepare), reached through
-     * @ref frame_context::scene — the scene pass prepares and records
-     * right after this one and owns the draw list, the per-frame bind
-     * group and the choice between loading and clearing the depth. This
-     * pass's @ref prepare decides whether it runs (the setting, a camera,
-     * a usable target) and announces a frame it runs to the scene pass
-     * (@ref scene_pass::expect_depth_prepass), whose prepare then
-     * resolves the depth-only twins; @ref record hands the scene pass
-     * the depth-only pass to begin and dispatch
-     * (@ref scene_pass::record_depth_prepass, in parallel above the draw
-     * threshold like the shading pass). The list is layer-filtered and
-     * frustum-culled against the camera and sorted by
+     * When it runs it lays the opaque queue's depth into the scene target's
+     * depth attachment, through a depth-only render target that imports
+     * that attachment (the depth-only targets the shadow passes use),
+     * before any colour is shaded. The draw list is the scene pass's own
+     * (@ref scene_pass::prepare) — the scene pass prepares and records
+     * right after this one and owns the draw list, the per-frame bind group
+     * and the choice between loading and clearing the depth. This pass's
+     * @ref prepare decides whether it runs (the setting, a camera, a usable
+     * target) and, on a frame it runs, publishes its target as
+     * @ref frame_resources::depth_prepass, which tells the scene pass's
+     * prepare to resolve the depth-only twins; @ref record looks up the
+     * @ref frame_resources::scene_view the scene pass published by then and
+     * hands its list the depth-only pass to begin and dispatch
+     * (@ref depth_prepass_source::record_depth_prepass, in parallel above
+     * the draw threshold like the shading pass). The list is layer-filtered
+     * and frustum-culled against the camera and sorted by
      * @ref draw_item::sort_key, so the opaque items it draws go
      * front-to-back; the transparent queue and every surface
      * @ref material::draws_in_depth_prepass rejects (blended, not
-     * depth-tested or not depth-writing, or a template whose fragment
-     * stage decides coverage) are skipped. The scene pass then loads the
-     * depth and draws each pre-passed surface with depth writes off and a
+     * depth-tested or not depth-writing, or a template whose fragment stage
+     * decides coverage) are skipped. The scene pass then loads the depth
+     * and draws each pre-passed surface with depth writes off and a
      * less-or-equal test (@ref material::depth_prepassed_pipeline), so a
      * covered pixel is shaded once, while everything the pre-pass skipped
      * keeps its ordinary less-and-write variant against the same buffer.
@@ -57,9 +58,9 @@ namespace rendering_engine
      * @c invariant so the two pipelines may not compile the position
      * differently.
      *
-     * The pass list sees it write @c scene_depth, which the scene pass
-     * reads (loads) and writes after it. Later depth consumers get the
-     * same depth either way.
+     * The pass list sees it write @ref frame_resources::scene_depth, which
+     * the scene pass reads (loads) and writes after it. Later depth
+     * consumers get the same depth either way.
      */
     struct depth_prepass : pass
     {
@@ -71,21 +72,26 @@ namespace rendering_engine
 
         // Decides whether the pass runs this frame, rebuilds the
         // depth-only target over the frame's scene depth when that
-        // changed, and tells the scene pass to expect it.
+        // changed, and publishes it for the scene pass.
         void prepare(const frame_context& ctx) override;
 
-        // Records the depth-only pass through the scene pass on a frame
-        // @ref prepare decided to run; nothing otherwise.
+        // Records the depth-only pass through the scene pass's list on a
+        // frame @ref prepare decided to run; nothing otherwise, or when no
+        // scene view was published.
         void record(gpu::command_encoder& encoder, const frame_context& ctx) override;
 
         const char* name() const override
         {
-            return "depth_prepass";
+            return builtin_passes::depth_prepass;
         }
 
         void declare_io(pass_io_builder& io) const override
         {
-            io.write("scene_depth");
+            io.write(frame_resources::scene_depth);
+            io.write(frame_resources::depth_prepass);
+            // The scene pass publishes its view while it prepares, after
+            // this pass; it is looked up while this pass records.
+            io.read_unordered(frame_resources::scene_view);
         }
 
         // Drops the depth-only target: it imports the scene target's
@@ -102,14 +108,14 @@ namespace rendering_engine
 
         // Depth-only target over @ref m_target_depth, the scene depth
         // attachment it was built against. Rebuilt whenever
-        // @ref frame_context::scene_depth_texture publishes another
-        // handle; the attachment itself stays owned by the renderer's
-        // scene-colour target.
+        // @ref frame_resources::scene_depth holds another handle; the
+        // attachment itself stays owned by the renderer's scene-colour
+        // target.
         gpu::render_target m_target{};
         gpu::texture m_target_depth{};
 
         // Whether this frame's @ref prepare decided the pass runs (and
-        // announced it to the scene pass), so @ref record draws.
+        // published its target for the scene pass), so @ref record draws.
         bool m_active{false};
     };
 } // namespace rendering_engine

@@ -60,18 +60,20 @@ namespace rendering_engine
      * @brief Runtime-tunable temporal-AA parameters (@ref post_settings::taa).
      *
      * @ref enabled mirrors whether @ref taa_pass is actually in the pass
-     * chain rather than requesting it: temporal AA also gates the scene
-     * pass's projection jitter and is decided once, at @ref renderer::init,
-     * from @c rendering_engine::graphics_settings::temporal_aa and the drawable size.
+     * chain and enabled rather than requesting it: temporal AA also gates
+     * the scene pass's projection jitter, @ref renderer::init registers the
+     * pass from @c rendering_engine::graphics_settings::temporal_aa and the
+     * drawable size, and only @ref renderer::set_pass_enabled or
+     * @ref renderer::remove_pass change it later.
      * @ref renderer::set_post_settings overwrites whatever value it is
-     * given here with the pass's real presence, so this always reports the
-     * truth rather than silently failing to apply a request to flip it.
+     * given here with the truth, rather than silently failing to apply a
+     * request to flip it.
      *
      * @ref feedback is genuinely live: the steady-state weight of the
      * reprojected history in the resolve's blend (0 disables temporal
      * accumulation — every frame resolves from the current image alone;
      * closer to 1 keeps a longer, smoother but slower-to-settle history).
-     * @ref taa_pass::record rewrites its UBO only when this differs from
+     * @ref taa_pass::prepare rewrites its UBO only when this differs from
      * the value it last uploaded.
      */
     struct taa_settings
@@ -265,12 +267,7 @@ namespace rendering_engine
      * @ref renderer::get_post_settings) and is copied into
      * @ref frame_context::post every @ref renderer::render so each post
      * pass can read the fields it owns and rewrite its own UBO only when a
-     * value actually changed. @ref exposure and @ref tonemap_op are the
-     * exception: @ref renderer::set_post_settings forwards them straight to
-     * @ref tonemap_pass::set_exposure / @ref tonemap_pass::set_operator,
-     * which already rewrite their UBO immediately and only on change, so
-     * @ref tonemap_pass::record has no need to read them back out of the
-     * frame context.
+     * value actually changed.
      *
      * The scene-wide fog medium is deliberately not part of this struct:
      * it stays on the existing @ref renderer::set_fog / @ref fog_settings

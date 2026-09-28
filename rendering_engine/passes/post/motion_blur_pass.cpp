@@ -41,7 +41,7 @@ namespace rendering_engine
         auto& gpu = *m_device;
 
         // Degenerate backbuffer (no settings, zero-sized window): leave the
-        // pass disabled so draws() is false and the chain reads the scene
+        // pass disabled so it never draws and the chain reads the scene
         // colour directly.
         if (width == 0 || height == 0)
         {
@@ -109,7 +109,7 @@ namespace rendering_engine
         m_pipeline = gpu.create_pipeline(pipeline_descriptor);
 
         // The bind group samples the scene colour and the motion vectors,
-        // which arrive through the frame context; record() builds it on
+        // which are looked up in the frame's store; prepare() builds it on
         // the first drawn frame and rebuilds it whenever either changes.
         m_enabled = true;
     }
@@ -178,14 +178,6 @@ namespace rendering_engine
         m_texture = gpu.render_target_color_texture(m_target);
     }
 
-    void motion_blur_pass::ensure_target(const motion_blur_settings& settings)
-    {
-        if (m_enabled && !m_target.valid() && motion_blur_active(settings))
-        {
-            create_target();
-        }
-    }
-
     void motion_blur_pass::resize(uint32_t width, uint32_t height)
     {
         if (!m_enabled || width == 0 || height == 0)
@@ -202,8 +194,8 @@ namespace rendering_engine
         auto& gpu = *m_device;
 
         // Create the replacement before releasing the old target so the
-        // handle published through frame_context::hdr_color_texture changes
-        // and its consumers rebind. The release is safe here: resize runs
+        // scene colour handle it publishes changes and its consumers
+        // rebind. The release is safe here: resize runs
         // between frames, and a deferred-execution backend retires the
         // attachment only once the last command buffer that used it has
         // finished.
@@ -213,22 +205,6 @@ namespace rendering_engine
         {
             gpu.destroy(old_target);
         }
-    }
-
-    bool motion_blur_pass::draws(const frame_context& ctx) const
-    {
-        return m_enabled && m_target.valid() && motion_blur_active(ctx.post.motion_blur) &&
-               ctx.velocity_texture.valid();
-    }
-
-    gpu::render_target motion_blur_pass::output_target() const
-    {
-        return m_target;
-    }
-
-    gpu::texture motion_blur_pass::output_texture() const
-    {
-        return m_texture;
     }
 
     void motion_blur_pass::rebuild_bind_group(gpu::texture scene_color, gpu::texture velocity)
@@ -295,10 +271,19 @@ namespace rendering_engine
 
     void motion_blur_pass::prepare(const frame_context& ctx)
     {
-        // The same test renderer::render published frame_context::hdr_color_*
-        // by: when it fails, the chain after this pass reads the scene
-        // colour and there is nothing to do.
-        m_draws = draws(ctx);
+        // The output target is allocated the first time motion blur is
+        // switched on, so the default configuration never pays for it.
+        const bool active = motion_blur_active(ctx.post.motion_blur);
+        if (m_enabled && !m_target.valid() && active)
+        {
+            create_target();
+        }
+
+        // Without motion vectors there is nothing to blur along: publish
+        // nothing, so the chain after this pass reads the scene colour.
+        const color_target scene_color = ctx.resources->get(frame_resources::scene_color);
+        const gpu::texture velocity = ctx.resources->get(frame_resources::velocity);
+        m_draws = m_enabled && m_target.valid() && active && velocity.valid();
         if (!m_draws)
         {
             return;
@@ -312,11 +297,13 @@ namespace rendering_engine
         // are stable until a resize recreates their targets, so compare
         // against what the group was built with and rebuild on change —
         // the first drawn frame included.
-        if (ctx.scene_color_texture != m_bound_color || ctx.velocity_texture != m_bound_velocity ||
-            !m_bind_group.valid())
+        if (scene_color.texture != m_bound_color || velocity != m_bound_velocity || !m_bind_group.valid())
         {
-            rebuild_bind_group(ctx.scene_color_texture, ctx.velocity_texture);
+            rebuild_bind_group(scene_color.texture, velocity);
         }
+
+        // The passes after this one work on the blurred copy.
+        ctx.resources->publish(frame_resources::scene_color, color_target{m_target, m_texture});
     }
 
     void motion_blur_pass::record(gpu::command_encoder& encoder, const frame_context& /*ctx*/)

@@ -6,6 +6,7 @@
 #include <cstdint>
 
 #include <rendering_engine/gpu/handle.hpp>
+#include <rendering_engine/passes/frame_resources.hpp>
 #include <rendering_engine/passes/pass.hpp>
 
 namespace rendering_engine
@@ -44,8 +45,9 @@ namespace rendering_engine
      *
      * The march binds the scene pass's per-frame group at slot 0 (the
      * @ref view_globals block, the lights and the shadow blocks and maps),
-     * handed in at construction the way the debug pass takes it, plus its
-     * own parameters and the scene depth at slot 1. The medium is the
+     * looked up in the published @ref frame_resources::scene_view the way
+     * the debug pass takes it, plus its own parameters and the scene depth
+     * at slot 1. The medium is the
      * scene's height fog (@ref fog_settings::height_density, falloff and
      * reference height) times @ref volumetric_fog_settings::density_scale;
      * while it runs the lit materials start their analytic height fog at
@@ -64,10 +66,10 @@ namespace rendering_engine
         // drawable size the targets follow. The group bound there is not a
         // constructor input: the march binds the scene pass's jittered
         // per-frame group (the view the scene depth was rasterised with),
-        // read through @ref frame_context::scene each frame after the scene
-        // pass refilled its buffers, so it always reflects the current
-        // view, lights and shadow casters. Nor is the scene depth: it
-        // arrives every frame as @ref frame_context::scene_depth_texture,
+        // looked up in @ref frame_resources::scene_view each frame after
+        // the scene pass refilled its buffers, so it always reflects the
+        // current view, lights and shadow casters. Nor is the scene depth:
+        // it is looked up every frame (@ref frame_resources::scene_depth),
         // and the bind groups sampling it are rebuilt whenever that handle
         // changes.
         volumetric_fog_pass(gpu::device& device, gpu::bind_group_layout frame_layout, uint32_t width, uint32_t height);
@@ -84,7 +86,7 @@ namespace rendering_engine
 
         const char* name() const override
         {
-            return "volumetric_fog";
+            return builtin_passes::volumetric_fog;
         }
 
         void declare_io(pass_io_builder& io) const override
@@ -92,12 +94,13 @@ namespace rendering_engine
             // The march samples the scene depth and, through the scene
             // pass's per-frame group, the three shadow maps; the composite
             // blends over the scene colour, reading it through the blend.
-            io.read("scene_depth");
-            io.read("shadow_map");
-            io.read("point_shadow");
-            io.read("spot_shadow");
-            io.read("scene_color");
-            io.write("scene_color");
+            io.read(frame_resources::scene_depth);
+            io.read_optional(frame_resources::scene_view);
+            io.read_optional(frame_resources::directional_shadow);
+            io.read_optional(frame_resources::point_shadow);
+            io.read_optional(frame_resources::spot_shadow);
+            io.read(frame_resources::scene_color);
+            io.write(frame_resources::scene_color);
         }
 
         // Recreates the half-resolution march target and the
@@ -167,6 +170,12 @@ namespace rendering_engine
         // The scene depth texture the bind groups were built against;
         // invalid until the first drawn frame builds them.
         gpu::texture m_bound_depth{};
+
+        // The scene pass's jittered per-frame group the march binds at
+        // slot 0 and the scene colour target the composite blends into,
+        // looked up by prepare() on a drawn frame.
+        gpu::bind_group m_frame_group{};
+        gpu::render_target m_target{};
 
         // False when the backbuffer dimensions are degenerate (no
         // settings, zero-sized window); record() then no-ops.

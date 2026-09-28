@@ -37,13 +37,16 @@ target_sources(AlphaEngine PRIVATE
 #   line         a coloured helix line strip
 #   phong        a Blinn-Phong lit sphere
 #   points       a coloured Fibonacci-sphere point cloud
+#   post_tint    a lit sphere seen through a colour-tint post pass the
+#                module registers before tonemap, with bloom switched off
+#                through the renderer's pass API
 #   scene_graph  a parent / child node hierarchy of orbiting spheres
 #                around a point light
 #   skybox       a procedural sky and an IBL-lit sphere grid
 #
 # They are left out of the default build, which builds AlphaEngine alone;
 # the alpha_demos target builds them, and CI builds it on every build job.
-set(ALPHAENGINE_DEMOS fog gltf instanced line phong points scene_graph skybox)
+set(ALPHAENGINE_DEMOS fog gltf instanced line phong points post_tint scene_graph skybox)
 
 add_custom_target(alpha_demos)
 foreach(demo IN LISTS ALPHAENGINE_DEMOS)

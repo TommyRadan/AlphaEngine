@@ -4,6 +4,7 @@
 #pragma once
 
 #include <rendering_engine/gpu/handle.hpp>
+#include <rendering_engine/passes/frame_resources.hpp>
 #include <rendering_engine/passes/pass.hpp>
 
 namespace rendering_engine
@@ -22,10 +23,12 @@ namespace rendering_engine
      * camera turns. The HDR result flows through the existing bloom and
      * tonemap chain like any other scene colour.
      *
-     * The pass is always present in the pass list but inert until a cube
-     * map is supplied through @ref set_cubemap (and skipped on no-camera
-     * frames), mirroring how the engine keeps the bloom pass resident but
-     * dormant when disabled.
+     * The cube map is the skybox of the world's environment probe
+     * (@ref render_world::environment, set through
+     * @ref renderer::set_environment), which @ref prepare follows every
+     * frame. The pass is always present in the pass list but inert while
+     * the world has none (and skipped on no-camera frames), mirroring how
+     * the engine keeps the bloom pass resident but dormant when disabled.
      */
     struct skybox_pass : pass
     {
@@ -35,33 +38,29 @@ namespace rendering_engine
         skybox_pass(const skybox_pass&) = delete;
         skybox_pass& operator=(const skybox_pass&) = delete;
 
-        // Decides whether the frame draws the sky and uploads the
-        // jittered inverse view-projection it unprojects with.
+        // Follows the world's environment cube map, decides whether the
+        // frame draws the sky and uploads the jittered inverse
+        // view-projection it unprojects with.
         void prepare(const frame_context& ctx) override;
 
         void record(gpu::command_encoder& encoder, const frame_context& ctx) override;
 
         const char* name() const override
         {
-            return "skybox";
+            return builtin_passes::skybox;
         }
 
         void declare_io(pass_io_builder& io) const override
         {
-            io.read("scene_color");
-            io.write("scene_color");
+            io.read(frame_resources::scene_color);
+            io.write(frame_resources::scene_color);
             // Depth is loaded for the less-equal test and stored back
             // (writes are off, but the attachment round-trips through the
             // pass), so declare it on both sides: the graph then orders
             // any depth consumer after the sky has been composited.
-            io.read("scene_depth");
-            io.write("scene_depth");
+            io.read(frame_resources::scene_depth);
+            io.write(frame_resources::scene_depth);
         }
-
-        // Set (or clear, with an invalid handle) the cube map sampled as
-        // the background. Rebuilds the input bind group; an invalid handle
-        // leaves the pass dormant so it records nothing.
-        void set_cubemap(gpu::texture cubemap);
 
     private:
         // The device this pass creates its resources on and releases them
@@ -69,10 +68,17 @@ namespace rendering_engine
         gpu::device* m_device{nullptr};
 
         // Rebuild the input bind group against @ref m_cubemap and the
-        // sky UBO. Called by @ref set_cubemap.
+        // sky UBO. Called at construction and by @ref prepare when the
+        // cube map changed.
         void rebuild_bind_group();
 
+        // The cube map the input bind group samples; invalid leaves the
+        // pass dormant.
         gpu::texture m_cubemap{};
+
+        // The scene colour target this frame composites into, looked up by
+        // @ref prepare.
+        gpu::render_target m_target{};
 
         // Whether this frame's record() draws (a cube map and a camera),
         // decided by prepare().

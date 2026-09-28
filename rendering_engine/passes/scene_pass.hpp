@@ -9,6 +9,7 @@
 
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/gpu/render_target.hpp>
+#include <rendering_engine/passes/frame_resources.hpp>
 #include <rendering_engine/passes/pass.hpp>
 #include <rendering_engine/render_stats.hpp>
 #include <rendering_engine/renderables/draw_item.hpp>
@@ -33,14 +34,14 @@ namespace rendering_engine
      * The per-frame uploads, the sorted draw list and the pipeline every
      * item binds are built once per frame by @ref prepare; @ref record
      * (and @ref record_depth_prepass, which the depth pre-pass calls
-     * ahead of it) then only encode from that list, so both passes draw
-     * the same items with the same per-frame and per-draw data. The
-     * depth pre-pass announces the frames it runs through
-     * @ref expect_depth_prepass before this pass prepares: the pass then
-     * resolves each pre-passed item's depth-only twin
-     * (@ref material::depth_prepass_pipeline) for it, loads the scene
-     * depth rather than clearing it and draws every pre-passed item
-     * (@ref material::draws_in_depth_prepass) with its
+     * ahead of it through the published @ref scene_view_data) then only
+     * encode from that list, so both passes draw the same items with the
+     * same per-frame and per-draw data. The depth pre-pass publishes
+     * @ref frame_resources::depth_prepass on the frames it runs, before
+     * this pass prepares: the pass then resolves each pre-passed item's
+     * depth-only twin (@ref material::depth_prepass_pipeline) for it,
+     * loads the scene depth rather than clearing it and draws every
+     * pre-passed item (@ref material::draws_in_depth_prepass) with its
      * @ref material::depth_prepassed_pipeline — depth writes off, a
      * less-or-equal test — so each covered pixel shades once; the other
      * items keep their ordinary variant.
@@ -80,19 +81,24 @@ namespace rendering_engine
      * the numbers in gpu/shader_bindings.hpp).
      * The matching lit materials read the layout via
      * @ref frame_bind_group_layout so the pipeline and the runtime bind
-     * group agree on slot shape.
+     * group agree on slot shape. Every frame the pass publishes the layout
+     * and its groups as @ref frame_resources::scene_view, for the passes
+     * that draw with the scene's camera, lights and shadows later in the
+     * frame (the volumetric fog, the debug pass) and for the depth
+     * pre-pass, which records this pass's list through it.
      *
-     * Skipped when no camera is attached.
+     * Draws into @ref frame_resources::scene_color and its depth; skipped
+     * when no camera is attached.
      */
-    struct scene_pass : pass
+    struct scene_pass : pass, depth_prepass_source
     {
-        // The shadow passes that run ahead of this one reach it through the
-        // frame context (@ref frame_context::directional_shadow,
-        // @c point_shadow, @c spot_shadow): their maps (and the directional
+        // The shadow passes that run ahead of this one publish their maps
+        // and fits (@ref frame_resources::directional_shadow,
+        // @c point_shadow, @c spot_shadow): the maps (and the directional
         // comparison sampler) go into the per-frame bind group, rebuilt if
-        // one of them changes, and their fitted matrices, biases and
-        // caster indices are uploaded each frame so the lit materials can
-        // sample them. An absent shadow pass disables that kind of
+        // one of them changes, and the fitted matrices, biases and caster
+        // indices are uploaded each frame so the lit materials can sample
+        // them. A shadow that is not published disables that kind of
         // shadowing.
         // @p stats is filled with this frame's draw statistics each record();
         // non-owning, owned by the renderer and surfaced to the debug
@@ -116,14 +122,14 @@ namespace rendering_engine
         scene_pass(const scene_pass&) = delete;
         scene_pass& operator=(const scene_pass&) = delete;
 
-        // Builds this frame's state: resets the stats, (re)builds the
-        // per-frame groups, uploads the per-frame blocks (view_globals,
-        // lights, the shadow blocks — from the shadow passes, which
-        // prepared ahead of this one), collects, keys and sorts the draw
-        // list and resolves the pipeline every item binds in each of the
-        // two dispatches. With no camera it only resets the stats and
-        // leaves the list empty. Consumes the depth pre-pass's
-        // @ref expect_depth_prepass for the frame.
+        // Builds this frame's state: resets the stats, (re)builds and
+        // publishes the per-frame groups, uploads the per-frame blocks
+        // (view_globals, lights, the shadow blocks — from the shadow
+        // passes, which prepared ahead of this one), collects, keys and
+        // sorts the draw list and resolves the pipeline every item binds
+        // in each of the two dispatches, the depth pre-pass's included when
+        // it published @ref frame_resources::depth_prepass. With no camera
+        // it only resets the stats and leaves the list empty.
         void prepare(const frame_context& ctx) override;
 
         // Opens the scene pass over the HDR target and dispatches the
@@ -132,27 +138,21 @@ namespace rendering_engine
 
         const char* name() const override
         {
-            return "scene";
+            return builtin_passes::scene;
         }
 
         void declare_io(pass_io_builder& io) const override
         {
-            io.read("shadow_map");
-            io.read("point_shadow");
-            io.read("spot_shadow");
+            io.read_optional(frame_resources::directional_shadow);
+            io.read_optional(frame_resources::point_shadow);
+            io.read_optional(frame_resources::spot_shadow);
             // Loaded rather than cleared on frames the depth pre-pass ran.
-            io.read("scene_depth");
-            io.write("scene_color");
-            io.write("scene_depth");
+            io.read_optional(frame_resources::depth_prepass);
+            io.read_optional(frame_resources::scene_depth);
+            io.write(frame_resources::scene_color);
+            io.write(frame_resources::scene_depth);
+            io.write(frame_resources::scene_view);
         }
-
-        // Called by the @ref depth_prepass from its own prepare, which the
-        // pass list runs right before this pass's, on a frame it will lay
-        // the opaque depth down: this pass's @ref prepare then resolves the
-        // pre-passed items' depth-only twins and @ref record loads the
-        // depth and shades those items with their depth-prepassed
-        // variants. Holds for the next @ref prepare only.
-        void expect_depth_prepass();
 
         // Draws this frame's pre-passed items (the opaque queue, filtered
         // by @ref material::draws_in_depth_prepass, front-to-back) through
@@ -161,35 +161,19 @@ namespace rendering_engine
         // @ref depth_prepass describes over the scene depth attachment;
         // this pass begins and ends it, since above the threshold it is
         // begun for parallel recording and the items are dispatched from
-        // worker threads like the shading pass's. Call after @ref prepare,
-        // on a frame announced through @ref expect_depth_prepass.
-        void record_depth_prepass(gpu::command_encoder& encoder, const gpu::render_pass_descriptor& descriptor);
+        // worker threads like the shading pass's. Called by the depth
+        // pre-pass while it records, on a frame it published
+        // @ref frame_resources::depth_prepass for.
+        void record_depth_prepass(gpu::command_encoder& encoder,
+                                  const gpu::render_pass_descriptor& descriptor) const override;
 
         // Layout for the per-frame bind group bound at slot 0 each
         // frame. The matching material's pipeline_descriptor must
         // reserve slot 0 for this layout.
         gpu::bind_group_layout frame_bind_group_layout() const;
 
-        // The per-frame bind group itself (camera / lights / shadow at
-        // slot 0). Built by the first @ref prepare and stable after that
-        // unless a shadow map changes — the pass refills the backing UBOs
-        // every frame rather than recreating the group. Passes later in the
-        // frame (the volumetric fog) read it through
-        // @ref frame_context::scene once this pass has prepared, and bind it
-        // to draw with the same camera, lights and shadows the scene used.
-        gpu::bind_group frame_bind_group() const;
-
-        // Per-frame bind group carrying the *unjittered* camera, for
-        // consumers that draw after the TAA resolve (the debug pass) and so
-        // would otherwise show the projection jitter as an un-averaged
-        // sub-pixel wobble. Identical to @ref frame_bind_group in every
-        // other binding, and the same handle when temporal-AA jitter is off
-        // (there is nothing to undo). Built and rebuilt with it; the debug
-        // pass reads it through @ref frame_context::scene.
-        gpu::bind_group overlay_frame_bind_group() const;
-
         // No resize override: the pass renders into the scene target the
-        // renderer hands it each frame, and the jitter it applies arrives
+        // renderer publishes each frame, and the jitter it applies arrives
         // through frame_context already scaled to the live target size.
 
     private:
@@ -224,10 +208,13 @@ namespace rendering_engine
             gpu::pipeline depth{};
         };
 
-        // (Re)builds @ref m_frame_bind_group and its overlay twin when they do
-        // not exist yet or a shadow map @p ctx publishes differs from the one
-        // they were built with. Called by @ref prepare.
-        void update_frame_bind_groups(const frame_context& ctx);
+        // (Re)builds @ref m_frame_bind_group and its overlay twin when they
+        // do not exist yet or a shadow map differs from the one they were
+        // built with; a null shadow binds nothing for that kind. Called by
+        // @ref prepare.
+        void update_frame_bind_groups(const directional_shadow_data* shadow,
+                                      const point_shadow_data* point_shadow,
+                                      const spot_shadow_data* spot_shadow);
 
         // The chunks a dispatch of @p draw_count items is cut into: 1 (a
         // serial walk on the primary) at or below the threshold, with the
@@ -240,7 +227,8 @@ namespace rendering_engine
         // @p phase's share of @ref m_items — serially, or in parallel
         // through one secondary encoder per chunk (see the class comment)
         // — and ends the pass.
-        void record_phase(gpu::command_encoder& encoder, gpu::render_pass_descriptor descriptor, draw_phase phase);
+        void
+        record_phase(gpu::command_encoder& encoder, gpu::render_pass_descriptor descriptor, draw_phase phase) const;
 
         // Binds and draws @ref m_items in [@p first, @p last) for @p phase
         // into @p pass_encoder: the per-frame group once, the pipeline
@@ -266,9 +254,12 @@ namespace rendering_engine
         gpu::buffer m_spot_shadow_ubo{};
         gpu::bind_group m_frame_bind_group{};
 
-        // Unjittered twin of @ref m_frame_bind_group for the debug pass.
+        // Unjittered twin of @ref m_frame_bind_group for passes that draw
+        // after the TAA resolve (the debug pass), which would otherwise
+        // show the projection jitter as an un-averaged sub-pixel wobble.
         // Only created when temporal-AA jitter is active; otherwise the
-        // accessor hands back the main group (the matrices are identical).
+        // published @ref scene_view_data::overlay_frame_group is the main
+        // group (the matrices are identical).
         // Shares every other binding with the main group — only its
         // view_globals block differs, describing the view without the
         // sub-pixel offset.
@@ -276,8 +267,9 @@ namespace rendering_engine
         gpu::bind_group m_overlay_frame_bind_group{};
 
         // The shadow maps and sampler the groups above were built with, as
-        // the frame context published them (invalid for an absent shadow
-        // pass); @ref update_frame_bind_groups rebuilds when they differ.
+        // the shadow passes published them (invalid for a shadow that is not
+        // published); @ref update_frame_bind_groups rebuilds when they
+        // differ.
         gpu::texture m_bound_shadow_map{};
         gpu::sampler m_bound_shadow_sampler{};
         gpu::texture m_bound_point_shadow_map{};
@@ -311,11 +303,13 @@ namespace rendering_engine
         // the fewest draws per chunk (0: never); fixed at construction.
         uint32_t m_parallel_draw_threshold{0};
 
-        // The depth pre-pass announced itself for the next @ref prepare
-        // (@ref expect_depth_prepass), and whether it runs this frame,
-        // consumed from that by @ref prepare: picks load vs clear and the
-        // pre-passed variants.
-        bool m_depth_prepass_requested{false};
+        // The scene colour target this frame draws into, looked up by
+        // @ref prepare.
+        gpu::render_target m_target{};
+
+        // Whether the depth pre-pass runs this frame (it published
+        // @ref frame_resources::depth_prepass), decided by @ref prepare:
+        // picks load vs clear and the pre-passed variants.
         bool m_depth_prepassed{false};
     };
 } // namespace rendering_engine

@@ -7,6 +7,7 @@
 #include <cstdint>
 
 #include <rendering_engine/gpu/handle.hpp>
+#include <rendering_engine/passes/frame_resources.hpp>
 #include <rendering_engine/passes/pass.hpp>
 
 namespace rendering_engine
@@ -44,10 +45,10 @@ namespace rendering_engine
      * resolve writes into one while sampling the other (last frame's
      * resolve) as history, and the roles swap after every frame, so no
      * copy is needed to store the history. The target being written this
-     * frame is exposed via @ref output_texture so the next pass (FXAA)
-     * samples it instead of the raw tonemap output; the handle therefore
-     * alternates between two values from frame to frame (and changes
-     * altogether on @ref resize), which FXAA absorbs with a small
+     * frame is published as @ref frame_resources::taa_resolve so the next
+     * pass (FXAA) samples it instead of the raw tonemap output; the handle
+     * therefore alternates between two values from frame to frame (and
+     * changes altogether on @ref resize), which FXAA absorbs with a small
      * per-handle bind-group cache.
      *
      * The history is only meaningful for frames of the same camera, so the
@@ -68,11 +69,10 @@ namespace rendering_engine
         // @p width / @p height are the backbuffer dimensions the two
         // accumulation targets are sized against. The two textures the
         // resolve samples are not constructor inputs: the tonemapped LDR
-        // image and the motion vectors arrive every frame as
-        // @ref frame_context::ldr_color_texture and
-        // @ref frame_context::velocity_texture, and the resolve bind groups
-        // are (re)built whenever either handle differs from the one they
-        // were last built against.
+        // image and the motion vectors are looked up every frame
+        // (@ref frame_resources::ldr_color, @ref frame_resources::velocity),
+        // and the resolve bind groups are (re)built whenever either handle
+        // differs from the one they were last built against.
         taa_pass(gpu::device& device, uint32_t width, uint32_t height);
         ~taa_pass() override;
 
@@ -81,8 +81,8 @@ namespace rendering_engine
 
         // Restarts the history on a camera change, rebinds the inputs when
         // their handles changed, writes the feedback weight the frame
-        // needs, picks the half this frame resolves into and swaps the
-        // pair's roles for the next frame.
+        // needs, picks and publishes the half this frame resolves into and
+        // swaps the pair's roles for the next frame.
         void prepare(const frame_context& ctx) override;
 
         // Draws the resolve into the half @ref prepare picked.
@@ -90,15 +90,17 @@ namespace rendering_engine
 
         const char* name() const override
         {
-            return "taa";
+            return builtin_passes::taa;
         }
 
         void declare_io(pass_io_builder& io) const override
         {
-            io.read("ldr_color");
-            io.read("velocity");
-            io.read("taa_history");
-            io.write("taa_resolve");
+            io.read(frame_resources::ldr_color);
+            io.read(frame_resources::velocity);
+            // The history is last frame's resolve, which this pass keeps to
+            // itself rather than publishing.
+            io.read_unordered("taa_history");
+            io.write(frame_resources::taa_resolve);
             io.write("taa_history");
         }
 
@@ -108,19 +110,9 @@ namespace rendering_engine
         // history (the next frame resolves from the current image alone,
         // exactly like the first frame after construction). The new
         // targets are created before the old ones are released so the
-        // handle published through frame_context::taa_resolve_texture
-        // changes and FXAA rebinds. No-op while the pass is disabled.
+        // published resolve handle changes and FXAA rebinds. No-op while
+        // the pass is disabled.
         void resize(uint32_t width, uint32_t height) override;
-
-        // The resolved LDR texture the next pass (FXAA) samples: the
-        // target the coming frame's resolve writes (the renderer asks
-        // before the passes prepare). The engine publishes it every frame
-        // as @ref frame_context::taa_resolve_texture; it alternates
-        // between the two ping-pong targets from frame to frame and
-        // changes on @ref resize. Invalid when the pass is disabled
-        // (degenerate backbuffer), in which case the caller should keep
-        // sampling the raw tonemap output.
-        gpu::texture output_texture() const;
 
     private:
         // The device this pass creates its resources on and releases them
@@ -205,8 +197,8 @@ namespace rendering_engine
         bool m_first_frame{true};
 
         // False when the backbuffer dimensions are degenerate (no settings,
-        // zero-sized window); record() then no-ops and output_texture()
-        // returns an invalid handle so the caller keeps the tonemap output.
+        // zero-sized window); record() then no-ops and nothing is
+        // published, so FXAA keeps sampling the tonemap output.
         bool m_enabled{false};
     };
 } // namespace rendering_engine

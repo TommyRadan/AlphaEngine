@@ -8,6 +8,7 @@
 #include <cstdint>
 
 #include <rendering_engine/gpu/handle.hpp>
+#include <rendering_engine/passes/frame_resources.hpp>
 #include <rendering_engine/passes/pass.hpp>
 
 namespace rendering_engine
@@ -49,9 +50,10 @@ namespace rendering_engine
      * the flag actually changed.
      *
      * The image it samples is not a constructor input: each frame it
-     * takes @ref frame_context::taa_resolve_texture when that is valid
-     * (temporal AA on) and @ref frame_context::ldr_color_texture
-     * otherwise, and binds an input bind group built against that handle.
+     * takes @ref frame_resources::taa_resolve while that is published
+     * (temporal AA on) and @ref frame_resources::ldr_color otherwise, and
+     * binds an input bind group built against that handle. It writes the
+     * result into @ref frame_resources::swapchain.
      * The TAA resolve alternates between two ping-pong targets from frame
      * to frame, so the groups are kept in a two-entry cache keyed by
      * handle: a handle seen before is rebound without work, a new one (the
@@ -61,11 +63,8 @@ namespace rendering_engine
     struct fxaa_pass : pass
     {
         // @p width / @p height are the backbuffer dimensions the per-texel
-        // edge step is baked from. @p taa_enabled says whether the renderer
-        // publishes a TAA resolve for this pass to sample (see
-        // @ref declare_io); the per-frame choice still follows the handle's
-        // validity.
-        fxaa_pass(gpu::device& device, uint32_t width, uint32_t height, bool taa_enabled);
+        // edge step is baked from.
+        fxaa_pass(gpu::device& device, uint32_t width, uint32_t height);
         ~fxaa_pass() override;
 
         fxaa_pass(const fxaa_pass&) = delete;
@@ -79,15 +78,16 @@ namespace rendering_engine
 
         const char* name() const override
         {
-            return "fxaa";
+            return builtin_passes::fxaa;
         }
 
-        // Declares the input the engine actually wires: the TAA resolve
-        // when temporal AA is on, else the tonemapped LDR target.
+        // The tonemapped LDR target is the input the pass falls back to;
+        // the TAA resolve replaces it while one is published.
         void declare_io(pass_io_builder& io) const override
         {
-            io.read(m_taa_enabled ? "taa_resolve" : "ldr_color");
-            io.write("swapchain");
+            io.read(frame_resources::ldr_color);
+            io.read_optional(frame_resources::taa_resolve);
+            io.write(frame_resources::swapchain);
         }
 
         // Notes the new drawable size for the per-texel edge step; the next
@@ -149,10 +149,9 @@ namespace rendering_engine
         std::array<bound_input, 2> m_inputs{};
         size_t m_next_input_slot{0};
 
-        // The cached group this frame draws with, picked by prepare().
+        // The cached group this frame draws with and the swapchain target
+        // it draws into, picked by prepare().
         gpu::bind_group m_input_bind_group{};
-
-        // Whether the engine wires the TAA resolve as this pass's input.
-        bool m_taa_enabled{false};
+        gpu::render_target m_target{};
     };
 } // namespace rendering_engine

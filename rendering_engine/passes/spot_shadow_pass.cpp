@@ -186,36 +186,6 @@ namespace rendering_engine
         }
     }
 
-    gpu::texture spot_shadow_pass::shadow_map() const
-    {
-        return m_depth_texture;
-    }
-
-    const core::math::mat4& spot_shadow_pass::light_view_projection() const
-    {
-        return m_light_view_projection;
-    }
-
-    bool spot_shadow_pass::has_shadow() const
-    {
-        return m_has_shadow;
-    }
-
-    int spot_shadow_pass::shadow_spot_index() const
-    {
-        return m_shadow_spot_index;
-    }
-
-    float spot_shadow_pass::depth_bias() const
-    {
-        return shadow_bias;
-    }
-
-    uint32_t spot_shadow_pass::culled_count() const
-    {
-        return m_culled;
-    }
-
     void spot_shadow_pass::set_caster_mask(uint32_t mask) noexcept
     {
         m_caster_mask = mask;
@@ -263,6 +233,7 @@ namespace rendering_engine
         m_has_shadow = caster != nullptr;
         if (!m_has_shadow)
         {
+            publish(ctx);
             return;
         }
 
@@ -305,6 +276,22 @@ namespace rendering_engine
                 m_items.push_back(draw.item);
             }
         }
+        publish(ctx);
+    }
+
+    void spot_shadow_pass::publish(const frame_context& ctx) const
+    {
+        // Published every frame, caster or not: the scene pass binds the
+        // map either way, and the active flag tells the lit shaders whether
+        // to sample it.
+        spot_shadow_data published{};
+        published.map = m_depth_texture;
+        published.active = m_has_shadow;
+        published.light_index = m_shadow_spot_index;
+        published.light_view_projection = m_light_view_projection;
+        published.depth_bias = shadow_bias;
+        published.culled = m_culled;
+        ctx.resources->publish(frame_resources::spot_shadow, published);
     }
 
     void spot_shadow_pass::record(gpu::command_encoder& encoder, const frame_context& /*ctx*/)

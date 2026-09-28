@@ -7,6 +7,7 @@
 #include <vector>
 
 #include <rendering_engine/gpu/handle.hpp>
+#include <rendering_engine/passes/frame_resources.hpp>
 #include <rendering_engine/passes/pass.hpp>
 #include <rendering_engine/renderables/draw_item.hpp>
 
@@ -42,8 +43,8 @@ namespace rendering_engine
         ui_pass(const ui_pass&) = delete;
         ui_pass& operator=(const ui_pass&) = delete;
 
-        // Rewrites the UiFrame block after a resize and sorts this frame's
-        // draw items.
+        // Rewrites the UiFrame block after a resize, looks up the swapchain
+        // target and sorts this frame's draw items.
         void prepare(const frame_context& ctx) override;
 
         // Draws the items @ref prepare sorted over the swapchain.
@@ -53,13 +54,13 @@ namespace rendering_engine
 
         const char* name() const override
         {
-            return "ui";
+            return builtin_passes::ui;
         }
 
         void declare_io(pass_io_builder& io) const override
         {
-            io.read("swapchain");
-            io.write("swapchain");
+            io.read(frame_resources::swapchain);
+            io.write(frame_resources::swapchain);
         }
 
         // The per-frame layout the ui material template is built
@@ -87,5 +88,9 @@ namespace rendering_engine
         // Reused across frames so the underlying allocation persists.
         // Copied and sorted by prepare(), drawn by record().
         std::vector<draw_item> m_items;
+
+        // The swapchain target this frame composites over, looked up by
+        // prepare().
+        gpu::render_target m_target{};
     };
 } // namespace rendering_engine

@@ -78,8 +78,7 @@ namespace rendering_engine
         m_vertex_buffer = gpu.create_buffer(vb_descriptor);
 
         // The Tonemap UBO holds the exposure scale, the operator selector
-        // and the grading blend. The first two are live-tunable through
-        // set_exposure / set_operator, the blend through
+        // and the grading blend, all live-tunable through
         // frame_context::post; each change rewrites this buffer via
         // write_buffer. std140 lays the three out contiguously and rounds
         // the block up to the 16-byte minimum.
@@ -237,19 +236,41 @@ namespace rendering_engine
 
     void tonemap_pass::prepare(const frame_context& ctx)
     {
+        const resource_store& resources = *ctx.resources;
+
         // Pick the variant: grading only with a table and a visible blend,
         // eye adaptation only while the auto-exposure pass publishes a
         // result. A texture the variant does not sample is left unbound
         // (invalid) so toggling one effect never rebinds for the other.
-        const bool grading = ctx.grading_lut_texture.valid() && ctx.post.grading.intensity > 0.0f;
-        const bool auto_exposure = ctx.exposure_texture.valid();
+        const gpu::texture published_lut = resources.get(frame_resources::grading_lut);
+        const gpu::texture published_exposure = resources.get(frame_resources::exposure);
+        const bool grading = published_lut.valid() && ctx.post.grading.intensity > 0.0f;
+        const bool auto_exposure = published_exposure.valid();
         m_variant = (grading ? variant_grading : 0) | (auto_exposure ? variant_auto_exposure : 0);
-        const gpu::texture grading_lut = grading ? ctx.grading_lut_texture : gpu::texture{};
-        const gpu::texture exposure = auto_exposure ? ctx.exposure_texture : gpu::texture{};
+        const gpu::texture grading_lut = grading ? published_lut : gpu::texture{};
+        const gpu::texture exposure = auto_exposure ? published_exposure : gpu::texture{};
 
+        // The manual exposure and the curve follow the post settings; the
+        // grading blend does while grading draws. One rewrite covers
+        // whichever changed.
+        bool changed = false;
+        if (ctx.post.exposure != m_exposure)
+        {
+            m_exposure = ctx.post.exposure;
+            changed = true;
+        }
+        if (ctx.post.tonemap_op != m_operator)
+        {
+            m_operator = ctx.post.tonemap_op;
+            changed = true;
+        }
         if (grading && ctx.post.grading.intensity != m_grading_intensity)
         {
             m_grading_intensity = ctx.post.grading.intensity;
+            changed = true;
+        }
+        if (changed)
+        {
             upload_uniforms();
         }
 
@@ -258,21 +279,23 @@ namespace rendering_engine
         // is toggled, the LUT is swapped or auto exposure is toggled, so
         // compare against the ones the bind group was built with and
         // rebuild on change — the first frame included.
-        if (ctx.hdr_color_texture != m_bound_input || grading_lut != m_bound_grading_lut ||
-            exposure != m_bound_exposure || !m_input_bind_group.valid())
+        const gpu::texture hdr = resources.get(frame_resources::scene_color).texture;
+        m_target = resources.get(frame_resources::ldr_color).target;
+        if (hdr != m_bound_input || grading_lut != m_bound_grading_lut || exposure != m_bound_exposure ||
+            !m_input_bind_group.valid())
         {
-            rebuild_bind_group(ctx.hdr_color_texture, grading_lut, exposure);
+            rebuild_bind_group(hdr, grading_lut, exposure);
         }
     }
 
-    void tonemap_pass::record(gpu::command_encoder& encoder, const frame_context& ctx)
+    void tonemap_pass::record(gpu::command_encoder& encoder, const frame_context& /*ctx*/)
     {
         gpu::render_pass_descriptor descriptor{};
         // Resolve into the off-screen LDR target rather than straight to
         // the swapchain: the final post effect (FXAA) needs to sample
         // this tonemapped result as a shader input, which the swapchain
         // cannot provide.
-        descriptor.target = ctx.ldr_color_target;
+        descriptor.target = m_target;
         // The fullscreen triangle covers every pixel; clearing is
         // strictly redundant but cheap and keeps the target in a
         // known state if a future post pass narrows its viewport.
@@ -286,26 +309,6 @@ namespace rendering_engine
         pass_encoder->set_vertex_buffer(0, m_vertex_buffer, 0, 0);
         pass_encoder->draw(3);
         pass_encoder->end();
-    }
-
-    void tonemap_pass::set_exposure(float exposure)
-    {
-        if (exposure == m_exposure)
-        {
-            return;
-        }
-        m_exposure = exposure;
-        upload_uniforms();
-    }
-
-    void tonemap_pass::set_operator(tonemap_operator op)
-    {
-        if (op == m_operator)
-        {
-            return;
-        }
-        m_operator = op;
-        upload_uniforms();
     }
 
     void tonemap_pass::upload_uniforms()

@@ -10,6 +10,7 @@
 
 #include <core/math/math.hpp>
 #include <rendering_engine/gpu/handle.hpp>
+#include <rendering_engine/passes/frame_resources.hpp>
 #include <rendering_engine/passes/pass.hpp>
 #include <rendering_engine/passes/shadow_casters.hpp>
 #include <rendering_engine/passes/shadow_settings.hpp>
@@ -18,10 +19,6 @@
 
 namespace rendering_engine
 {
-    // Six faces of the omni shadow cube, in cube-map face order: +X, -X,
-    // +Y, -Y, +Z, -Z (the order of @c gpu::cube_face).
-    constexpr int point_shadow_face_count = 6;
-
     /**
      * @brief Omni (point-light) shadow-map pass.
      *
@@ -31,11 +28,12 @@ namespace rendering_engine
      * perspective along ±X/±Y/±Z with the up vector the cube-map face
      * convention demands, so a @c samplerCube lookup along
      * (fragment - light) lands on the face and texel that saw the
-     * fragment. The @ref scene_pass exposes the cube plus the six face
-     * view-projections, the light position and the faces' near / far
-     * planes to the lit materials through its per-frame bind group; the
-     * lit fragment shader reconstructs the receiver's face depth from the
-     * planes and compares it against the sampled depth.
+     * fragment. It publishes the cube with the six face view-projections,
+     * the light position and the faces' near / far planes as
+     * @ref frame_resources::point_shadow, which the @ref scene_pass hands
+     * the lit materials through its per-frame bind group; the lit fragment
+     * shader reconstructs the receiver's face depth from the planes and
+     * compares it against the sampled depth.
      *
      * Like @ref shadow_pass it culls the frame's mesh draws
      * (@ref frame_context::scene_draws) and pushes the PerDraw block each
@@ -45,8 +43,9 @@ namespace rendering_engine
      * caster's @ref point_light::range (a fixed default when the range is
      * 0, "no cutoff"), so the depth precision is spent on the volume the
      * light can actually reach. When no point light has @c cast_shadow set the pass
-     * still clears the faces and reports @ref has_shadow false so the lit
-     * shader falls back to unshadowed lighting. A draw also needs
+     * still clears the faces and publishes the cube as inactive
+     * (@ref point_shadow_data::active) so the lit shader falls back to
+     * unshadowed lighting. A draw also needs
      * @ref mesh_draw::casts_shadow and a @ref mesh_draw::layer_mask that
      * overlaps @ref caster_mask to reach the map; both default to "every
      * mesh casts".
@@ -63,9 +62,10 @@ namespace rendering_engine
         point_shadow_pass& operator=(const point_shadow_pass&) = delete;
 
         // Finds the caster, collects the casters with their bounds,
-        // refreshes and uploads the six face matrices and culls each
-        // caster against each face; every accessor below reports this
-        // frame from here on. Runs ahead of the scene pass's prepare.
+        // refreshes and uploads the six face matrices, culls each caster
+        // against each face and publishes the cube and the faces
+        // (@ref frame_resources::point_shadow) for the scene pass, which
+        // prepares after it.
         void prepare(const frame_context& ctx) override;
 
         // Clears every face and draws into it the casters @ref prepare
@@ -74,46 +74,13 @@ namespace rendering_engine
 
         const char* name() const override
         {
-            return "point_shadow";
+            return builtin_passes::point_shadow;
         }
 
         void declare_io(pass_io_builder& io) const override
         {
-            io.write("point_shadow");
+            io.write(frame_resources::point_shadow);
         }
-
-        // The depth cube map every face renders into. Stable for the pass's
-        // lifetime so the scene pass can bake the handle into its per-frame
-        // bind group.
-        gpu::texture shadow_map() const;
-
-        // Light-space view-projection for face @p face, refreshed every prepare.
-        const core::math::mat4& light_view_projection(int face) const;
-
-        // World-space position of the active caster, refreshed every prepare.
-        const core::math::vec3& light_position() const;
-
-        // Near / far planes of the six face frustums, refreshed every prepare
-        // (the far plane follows the caster's range); the lit shader
-        // reconstructs a face's stored depth from them.
-        float shadow_near() const;
-        float shadow_far() const;
-
-        // Whether a shadow-casting point light was found this frame.
-        bool has_shadow() const;
-
-        // Index of the caster within the packed point-light array (matching
-        // pack_lights ordering) so the lit shader only shadows that light. -1
-        // when has_shadow is false.
-        int shadow_point_index() const;
-
-        // Base depth-comparison bias the lit shader slope-scales.
-        float depth_bias() const;
-
-        // Caster / face pairs skipped by the last @ref prepare because the
-        // caster's world bounds fell outside that face's frustum (a caster
-        // outside every face counts six times). Zero on no-caster frames.
-        uint32_t culled_count() const;
 
         // Layer bits this pass accepts casters from, on top of the
         // existing @ref mesh_draw::casts_shadow filter: a mesh draw
@@ -142,6 +109,10 @@ namespace rendering_engine
             core::math::aabb bounds{};
             uint32_t faces{0};
         };
+
+        // Publishes this frame's cube and faces
+        // (@ref frame_resources::point_shadow); the end of every prepare().
+        void publish(const frame_context& ctx) const;
 
         // The depth cube and the six depth-only targets attached to its
         // faces. The cube is owned here (the targets import it), so it is
