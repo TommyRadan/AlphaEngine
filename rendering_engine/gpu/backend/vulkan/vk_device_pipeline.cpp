@@ -94,7 +94,7 @@ namespace rendering_engine::gpu::backend::vulkan
         info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
         info.bindingCount = static_cast<uint32_t>(bindings.size());
         info.pBindings = bindings.data();
-        if (!vk_check(vkCreateDescriptorSetLayout(m_device, &info, nullptr, &record.object),
+        if (!vk_check(vkCreateDescriptorSetLayout(m_device.handle(), &info, nullptr, &record.object),
                       "vkCreateDescriptorSetLayout"))
         {
             throw std::runtime_error{"vkCreateDescriptorSetLayout failed"};
@@ -116,7 +116,7 @@ namespace rendering_engine::gpu::backend::vulkan
         // material rebuild) stays valid for the pipeline-layout build
         // or descriptor-set allocation the same frame still names it
         // in; the handle-pool slot is freed now.
-        const VkDevice dev = m_device;
+        const VkDevice dev = m_device.handle();
         const VkDescriptorSetLayout object = record->object;
         if (object != VK_NULL_HANDLE)
         {
@@ -486,8 +486,8 @@ namespace rendering_engine::gpu::backend::vulkan
         {
             return {};
         }
-        record.layout =
-            build_pipeline_layout(m_device, *this, descriptor.bind_group_layouts, descriptor.push_constant_ranges);
+        record.layout = build_pipeline_layout(
+            m_device.handle(), *this, descriptor.bind_group_layouts, descriptor.push_constant_ranges);
         if (record.layout == VK_NULL_HANDLE)
         {
             return {};
@@ -549,7 +549,7 @@ namespace rendering_engine::gpu::backend::vulkan
     {
         vk_pipeline record{};
         record.is_compute = true;
-        record.layout = build_pipeline_layout(m_device, *this, descriptor.bind_group_layouts, {});
+        record.layout = build_pipeline_layout(m_device.handle(), *this, descriptor.bind_group_layouts, {});
         if (record.layout == VK_NULL_HANDLE)
         {
             return {};
@@ -559,7 +559,7 @@ namespace rendering_engine::gpu::backend::vulkan
         if (sm == nullptr || sm->object == VK_NULL_HANDLE)
         {
             LOG_ERR("vk_device::create_compute_pipeline: compute shader module is not live");
-            vkDestroyPipelineLayout(m_device, record.layout, nullptr);
+            vkDestroyPipelineLayout(m_device.handle(), record.layout, nullptr);
             return {};
         }
 
@@ -567,7 +567,7 @@ namespace rendering_engine::gpu::backend::vulkan
         record.compute_object = build_compute_pipeline(sm->object, record.layout);
         if (record.compute_object == VK_NULL_HANDLE)
         {
-            vkDestroyPipelineLayout(m_device, record.layout, nullptr);
+            vkDestroyPipelineLayout(m_device.handle(), record.layout, nullptr);
             return {};
         }
 
@@ -589,7 +589,7 @@ namespace rendering_engine::gpu::backend::vulkan
         cpi.stage = stage;
         cpi.layout = layout;
         VkPipeline result = VK_NULL_HANDLE;
-        if (!vk_check(vkCreateComputePipelines(m_device, m_pipeline_cache, 1, &cpi, nullptr, &result),
+        if (!vk_check(vkCreateComputePipelines(m_device.handle(), m_pipeline_cache, 1, &cpi, nullptr, &result),
                       "vkCreateComputePipelines"))
         {
             return VK_NULL_HANDLE;
@@ -604,7 +604,7 @@ namespace rendering_engine::gpu::backend::vulkan
         {
             return;
         }
-        VkDevice dev = m_device;
+        VkDevice dev = m_device.handle();
         std::vector<VkPipeline> graphics_objects;
         graphics_objects.reserve(record->graphics_variants.size());
         for (auto& v : record->graphics_variants)
@@ -709,8 +709,9 @@ namespace rendering_engine::gpu::backend::vulkan
                         "invalid");
                 for (uint32_t freed = 0; freed < set_index; ++freed)
                 {
-                    vk_check(vkFreeDescriptorSets(m_device, record.pools[freed], 1, &record.descriptor_sets[freed]),
-                             "vkFreeDescriptorSets");
+                    vk_check(
+                        vkFreeDescriptorSets(m_device.handle(), record.pools[freed], 1, &record.descriptor_sets[freed]),
+                        "vkFreeDescriptorSets");
                 }
                 return {};
             }
@@ -891,7 +892,7 @@ namespace rendering_engine::gpu::backend::vulkan
         }
         if (!writes.empty())
         {
-            vkUpdateDescriptorSets(m_device, static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
+            vkUpdateDescriptorSets(m_device.handle(), static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
         }
 
         bind_group h{};
@@ -906,7 +907,7 @@ namespace rendering_engine::gpu::backend::vulkan
         {
             return;
         }
-        VkDevice dev = m_device;
+        VkDevice dev = m_device.handle();
         // Each set goes back to the pool it was allocated from, which
         // need not be the chain's current pool.
         const std::array<VkDescriptorPool, k_max_frames_in_flight> pools = record->pools;
@@ -976,7 +977,7 @@ namespace rendering_engine::gpu::backend::vulkan
         info.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
         info.initialDataSize = seed.size();
         info.pInitialData = seed.empty() ? nullptr : seed.data();
-        VkResult result = vkCreatePipelineCache(m_device, &info, nullptr, &m_pipeline_cache);
+        VkResult result = vkCreatePipelineCache(m_device.handle(), &info, nullptr, &m_pipeline_cache);
         if (result != VK_SUCCESS && !seed.empty())
         {
             // The header matched, yet the driver refused the rest; an
@@ -986,7 +987,7 @@ namespace rendering_engine::gpu::backend::vulkan
             m_pipeline_cache_digest = 0;
             info.initialDataSize = 0;
             info.pInitialData = nullptr;
-            result = vkCreatePipelineCache(m_device, &info, nullptr, &m_pipeline_cache);
+            result = vkCreatePipelineCache(m_device.handle(), &info, nullptr, &m_pipeline_cache);
         }
         if (result != VK_SUCCESS)
         {
@@ -1005,16 +1006,16 @@ namespace rendering_engine::gpu::backend::vulkan
         }
         // After a device loss the cache may hold whatever the driver was
         // building when it died; the file from the last good run stays.
-        if (!m_pipeline_cache_file.empty() && !m_device_lost)
+        if (!m_pipeline_cache_file.empty() && !m_device.device_lost())
         {
             const std::string file = m_pipeline_cache_file.string();
             size_t size = 0;
-            VkResult result = vkGetPipelineCacheData(m_device, m_pipeline_cache, &size, nullptr);
+            VkResult result = vkGetPipelineCacheData(m_device.handle(), m_pipeline_cache, &size, nullptr);
             std::vector<uint8_t> data;
             if (result == VK_SUCCESS && size > 0)
             {
                 data.resize(size);
-                result = vkGetPipelineCacheData(m_device, m_pipeline_cache, &size, data.data());
+                result = vkGetPipelineCacheData(m_device.handle(), m_pipeline_cache, &size, data.data());
                 data.resize(size);
             }
             if (result != VK_SUCCESS)
@@ -1036,7 +1037,7 @@ namespace rendering_engine::gpu::backend::vulkan
                 LOG_INF("Vulkan pipeline cache: wrote %zu bytes to %s", data.size(), file.c_str());
             }
         }
-        vkDestroyPipelineCache(m_device, m_pipeline_cache, nullptr);
+        vkDestroyPipelineCache(m_device.handle(), m_pipeline_cache, nullptr);
         m_pipeline_cache = VK_NULL_HANDLE;
         m_pipeline_cache_file.clear();
         m_pipeline_cache_digest = 0;
@@ -1052,7 +1053,7 @@ namespace rendering_engine::gpu::backend::vulkan
 
     bool vk_device::reload_shader_modules(const std::vector<shader_module_update>& updates)
     {
-        if (!m_initialised || m_device_lost)
+        if (!m_initialised || m_device.device_lost())
         {
             return false;
         }
@@ -1082,7 +1083,7 @@ namespace rendering_engine::gpu::backend::vulkan
         {
             for (const staged_module& module : staged)
             {
-                vkDestroyShaderModule(m_device, module.object, nullptr);
+                vkDestroyShaderModule(m_device.handle(), module.object, nullptr);
             }
         };
         for (const shader_module_update& update : updates)
@@ -1102,7 +1103,8 @@ namespace rendering_engine::gpu::backend::vulkan
             info.codeSize = update.spirv.size() * sizeof(uint32_t);
             info.pCode = update.spirv.data();
             VkShaderModule object = VK_NULL_HANDLE;
-            if (!vk_check(vkCreateShaderModule(m_device, &info, nullptr, &object), "vkCreateShaderModule (hot reload)"))
+            if (!vk_check(vkCreateShaderModule(m_device.handle(), &info, nullptr, &object),
+                          "vkCreateShaderModule (hot reload)"))
             {
                 discard_new_modules();
                 return false;
@@ -1200,12 +1202,12 @@ namespace rendering_engine::gpu::backend::vulkan
             {
                 for (VkPipeline object : rebuilt.objects)
                 {
-                    vkDestroyPipeline(m_device, object, nullptr);
+                    vkDestroyPipeline(m_device.handle(), object, nullptr);
                 }
             }
             for (const rebuilt_compute& rebuilt : computes)
             {
-                vkDestroyPipeline(m_device, rebuilt.object, nullptr);
+                vkDestroyPipeline(m_device.handle(), rebuilt.object, nullptr);
             }
             for (const staged_module& module : staged)
             {
@@ -1250,7 +1252,7 @@ namespace rendering_engine::gpu::backend::vulkan
             }
             rebuilt.record->compute_object = rebuilt.object;
         }
-        const VkDevice dev = m_device;
+        const VkDevice dev = m_device.handle();
         enqueue_destroy(
             [dev, retired_modules = std::move(retired_modules), retired_pipelines = std::move(retired_pipelines)]
             {

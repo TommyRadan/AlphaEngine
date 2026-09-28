@@ -17,6 +17,8 @@ target_sources(alpha_rhi PRIVATE
     vk_factory.cpp
     vk_instance.cpp
     vk_instance.hpp
+    vk_logical_device.cpp
+    vk_logical_device.hpp
     vk_negotiate.cpp
     vk_negotiate.hpp
     vk_overlay_renderer.cpp

@@ -16,7 +16,6 @@
 #include <array>
 #include <cstring>
 #include <optional>
-#include <set>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -140,10 +139,10 @@ namespace rendering_engine::gpu::backend::vulkan
         m_instance.create_surface(surface);
         m_physical_device.pick_physical_device(m_instance);
         m_physical_device.resolve_depth_formats();
-        create_logical_device();
+        m_device.create_logical_device(m_features);
         query_capabilities();
         create_pipeline_cache();
-        create_allocator();
+        m_device.create_allocator();
         create_command_pools();
         if (!create_staging_ring())
         {
@@ -231,11 +230,11 @@ namespace rendering_engine::gpu::backend::vulkan
         {
             return;
         }
-        if (m_device != VK_NULL_HANDLE && !m_device_lost)
+        if (m_device.handle() != VK_NULL_HANDLE && !m_device.device_lost())
         {
             // A lost device has nothing left to wait for; its objects
             // may still be destroyed, which is all that follows.
-            check_queue_result(vkDeviceWaitIdle(m_device), "vkDeviceWaitIdle (quit)");
+            m_device.check_queue_result(vkDeviceWaitIdle(m_device.handle()), "vkDeviceWaitIdle (quit)");
         }
         // Every pipeline this run built is in the cache by now; write it
         // out before anything is torn down.
@@ -273,19 +272,19 @@ namespace rendering_engine::gpu::backend::vulkan
                 {
                     if (v.object != VK_NULL_HANDLE)
                     {
-                        vkDestroyPipeline(m_device, v.object, nullptr);
+                        vkDestroyPipeline(m_device.handle(), v.object, nullptr);
                         v.object = VK_NULL_HANDLE;
                     }
                 }
                 p.graphics_variants.clear();
                 if (p.compute_object != VK_NULL_HANDLE)
                 {
-                    vkDestroyPipeline(m_device, p.compute_object, nullptr);
+                    vkDestroyPipeline(m_device.handle(), p.compute_object, nullptr);
                     p.compute_object = VK_NULL_HANDLE;
                 }
                 if (p.layout != VK_NULL_HANDLE)
                 {
-                    vkDestroyPipelineLayout(m_device, p.layout, nullptr);
+                    vkDestroyPipelineLayout(m_device.handle(), p.layout, nullptr);
                     p.layout = VK_NULL_HANDLE;
                 }
             });
@@ -294,7 +293,7 @@ namespace rendering_engine::gpu::backend::vulkan
             {
                 if (l.object != VK_NULL_HANDLE)
                 {
-                    vkDestroyDescriptorSetLayout(m_device, l.object, nullptr);
+                    vkDestroyDescriptorSetLayout(m_device.handle(), l.object, nullptr);
                     l.object = VK_NULL_HANDLE;
                 }
             });
@@ -303,7 +302,7 @@ namespace rendering_engine::gpu::backend::vulkan
             {
                 if (s.object != VK_NULL_HANDLE)
                 {
-                    vkDestroyShaderModule(m_device, s.object, nullptr);
+                    vkDestroyShaderModule(m_device.handle(), s.object, nullptr);
                     s.object = VK_NULL_HANDLE;
                 }
             });
@@ -312,7 +311,7 @@ namespace rendering_engine::gpu::backend::vulkan
             {
                 if (s.object != VK_NULL_HANDLE)
                 {
-                    vkDestroySampler(m_device, s.object, nullptr);
+                    vkDestroySampler(m_device.handle(), s.object, nullptr);
                     s.object = VK_NULL_HANDLE;
                 }
             });
@@ -321,19 +320,19 @@ namespace rendering_engine::gpu::backend::vulkan
             {
                 if (t.default_sampler != VK_NULL_HANDLE)
                 {
-                    vkDestroySampler(m_device, t.default_sampler, nullptr);
+                    vkDestroySampler(m_device.handle(), t.default_sampler, nullptr);
                     t.default_sampler = VK_NULL_HANDLE;
                 }
                 if (t.view != VK_NULL_HANDLE)
                 {
-                    vkDestroyImageView(m_device, t.view, nullptr);
+                    vkDestroyImageView(m_device.handle(), t.view, nullptr);
                     t.view = VK_NULL_HANDLE;
                 }
                 for (VkImageView storage_view : t.storage_views)
                 {
                     if (storage_view != VK_NULL_HANDLE)
                     {
-                        vkDestroyImageView(m_device, storage_view, nullptr);
+                        vkDestroyImageView(m_device.handle(), storage_view, nullptr);
                     }
                 }
                 t.storage_views.clear();
@@ -341,13 +340,13 @@ namespace rendering_engine::gpu::backend::vulkan
                 {
                     if (attachment_view != VK_NULL_HANDLE)
                     {
-                        vkDestroyImageView(m_device, attachment_view, nullptr);
+                        vkDestroyImageView(m_device.handle(), attachment_view, nullptr);
                     }
                 }
                 t.attachment_views.clear();
                 if (!t.external && t.image != VK_NULL_HANDLE)
                 {
-                    vmaDestroyImage(m_allocator, t.image, t.allocation);
+                    vmaDestroyImage(m_device.allocator(), t.image, t.allocation);
                 }
                 t.image = VK_NULL_HANDLE;
                 t.allocation = VK_NULL_HANDLE;
@@ -359,7 +358,7 @@ namespace rendering_engine::gpu::backend::vulkan
                 // with it.
                 if (b.object != VK_NULL_HANDLE)
                 {
-                    vmaDestroyBuffer(m_allocator, b.object, b.allocation);
+                    vmaDestroyBuffer(m_device.allocator(), b.object, b.allocation);
                 }
                 b.object = VK_NULL_HANDLE;
                 b.allocation = VK_NULL_HANDLE;
@@ -374,13 +373,13 @@ namespace rendering_engine::gpu::backend::vulkan
                     {
                         if (fb != VK_NULL_HANDLE)
                         {
-                            vkDestroyFramebuffer(m_device, fb, nullptr);
+                            vkDestroyFramebuffer(m_device.handle(), fb, nullptr);
                         }
                     }
                     v.framebuffers.clear();
                     if (v.render_pass != VK_NULL_HANDLE)
                     {
-                        vkDestroyRenderPass(m_device, v.render_pass, nullptr);
+                        vkDestroyRenderPass(m_device.handle(), v.render_pass, nullptr);
                         v.render_pass = VK_NULL_HANDLE;
                     }
                 }
@@ -391,7 +390,7 @@ namespace rendering_engine::gpu::backend::vulkan
             {
                 if (q.pool != VK_NULL_HANDLE)
                 {
-                    vkDestroyQueryPool(m_device, q.pool, nullptr);
+                    vkDestroyQueryPool(m_device.handle(), q.pool, nullptr);
                     q.pool = VK_NULL_HANDLE;
                 }
             });
@@ -415,13 +414,13 @@ namespace rendering_engine::gpu::backend::vulkan
         {
             if (pool != VK_NULL_HANDLE)
             {
-                vkDestroyDescriptorPool(m_device, pool, nullptr);
+                vkDestroyDescriptorPool(m_device.handle(), pool, nullptr);
             }
         }
         m_descriptor_pools.clear();
         if (m_fallback_sampler != VK_NULL_HANDLE)
         {
-            vkDestroySampler(m_device, m_fallback_sampler, nullptr);
+            vkDestroySampler(m_device.handle(), m_fallback_sampler, nullptr);
             m_fallback_sampler = VK_NULL_HANDLE;
         }
         // The batches' dedicated staging buffers and the ring are VMA
@@ -429,12 +428,8 @@ namespace rendering_engine::gpu::backend::vulkan
         // before the device.
         destroy_command_pools();
         destroy_staging_ring();
-        destroy_allocator();
-        if (m_device != VK_NULL_HANDLE)
-        {
-            vkDestroyDevice(m_device, nullptr);
-            m_device = VK_NULL_HANDLE;
-        }
+        m_device.destroy_allocator();
+        m_device.destroy();
         m_instance.shutdown();
 
         m_have_current_image = false;
@@ -450,7 +445,7 @@ namespace rendering_engine::gpu::backend::vulkan
         m_in_frame = false;
         m_next_transfer_batch_id = 1;
         m_swapchain_suspended = false;
-        m_device_lost = false;
+        m_device.reset();
         m_device_lost_thrown = false;
         m_features = {};
         m_limits = {};
@@ -459,167 +454,6 @@ namespace rendering_engine::gpu::backend::vulkan
     }
 
     // -- Physical / logical device --------------------------------------
-
-    void vk_device::create_logical_device()
-    {
-        m_extended_dynamic_state_enabled = m_physical_device.has_extended_dynamic_state();
-        const float queue_priority = 1.0f;
-        std::set<uint32_t> unique_families{m_physical_device.graphics_queue_family(),
-                                           m_physical_device.present_queue_family()};
-        std::vector<VkDeviceQueueCreateInfo> queue_infos;
-        for (uint32_t family : unique_families)
-        {
-            VkDeviceQueueCreateInfo qi{};
-            qi.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-            qi.queueFamilyIndex = family;
-            qi.queueCount = 1;
-            qi.pQueuePriorities = &queue_priority;
-            queue_infos.push_back(qi);
-        }
-
-        // Query the chained feature of the optional extension —
-        // extended_dynamic_state exposes its feature bit through
-        // @c VkPhysicalDeviceFeatures2.
-        VkPhysicalDeviceExtendedDynamicStateFeaturesEXT eds_query{};
-        eds_query.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT;
-        VkPhysicalDeviceFeatures2 features2_query{};
-        features2_query.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-        void** features2_query_pnext = &features2_query.pNext;
-        if (m_extended_dynamic_state_enabled)
-        {
-            *features2_query_pnext = &eds_query;
-            features2_query_pnext = &eds_query.pNext;
-        }
-        vkGetPhysicalDeviceFeatures2(m_physical_device.handle(), &features2_query);
-        if (m_extended_dynamic_state_enabled && eds_query.extendedDynamicState != VK_TRUE)
-        {
-            m_extended_dynamic_state_enabled = false;
-            LOG_WRN("VK_EXT_extended_dynamic_state extension exposed but feature unavailable; "
-                    "vertex_layout.stride==0 will collapse meshes to a point");
-        }
-
-        // Core features are requested only when the device reports
-        // them: vkCreateDevice fails with VK_ERROR_FEATURE_NOT_PRESENT
-        // for any unsupported feature that is asked for, and none of
-        // these is universal (MoltenVK has no geometry shaders or
-        // fillModeNonSolid, much mobile hardware no tessellation). What
-        // was granted is recorded in m_features for the consumers to
-        // gate on, and every gap is logged once here.
-        VkPhysicalDeviceFeatures supported{};
-        vkGetPhysicalDeviceFeatures(m_physical_device.handle(), &supported);
-        VkPhysicalDeviceFeatures features{};
-        const auto request = [](VkBool32 available, VkBool32& requested, bool& granted, const char* consequence)
-        {
-            granted = available == VK_TRUE;
-            requested = granted ? VK_TRUE : VK_FALSE;
-            if (!granted)
-            {
-                LOG_WRN("Vulkan feature unavailable on this device: %s", consequence);
-            }
-        };
-        request(supported.fillModeNonSolid,
-                features.fillModeNonSolid,
-                m_features.fill_mode_non_solid,
-                "fillModeNonSolid (wireframe / point materials rasterise filled)");
-        request(supported.geometryShader,
-                features.geometryShader,
-                m_features.geometry_shader,
-                "geometryShader (pipelines with a geometry stage are refused)");
-        request(supported.tessellationShader,
-                features.tessellationShader,
-                m_features.tessellation_shader,
-                "tessellationShader (pipelines with tessellation stages are refused)");
-        request(supported.multiDrawIndirect,
-                features.multiDrawIndirect,
-                m_features.multi_draw_indirect,
-                "multiDrawIndirect (multi-draw indirect is issued as one draw per record)");
-        request(supported.samplerAnisotropy,
-                features.samplerAnisotropy,
-                m_features.sampler_anisotropy,
-                "samplerAnisotropy (anisotropic filtering is unavailable)");
-        request(supported.depthBiasClamp,
-                features.depthBiasClamp,
-                m_features.depth_bias_clamp,
-                "depthBiasClamp (depth bias is applied unclamped)");
-        request(supported.independentBlend,
-                features.independentBlend,
-                m_features.independent_blend,
-                "independentBlend (every colour attachment of a pipeline blends alike)");
-        // The block-compressed families are enabled wherever the device
-        // has them, without a warning when it does not: a desktop GPU
-        // lacks ASTC and a mobile one BCn as a matter of course, and
-        // format_support steers the texture loaders to what is there.
-        features.textureCompressionBC = supported.textureCompressionBC;
-        features.textureCompressionASTC_LDR = supported.textureCompressionASTC_LDR;
-
-        std::vector<const char*> device_extensions{VK_KHR_SWAPCHAIN_EXTENSION_NAME};
-        if (m_extended_dynamic_state_enabled)
-        {
-            device_extensions.push_back(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
-        }
-        if (m_physical_device.has_portability_subset())
-        {
-            // A device that lists the portability subset is a layered
-            // implementation, and the spec requires the extension to
-            // be enabled on it.
-            device_extensions.push_back(k_portability_subset_extension);
-            m_features.portability_subset = true;
-        }
-
-        VkPhysicalDeviceExtendedDynamicStateFeaturesEXT eds_feature{};
-        eds_feature.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT;
-        eds_feature.extendedDynamicState = VK_TRUE;
-        VkPhysicalDeviceFeatures2 features2{};
-        features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-        features2.features = features;
-        void** features2_pnext = &features2.pNext;
-        if (m_extended_dynamic_state_enabled)
-        {
-            *features2_pnext = &eds_feature;
-            features2_pnext = &eds_feature.pNext;
-        }
-
-        VkDeviceCreateInfo info{};
-        info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-        info.queueCreateInfoCount = static_cast<uint32_t>(queue_infos.size());
-        info.pQueueCreateInfos = queue_infos.data();
-        info.pNext = &features2;
-        info.pEnabledFeatures = nullptr;
-        info.enabledExtensionCount = static_cast<uint32_t>(device_extensions.size());
-        info.ppEnabledExtensionNames = device_extensions.data();
-        if (!vk_check(vkCreateDevice(m_physical_device.handle(), &info, nullptr, &m_device), "vkCreateDevice"))
-        {
-            m_device = VK_NULL_HANDLE;
-            throw std::runtime_error{"vkCreateDevice failed"};
-        }
-        vkGetDeviceQueue(m_device, m_physical_device.graphics_queue_family(), 0, &m_graphics_queue);
-        vkGetDeviceQueue(m_device, m_physical_device.present_queue_family(), 0, &m_present_queue);
-
-        if (m_extended_dynamic_state_enabled)
-        {
-            m_cmd_bind_vertex_buffers2 = reinterpret_cast<PFN_vkCmdBindVertexBuffers2EXT>(
-                vkGetDeviceProcAddr(m_device, "vkCmdBindVertexBuffers2EXT"));
-            if (m_cmd_bind_vertex_buffers2 == nullptr)
-            {
-                m_extended_dynamic_state_enabled = false;
-                LOG_WRN("vkGetDeviceProcAddr returned null for vkCmdBindVertexBuffers2EXT; "
-                        "falling back to non-dynamic stride");
-            }
-        }
-
-        LOG_INF("Vulkan logical device created (extended_dynamic_state: %s, "
-                "portability_subset: %s; features: fillModeNonSolid %s, geometryShader %s, tessellationShader %s, "
-                "multiDrawIndirect %s, samplerAnisotropy %s, depthBiasClamp %s, independentBlend %s)",
-                m_extended_dynamic_state_enabled ? "on" : "off",
-                m_features.portability_subset ? "on" : "off",
-                m_features.fill_mode_non_solid ? "on" : "off",
-                m_features.geometry_shader ? "on" : "off",
-                m_features.tessellation_shader ? "on" : "off",
-                m_features.multi_draw_indirect ? "on" : "off",
-                m_features.sampler_anisotropy ? "on" : "off",
-                m_features.depth_bias_clamp ? "on" : "off",
-                m_features.independent_blend ? "on" : "off");
-    }
 
     void vk_device::query_capabilities()
     {
@@ -698,53 +532,6 @@ namespace rendering_engine::gpu::backend::vulkan
         return to_texture_usage(props.optimalTilingFeatures, is_depth_format(format));
     }
 
-    void vk_device::create_allocator()
-    {
-        VkPhysicalDeviceProperties props{};
-        vkGetPhysicalDeviceProperties(m_physical_device.handle(), &props);
-        // VMA imports the entry points of the version it is told, which
-        // may be neither higher than the instance asked for nor higher
-        // than the physical device implements; only major.minor count.
-        const uint32_t api = std::min(m_instance.api_version(), props.apiVersion);
-        const uint32_t api_major_minor = VK_MAKE_VERSION(VK_VERSION_MAJOR(api), VK_VERSION_MINOR(api), 0);
-
-        VmaVulkanFunctions functions{};
-        functions.vkGetInstanceProcAddr = vkGetInstanceProcAddr;
-        functions.vkGetDeviceProcAddr = vkGetDeviceProcAddr;
-
-        VmaAllocatorCreateInfo info{};
-        info.vulkanApiVersion = api_major_minor;
-        info.instance = m_instance.handle();
-        info.physicalDevice = m_physical_device.handle();
-        info.device = m_device;
-        info.pVulkanFunctions = &functions;
-        if (!vk_check(vmaCreateAllocator(&info, &m_allocator), "vmaCreateAllocator"))
-        {
-            m_allocator = VK_NULL_HANDLE;
-            throw std::runtime_error{"vmaCreateAllocator failed"};
-        }
-
-        const VkPhysicalDeviceMemoryProperties* memory = nullptr;
-        vmaGetMemoryProperties(m_allocator, &memory);
-        LOG_INF("Vulkan memory allocator: VMA %u.%u.%u against api %u.%u, %u memory heaps, %u memory types",
-                VK_VERSION_MAJOR(VMA_VERSION),
-                VK_VERSION_MINOR(VMA_VERSION),
-                VK_VERSION_PATCH(VMA_VERSION),
-                VK_VERSION_MAJOR(api_major_minor),
-                VK_VERSION_MINOR(api_major_minor),
-                memory != nullptr ? memory->memoryHeapCount : 0u,
-                memory != nullptr ? memory->memoryTypeCount : 0u);
-    }
-
-    void vk_device::destroy_allocator()
-    {
-        if (m_allocator != VK_NULL_HANDLE)
-        {
-            vmaDestroyAllocator(m_allocator);
-            m_allocator = VK_NULL_HANDLE;
-        }
-    }
-
     void vk_device::create_command_pools()
     {
         // Transfer batches reset their own buffer when a slot is reused
@@ -756,7 +543,7 @@ namespace rendering_engine::gpu::backend::vulkan
         info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
         info.queueFamilyIndex = m_physical_device.graphics_queue_family();
         info.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT | VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-        if (!vk_check(vkCreateCommandPool(m_device, &info, nullptr, &m_transfer_command_pool),
+        if (!vk_check(vkCreateCommandPool(m_device.handle(), &info, nullptr, &m_transfer_command_pool),
                       "vkCreateCommandPool (transfer)"))
         {
             m_transfer_command_pool = VK_NULL_HANDLE;
@@ -766,7 +553,7 @@ namespace rendering_engine::gpu::backend::vulkan
         for (uint32_t slot = 0; slot < m_frames_in_flight; ++slot)
         {
             frame_command_slot& frame_slot = m_frame_command_slots[slot];
-            if (!vk_check(vkCreateCommandPool(m_device, &info, nullptr, &frame_slot.pool),
+            if (!vk_check(vkCreateCommandPool(m_device.handle(), &info, nullptr, &frame_slot.pool),
                           "vkCreateCommandPool (frame)"))
             {
                 frame_slot.pool = VK_NULL_HANDLE;
@@ -786,13 +573,13 @@ namespace rendering_engine::gpu::backend::vulkan
         {
             if (batch.fence != VK_NULL_HANDLE)
             {
-                vkDestroyFence(m_device, batch.fence, nullptr);
+                vkDestroyFence(m_device.handle(), batch.fence, nullptr);
             }
         }
         m_transfer_batches.clear();
         if (m_transfer_command_pool != VK_NULL_HANDLE)
         {
-            vkDestroyCommandPool(m_device, m_transfer_command_pool, nullptr);
+            vkDestroyCommandPool(m_device.handle(), m_transfer_command_pool, nullptr);
             m_transfer_command_pool = VK_NULL_HANDLE;
         }
         for (frame_command_slot& slot : m_frame_command_slots)
@@ -801,14 +588,14 @@ namespace rendering_engine::gpu::backend::vulkan
             slot.next = 0;
             if (slot.pool != VK_NULL_HANDLE)
             {
-                vkDestroyCommandPool(m_device, slot.pool, nullptr);
+                vkDestroyCommandPool(m_device.handle(), slot.pool, nullptr);
                 slot.pool = VK_NULL_HANDLE;
             }
             for (frame_command_slot::lane& lane : slot.lanes)
             {
                 if (lane.pool != VK_NULL_HANDLE)
                 {
-                    vkDestroyCommandPool(m_device, lane.pool, nullptr);
+                    vkDestroyCommandPool(m_device.handle(), lane.pool, nullptr);
                 }
             }
             slot.lanes.clear();
@@ -824,7 +611,7 @@ namespace rendering_engine::gpu::backend::vulkan
         bi.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         const VmaAllocationCreateInfo ai = host_mapped_allocation(/*prefer_host=*/true);
         VmaAllocationInfo info{};
-        if (!vk_check(vmaCreateBuffer(m_allocator, &bi, &ai, &m_staging_buffer, &m_staging_allocation, &info),
+        if (!vk_check(vmaCreateBuffer(m_device.allocator(), &bi, &ai, &m_staging_buffer, &m_staging_allocation, &info),
                       "vmaCreateBuffer (staging ring)"))
         {
             m_staging_buffer = VK_NULL_HANDLE;
@@ -849,7 +636,7 @@ namespace rendering_engine::gpu::backend::vulkan
     {
         if (m_staging_buffer != VK_NULL_HANDLE)
         {
-            vmaDestroyBuffer(m_allocator, m_staging_buffer, m_staging_allocation);
+            vmaDestroyBuffer(m_device.allocator(), m_staging_buffer, m_staging_allocation);
         }
         m_staging_buffer = VK_NULL_HANDLE;
         m_staging_allocation = VK_NULL_HANDLE;
@@ -880,7 +667,7 @@ namespace rendering_engine::gpu::backend::vulkan
         info.poolSizeCount = static_cast<uint32_t>(sizes.size());
         info.pPoolSizes = sizes.data();
         VkDescriptorPool pool = VK_NULL_HANDLE;
-        if (!vk_check(vkCreateDescriptorPool(m_device, &info, nullptr, &pool), "vkCreateDescriptorPool"))
+        if (!vk_check(vkCreateDescriptorPool(m_device.handle(), &info, nullptr, &pool), "vkCreateDescriptorPool"))
         {
             return false;
         }
@@ -914,7 +701,7 @@ namespace rendering_engine::gpu::backend::vulkan
             ai.descriptorPool = m_descriptor_pools.back();
             ai.descriptorSetCount = 1;
             ai.pSetLayouts = &layout;
-            const VkResult r = vkAllocateDescriptorSets(m_device, &ai, &out_set);
+            const VkResult r = vkAllocateDescriptorSets(m_device.handle(), &ai, &out_set);
             if (r == VK_SUCCESS)
             {
                 out_pool = m_descriptor_pools.back();
@@ -985,7 +772,7 @@ namespace rendering_engine::gpu::backend::vulkan
         // succeeds, so it is released unconditionally right after.
         info.oldSwapchain = m_swapchain;
         VkSwapchainKHR new_swapchain = VK_NULL_HANDLE;
-        const VkResult create_result = vkCreateSwapchainKHR(m_device, &info, nullptr, &new_swapchain);
+        const VkResult create_result = vkCreateSwapchainKHR(m_device.handle(), &info, nullptr, &new_swapchain);
         destroy_swapchain();
         if (create_result != VK_SUCCESS)
         {
@@ -999,13 +786,14 @@ namespace rendering_engine::gpu::backend::vulkan
         m_swapchain_extent = extent;
 
         uint32_t actual = 0;
-        if (!vk_check(vkGetSwapchainImagesKHR(m_device, m_swapchain, &actual, nullptr), "vkGetSwapchainImagesKHR"))
+        if (!vk_check(vkGetSwapchainImagesKHR(m_device.handle(), m_swapchain, &actual, nullptr),
+                      "vkGetSwapchainImagesKHR"))
         {
             destroy_swapchain();
             return false;
         }
         m_swapchain_images.resize(actual);
-        if (!vk_check(vkGetSwapchainImagesKHR(m_device, m_swapchain, &actual, m_swapchain_images.data()),
+        if (!vk_check(vkGetSwapchainImagesKHR(m_device.handle(), m_swapchain, &actual, m_swapchain_images.data()),
                       "vkGetSwapchainImagesKHR"))
         {
             destroy_swapchain();
@@ -1026,7 +814,8 @@ namespace rendering_engine::gpu::backend::vulkan
             vi.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
             vi.subresourceRange.levelCount = 1;
             vi.subresourceRange.layerCount = 1;
-            const VkResult view_result = vkCreateImageView(m_device, &vi, nullptr, &m_swapchain_image_views[i]);
+            const VkResult view_result =
+                vkCreateImageView(m_device.handle(), &vi, nullptr, &m_swapchain_image_views[i]);
             if (view_result != VK_SUCCESS)
             {
                 LOG_ERR("vkCreateImageView (swapchain image %u) failed: %s", i, vk_result_to_string(view_result));
@@ -1053,7 +842,7 @@ namespace rendering_engine::gpu::backend::vulkan
             di.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
             di.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
             const VmaAllocationCreateInfo depth_alloc = device_local_allocation();
-            const VkResult depth_result = vmaCreateImage(m_allocator,
+            const VkResult depth_result = vmaCreateImage(m_device.allocator(),
                                                          &di,
                                                          &depth_alloc,
                                                          &m_swapchain_depth_images[slot],
@@ -1078,7 +867,7 @@ namespace rendering_engine::gpu::backend::vulkan
             dvi.subresourceRange.levelCount = 1;
             dvi.subresourceRange.layerCount = 1;
             const VkResult depth_view_result =
-                vkCreateImageView(m_device, &dvi, nullptr, &m_swapchain_depth_views[slot]);
+                vkCreateImageView(m_device.handle(), &dvi, nullptr, &m_swapchain_depth_views[slot]);
             if (depth_view_result != VK_SUCCESS)
             {
                 LOG_ERR(
@@ -1096,7 +885,8 @@ namespace rendering_engine::gpu::backend::vulkan
         m_render_finished.assign(actual, VK_NULL_HANDLE);
         for (uint32_t i = 0; i < actual; ++i)
         {
-            const VkResult semaphore_result = vkCreateSemaphore(m_device, &rfi, nullptr, &m_render_finished[i]);
+            const VkResult semaphore_result =
+                vkCreateSemaphore(m_device.handle(), &rfi, nullptr, &m_render_finished[i]);
             if (semaphore_result != VK_SUCCESS)
             {
                 LOG_ERR("vkCreateSemaphore (render-finished %u) failed: %s", i, vk_result_to_string(semaphore_result));
@@ -1118,7 +908,7 @@ namespace rendering_engine::gpu::backend::vulkan
 
     void vk_device::destroy_swapchain()
     {
-        if (m_device == VK_NULL_HANDLE)
+        if (m_device.handle() == VK_NULL_HANDLE)
         {
             return;
         }
@@ -1126,12 +916,13 @@ namespace rendering_engine::gpu::backend::vulkan
         {
             if (m_swapchain_depth_views[slot] != VK_NULL_HANDLE)
             {
-                vkDestroyImageView(m_device, m_swapchain_depth_views[slot], nullptr);
+                vkDestroyImageView(m_device.handle(), m_swapchain_depth_views[slot], nullptr);
                 m_swapchain_depth_views[slot] = VK_NULL_HANDLE;
             }
             if (m_swapchain_depth_images[slot] != VK_NULL_HANDLE)
             {
-                vmaDestroyImage(m_allocator, m_swapchain_depth_images[slot], m_swapchain_depth_allocations[slot]);
+                vmaDestroyImage(
+                    m_device.allocator(), m_swapchain_depth_images[slot], m_swapchain_depth_allocations[slot]);
                 m_swapchain_depth_images[slot] = VK_NULL_HANDLE;
                 m_swapchain_depth_allocations[slot] = VK_NULL_HANDLE;
             }
@@ -1141,7 +932,7 @@ namespace rendering_engine::gpu::backend::vulkan
         {
             if (v != VK_NULL_HANDLE)
             {
-                vkDestroyImageView(m_device, v, nullptr);
+                vkDestroyImageView(m_device.handle(), v, nullptr);
             }
         }
         m_swapchain_image_views.clear();
@@ -1150,13 +941,13 @@ namespace rendering_engine::gpu::backend::vulkan
         {
             if (s != VK_NULL_HANDLE)
             {
-                vkDestroySemaphore(m_device, s, nullptr);
+                vkDestroySemaphore(m_device.handle(), s, nullptr);
             }
         }
         m_render_finished.clear();
         if (m_swapchain != VK_NULL_HANDLE)
         {
-            vkDestroySwapchainKHR(m_device, m_swapchain, nullptr);
+            vkDestroySwapchainKHR(m_device.handle(), m_swapchain, nullptr);
             m_swapchain = VK_NULL_HANDLE;
         }
     }
@@ -1173,9 +964,9 @@ namespace rendering_engine::gpu::backend::vulkan
         // fences are owned here.
         for (uint32_t slot = 0; slot < m_frames_in_flight; ++slot)
         {
-            if (!vk_check(vkCreateSemaphore(m_device, &si, nullptr, &m_image_available[slot]),
+            if (!vk_check(vkCreateSemaphore(m_device.handle(), &si, nullptr, &m_image_available[slot]),
                           "vkCreateSemaphore (image-available)") ||
-                !vk_check(vkCreateFence(m_device, &fi, nullptr, &m_in_flight_fences[slot]),
+                !vk_check(vkCreateFence(m_device.handle(), &fi, nullptr, &m_in_flight_fences[slot]),
                           "vkCreateFence (in-flight)"))
             {
                 throw std::runtime_error{"vk sync objects"};
@@ -1187,7 +978,7 @@ namespace rendering_engine::gpu::backend::vulkan
 
     void vk_device::destroy_sync_objects()
     {
-        if (m_device == VK_NULL_HANDLE)
+        if (m_device.handle() == VK_NULL_HANDLE)
         {
             return;
         }
@@ -1195,12 +986,12 @@ namespace rendering_engine::gpu::backend::vulkan
         {
             if (m_image_available[slot] != VK_NULL_HANDLE)
             {
-                vkDestroySemaphore(m_device, m_image_available[slot], nullptr);
+                vkDestroySemaphore(m_device.handle(), m_image_available[slot], nullptr);
                 m_image_available[slot] = VK_NULL_HANDLE;
             }
             if (m_in_flight_fences[slot] != VK_NULL_HANDLE)
             {
-                vkDestroyFence(m_device, m_in_flight_fences[slot], nullptr);
+                vkDestroyFence(m_device.handle(), m_in_flight_fences[slot], nullptr);
                 m_in_flight_fences[slot] = VK_NULL_HANDLE;
             }
         }
@@ -1218,7 +1009,7 @@ namespace rendering_engine::gpu::backend::vulkan
     {
         m_window_width = width;
         m_window_height = height;
-        if (!m_initialised || m_device == VK_NULL_HANDLE)
+        if (!m_initialised || m_device.handle() == VK_NULL_HANDLE)
         {
             return;
         }
@@ -1271,7 +1062,7 @@ namespace rendering_engine::gpu::backend::vulkan
 
     bool vk_device::recreate_swapchain()
     {
-        if (m_device == VK_NULL_HANDLE || m_instance.surface() == VK_NULL_HANDLE || m_device_lost)
+        if (m_device.handle() == VK_NULL_HANDLE || m_instance.surface() == VK_NULL_HANDLE || m_device.device_lost())
         {
             return false;
         }
@@ -1303,7 +1094,7 @@ namespace rendering_engine::gpu::backend::vulkan
         // every frame in flight, and the present that may still be
         // reading the image it was handed. A rebuild is rare, so the
         // full drain is affordable.
-        if (!check_queue_result(vkDeviceWaitIdle(m_device), "vkDeviceWaitIdle (swapchain rebuild)"))
+        if (!m_device.check_queue_result(vkDeviceWaitIdle(m_device.handle()), "vkDeviceWaitIdle (swapchain rebuild)"))
         {
             suspend_swapchain("the device could not be waited idle before the rebuild", true);
             return false;
@@ -1399,7 +1190,7 @@ namespace rendering_engine::gpu::backend::vulkan
                     p.graphics_variants.end());
             });
 
-        const VkDevice dev = m_device;
+        const VkDevice dev = m_device.handle();
         if (device_idle)
         {
             // Nothing is in flight and the caller is about to destroy
@@ -1670,7 +1461,7 @@ namespace rendering_engine::gpu::backend::vulkan
         info.queryCount = descriptor.count;
         vk_query_set record{};
         record.count = descriptor.count;
-        if (!vk_check(vkCreateQueryPool(m_device, &info, nullptr, &record.pool), "vkCreateQueryPool"))
+        if (!vk_check(vkCreateQueryPool(m_device.handle(), &info, nullptr, &record.pool), "vkCreateQueryPool"))
         {
             return {};
         }
@@ -1688,7 +1479,7 @@ namespace rendering_engine::gpu::backend::vulkan
         }
         // The frame's command buffer may still write or reset the
         // pool; it goes with the rest at the next fence wait.
-        const VkDevice dev = m_device;
+        const VkDevice dev = m_device.handle();
         const VkQueryPool pool = record->pool;
         if (pool != VK_NULL_HANDLE)
         {
@@ -1710,14 +1501,14 @@ namespace rendering_engine::gpu::backend::vulkan
             LOG_WRN("resolve_queries: %u queries from %u exceed the %u-query set", count, first, record->count);
             return false;
         }
-        if (m_device_lost)
+        if (m_device.device_lost())
         {
             return false;
         }
         // No wait: VK_NOT_READY means a query has not completed (or was
         // reset and never written) and the caller keeps its previous
         // values.
-        const VkResult r = vkGetQueryPoolResults(m_device,
+        const VkResult r = vkGetQueryPoolResults(m_device.handle(),
                                                  record->pool,
                                                  first,
                                                  count,
@@ -1729,7 +1520,7 @@ namespace rendering_engine::gpu::backend::vulkan
         {
             return false;
         }
-        return check_queue_result(r, "vkGetQueryPoolResults");
+        return m_device.check_queue_result(r, "vkGetQueryPoolResults");
     }
 
     // -- Debug names ---------------------------------------------------
@@ -1738,7 +1529,8 @@ namespace rendering_engine::gpu::backend::vulkan
     {
         if (const auto* record = m_buffers.lookup(handle.id))
         {
-            m_instance.name_object(m_device, VK_OBJECT_TYPE_BUFFER, reinterpret_cast<uint64_t>(record->object), name);
+            m_instance.name_object(
+                m_device.handle(), VK_OBJECT_TYPE_BUFFER, reinterpret_cast<uint64_t>(record->object), name);
         }
     }
 
@@ -1746,8 +1538,10 @@ namespace rendering_engine::gpu::backend::vulkan
     {
         if (const auto* record = m_textures.lookup(handle.id))
         {
-            m_instance.name_object(m_device, VK_OBJECT_TYPE_IMAGE, reinterpret_cast<uint64_t>(record->image), name);
-            m_instance.name_object(m_device, VK_OBJECT_TYPE_IMAGE_VIEW, reinterpret_cast<uint64_t>(record->view), name);
+            m_instance.name_object(
+                m_device.handle(), VK_OBJECT_TYPE_IMAGE, reinterpret_cast<uint64_t>(record->image), name);
+            m_instance.name_object(
+                m_device.handle(), VK_OBJECT_TYPE_IMAGE_VIEW, reinterpret_cast<uint64_t>(record->view), name);
         }
     }
 
@@ -1755,7 +1549,8 @@ namespace rendering_engine::gpu::backend::vulkan
     {
         if (const auto* record = m_samplers.lookup(handle.id))
         {
-            m_instance.name_object(m_device, VK_OBJECT_TYPE_SAMPLER, reinterpret_cast<uint64_t>(record->object), name);
+            m_instance.name_object(
+                m_device.handle(), VK_OBJECT_TYPE_SAMPLER, reinterpret_cast<uint64_t>(record->object), name);
         }
     }
 
@@ -1766,9 +1561,9 @@ namespace rendering_engine::gpu::backend::vulkan
         if (const auto* record = m_pipelines.lookup(handle.id))
         {
             m_instance.name_object(
-                m_device, VK_OBJECT_TYPE_PIPELINE_LAYOUT, reinterpret_cast<uint64_t>(record->layout), name);
+                m_device.handle(), VK_OBJECT_TYPE_PIPELINE_LAYOUT, reinterpret_cast<uint64_t>(record->layout), name);
             m_instance.name_object(
-                m_device, VK_OBJECT_TYPE_PIPELINE, reinterpret_cast<uint64_t>(record->compute_object), name);
+                m_device.handle(), VK_OBJECT_TYPE_PIPELINE, reinterpret_cast<uint64_t>(record->compute_object), name);
         }
     }
 
@@ -1842,7 +1637,7 @@ namespace rendering_engine::gpu::backend::vulkan
             encoder.reset();
             return;
         }
-        if (m_device_lost)
+        if (m_device.device_lost())
         {
             // Nothing can execute any more; end_frame raises the loss
             // to the main loop. The command buffer belongs to the frame
@@ -1890,7 +1685,7 @@ namespace rendering_engine::gpu::backend::vulkan
             {
                 return;
             }
-            if (!vk_check(vkResetFences(m_device, 1, &fence), "vkResetFences (no-image)"))
+            if (!vk_check(vkResetFences(m_device.handle(), 1, &fence), "vkResetFences (no-image)"))
             {
                 return;
             }
@@ -1898,7 +1693,8 @@ namespace rendering_engine::gpu::backend::vulkan
             si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
             si.commandBufferCount = 1;
             si.pCommandBuffers = &cmd;
-            if (check_queue_result(vkQueueSubmit(m_graphics_queue, 1, &si, fence), "vkQueueSubmit (no-image)"))
+            if (m_device.check_queue_result(vkQueueSubmit(m_device.graphics_queue(), 1, &si, fence),
+                                            "vkQueueSubmit (no-image)"))
             {
                 m_in_flight_fence_armed[slot] = true;
                 m_fence_submit_serial[slot] = ++m_submit_serial;
@@ -1918,7 +1714,7 @@ namespace rendering_engine::gpu::backend::vulkan
         {
             return;
         }
-        if (!vk_check(vkResetFences(m_device, 1, &fence), "vkResetFences"))
+        if (!vk_check(vkResetFences(m_device.handle(), 1, &fence), "vkResetFences"))
         {
             return;
         }
@@ -1933,7 +1729,7 @@ namespace rendering_engine::gpu::backend::vulkan
         si.pCommandBuffers = &cmd;
         si.signalSemaphoreCount = 1;
         si.pSignalSemaphores = &m_render_finished[m_current_image_index];
-        if (!check_queue_result(vkQueueSubmit(m_graphics_queue, 1, &si, fence), "vkQueueSubmit"))
+        if (!m_device.check_queue_result(vkQueueSubmit(m_device.graphics_queue(), 1, &si, fence), "vkQueueSubmit"))
         {
             // Nothing signals the fence or the render-finished
             // semaphore now: the fence stays disarmed so the next
@@ -1965,8 +1761,9 @@ namespace rendering_engine::gpu::backend::vulkan
         // Disarmed before the wait: after a failure nothing would ever
         // signal it, and a lost device is done anyway.
         m_in_flight_fence_armed[slot] = false;
-        if (!check_queue_result(vkWaitForFences(m_device, 1, &m_in_flight_fences[slot], VK_TRUE, UINT64_MAX),
-                                "vkWaitForFences"))
+        if (!m_device.check_queue_result(
+                vkWaitForFences(m_device.handle(), 1, &m_in_flight_fences[slot], VK_TRUE, UINT64_MAX),
+                "vkWaitForFences"))
         {
             return false;
         }
@@ -2000,7 +1797,7 @@ namespace rendering_engine::gpu::backend::vulkan
         frame_command_slot& slot = m_frame_command_slots[m_frame_slot];
         if (slot.pool != VK_NULL_HANDLE)
         {
-            vk_check(vkResetCommandPool(m_device, slot.pool, 0), "vkResetCommandPool (frame)");
+            vk_check(vkResetCommandPool(m_device.handle(), slot.pool, 0), "vkResetCommandPool (frame)");
         }
         slot.next = 0;
         // The secondaries of this slot's frame were executed by its
@@ -2009,7 +1806,7 @@ namespace rendering_engine::gpu::backend::vulkan
         {
             if (lane.pool != VK_NULL_HANDLE)
             {
-                vk_check(vkResetCommandPool(m_device, lane.pool, 0), "vkResetCommandPool (lane)");
+                vk_check(vkResetCommandPool(m_device.handle(), lane.pool, 0), "vkResetCommandPool (lane)");
             }
             lane.next = 0;
         }
@@ -2017,7 +1814,7 @@ namespace rendering_engine::gpu::backend::vulkan
 
     VkCommandBuffer vk_device::acquire_secondary_command_buffer(uint32_t lane_index)
     {
-        if (m_device_lost || m_device == VK_NULL_HANDLE)
+        if (m_device.device_lost() || m_device.handle() == VK_NULL_HANDLE)
         {
             return VK_NULL_HANDLE;
         }
@@ -2037,7 +1834,8 @@ namespace rendering_engine::gpu::backend::vulkan
             info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
             info.queueFamilyIndex = m_physical_device.graphics_queue_family();
             info.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
-            if (!vk_check(vkCreateCommandPool(m_device, &info, nullptr, &lane.pool), "vkCreateCommandPool (lane)"))
+            if (!vk_check(vkCreateCommandPool(m_device.handle(), &info, nullptr, &lane.pool),
+                          "vkCreateCommandPool (lane)"))
             {
                 lane.pool = VK_NULL_HANDLE;
                 return VK_NULL_HANDLE;
@@ -2053,7 +1851,7 @@ namespace rendering_engine::gpu::backend::vulkan
         ai.level = VK_COMMAND_BUFFER_LEVEL_SECONDARY;
         ai.commandBufferCount = 1;
         VkCommandBuffer cmd = VK_NULL_HANDLE;
-        if (!vk_check(vkAllocateCommandBuffers(m_device, &ai, &cmd), "vkAllocateCommandBuffers (lane)"))
+        if (!vk_check(vkAllocateCommandBuffers(m_device.handle(), &ai, &cmd), "vkAllocateCommandBuffers (lane)"))
         {
             return VK_NULL_HANDLE;
         }
@@ -2064,7 +1862,7 @@ namespace rendering_engine::gpu::backend::vulkan
 
     VkCommandBuffer vk_device::acquire_frame_command_buffer()
     {
-        if (m_device_lost)
+        if (m_device.device_lost())
         {
             return VK_NULL_HANDLE;
         }
@@ -2086,7 +1884,7 @@ namespace rendering_engine::gpu::backend::vulkan
         ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
         ai.commandBufferCount = 1;
         VkCommandBuffer cmd = VK_NULL_HANDLE;
-        if (!vk_check(vkAllocateCommandBuffers(m_device, &ai, &cmd), "vkAllocateCommandBuffers (frame)"))
+        if (!vk_check(vkAllocateCommandBuffers(m_device.handle(), &ai, &cmd), "vkAllocateCommandBuffers (frame)"))
         {
             return VK_NULL_HANDLE;
         }
@@ -2131,11 +1929,11 @@ namespace rendering_engine::gpu::backend::vulkan
 
     void vk_device::flush_pending_destroys()
     {
-        if (m_device == VK_NULL_HANDLE || m_device_lost)
+        if (m_device.handle() == VK_NULL_HANDLE || m_device.device_lost())
         {
             return;
         }
-        check_queue_result(vkDeviceWaitIdle(m_device), "vkDeviceWaitIdle (flush_pending_destroys)");
+        m_device.check_queue_result(vkDeviceWaitIdle(m_device.handle()), "vkDeviceWaitIdle (flush_pending_destroys)");
         // Idle: nothing executes any more, so every deferred destroy —
         // including one stamped for a submission that never happened —
         // may run now, same reasoning as quit()'s own final drain.
@@ -2149,7 +1947,7 @@ namespace rendering_engine::gpu::backend::vulkan
 
     void vk_device::begin_frame()
     {
-        if (!m_initialised || m_device_lost)
+        if (!m_initialised || m_device.device_lost())
         {
             // A lost device has no frame to wait for; the renderer's
             // recording is dropped by submit and end_frame raises the
@@ -2168,7 +1966,7 @@ namespace rendering_engine::gpu::backend::vulkan
         // host writes against the GPU's reads. The fence is only waited
         // when a submission armed it: after a failed submit nothing would
         // ever signal it.
-        if (!wait_slot_fence(m_frame_slot) && m_device_lost)
+        if (!wait_slot_fence(m_frame_slot) && m_device.device_lost())
         {
             return;
         }
@@ -2179,7 +1977,7 @@ namespace rendering_engine::gpu::backend::vulkan
         // still be executing and is left alone, as are the deferred
         // destroys it gates.
         retire_transfer_batches();
-        if (m_device_lost)
+        if (m_device.device_lost())
         {
             return;
         }
@@ -2214,7 +2012,7 @@ namespace rendering_engine::gpu::backend::vulkan
         {
             return;
         }
-        if (m_have_current_image && m_present_pending && !m_device_lost)
+        if (m_have_current_image && m_present_pending && !m_device.device_lost())
         {
             VkPresentInfoKHR pi{};
             pi.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -2223,7 +2021,7 @@ namespace rendering_engine::gpu::backend::vulkan
             pi.swapchainCount = 1;
             pi.pSwapchains = &m_swapchain;
             pi.pImageIndices = &m_current_image_index;
-            const VkResult r = vkQueuePresentKHR(m_present_queue, &pi);
+            const VkResult r = vkQueuePresentKHR(m_device.present_queue(), &pi);
             if (r == VK_ERROR_OUT_OF_DATE_KHR || r == VK_SUBOPTIMAL_KHR)
             {
                 // The semaphore wait was consumed either way (a rejected
@@ -2236,7 +2034,7 @@ namespace rendering_engine::gpu::backend::vulkan
             }
             else
             {
-                check_queue_result(r, "vkQueuePresentKHR");
+                m_device.check_queue_result(r, "vkQueuePresentKHR");
             }
         }
         // An image acquired without a submission (the encoder failed to
@@ -2246,7 +2044,7 @@ namespace rendering_engine::gpu::backend::vulkan
         m_acquire_attempted = false;
         m_present_pending = false;
 
-        if (m_device_lost && !m_device_lost_thrown)
+        if (m_device.device_lost() && !m_device_lost_thrown)
         {
             // Raised exactly once, from the frame boundary, so the main
             // loop's failure path shows the message and tears the
@@ -2284,13 +2082,13 @@ namespace rendering_engine::gpu::backend::vulkan
             return;
         }
         m_acquire_attempted = true;
-        if (m_swapchain_suspended || m_swapchain == VK_NULL_HANDLE || m_device_lost)
+        if (m_swapchain_suspended || m_swapchain == VK_NULL_HANDLE || m_device.device_lost())
         {
             return;
         }
         for (int attempt = 0; attempt < 2; ++attempt)
         {
-            const VkResult r = vkAcquireNextImageKHR(m_device,
+            const VkResult r = vkAcquireNextImageKHR(m_device.handle(),
                                                      m_swapchain,
                                                      UINT64_MAX,
                                                      m_image_available[m_frame_slot],
@@ -2333,7 +2131,7 @@ namespace rendering_engine::gpu::backend::vulkan
                 }
                 return;
             }
-            check_queue_result(r, "vkAcquireNextImageKHR");
+            m_device.check_queue_result(r, "vkAcquireNextImageKHR");
             return;
         }
     }
@@ -2342,7 +2140,7 @@ namespace rendering_engine::gpu::backend::vulkan
 
     vk_device::transfer_batch* vk_device::open_transfer_batch()
     {
-        if (m_device_lost || m_transfer_command_pool == VK_NULL_HANDLE)
+        if (m_device.device_lost() || m_transfer_command_pool == VK_NULL_HANDLE)
         {
             return nullptr;
         }
@@ -2372,15 +2170,16 @@ namespace rendering_engine::gpu::backend::vulkan
             ai.commandPool = m_transfer_command_pool;
             ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
             ai.commandBufferCount = 1;
-            if (!vk_check(vkAllocateCommandBuffers(m_device, &ai, &batch.cmd), "vkAllocateCommandBuffers (transfer)"))
+            if (!vk_check(vkAllocateCommandBuffers(m_device.handle(), &ai, &batch.cmd),
+                          "vkAllocateCommandBuffers (transfer)"))
             {
                 return nullptr;
             }
             VkFenceCreateInfo fi{};
             fi.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-            if (!vk_check(vkCreateFence(m_device, &fi, nullptr, &batch.fence), "vkCreateFence (transfer)"))
+            if (!vk_check(vkCreateFence(m_device.handle(), &fi, nullptr, &batch.fence), "vkCreateFence (transfer)"))
             {
-                vkFreeCommandBuffers(m_device, m_transfer_command_pool, 1, &batch.cmd);
+                vkFreeCommandBuffers(m_device.handle(), m_transfer_command_pool, 1, &batch.cmd);
                 return nullptr;
             }
             m_transfer_batches.push_back(batch);
@@ -2451,7 +2250,7 @@ namespace rendering_engine::gpu::backend::vulkan
             LOG_ERR("vk_device::stage_upload: no source data (%zu bytes)", size);
             return false;
         }
-        if (m_device_lost || m_staging_buffer == VK_NULL_HANDLE)
+        if (m_device.device_lost() || m_staging_buffer == VK_NULL_HANDLE)
         {
             return false;
         }
@@ -2515,7 +2314,7 @@ namespace rendering_engine::gpu::backend::vulkan
         const VmaAllocationCreateInfo ai = host_mapped_allocation(/*prefer_host=*/true);
         VmaAllocationInfo info{};
         transfer_batch::dedicated_staging staging{};
-        if (!vk_check(vmaCreateBuffer(m_allocator, &bi, &ai, &staging.buffer, &staging.allocation, &info),
+        if (!vk_check(vmaCreateBuffer(m_device.allocator(), &bi, &ai, &staging.buffer, &staging.allocation, &info),
                       "vmaCreateBuffer (dedicated staging)"))
         {
             return false;
@@ -2523,7 +2322,7 @@ namespace rendering_engine::gpu::backend::vulkan
         if (info.pMappedData == nullptr)
         {
             LOG_ERR("vk_device::stage_upload: the dedicated staging allocation is not mapped");
-            vmaDestroyBuffer(m_allocator, staging.buffer, staging.allocation);
+            vmaDestroyBuffer(m_device.allocator(), staging.buffer, staging.allocation);
             return false;
         }
         std::memcpy(info.pMappedData, data, size);
@@ -2634,13 +2433,13 @@ namespace rendering_engine::gpu::backend::vulkan
         batch.state = transfer_batch::batch_state::in_flight;
         m_staging_ring.seal(batch.id);
         const bool ended = vk_check(vkEndCommandBuffer(batch.cmd), "vkEndCommandBuffer (transfer)");
-        if (!ended || m_device_lost)
+        if (!ended || m_device.device_lost())
         {
             LOG_ERR("vk_device: transfer batch %llu dropped; the uploads it carried never reach the GPU",
                     static_cast<unsigned long long>(batch.id));
             return false;
         }
-        if (!vk_check(vkResetFences(m_device, 1, &batch.fence), "vkResetFences (transfer)"))
+        if (!vk_check(vkResetFences(m_device.handle(), 1, &batch.fence), "vkResetFences (transfer)"))
         {
             LOG_ERR("vk_device: transfer batch %llu dropped; the uploads it carried never reach the GPU",
                     static_cast<unsigned long long>(batch.id));
@@ -2650,7 +2449,8 @@ namespace rendering_engine::gpu::backend::vulkan
         si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
         si.commandBufferCount = 1;
         si.pCommandBuffers = &batch.cmd;
-        if (!check_queue_result(vkQueueSubmit(m_graphics_queue, 1, &si, batch.fence), "vkQueueSubmit (transfer)"))
+        if (!m_device.check_queue_result(vkQueueSubmit(m_device.graphics_queue(), 1, &si, batch.fence),
+                                         "vkQueueSubmit (transfer)"))
         {
             LOG_ERR("vk_device: transfer batch %llu dropped; the uploads it carried never reach the GPU",
                     static_cast<unsigned long long>(batch.id));
@@ -2678,7 +2478,7 @@ namespace rendering_engine::gpu::backend::vulkan
         m_staging_ring.retire(batch.id);
         for (const transfer_batch::dedicated_staging& staging : batch.dedicated)
         {
-            vmaDestroyBuffer(m_allocator, staging.buffer, staging.allocation);
+            vmaDestroyBuffer(m_device.allocator(), staging.buffer, staging.allocation);
         }
         batch.dedicated.clear();
         batch.submitted = false;
@@ -2695,14 +2495,14 @@ namespace rendering_engine::gpu::backend::vulkan
         {
             if (batch->submitted)
             {
-                const VkResult status = vkGetFenceStatus(m_device, batch->fence);
+                const VkResult status = vkGetFenceStatus(m_device.handle(), batch->fence);
                 if (status == VK_NOT_READY)
                 {
                     return;
                 }
                 if (status != VK_SUCCESS)
                 {
-                    check_queue_result(status, "vkGetFenceStatus (transfer)");
+                    m_device.check_queue_result(status, "vkGetFenceStatus (transfer)");
                     return;
                 }
             }
@@ -2741,8 +2541,9 @@ namespace rendering_engine::gpu::backend::vulkan
         {
             return false;
         }
-        if (batch->submitted && !check_queue_result(vkWaitForFences(m_device, 1, &batch->fence, VK_TRUE, UINT64_MAX),
-                                                    "vkWaitForFences (transfer)"))
+        if (batch->submitted &&
+            !m_device.check_queue_result(vkWaitForFences(m_device.handle(), 1, &batch->fence, VK_TRUE, UINT64_MAX),
+                                         "vkWaitForFences (transfer)"))
         {
             return false;
         }
@@ -2764,37 +2565,12 @@ namespace rendering_engine::gpu::backend::vulkan
         si.maxLod = VK_LOD_CLAMP_NONE;
         si.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK;
         si.maxAnisotropy = 1.0f;
-        if (!vk_check(vkCreateSampler(m_device, &si, nullptr, &m_fallback_sampler), "vkCreateSampler (fallback)"))
+        if (!vk_check(vkCreateSampler(m_device.handle(), &si, nullptr, &m_fallback_sampler),
+                      "vkCreateSampler (fallback)"))
         {
             m_fallback_sampler = VK_NULL_HANDLE;
             throw std::runtime_error{"vkCreateSampler (fallback) failed"};
         }
-    }
-
-    void vk_device::mark_device_lost(const char* what)
-    {
-        if (m_device_lost)
-        {
-            return;
-        }
-        m_device_lost = true;
-        LOG_FTL("%s reported VK_ERROR_DEVICE_LOST: the Vulkan device is gone. No further work is submitted or "
-                "presented; the engine shuts down at the end of this frame",
-                what);
-    }
-
-    bool vk_device::check_queue_result(VkResult result, const char* what)
-    {
-        if (result == VK_SUCCESS)
-        {
-            return true;
-        }
-        if (result == VK_ERROR_DEVICE_LOST)
-        {
-            mark_device_lost(what);
-            return false;
-        }
-        return vk_check(result, what);
     }
 
     // -- Render-pass cache ---------------------------------------------
@@ -2979,7 +2755,7 @@ namespace rendering_engine::gpu::backend::vulkan
         rpi.pDependencies = deps.data();
 
         VkRenderPass new_render_pass = VK_NULL_HANDLE;
-        const VkResult rp_result = vkCreateRenderPass(m_device, &rpi, nullptr, &new_render_pass);
+        const VkResult rp_result = vkCreateRenderPass(m_device.handle(), &rpi, nullptr, &new_render_pass);
         if (rp_result != VK_SUCCESS)
         {
             LOG_ERR("vkCreateRenderPass failed: %s (colour attachments=%u color_load[0]=%i depth_load=%i use_depth=%i)",
@@ -3026,7 +2802,7 @@ namespace rendering_engine::gpu::backend::vulkan
                     fbi.height = m_swapchain_extent.height;
                     fbi.layers = 1;
                     VkFramebuffer& framebuffer = v.framebuffers[i * m_frames_in_flight + slot];
-                    const VkResult fb_result = vkCreateFramebuffer(m_device, &fbi, nullptr, &framebuffer);
+                    const VkResult fb_result = vkCreateFramebuffer(m_device.handle(), &fbi, nullptr, &framebuffer);
                     if (fb_result != VK_SUCCESS)
                     {
                         LOG_ERR("vkCreateFramebuffer (swapchain image %u, slot %u) failed: %s",
@@ -3081,7 +2857,7 @@ namespace rendering_engine::gpu::backend::vulkan
                 fbi.width = target.width;
                 fbi.height = target.height;
                 fbi.layers = 1;
-                const VkResult fb_result = vkCreateFramebuffer(m_device, &fbi, nullptr, &v.framebuffers[0]);
+                const VkResult fb_result = vkCreateFramebuffer(m_device.handle(), &fbi, nullptr, &v.framebuffers[0]);
                 if (fb_result != VK_SUCCESS)
                 {
                     LOG_ERR("vkCreateFramebuffer (offscreen) failed: %s", vk_result_to_string(fb_result));
@@ -3144,7 +2920,7 @@ namespace rendering_engine::gpu::backend::vulkan
     }
     VkDevice vk_device::vk_handle() const noexcept
     {
-        return m_device;
+        return m_device.handle();
     }
     VkPhysicalDevice vk_device::physical_device() const noexcept
     {
@@ -3152,7 +2928,7 @@ namespace rendering_engine::gpu::backend::vulkan
     }
     VkQueue vk_device::graphics_queue() const noexcept
     {
-        return m_graphics_queue;
+        return m_device.graphics_queue();
     }
     uint32_t vk_device::graphics_queue_family() const noexcept
     {
@@ -3160,7 +2936,7 @@ namespace rendering_engine::gpu::backend::vulkan
     }
     VmaAllocator vk_device::allocator() const noexcept
     {
-        return m_allocator;
+        return m_device.allocator();
     }
     VkPipelineCache vk_device::pipeline_cache() const noexcept
     {
@@ -3168,7 +2944,7 @@ namespace rendering_engine::gpu::backend::vulkan
     }
     bool vk_device::device_lost() const noexcept
     {
-        return m_device_lost;
+        return m_device.device_lost();
     }
     VkFormat vk_device::vk_format_for(texture_format format) const noexcept
     {
@@ -3204,10 +2980,10 @@ namespace rendering_engine::gpu::backend::vulkan
     }
     bool vk_device::extended_dynamic_state_enabled() const noexcept
     {
-        return m_extended_dynamic_state_enabled;
+        return m_device.extended_dynamic_state_enabled();
     }
     PFN_vkCmdBindVertexBuffers2EXT vk_device::cmd_bind_vertex_buffers2() const noexcept
     {
-        return m_cmd_bind_vertex_buffers2;
+        return m_device.cmd_bind_vertex_buffers2();
     }
 } // namespace rendering_engine::gpu::backend::vulkan

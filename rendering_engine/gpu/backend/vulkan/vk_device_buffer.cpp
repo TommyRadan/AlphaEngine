@@ -109,8 +109,9 @@ namespace rendering_engine::gpu::backend::vulkan
 
         const VmaAllocationCreateInfo alloc = host_visible ? host_mapped_allocation(false) : device_local_allocation();
         VmaAllocationInfo alloc_info{};
-        if (!vk_check(vmaCreateBuffer(m_allocator, &info, &alloc, &record.object, &record.allocation, &alloc_info),
-                      "vmaCreateBuffer"))
+        if (!vk_check(
+                vmaCreateBuffer(m_device.allocator(), &info, &alloc, &record.object, &record.allocation, &alloc_info),
+                "vmaCreateBuffer"))
         {
             return {};
         }
@@ -122,7 +123,7 @@ namespace rendering_engine::gpu::backend::vulkan
             if (record.mapped == nullptr)
             {
                 LOG_ERR("vk_device::create_buffer: host-visible buffer allocation is not mapped");
-                vmaDestroyBuffer(m_allocator, record.object, record.allocation);
+                vmaDestroyBuffer(m_device.allocator(), record.object, record.allocation);
                 return {};
             }
         }
@@ -175,7 +176,7 @@ namespace rendering_engine::gpu::backend::vulkan
         // The handle pool slot is freed immediately so the engine can
         // recycle handle ids. The persistent map goes with the
         // allocation.
-        const VmaAllocator allocator = m_allocator;
+        const VmaAllocator allocator = m_device.allocator();
         const VkBuffer obj = record->object;
         const VmaAllocation allocation = record->allocation;
         enqueue_destroy(

@@ -30,7 +30,7 @@ namespace rendering_engine::gpu::backend::vulkan
         info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
         info.codeSize = descriptor.spirv.size() * sizeof(uint32_t);
         info.pCode = descriptor.spirv.data();
-        if (!vk_check(vkCreateShaderModule(m_device, &info, nullptr, &record.object), "vkCreateShaderModule"))
+        if (!vk_check(vkCreateShaderModule(m_device.handle(), &info, nullptr, &record.object), "vkCreateShaderModule"))
         {
             return {};
         }
@@ -53,7 +53,7 @@ namespace rendering_engine::gpu::backend::vulkan
         // needed by a variant built later in the same frame. Deferring
         // the destroy to the next frame-top drain, like every other
         // resource, keeps that build valid.
-        const VkDevice dev = m_device;
+        const VkDevice dev = m_device.handle();
         const VkShaderModule object = record->object;
         if (object != VK_NULL_HANDLE)
         {

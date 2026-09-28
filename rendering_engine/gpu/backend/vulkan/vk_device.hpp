@@ -63,6 +63,7 @@
 #include <rendering_engine/gpu/backend/vulkan/vk_allocator.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_check.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_instance.hpp>
+#include <rendering_engine/gpu/backend/vulkan/vk_logical_device.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_physical_device.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_resources.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_staging_ring.hpp>
@@ -225,7 +226,8 @@ namespace rendering_engine::gpu::backend::vulkan
         // From then on every submit, acquire and present is a no-op
         // and the next end_frame throws, once, so the main loop's
         // failure path tears the engine down in order rather than
-        // looping on a dead device. See mark_device_lost.
+        // looping on a dead device. See
+        // vk_logical_device::mark_device_lost.
         bool device_lost() const noexcept;
         // The VkFormat backing @p format on this device. Depth formats
         // come from the fallback chains resolved once at init
@@ -532,16 +534,10 @@ namespace rendering_engine::gpu::backend::vulkan
 
     private:
         void create_default_textures();
-        void create_logical_device();
         // Fill the base class's device_features / device_limits from
         // the physical device's properties and the grants recorded by
         // create_logical_device.
         void query_capabilities();
-        // The VMA allocator over the logical device, told the API
-        // version the instance and the physical device agree on.
-        // Throws when VMA refuses; destroyed after every allocation.
-        void create_allocator();
-        void destroy_allocator();
         // The transfer pool the batches allocate from and the per-frame
         // pools the encoders draw on. Throws when a pool cannot be
         // created.
@@ -572,15 +568,6 @@ namespace rendering_engine::gpu::backend::vulkan
         // failed to create, so a null sampler never reaches a
         // combined-image-sampler descriptor.
         void create_fallback_sampler();
-        // Record a device loss reported by @p what: logs once at fatal
-        // level and flips m_device_lost. Every later submit / acquire /
-        // present is a no-op and the next end_frame throws.
-        void mark_device_lost(const char* what);
-        // Result check for the queue-level calls that can report
-        // VK_ERROR_DEVICE_LOST (submit, present, fence and idle waits):
-        // that code goes through mark_device_lost, any other failure is
-        // logged through vk_check. Returns true on VK_SUCCESS.
-        bool check_queue_result(VkResult result, const char* what);
         // Build the swapchain for @p extent plus everything hanging off
         // it (image views, one depth buffer per frame slot, the
         // per-image render-finished semaphores). The previous swapchain, if any,
@@ -713,14 +700,11 @@ namespace rendering_engine::gpu::backend::vulkan
         // reverse (see quit), and their destructors release nothing.
         vk_instance m_instance;
         vk_physical_device m_physical_device;
+        vk_logical_device m_device{m_instance, m_physical_device};
 
         // Whether presentation waits for vertical sync
         // (surface_desc::vsync), read at every swapchain build.
         bool m_vsync{false};
-        VkDevice m_device{VK_NULL_HANDLE};
-        VkQueue m_graphics_queue{VK_NULL_HANDLE};
-        VkQueue m_present_queue{VK_NULL_HANDLE};
-        VmaAllocator m_allocator{VK_NULL_HANDLE};
         // See pipeline_cache(). m_pipeline_cache_file is empty when the
         // shader cache directory is disabled; m_pipeline_cache_digest is
         // the digest of the data read from it (0 when nothing was), so
@@ -802,10 +786,8 @@ namespace rendering_engine::gpu::backend::vulkan
         std::vector<VkDescriptorPool> m_descriptor_pools;
         VkSampler m_fallback_sampler{VK_NULL_HANDLE};
 
-        // See device_lost(). m_device_lost_thrown records that
-        // end_frame has already raised the loss to the main loop, so
-        // it is thrown exactly once.
-        bool m_device_lost{false};
+        // end_frame has already raised the device loss to the main
+        // loop, so it is thrown exactly once.
         bool m_device_lost_thrown{false};
 
         VkSwapchainKHR m_swapchain{VK_NULL_HANDLE};
@@ -920,12 +902,6 @@ namespace rendering_engine::gpu::backend::vulkan
         frame_stats m_frame_stats{};
         uint32_t m_frame_index{0};
         static constexpr uint32_t k_diagnostic_frames = 3;
-
-        // VK_EXT_extended_dynamic_state — needed for runtime stride
-        // override on @c set_vertex_buffer. See the public accessor
-        // for the rationale.
-        bool m_extended_dynamic_state_enabled{false};
-        PFN_vkCmdBindVertexBuffers2EXT m_cmd_bind_vertex_buffers2{nullptr};
 
         // Last drawable size the engine reported through
         // resize_swapchain, in pixels (seeded from the surface_desc
