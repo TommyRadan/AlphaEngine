@@ -58,14 +58,15 @@ namespace runtime
      * components. Main-thread-only.
      *
      * **Structural mutation during a traversal.** While the scene is walking
-     * the tree — inside a component's @c on_update (from the scene's update
-     * or @ref update_subtree) or @c on_active_changed (from @ref set_active)
-     * — the node, child and component lists being iterated must not change.
+     * the tree — inside a component's @c on_fixed_update or @c on_update
+     * (from the scene's walks or @ref update_subtree) or
+     * @c on_active_changed (from @ref set_active) — the node, child and
+     * component lists being iterated must not change.
      * The immediate APIs (@ref add, @ref remove, @ref set_active,
      * @ref add_component, @ref remove_component, @ref remove_all_components)
      * detect that case through the owning @ref runtime::scene: in debug
      * builds they assert; in release builds they log an error and apply the
-     * call at the end of @ref runtime::scene::update instead. Code that
+     * call at the scene's next @ref runtime::scene::apply_deferred instead. Code that
      * needs to mutate the tree from a hook should say so explicitly with the
      * scene's @c destroy_node / @c defer_remove_component / @c defer_reparent
      * / @c defer_set_active, reached via @ref scene.
@@ -245,8 +246,8 @@ namespace runtime
 
         /**
          * @brief True between a @c scene::destroy_node / @c defer_destroy
-         *        request for this node and the end of the
-         *        @c scene::update that applies it.
+         *        request for this node and the @c scene::apply_deferred that
+         *        applies it.
          *
          * Lets a component's @c on_update skip work on a node that is already
          * on its way out.
@@ -276,7 +277,7 @@ namespace runtime
          * Replaces any existing @c C on this node. Returns a pointer to the
          * pooled component, or @c nullptr if the node has no store yet — or if
          * called during a traversal, in which case (release builds) the add is
-         * applied at the end of the current @c scene::update instead.
+         * applied at the scene's next @c scene::apply_deferred instead.
          */
         template<typename C>
         C* add_component(C value)
@@ -441,7 +442,7 @@ namespace runtime
         // debug builds, and in release builds tells the caller to defer.
         bool reject_during_traversal(const char* operation) const;
 
-        // Queues @p command on the owning scene for the end of its update.
+        // Queues @p command on the owning scene for its next apply_deferred.
         void defer(std::function<void()> command);
 
         // Gives this (fresh) node a copy of every component on @p source that
@@ -464,8 +465,8 @@ namespace runtime
         runtime::scene* m_owning_scene;
         uint32_t m_pool_slot;
 
-        // Written by the scene's update walk; read by the store's per-type
-        // on_update dispatch through the owner record.
+        // Written by the scene's walks; read by the store's per-type hook
+        // dispatches and each_visited through the owner record.
         visit_mark m_visit;
 
         // See lifetime_cell; null until first requested.

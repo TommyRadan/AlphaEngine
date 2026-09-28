@@ -150,9 +150,9 @@ namespace
 
         explicit orbit_pivot(float rate) : m_rate{rate} {}
 
-        void on_update(float delta_time) override
+        void on_update(double delta_time) override
         {
-            m_time += delta_time / 1000.0f;
+            m_time += static_cast<float>(delta_time);
             owner().transform.set_rotation(math::vec3{0.0f, 0.0f, m_rate * m_time});
         }
 

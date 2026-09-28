@@ -7,12 +7,8 @@
 #include <cmath>
 #include <utility>
 
-#include <core/event.hpp>
-#include <core/event_engine.hpp>
 #include <core/log.hpp>
-#include <core/time.hpp>
 #include <runtime/components/mesh_component.hpp>
-#include <runtime/engine.hpp>
 #include <runtime/node.hpp>
 
 namespace runtime
@@ -26,9 +22,6 @@ namespace runtime
         // Layers blended at once. A burst of cross-fades beyond this drops
         // the faintest outgoing layer rather than growing without bound.
         constexpr std::size_t max_layers = 8;
-
-        // The fixed step arrives in milliseconds; clip time is in seconds.
-        constexpr double milliseconds_per_second = 1000.0;
 
         // Below this total the blend weights carry no usable direction.
         constexpr float weight_epsilon = 1e-6f;
@@ -110,8 +103,6 @@ namespace runtime
         std::vector<machine_state> states;
         std::vector<transition> transitions;
         std::size_t current_state{no_clip};
-
-        bool active{true};
 
         // Set whenever the sampled pose may differ from the one last
         // written; apply() is a no-op otherwise.
@@ -453,7 +444,6 @@ namespace runtime
         // Same layers, so the copy samples the same pose the source does
         // right now; apply() re-runs once a skin or node is bound to it.
         copy.m_impl->layers = m_impl->layers;
-        copy.m_impl->active = m_impl->active;
         copy.m_impl->needs_apply = true;
 
         if (!m_impl->node_bindings.empty() || !m_impl->skin_bindings.empty())
@@ -620,14 +610,20 @@ namespace runtime
         return m_impl->current_state < m_impl->states.size() ? m_impl->states[m_impl->current_state].name : none;
     }
 
-    void animator_component::advance(double delta_ms)
+    void animator_component::advance(double delta_seconds)
     {
-        m_impl->advance(std::max(delta_ms, 0.0) / milliseconds_per_second);
+        if (m_impl)
+        {
+            m_impl->advance(std::max(delta_seconds, 0.0));
+        }
     }
 
     void animator_component::apply(double alpha)
     {
-        m_impl->apply(alpha);
+        if (m_impl)
+        {
+            m_impl->apply(alpha);
+        }
     }
 
     void animator_component::on_attach(node& owner)
@@ -637,42 +633,8 @@ namespace runtime
         {
             return;
         }
-        // The callback captures the heap state, not the component, which the
-        // pool may move.
-        impl* state = m_impl.get();
-        m_fixed_step = runtime::current_engine().events->subscribe<core::frame>(
-            [state](const core::frame& step)
-            {
-                if (state->active)
-                {
-                    state->advance(static_cast<double>(step.m_delta_time) / milliseconds_per_second);
-                }
-            });
         // Bound skins get a palette before their first draw.
         m_impl->needs_apply = true;
         m_impl->apply(0.0);
-    }
-
-    void animator_component::on_update(node& owner)
-    {
-        (void)owner;
-        if (m_impl && m_impl->active)
-        {
-            m_impl->apply(runtime::current_engine().time->interpolation_alpha());
-        }
-    }
-
-    void animator_component::on_destroy()
-    {
-        m_fixed_step.reset();
-    }
-
-    void animator_component::on_active_changed(node& owner, bool active)
-    {
-        (void)owner;
-        if (m_impl)
-        {
-            m_impl->active = active;
-        }
     }
 } // namespace runtime

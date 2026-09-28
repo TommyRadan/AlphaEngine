@@ -6,11 +6,9 @@
 #include <typeinfo>
 #include <utility>
 
-#include <core/event_engine.hpp>
 #include <core/log.hpp>
 #include <core/time.hpp>
 #include <runtime/engine.hpp>
-#include <runtime/scene.hpp>
 
 runtime::behavior_component::behavior_component(std::unique_ptr<behavior> logic) noexcept : m_behavior{std::move(logic)}
 {
@@ -50,23 +48,6 @@ bool runtime::behavior_component::begin_update(behavior& logic)
     return logic.m_enabled;
 }
 
-void runtime::behavior_component::fixed_step(behavior& logic, float delta_time)
-{
-    if (logic.m_owner == nullptr)
-    {
-        return;
-    }
-    // Mark the owner's scene as walked for the duration, as the scene update
-    // does around on_update: the node APIs then refuse (debug) or defer
-    // (release) structural changes, so the behaviour cannot, for one, free
-    // itself while its hook is still running.
-    scene::traversal_scope traversal{logic.m_owner->scene()};
-    if (begin_update(logic))
-    {
-        logic.on_fixed_update(delta_time);
-    }
-}
-
 void runtime::behavior_component::on_attach(node& owner)
 {
     if (!m_behavior)
@@ -75,14 +56,6 @@ void runtime::behavior_component::on_attach(node& owner)
     }
 
     m_behavior->m_owner = &owner;
-
-    // The fixed step reaches behaviours through the core::frame the engine
-    // emits once per drained step. The listener holds the heap behaviour,
-    // which keeps its address however the pool moves this component, and is
-    // dropped in on_destroy before the behaviour is deleted.
-    behavior* logic = m_behavior.get();
-    m_fixed_step = runtime::current_engine().events->subscribe<core::frame>([logic](const core::frame& step)
-                                                                            { fixed_step(*logic, step.m_delta_time); });
 
     // A disabled node hides the component right after this (add_component
     // and the clone path both follow up with on_active_changed(false)), so
@@ -93,6 +66,16 @@ void runtime::behavior_component::on_attach(node& owner)
     }
 }
 
+void runtime::behavior_component::on_fixed_update(node& owner)
+{
+    (void)owner;
+    if (!m_behavior || !begin_update(*m_behavior))
+    {
+        return;
+    }
+    m_behavior->on_fixed_update(runtime::current_engine().time->fixed_delta_time());
+}
+
 void runtime::behavior_component::on_update(node& owner)
 {
     (void)owner;
@@ -100,8 +83,8 @@ void runtime::behavior_component::on_update(node& owner)
     {
         return;
     }
-    // The same real frame delta core::render_update carries this frame.
-    m_behavior->on_update(static_cast<float>(runtime::current_engine().time->delta_time()));
+    // The frame's game time: the real delta at the time scale.
+    m_behavior->on_update(runtime::current_engine().time->delta_time());
 }
 
 void runtime::behavior_component::on_active_changed(node& owner, bool active)
@@ -123,8 +106,6 @@ void runtime::behavior_component::on_active_changed(node& owner, bool active)
 
 void runtime::behavior_component::on_destroy()
 {
-    // No more fixed steps, whatever the hooks below do.
-    m_fixed_step.reset();
     if (!m_behavior)
     {
         return;

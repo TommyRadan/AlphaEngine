@@ -18,8 +18,8 @@
  * script's class — with any of the hooks @c on_start, @c on_enable,
  * @c on_disable, @c on_fixed_update(dt), @c on_update(dt) and
  * @c on_destroy, each called with @c self, when and as often as the native
- * hook of the same name (runtime/behavior.hpp; both deltas in milliseconds,
- * as there). It may declare a @c properties table of defaults:
+ * hook of the same name (runtime/behavior.hpp; both deltas in seconds of game
+ * time, as there). It may declare a @c properties table of defaults:
  * @code
  * local bob = {
  *     properties = { height = 0.5, speed = 1.0 },
@@ -31,7 +31,7 @@
  * end
  *
  * function bob:on_update(dt)
- *     self.time = self.time + dt / 1000
+ *     self.time = self.time + dt
  *     self.node.position = self.base + vec3(0, 0, self.height * math.sin(self.time * self.speed))
  * end
  *
@@ -86,11 +86,11 @@
  *   @c camera(), @c rigidbody(), @c audio_source() (@c nil when the node
  *   has none); @c script() (the @c self of the node's scripted behaviour,
  *   @c nil when it has none); @c valid(). Changing @c active or @c parent from a hook is
- *   applied at the end of the scene's update, as the native deferred
- *   commands are.
+ *   applied once the stage that ran the hook finishes (after the fixed
+ *   step, or after the update), as the native deferred commands are.
  * - a scene (@c node:scene()) — @c root, @c create_node([name[, parent]]),
- *   @c destroy_node(node) (at the end of the update, like
- *   @c scene::destroy_node), @c find(name), @c valid().
+ *   @c destroy_node(node) (deferred, like @c scene::destroy_node),
+ *   @c find(name), @c valid().
  * - components — a light: @c kind, @c color, @c intensity,
  *   @c cast_shadow, @c range, @c inner_angle, @c outer_angle (where the
  *   kind has them); a camera: @c priority, @c main, and for a perspective
@@ -117,6 +117,13 @@
  * - @c log — @c info, @c warn and @c error, each taking any values as
  *   @c print does, logged under the @c "script" category with the calling
  *   script's file and line; @c print is @c log.info.
+ * - @c time — the engine clock, in seconds: @c delta (the frame's game time,
+ *   scaled), @c unscaled_delta (real time), @c fixed_delta (the fixed step)
+ *   and @c total (real time since start), read only; @c scale, the game time
+ *   scale (0 pauses, 1 is real time), and @c paused, readable and
+ *   assignable, both applying from the next frame. A paused game runs no
+ *   script's @c on_fixed_update or @c on_update until it is resumed from
+ *   outside — through the editor's time controls, say.
  *
  * **Lifetime.** A script never holds a pointer into the engine. A node
  * reaches it as a handle over the node's lifetime cell
@@ -223,8 +230,8 @@ namespace runtime
 
         void on_enable() override;
         void on_start() override;
-        void on_fixed_update(float delta_time) override;
-        void on_update(float delta_time) override;
+        void on_fixed_update(double delta_time) override;
+        void on_update(double delta_time) override;
         void on_disable() override;
         void on_destroy() override;
 
@@ -241,7 +248,7 @@ namespace runtime
 
         // Calls the hook @p hook of the script (with @p delta_time when non-
         // null) if this behaviour is running one; an error stops it.
-        void call(const char* hook, const float* delta_time = nullptr);
+        void call(const char* hook, const double* delta_time = nullptr);
 
         // Runs the script's on_start if it has not run yet; false when the
         // behaviour cannot be updated (no script, stopped).

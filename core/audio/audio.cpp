@@ -294,6 +294,16 @@ namespace core
         }
     }
 
+    void audio::set_time_scale(float scale)
+    {
+        m_time_scale = scale > 0.0f ? scale : 0.0f;
+    }
+
+    float audio::time_scale() const noexcept
+    {
+        return m_time_scale;
+    }
+
     audio::listener_token audio::attach_listener()
     {
         const listener_token token = m_next_listener_token++;
@@ -361,7 +371,10 @@ namespace core
 
         for (voice& v : m_voices)
         {
-            if (!v.active || v.paused || !v.clip)
+            // The voice's playback rate: its pitch at the game's time scale.
+            // At 0 it holds its place and contributes nothing.
+            const double rate = static_cast<double>(v.pitch) * static_cast<double>(m_time_scale);
+            if (!v.active || v.paused || !v.clip || !(rate > 0.0))
             {
                 continue;
             }
@@ -413,7 +426,7 @@ namespace core
                 out[i * 2 + 0] += l * left_gain;
                 out[i * 2 + 1] += r * right_gain;
 
-                v.cursor += static_cast<double>(v.pitch);
+                v.cursor += rate;
                 if (v.cursor >= static_cast<double>(clip_frames))
                 {
                     if (v.loop)
@@ -436,7 +449,7 @@ namespace core
         }
     }
 
-    void audio::update(float delta_time)
+    void audio::update(double delta_seconds)
     {
         // ~100 ms of buffered audio absorbs ordinary frame-time jitter
         // without adding noticeable latency; a stall (a debugger pause, a
@@ -455,8 +468,8 @@ namespace core
         {
             // No device to keep topped up: advance voices by wall-clock time
             // instead, so is_playing()/looping bookkeeping stays correct.
-            frames_needed =
-                static_cast<std::size_t>(std::clamp(delta_time, 0.0f, 1.0f) * static_cast<float>(k_mixer_sample_rate));
+            frames_needed = static_cast<std::size_t>(std::clamp(delta_seconds, 0.0, 1.0) *
+                                                     static_cast<double>(k_mixer_sample_rate));
         }
         frames_needed = std::min(frames_needed, k_max_frames_per_update);
         if (frames_needed == 0)

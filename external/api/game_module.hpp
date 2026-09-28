@@ -16,9 +16,9 @@
  * @code
  * struct spinner final : runtime::behavior
  * {
- *     void on_update(float delta_time) override
+ *     void on_update(double delta_time) override
  *     {
- *         m_angle += delta_time / 1000.0f;
+ *         m_angle += static_cast<float>(delta_time);
  *         owner().transform.set_rotation(core::math::vec3{0.0f, 0.0f, m_angle});
  *     }
  *
@@ -36,7 +36,12 @@
  * The body receives @c scene, the engine's active scene at start-up (the
  * persistent scene); a module may load scenes of its own through
  * @c runtime::current_engine().scenes. A game-wide concern that belongs to
- * no object may still subscribe to the event bus from its bootstrap.
+ * no object may still subscribe to the event bus from its bootstrap; logic
+ * that runs every frame or every fixed step in a place of its own in the
+ * frame is a system, added to one of the frame's stages through
+ * @c runtime::current_engine().systems (runtime/scheduler.hpp) by a
+ * behaviour that keeps the returned registration, so the system goes with
+ * it.
  *
  * A module names its behaviours in a @c REFLECT_TYPES() block
  * (runtime/reflection.hpp) so scene files and prefabs can carry them. A

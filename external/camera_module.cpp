@@ -124,7 +124,7 @@ namespace
      */
     struct fly_camera final : runtime::behavior
     {
-        void on_update(float delta_time) override
+        void on_update(double delta_time) override
         {
             core::input& input = *runtime::current_engine().input;
 
@@ -138,7 +138,7 @@ namespace
             const core::math::vec3 right = safe_normalize(core::math::cross(forward, up_vector));
 
             const float speed = input.is_action_down("sprint") ? 30.0f : 3.0f;
-            const float distance = speed * (delta_time / 1000.0f);
+            const float distance = speed * static_cast<float>(delta_time);
             core::math::vec3 new_position = position;
 
             if (input.is_action_down("move_forward"))
@@ -172,7 +172,7 @@ namespace
         }
 
     private:
-        void look(core::input& input, float delta_time)
+        void look(core::input& input, double delta_time)
         {
             // Mouse-look only while "look_enable" (the left mouse button by
             // default) is held, in every build configuration; the debug
@@ -189,7 +189,7 @@ namespace
             const float stick_y = input.get_axis("look_y");
             if (stick_x != 0.0f || stick_y != 0.0f)
             {
-                delta += core::math::vec2{stick_x, stick_y} * (gamepad_look_speed * (delta_time / 1000.0f));
+                delta += core::math::vec2{stick_x, stick_y} * (gamepad_look_speed * static_cast<float>(delta_time));
             }
             if (delta.x == 0.0f && delta.y == 0.0f)
             {

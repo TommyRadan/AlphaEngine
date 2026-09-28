@@ -30,10 +30,12 @@ namespace runtime
      * copies (and the materials and mesh assets they name), never a
      * component, a mesh source or a node.
      *
-     * @ref runtime::engine::tick calls it once per rendered frame, after
-     * every update that can move a node — the fixed steps, physics and its
-     * interpolation, the scene update with its deferred commands, and the
-     * overlay's editing — and right before @c renderer::render. Every pose
+     * The engine runs it once per rendered frame, in the scheduler's
+     * @c render_extract stage (runtime/scheduler.hpp): after every stage
+     * that can move a node — the fixed steps, physics and its
+     * interpolation, the scene update with its deferred commands, the
+     * animation and the transform propagation — and the overlay's editing,
+     * and right before @c renderer::render. Every pose
      * the renderer reads therefore comes from the same, final state of the
      * frame, whatever order the component types update in. Proxies are
      * created, enabled and destroyed by the components' own hooks, not here,

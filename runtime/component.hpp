@@ -14,8 +14,9 @@
  * registering it anywhere first.
  *
  * Each pool also records which node owns every live component, so the scene
- * can walk one type's pool as a unit — dispatching @c on_update per type
- * (@ref runtime::scene::update) or answering "every @c mesh_component"
+ * can walk one type's pool as a unit — dispatching @c on_fixed_update and
+ * @c on_update per type (@ref runtime::scene::fixed_update,
+ * @ref runtime::scene::update) or answering "every @c mesh_component"
  * (@ref runtime::scene::each / @ref runtime::scene::view) — rather than
  * chasing the node tree.
  */
@@ -65,15 +66,18 @@ namespace runtime
     };
 
     /**
-     * @brief Where a node stood in the most recent scene update walk.
+     * @brief Where a node stood in the most recent walk of its scene.
      *
-     * Written by @ref runtime::scene::update as it walks the tree for
-     * transform propagation: @c stamp names the update that reached the node
-     * (it is only reached while effectively active and linked under the scene
-     * root) and @c order is its depth-first position in that walk. The store
-     * reads it to dispatch @c on_update per component type, to owners the walk
-     * reached, parents before children. Lives in the node; the store keeps a
-     * pointer to it beside each component's owner.
+     * Written by every walk of the tree (@ref runtime::scene::fixed_update,
+     * @ref runtime::scene::update, @ref runtime::scene::propagate_transforms),
+     * which also settles the world matrices: @c stamp names the walk that
+     * reached the node (it is only reached while effectively active and
+     * linked under the scene root) and @c order is its depth-first position
+     * in that walk. The store reads it to dispatch @c on_fixed_update and
+     * @c on_update per component type — and @ref component_store::each_visited
+     * to visit one type — to owners the walk reached, parents before
+     * children. Lives in the node; the store keeps a pointer to it beside
+     * each component's owner.
      */
     struct visit_mark
     {
@@ -89,7 +93,7 @@ namespace runtime
      * here. Type-erased so the store needs no compile-time list of component
      * types — a pool is created lazily the first time a given type is added,
      * and the order in which types first appear is the order the per-type
-     * @c on_update dispatch runs them in.
+     * @c on_fixed_update and @c on_update dispatches run them in.
      *
      * Destroying the store dispatches @c on_destroy to every component still
      * alive in it (in pool slot order) before their values are destroyed, so a
@@ -250,9 +254,9 @@ namespace runtime
         /**
          * @brief Per-type @c on_update dispatch for one scene update.
          *
-         * For each component type that defines @c on_update — in the order
-         * the types first appeared in this store — walks that type's pool and
-         * calls @c on_update on every component whose owner the update walk
+         * For each component type that defines @c on_update(node&) — in the
+         * order the types first appeared in this store — walks that type's
+         * pool and calls @c on_update on every component whose owner the walk
          * stamped with @p stamp (see @ref visit_mark), owners ordered as the
          * walk met them: parents before children, siblings in insertion
          * order. Types without the hook cost nothing.
@@ -265,6 +269,36 @@ namespace runtime
             for (std::size_t i = 0; i < m_pool_order.size(); ++i)
             {
                 m_pool_order[i]->update_visited(stamp);
+            }
+        }
+
+        /**
+         * @brief Per-type @c on_fixed_update dispatch for one fixed step:
+         *        @ref update_visited for components that define
+         *        @c on_fixed_update(node&), in the same type and walk order.
+         */
+        void fixed_update_visited(uint64_t stamp)
+        {
+            for (std::size_t i = 0; i < m_pool_order.size(); ++i)
+            {
+                m_pool_order[i]->fixed_update_visited(stamp);
+            }
+        }
+
+        /**
+         * @brief Invokes @p fn(node&, C&) on every @c C whose owner the walk
+         *        stamped with @p stamp, in walk order (parents before
+         *        children, siblings in insertion order).
+         *
+         * What an engine system uses to visit one component type the way the
+         * per-type dispatches do. @p fn must not add a @c C.
+         */
+        template<typename C, typename Fn>
+        void each_visited(uint64_t stamp, Fn&& fn)
+        {
+            if (typed_pool<C>* typed = find_pool<C>())
+            {
+                typed->visit(stamp, fn);
             }
         }
 
@@ -311,6 +345,7 @@ namespace runtime
             virtual void attach(component_handle handle, node& owner) = 0;
             virtual void update(component_handle handle, node& owner) noexcept = 0;
             virtual void update_visited(uint64_t stamp) = 0;
+            virtual void fixed_update_visited(uint64_t stamp) = 0;
             virtual void set_active(component_handle handle, node& owner, bool active) noexcept = 0;
         };
 
@@ -322,7 +357,7 @@ namespace runtime
             // Parallel to data's slots, indexed by slot index.
             std::vector<owner_record> owners;
 
-            // Scratch for update_visited, kept to reuse its capacity.
+            // Scratch for visit, kept to reuse its capacity.
             struct ordered_handle
             {
                 uint32_t order;
@@ -465,46 +500,68 @@ namespace runtime
                 }
             }
 
+            // Calls fn(node&, C&) on every component whose owner the walk
+            // stamped with @p stamp, in walk order.
+            template<typename Fn>
+            void visit(uint64_t stamp, Fn& fn)
+            {
+                // Borrow the scratch list (a hook that re-enters the walk
+                // finds it empty rather than reshuffled under us).
+                std::vector<ordered_handle> pending;
+                pending.swap(visit_order);
+                pending.clear();
+
+                // One contiguous pass over the pool picks out the components
+                // whose owner this walk reached...
+                for (auto it = data.begin(); it != data.end(); ++it)
+                {
+                    const owner_record record = owner_at(it.handle().index);
+                    if (record.visit != nullptr && record.visit->stamp == stamp)
+                    {
+                        pending.push_back(ordered_handle{record.visit->order, it.handle()});
+                    }
+                }
+
+                // ...and they run in walk order, parents before children.
+                // Slot order usually follows creation order, which usually
+                // follows the tree, so the sort is mostly skipped.
+                auto by_order = [](const ordered_handle& a, const ordered_handle& b) { return a.order < b.order; };
+                if (!std::is_sorted(pending.begin(), pending.end(), by_order))
+                {
+                    std::sort(pending.begin(), pending.end(), by_order);
+                }
+
+                for (const ordered_handle& entry : pending)
+                {
+                    // Re-resolved: an earlier call may have freed it (a node
+                    // destroyed mid-walk in a release build).
+                    if (C* c = data.get(entry.handle))
+                    {
+                        fn(*owners[entry.handle.index].owner, *c);
+                    }
+                }
+                visit_order.swap(pending);
+            }
+
             void update_visited(uint64_t stamp) override
             {
                 if constexpr (requires(C& c, node& n) { c.on_update(n); })
                 {
-                    // Borrow the scratch list (a hook that re-enters the
-                    // update finds it empty rather than reshuffled under us).
-                    std::vector<ordered_handle> pending;
-                    pending.swap(visit_order);
-                    pending.clear();
+                    auto hook = [](node& owner, C& c) { c.on_update(owner); };
+                    visit(stamp, hook);
+                }
+                else
+                {
+                    (void)stamp;
+                }
+            }
 
-                    // One contiguous pass over the pool picks out the
-                    // components whose owner this update reached...
-                    for (auto it = data.begin(); it != data.end(); ++it)
-                    {
-                        const owner_record record = owner_at(it.handle().index);
-                        if (record.visit != nullptr && record.visit->stamp == stamp)
-                        {
-                            pending.push_back(ordered_handle{record.visit->order, it.handle()});
-                        }
-                    }
-
-                    // ...and they run in walk order, parents before children.
-                    // Slot order usually follows creation order, which usually
-                    // follows the tree, so the sort is mostly skipped.
-                    auto by_order = [](const ordered_handle& a, const ordered_handle& b) { return a.order < b.order; };
-                    if (!std::is_sorted(pending.begin(), pending.end(), by_order))
-                    {
-                        std::sort(pending.begin(), pending.end(), by_order);
-                    }
-
-                    for (const ordered_handle& entry : pending)
-                    {
-                        // Re-resolved: an earlier hook may have freed it (a
-                        // node destroyed mid-walk in a release build).
-                        if (C* c = data.get(entry.handle))
-                        {
-                            c->on_update(*owners[entry.handle.index].owner);
-                        }
-                    }
-                    visit_order.swap(pending);
+            void fixed_update_visited(uint64_t stamp) override
+            {
+                if constexpr (requires(C& c, node& n) { c.on_fixed_update(n); })
+                {
+                    auto hook = [](node& owner, C& c) { c.on_fixed_update(owner); };
+                    visit(stamp, hook);
                 }
                 else
                 {

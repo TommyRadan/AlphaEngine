@@ -18,7 +18,6 @@
 #include <vector>
 
 #include <core/math/math.hpp>
-#include <core/subscription.hpp>
 #include <runtime/animation/animation_clip.hpp>
 #include <runtime/animation/skeleton.hpp>
 
@@ -52,15 +51,18 @@ namespace runtime
      * speed) and transitions from one state — or from any — to another,
      * fired by name through @ref trigger.
      *
-     * **Timing.** Playback advances on the engine's fixed update step (the
-     * @c core::frame event, subscribed in @ref on_attach), so it is
-     * deterministic and independent of the render rate. Each step keeps the
-     * previous step's clip times and fade weights alongside the current
-     * ones; @ref on_update, once per rendered frame, samples the clips
-     * @c core::time::interpolation_alpha of the way between the two, so
-     * motion stays smooth when the render rate runs ahead of the fixed
-     * rate. Clip time is in seconds (the clips' unit); the fixed step
-     * arrives in milliseconds.
+     * **Timing.** The engine's animation systems drive every animator on an
+     * effectively active node under its scene's root, in hierarchy order
+     * (runtime/scheduler.hpp): once per fixed step, in the
+     * @c post_physics stage, @ref advance moves playback on by the fixed
+     * step, so it is deterministic, independent of the render rate and
+     * frozen while the game is paused; once per rendered frame, in the
+     * @c animation stage, @ref apply samples the clips
+     * @c core::time::interpolation_alpha of the way between the previous
+     * step's clip times and fade weights and the latest ones, so motion
+     * stays smooth when the render rate runs ahead of the fixed rate. A
+     * disabled node's animator holds its pose. Clip time and the fixed step
+     * are both in seconds.
      *
      * **Output.** Two kinds of binding say where the pose goes:
      * @ref bind_node makes a scene node follow a joint (its local transform
@@ -196,38 +198,27 @@ namespace runtime
         const std::string& current_state() const noexcept;
 
         /**
-         * @brief Advances playback by one fixed step of @p delta_ms. Called
-         *        from the @c core::frame subscription while attached and
-         *        active; exposed for callers driving an unattached animator.
+         * @brief Advances playback by one fixed step of @p delta_seconds.
+         *        Run by the engine once per fixed step (see the class notes);
+         *        exposed for callers driving an unattached animator.
          */
-        void advance(double delta_ms);
+        void advance(double delta_seconds);
 
         /**
          * @brief Samples the pose @p alpha of the way from the previous
          *        fixed step to the latest one and writes it to the bound
-         *        nodes and skins. Called from @ref on_update; exposed like
-         *        @ref advance.
+         *        nodes and skins. Run by the engine once per rendered frame;
+         *        exposed like @ref advance.
          */
         void apply(double alpha);
 
-        /** @brief Subscribes to the fixed step and writes the first pose. */
+        /** @brief Writes the first pose, so bound skins have a palette before their first draw. */
         void on_attach(node& owner);
-
-        /** @brief Writes the render-time pose (see the class notes). */
-        void on_update(node& owner);
-
-        /** @brief Drops the fixed-step subscription. */
-        void on_destroy();
-
-        /** @brief Pauses playback while the owning node is disabled. */
-        void on_active_changed(node& owner, bool active);
 
     private:
         struct impl;
 
-        // Heap state: the fixed-step callback captures its address, which
-        // stays put when the pool relocates the component.
+        // Heap state, so the component moves cheaply within its pool.
         std::unique_ptr<impl> m_impl;
-        core::subscription m_fixed_step;
     };
 } // namespace runtime

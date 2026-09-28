@@ -182,12 +182,11 @@ namespace core
      * 0, so single-player code is unaffected by any of the above.
      *
      * @ref was_action_pressed and @ref was_action_released answer for the fixed step that just ran: they latch
-     * once per @ref runtime::engine::tick, right before its `core::frame` broadcast (see @ref begin_step), so
-     * they stay stable through every behaviour's `on_fixed_update` in that step even when several run in one
-     * rendered frame. @ref is_action_down, @ref get_axis, @ref mouse_position and @ref mouse_delta are live —
-     * safe to poll from either `on_fixed_update` or the render-rate `on_update` — because the physical state
-     * behind them only changes where @c platform::window pumps events, once per rendered frame and
-     * before any fixed step drawn from it runs.
+     * once per fixed step, before any of the step's game logic runs (see @ref begin_step), so they stay stable
+     * through every behaviour's `on_fixed_update` in that step even when several run in one rendered frame. @ref
+     * is_action_down, @ref get_axis, @ref mouse_position and @ref mouse_delta are live — safe to poll from either
+     * `on_fixed_update` or the render-rate `on_update` — because the physical state behind them only changes where @c
+     * platform::window pumps events, once per rendered frame and before any fixed step drawn from it runs.
      *
      * Main-thread-only, like the rest of the engine.
      */
@@ -378,8 +377,8 @@ namespace core
          * @brief Latches every player's action pressed / released edges for the fixed step about to run and
          *        clears the accumulator behind them.
          *
-         * Called once per fixed step by @ref runtime::engine::tick, right before its `core::frame` broadcast.
-         * Not for game code to call.
+         * Called once per fixed step by the engine's first system of the step (@c runtime::stage::scripts_fixed),
+         * before any of the step's game logic. Not for game code to call.
          */
         void begin_step();
 
@@ -387,8 +386,8 @@ namespace core
          * @brief Latches the cursor motion and scroll accumulated since the previous call into @ref mouse_delta /
          *        @ref mouse_wheel_delta and resets both accumulators.
          *
-         * Called once per rendered frame by @ref runtime::engine::tick, right after @c platform::window
-         * has pumped this frame's input. Not for game code to call.
+         * Called once per rendered frame by the engine's input stage (@c runtime::stage::input), right after
+         * @c platform::window has pumped this frame's input. Not for game code to call.
          */
         void end_frame();
 

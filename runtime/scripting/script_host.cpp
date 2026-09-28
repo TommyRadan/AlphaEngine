@@ -12,8 +12,6 @@
 #include <system_error>
 #include <utility>
 
-#include <core/event.hpp>
-#include <core/event_engine.hpp>
 #include <core/log.hpp>
 #include <core/math/math.hpp>
 #include <core/os/os.hpp>
@@ -29,8 +27,8 @@ namespace
     constexpr bool k_hot_reload = false;
 #endif
 
-    // How often the hot-reload watchers rescan their directories.
-    constexpr float k_poll_interval_ms = 500.0f;
+    // How often the hot-reload watchers rescan their directories, in seconds.
+    constexpr double k_poll_interval = 0.5;
 
     // The message handler of every protected call into a script: turns the
     // error object into a message that starts with the file and line of the
@@ -481,7 +479,7 @@ sol::table runtime::script_host::state::make_self(const scripting::script_class&
 
 bool runtime::script_host::state::call(const sol::table& self,
                                        const char* hook,
-                                       const float* delta_time,
+                                       const double* delta_time,
                                        std::string& error)
 {
     lua_State* raw = lua.lua_state();
@@ -531,14 +529,14 @@ void runtime::script_host::state::watch_file(scripting::script_class& script)
     }
 }
 
-void runtime::script_host::state::poll_changes(float delta_time)
+void runtime::script_host::state::poll_changes(double delta_seconds)
 {
-    since_poll += delta_time;
-    if (since_poll < k_poll_interval_ms)
+    since_poll += delta_seconds;
+    if (since_poll < k_poll_interval)
     {
         return;
     }
-    since_poll = 0.0f;
+    since_poll = 0.0;
 
     const core::vfs& files = core::default_vfs();
     std::vector<scripting::script_class*> changed;
@@ -576,7 +574,7 @@ runtime::script_host::~script_host()
     }
 }
 
-void runtime::script_host::init(core::event_bus& events)
+void runtime::script_host::init(scheduler& systems)
 {
     LOG_INF("Init Script Host (%s)", LUA_RELEASE);
     m_state = std::make_unique<state>();
@@ -596,18 +594,23 @@ void runtime::script_host::init(core::event_bus& events)
 
     if constexpr (k_hot_reload)
     {
-        m_reload_poll = events.subscribe<core::render_update>(
-            [this](const core::render_update& tick)
+        // A tool, not game logic: it counts real time and keeps polling
+        // while the game is paused.
+        m_reload_poll = systems.add(
+            stage::update,
+            "script_reload",
+            [this](const frame_time& time)
             {
                 if (m_state)
                 {
-                    m_state->poll_changes(tick.m_delta_time);
+                    m_state->poll_changes(time.unscaled_delta);
                 }
-            });
+            },
+            system_options{.order = engine_order::script_reload, .while_paused = true});
     }
     else
     {
-        (void)events;
+        (void)systems;
     }
 }
 

@@ -34,12 +34,12 @@ namespace
     // Commands may queue further commands; the drain repeats until quiet. A
     // command that keeps re-queueing itself would never let a frame end, so
     // the drain gives up after this many rounds and leaves the remainder for
-    // the next update.
+    // the next drain.
     constexpr int k_max_drain_rounds = 32;
 
-    // Stamps the update walks, unique across every scene in the process so a
-    // node that moves between scenes can never carry a mark that happens to
-    // match its new scene's current update. Main-thread-only, like the walks.
+    // Stamps the walks, unique across every scene in the process so a node
+    // that moves between scenes can never carry a mark that happens to match
+    // its new scene's latest walk. Main-thread-only, like the walks.
     uint64_t g_update_stamp = 0;
 } // namespace
 
@@ -153,32 +153,45 @@ void runtime::scene::quit()
     release_all();
 }
 
+void runtime::scene::fixed_update()
+{
+    // on_fixed_update hooks may not restructure the lists walked here; the
+    // scope makes the immediate APIs assert (debug) or defer (release). What
+    // they queue waits for apply_deferred, after the fixed step.
+    traversal_scope traversal{this};
+    walk();
+    components.fixed_update_visited(m_walk_stamp);
+}
+
 void runtime::scene::update()
 {
-    {
-        // on_update hooks may not restructure the lists walked here; the
-        // scope makes the immediate APIs assert (debug) or defer (release).
-        traversal_scope traversal{this};
+    // As fixed_update: the hooks' structural changes wait for apply_deferred.
+    traversal_scope traversal{this};
+    walk();
 
-        // One serial depth-first walk settles every world matrix, parents
-        // before children, and stamps the nodes it reaches (effectively
-        // active, linked under the root) with their place in the walk.
-        const uint64_t stamp = ++g_update_stamp;
-        uint32_t order = 0;
-        propagate(root, stamp, order);
+    // on_update runs one component type at a time, each a pass over that
+    // type's pool, to the components whose owner the walk stamped, in walk
+    // order. Components bridge to shared subsystems (renderer registries, the
+    // light list, per-draw GPU buffers), none of which are thread-safe, so
+    // this stays on the main thread too.
+    components.update_visited(m_walk_stamp);
+}
 
-        // Then on_update runs one component type at a time, each a pass over
-        // that type's pool, to the components whose owner the walk stamped,
-        // in walk order. Components bridge to shared subsystems (renderer
-        // registries, the light list, per-draw GPU buffers), none of which are
-        // thread-safe, so this stays on the main thread too.
-        components.update_visited(stamp);
-    }
+void runtime::scene::propagate_transforms()
+{
+    traversal_scope traversal{this};
+    walk();
+}
 
-    // The walk is over, so the tree may change again: apply what the hooks
-    // asked for (node destruction, re-parenting, component removal, active
-    // toggles) in the order they asked.
-    apply_deferred();
+void runtime::scene::walk()
+{
+    // One serial depth-first walk settles every world matrix, parents before
+    // children, and stamps the nodes it reaches (effectively active, linked
+    // under the root) with their place in the walk.
+    const uint64_t stamp = ++g_update_stamp;
+    uint32_t order = 0;
+    propagate(root, stamp, order);
+    m_walk_stamp = stamp;
 }
 
 void runtime::scene::propagate(node& target, uint64_t stamp, uint32_t& order)
@@ -213,8 +226,8 @@ runtime::node& runtime::scene::create_node(core::string_id name, node* parent)
     scene* target_scene = target.scene();
     if (target_scene != nullptr && target_scene->is_traversing())
     {
-        // The parent's child list may be under a walk right now; link once
-        // that update has unwound.
+        // The parent's child list may be under a walk right now; link at the
+        // next drain, once the walk has unwound.
         target_scene->defer([&target, &created] { target.add(created); });
     }
     else
@@ -317,7 +330,7 @@ runtime::node& runtime::scene::clone(node& source, node* parent)
 
     // The copy's components go into the store it is scoped to right now; if
     // that scene is mid-walk its pools must not grow, so the rest waits for
-    // the end of its update.
+    // its next drain.
     scene* copy_scene = copy.scene();
     if (copy_scene != nullptr && copy_scene->is_traversing())
     {
@@ -568,7 +581,7 @@ void runtime::scene::apply_deferred()
     {
         // The retired nodes stay allocated (detached, component-less) until a
         // drain completes: a command left over may still name one.
-        LOG_ERR("runtime::scene::apply_deferred: commands kept re-queueing for %d rounds; %zu left for the next update",
+        LOG_ERR("runtime::scene::apply_deferred: commands kept re-queueing for %d rounds; %zu left for the next drain",
                 k_max_drain_rounds,
                 m_pending.size());
         return;

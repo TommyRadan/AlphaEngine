@@ -131,7 +131,7 @@ void runtime::lua_behavior::release_script(bool end_hooks)
     state.failed = false;
 }
 
-void runtime::lua_behavior::call(const char* hook, const float* delta_time)
+void runtime::lua_behavior::call(const char* hook, const double* delta_time)
 {
     instance& state = *m_instance;
     if (state.host == nullptr || !is_loaded() || state.failed)
@@ -198,7 +198,7 @@ void runtime::lua_behavior::on_start()
     ensure_started();
 }
 
-void runtime::lua_behavior::on_fixed_update(float delta_time)
+void runtime::lua_behavior::on_fixed_update(double delta_time)
 {
     if (ensure_started())
     {
@@ -206,7 +206,7 @@ void runtime::lua_behavior::on_fixed_update(float delta_time)
     }
 }
 
-void runtime::lua_behavior::on_update(float delta_time)
+void runtime::lua_behavior::on_update(double delta_time)
 {
     if (ensure_started())
     {

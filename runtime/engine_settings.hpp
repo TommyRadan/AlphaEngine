@@ -67,6 +67,23 @@ namespace runtime
     };
 
     /**
+     * @brief Game-time configuration, read once by @ref engine into its clock (@c core::time). Owned by
+     *        @c runtime: the scheduler it paces is the world layer's.
+     */
+    struct time_settings
+    {
+        /**
+         * @brief The game time scale the engine starts at: 1 (the default) is real time, below 1 slows the game
+         *        down, above 1 speeds it up and 0 starts it paused, clamped to [0, @c core::time::max_time_scale].
+         *        Physics, animation, behaviours, scripts and audio run at it; the frame loop, the editor and the UI
+         *        do not. Changed at run time through @c core::time::set_time_scale (the editor's Profiler panel,
+         *        Lua's @c time.scale). Set from @c time.scale in settings.json, @c ALPHAENGINE_TIME_SCALE or
+         *        @c --time-scale.
+         */
+        float scale{1.0f};
+    };
+
+    /**
      * @brief Every module-owned settings struct the engine is constructed around.
      *
      * Plain data. Each member's own default constructor holds its compiled defaults; @ref register_engine_settings
@@ -85,12 +102,13 @@ namespace runtime
         core::input_settings input;
         content_settings content;
         diagnostics_settings diagnostics;
+        time_settings time;
     };
 
     /**
      * @brief Registers every module's settings section against @p registry, in the order that fixes the
      *        `--help` layout and the "resolved" log lines: window, graphics / camera / shadows, input,
-     *        content, diagnostics, and finally post-processing (registered last so its many options print as
+     *        content, diagnostics, time, and finally post-processing (registered last so its many options print as
      *        their own trailing `--help` block, matching the historical command-line layout).
      */
     void register_engine_settings(core::settings_registry& registry, engine_settings& out);

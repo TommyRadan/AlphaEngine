@@ -92,9 +92,9 @@ namespace
             type.field("speed", &orbiting_sun::m_speed).field("angle", &orbiting_sun::m_angle);
         }
 
-        void on_update(float delta_time) override
+        void on_update(double delta_time) override
         {
-            m_angle += m_speed * (delta_time / 1000.0f);
+            m_angle += m_speed * static_cast<float>(delta_time);
             aim();
         }
 

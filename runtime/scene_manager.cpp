@@ -49,19 +49,43 @@ void runtime::scene_manager::quit()
     m_scenes.front().scene->quit();
 }
 
+void runtime::scene_manager::fixed_update()
+{
+    walk_scenes([](runtime::scene& scene) { scene.fixed_update(); });
+}
+
 void runtime::scene_manager::update()
 {
+    walk_scenes([](runtime::scene& scene) { scene.update(); });
+}
+
+void runtime::scene_manager::propagate_transforms()
+{
+    walk_scenes([](runtime::scene& scene) { scene.propagate_transforms(); });
+}
+
+void runtime::scene_manager::walk_scenes(void (*walk)(runtime::scene&))
+{
     m_updating = true;
-    // Indexed: a hook may load a scene mid-loop, appending here; it gets its
-    // first update this frame. Scenes on their way out are skipped.
+    // Indexed: a hook or command may load a scene mid-loop, appending here;
+    // it gets its first walk right away. Scenes on their way out are
+    // skipped.
     for (std::size_t index = 0; index < m_scenes.size(); ++index)
     {
         if (!m_scenes[index].unload_pending)
         {
-            m_scenes[index].scene->update();
+            walk(*m_scenes[index].scene);
         }
     }
     m_updating = false;
+}
+
+void runtime::scene_manager::apply_deferred()
+{
+    // A command may unload a scene, its own included; the unload waits for
+    // every drain to finish. A scene on its way out applies what it still
+    // holds as it quits.
+    walk_scenes([](runtime::scene& scene) { scene.apply_deferred(); });
     apply_pending_unloads();
 }
 

@@ -21,7 +21,7 @@ double get_delta_time()
     return runtime::current_engine().time->delta_time();
 }
 
-float get_total_time()
+double get_total_time()
 {
     return runtime::current_engine().time->total_time();
 }

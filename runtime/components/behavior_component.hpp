@@ -13,7 +13,6 @@
 #include <type_traits>
 #include <utility>
 
-#include <core/subscription.hpp>
 #include <runtime/behavior.hpp>
 #include <runtime/node.hpp>
 
@@ -27,24 +26,25 @@ namespace runtime
      * hooks — stays put while the component is relocated within its pool, and
      * forwards the hooks the store dispatches:
      *
-     * - @ref on_attach records the owner, subscribes the behaviour to the
-     *   fixed step (@c core::frame on the engine's event bus) and, on an
-     *   effectively active node, enables it;
+     * - @ref on_attach records the owner and, on an effectively active node,
+     *   enables it;
+     * - @ref on_fixed_update — the scene's per-type fixed update, once per
+     *   fixed step, in hierarchy order — runs @ref behavior::on_fixed_update
+     *   with the engine clock's fixed step;
      * - @ref on_update — the scene's per-type update, once per rendered
-     *   frame — runs @ref behavior::on_update with the engine clock's frame
-     *   delta;
+     *   frame, in hierarchy order — runs @ref behavior::on_update with the
+     *   engine clock's (scaled) frame delta;
      * - @ref on_active_changed enables or disables it with its node;
      * - @ref on_destroy disables it if needed, runs
-     *   @ref behavior::on_destroy, drops the fixed-step subscription and
-     *   deletes the behaviour.
+     *   @ref behavior::on_destroy and deletes the behaviour.
      *
-     * The fixed step runs with the behaviour's scene marked as traversing,
-     * like the scene's own update, so the two update hooks follow the same
-     * rule for structural changes (see behavior.hpp). @ref behavior::on_start
-     * runs before whichever update reaches the behaviour first.
+     * Both updates run inside the scene's walk, so the two hooks follow the
+     * same rule for structural changes (see behavior.hpp).
+     * @ref behavior::on_start runs before whichever update reaches the
+     * behaviour first.
      *
-     * Attaching one needs a live engine (for the event bus). Move-only;
-     * cloned through @ref clone, which defers to @ref behavior::clone.
+     * The updates need a live engine (for its clock). Move-only; cloned
+     * through @ref clone, which defers to @ref behavior::clone.
      */
     struct behavior_component
     {
@@ -62,6 +62,9 @@ namespace runtime
 
         /** @brief Attaches the behaviour to @p owner (see the class notes). */
         void on_attach(node& owner);
+
+        /** @brief Runs the behaviour's fixed step (and its start, the first time). */
+        void on_fixed_update(node& owner);
 
         /** @brief Runs the behaviour's frame update (and its start, the first time). */
         void on_update(node& owner);
@@ -103,12 +106,8 @@ namespace runtime
         // True when @p logic is to be updated now — enabled, attached, its
         // node not queued for destruction — starting it the first time.
         static bool begin_update(behavior& logic);
-        static void fixed_step(behavior& logic, float delta_time);
 
         std::unique_ptr<behavior> m_behavior;
-        // The fixed-step listener; its callback holds the behaviour's heap
-        // address, never this component's.
-        core::subscription m_fixed_step;
     };
 
     /**

@@ -69,7 +69,8 @@ namespace rendering_engine
 
         /**
          * @brief The engine clock the frame context's time and delta are
-         *        read from every frame. Null leaves both zero.
+         *        read from every frame, in real (unscaled) seconds. Null
+         *        leaves both zero.
          */
         const core::time* time{nullptr};
 

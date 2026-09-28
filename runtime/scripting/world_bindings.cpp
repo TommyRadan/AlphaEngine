@@ -26,6 +26,7 @@
 #include <core/input.hpp>
 #include <core/log.hpp>
 #include <core/math/math.hpp>
+#include <core/time.hpp>
 #include <rendering_engine/camera/camera.hpp>
 #include <rendering_engine/camera/perspective_camera.hpp>
 #include <rendering_engine/lighting/directional_light.hpp>
@@ -452,8 +453,9 @@ namespace
             return root != nullptr && root->scene() != nullptr;
         };
         type["root"] = sol::readonly_property([](const scene_ref& self) { return make_node_ref(self.resolve().root); });
-        // scene::create_node links the node at the end of the update when
-        // the parent's scene is being walked; destroy_node always waits.
+        // scene::create_node links the node at the next deferred-command
+        // drain when the parent's scene is being walked; destroy_node always
+        // waits for it.
         type["create_node"] = [](const scene_ref& self, sol::optional<std::string> name, sol::optional<node_ref> parent)
         {
             runtime::scene& scene = self.resolve();
@@ -552,6 +554,32 @@ namespace
         input["assign_mouse"] = [](int player) { engine_input().assign_mouse(player); };
         input["keyboard_player"] = [] { return engine_input().keyboard_player(); };
         input["mouse_player"] = [] { return engine_input().mouse_player(); };
+    }
+
+    core::time& engine_time()
+    {
+        return *runtime::current_engine().time;
+    }
+
+    // The type of the one "time" value: a handle to the engine clock that
+    // holds nothing itself, so every read sees the clock as it is.
+    struct time_ref
+    {
+    };
+
+    void bind_time(sol::state& lua, sol::table& types)
+    {
+        sol::usertype<time_ref> type = types.new_usertype<time_ref>("time", sol::no_constructor);
+        type["delta"] = sol::readonly_property([](const time_ref&) { return engine_time().delta_time(); });
+        type["unscaled_delta"] =
+            sol::readonly_property([](const time_ref&) { return engine_time().unscaled_delta_time(); });
+        type["fixed_delta"] = sol::readonly_property([](const time_ref&) { return engine_time().fixed_delta_time(); });
+        type["total"] = sol::readonly_property([](const time_ref&) { return engine_time().total_time(); });
+        type["scale"] = sol::property([](const time_ref&) { return engine_time().time_scale(); },
+                                      [](const time_ref&, double scale) { engine_time().set_time_scale(scale); });
+        type["paused"] = sol::property([](const time_ref&) { return engine_time().is_paused(); },
+                                       [](const time_ref&, bool paused) { engine_time().set_paused(paused); });
+        lua["time"] = time_ref{};
     }
 
     // log.<level>(...): the arguments joined as print joins them, logged
@@ -655,6 +683,7 @@ void runtime::scripting::bind_world(sol::state& lua)
     bind_rigidbody(types);
     bind_audio_source(types);
     bind_input(lua, types);
+    bind_time(lua, types);
     lua.registry()["alphaengine.script_types"] = types;
 
     bind_log(lua);

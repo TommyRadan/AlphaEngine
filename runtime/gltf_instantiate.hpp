@@ -12,8 +12,8 @@
 #include <memory>
 #include <vector>
 
-#include <core/subscription.hpp>
 #include <rendering_engine/resources/gltf_model.hpp>
+#include <runtime/scheduler.hpp>
 
 namespace runtime
 {
@@ -73,20 +73,22 @@ namespace runtime
      *        @ref instantiate_gltf as soon as it has loaded (see
      *        @c asset_cache::load_gltf_async).
      *
-     * The check runs on @c core::render_update, which the engine emits
-     * outside every scene traversal, so the nodes can be created there: an
-     * asset that is already ready spawns on the next tick, one still loading
-     * on the first tick after @c asset_cache::pump resolves it. @p on_spawned,
-     * when set, then receives the spawned roots. A load that failed spawns
-     * nothing (the cache logged why). Either way it happens once.
+     * The check is a system of the engine's scheduler, in the @c update
+     * stage before the scenes update (@c engine_order::gltf_spawn), which
+     * runs outside every scene traversal, so the nodes can be created there,
+     * and keeps running while the game is paused: an asset that is already
+     * ready spawns on the next frame, one still loading on the first frame
+     * after @c asset_cache::pump resolves it. @p on_spawned, when set, then
+     * receives the spawned roots. A load that failed spawns nothing (the
+     * cache logged why). Either way it happens once.
      *
-     * The returned subscription is the pending spawn: keep it alive where it
+     * The returned registration is the pending spawn: keep it alive where it
      * cannot outlive @p parent — in a behaviour on @p parent or one of its
      * ancestors — and destroy it to cancel. It holds @p asset until then;
      * as with @ref instantiate_gltf, the model must outlive the nodes
      * spawned from it.
      */
-    core::subscription
+    system_registration
     instantiate_gltf_when_ready(std::shared_ptr<const rendering_engine::gltf_asset> asset,
                                 node& parent,
                                 std::function<void(const std::vector<node*>& roots)> on_spawned = {});

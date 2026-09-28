@@ -130,9 +130,10 @@ namespace rendering_engine
         // Drives the temporal-AA jitter sequence.
         uint64_t frame_index{0};
 
-        // The engine clock (core::time) in seconds: the time since it
-        // started and this frame's delta. The scene pass hands both to
-        // shaders through the @ref view_globals block.
+        // The engine clock (core::time) in real seconds, whatever the game's
+        // time scale: the time since it started and this frame's delta. The
+        // scene pass hands both to shaders through the @ref view_globals
+        // block.
         float time_seconds{0.0f};
         float delta_seconds{0.0f};
 

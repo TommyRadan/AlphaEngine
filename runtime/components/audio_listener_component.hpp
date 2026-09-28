@@ -20,7 +20,8 @@ namespace runtime
      * Registers with @c core::audio (@ref on_attach) as a candidate for the
      * one active listener 3D playback is mixed against, and keeps its
      * world-space position and right axis in step with the node
-     * (@ref on_update). Arbitration is the audio subsystem's: among the
+     * (@ref sync, which the engine's audio stage runs once per frame, after
+     * the transforms have settled). Arbitration is the audio subsystem's: among the
      * attached, enabled listeners the most recently attached wins, mirroring
      * camera arbitration's spirit (rendering_engine/camera/camera.hpp) but
      * without a priority ranking — so destroying or disabling the winner
@@ -37,8 +38,11 @@ namespace runtime
         /** @brief Registers this node as a listener candidate. */
         void on_attach(node& owner);
 
-        /** @brief Pushes the node's world-space position and right axis to the audio subsystem. */
-        void on_update(node& owner);
+        /**
+         * @brief Pushes @p owner's world-space position and right axis to the
+         *        audio subsystem. Run by the engine's audio stage.
+         */
+        void sync(node& owner);
 
         /** @brief Unregisters the listener. */
         void on_destroy();

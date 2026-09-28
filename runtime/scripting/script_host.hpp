@@ -26,12 +26,7 @@
 
 #include <memory>
 
-#include <core/subscription.hpp>
-
-namespace core
-{
-    struct event_bus;
-}
+#include <runtime/scheduler.hpp>
 
 namespace runtime
 {
@@ -40,8 +35,9 @@ namespace runtime
      *
      * **Hot reload.** In Debug builds the host watches the directory of every
      * script it has loaded from a real file (through
-     * @c core::os::directory_watcher, polled twice a second from
-     * @c core::render_update). When a script's file changes it is loaded
+     * @c core::os::directory_watcher, polled twice a second of real time by
+     * a system of the scheduler's @c update stage, which keeps running while
+     * the game is paused). When a script's file changes it is loaded
      * again and every behaviour running it is re-bound to the new code: the
      * @c self state is kept, a property still declared keeps its value, a
      * new one starts at its default and one no longer declared is cleared.
@@ -63,10 +59,10 @@ namespace runtime
 
         /**
          * @brief Creates the Lua state, opens its libraries, binds the engine
-         *        API and, in Debug builds, starts polling for script changes
-         *        on @p events.
+         *        API and, in Debug builds, adds the system that polls for
+         *        script changes to @p systems.
          */
-        void init(core::event_bus& events);
+        void init(scheduler& systems);
 
         /**
          * @brief Detaches every scripted behaviour still alive from its
@@ -80,6 +76,6 @@ namespace runtime
 
     private:
         std::unique_ptr<state> m_state;
-        core::subscription m_reload_poll;
+        system_registration m_reload_poll;
     };
 } // namespace runtime

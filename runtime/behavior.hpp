@@ -27,31 +27,35 @@
  *   the behaviour itself is deleted right after.
  *
  * Only an enabled behaviour is updated, and none is updated once its node has
- * been queued for destruction.
+ * been queued for destruction or while the game is paused (time scale 0).
  *
- * **Order within an engine tick** (@ref runtime::engine::tick):
+ * **Order within a frame** (the stages of @ref runtime::scheduler):
  *
- * 1. The window pumps input; @c core input events reach their event-bus
- *    listeners. A behaviour that wants input subscribes to those events (in
- *    @ref behavior::on_enable, say) and keeps the tokens as members.
- * 2. For every fixed step drained this frame, @c core::frame is emitted and
- *    every enabled behaviour's @ref behavior::on_fixed_update runs from it,
- *    with the other @c core::frame listeners, in the order the behaviours
- *    were attached. A frame may run zero, one or several fixed steps.
- * 3. @c core::render_update is emitted to its listeners.
- * 4. Every loaded scene updates (the persistent scene first, then load
- *    order): world transforms settle, then @c on_update runs one component
- *    type at a time, which is where every enabled behaviour's
- *    @ref behavior::on_update runs, parents before children. The scene then
- *    applies its deferred commands.
- * 5. The frame is drawn.
+ * 1. @c input — the window pumps input; @c core input events reach their
+ *    event-bus listeners. A behaviour that wants input subscribes to those
+ *    events (in @ref behavior::on_enable, say) and keeps the tokens as
+ *    members, or polls @c core::input from its hooks.
+ * 2. The fixed stage, once per fixed step drained this frame (zero, one or
+ *    several): @c scripts_fixed runs every enabled behaviour's
+ *    @ref behavior::on_fixed_update, in hierarchy order — every loaded scene
+ *    in turn (the persistent scene first, then load order), and within a
+ *    scene depth-first, parents before children, siblings in the order they
+ *    were added — whatever order the behaviours were attached in; then
+ *    @c physics steps the simulation and @c post_physics follows it; then
+ *    the scenes apply their deferred commands, so a node a behaviour
+ *    destroyed is gone, rigid body included, before the next step.
+ * 3. @c update — every enabled behaviour's @ref behavior::on_update, in the
+ *    same hierarchy order; then the deferred commands again.
+ * 4. @c animation, @c transform_propagation, @c audio, @c render_extract;
+ *    then the frame is drawn.
  *
- * Both deltas are in milliseconds, like the @c core::frame and
- * @c core::render_update events they mirror: the fixed step length, and the
- * real time since the previous rendered frame (zero on the first frame).
- * Use @ref behavior::on_update for smooth, render-rate motion (a camera, a
- * spinning prop) and @ref behavior::on_fixed_update for frame-rate
- * independent simulation.
+ * Both deltas are in seconds of game time: the fixed step length
+ * (@c core::time::fixed_delta_time), and the time since the previous
+ * rendered frame scaled by the time scale (@c core::time::delta_time; zero
+ * on the first frame). Use @ref behavior::on_update for smooth, render-rate
+ * motion (a camera, a spinning prop) and @ref behavior::on_fixed_update for
+ * frame-rate independent simulation; the time scale slows both down, since
+ * it thins out the fixed steps and scales the frame delta.
  *
  * **Changing the scene from a hook.** @ref behavior::on_start,
  * @ref behavior::on_fixed_update, @ref behavior::on_update,
@@ -63,8 +67,9 @@
  * @code
  * owner().scene()->destroy_node(owner());
  * @endcode
- * which is applied at the end of the scene's update: the behaviour receives
- * no further updates meanwhile, then gets its @ref behavior::on_disable and
+ * which is applied when the stage that queued it finishes (after the fixed
+ * step, or after the update): the behaviour receives no further updates
+ * meanwhile, then gets its @ref behavior::on_disable and
  * @ref behavior::on_destroy from the teardown.
  *
  * Main-thread-only, like the rest of the scene. Hooks must not throw.
@@ -135,18 +140,19 @@ namespace runtime
 
         /**
          * @brief One fixed simulation step.
-         * @param delta_time Length of the step, in milliseconds.
+         * @param delta_time Length of the step, in seconds.
          */
-        virtual void on_fixed_update(float delta_time)
+        virtual void on_fixed_update(double delta_time)
         {
             (void)delta_time;
         }
 
         /**
          * @brief One rendered frame.
-         * @param delta_time Real time since the previous rendered frame, in milliseconds.
+         * @param delta_time Game time since the previous rendered frame (the real time times the time scale), in
+         *                   seconds.
          */
-        virtual void on_update(float delta_time)
+        virtual void on_update(double delta_time)
         {
             (void)delta_time;
         }
