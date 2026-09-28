@@ -147,10 +147,10 @@ namespace rendering_engine::gpu::backend::vulkan
                 // the open transfer batch. A failed staging step leaves
                 // the buffer allocated but unfilled, with the failure
                 // logged.
-                staged_upload source{};
-                if (stage_upload(descriptor.initial_data, descriptor.size, source))
+                vk_transfer::staged_upload source{};
+                if (m_transfer.stage_upload(descriptor.initial_data, descriptor.size, source))
                 {
-                    record_buffer_copy(source, record.object, 0, descriptor.size);
+                    m_transfer.record_buffer_copy(source, record.object, 0, descriptor.size);
                 }
                 else
                 {
@@ -245,13 +245,13 @@ namespace rendering_engine::gpu::backend::vulkan
         // Device-local: through the staging ring into the open transfer
         // batch, which submit() queues ahead of the frame that reads
         // the buffer.
-        staged_upload source{};
-        if (!stage_upload(data, size, source))
+        vk_transfer::staged_upload source{};
+        if (!m_transfer.stage_upload(data, size, source))
         {
             LOG_ERR("vk_device::write_buffer: %zu bytes not written (staging failed)", size);
             return;
         }
-        record_buffer_copy(source, record->object, offset, size);
+        m_transfer.record_buffer_copy(source, record->object, offset, size);
     }
 
     void vk_device::sync_host_region(vk_buffer& record, uint32_t slot, VkDeviceSize skip_begin, VkDeviceSize skip_end)

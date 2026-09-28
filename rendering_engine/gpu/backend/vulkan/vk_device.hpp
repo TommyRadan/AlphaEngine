@@ -40,7 +40,7 @@
  * vkAllocateMemory, and host-visible buffers are persistently mapped
  * by their allocation. Uploads go through one persistently mapped
  * staging ring and a batched transfer command buffer that is submitted
- * with its own fence ahead of the frame (see stage_upload). Compute
+ * with its own fence ahead of the frame (see vk_transfer.hpp). Compute
  * pipelines and storage-image bind groups are implemented (the IBL
  * convolution runs on the GPU), as are indirect draws,
  * memory barriers, the buffer <-> texture copies, timestamp queries
@@ -68,7 +68,7 @@
 #include <rendering_engine/gpu/backend/vulkan/vk_physical_device.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_pipeline_cache.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_resources.hpp>
-#include <rendering_engine/gpu/backend/vulkan/vk_staging_ring.hpp>
+#include <rendering_engine/gpu/backend/vulkan/vk_transfer.hpp>
 #include <rendering_engine/gpu/device.hpp>
 
 namespace rendering_engine::gpu::backend::vulkan
@@ -342,66 +342,6 @@ namespace rendering_engine::gpu::backend::vulkan
         // that frame's fence (see m_image_last_slot).
         void acquire_swapchain_image();
 
-        // -- Uploads ------------------------------------------------------
-        //
-        // Every upload (buffer initial data, write_buffer to device-local
-        // memory, texture uploads, mipmap generation, the initial layout
-        // transition of a new image) is recorded into the open transfer
-        // batch: one primary command buffer with its own fence. The
-        // batch is submitted ahead of the frame's command buffer in
-        // submit(), or earlier when the staging ring runs out of space.
-        // It opens with an all-commands -> transfer barrier, so its
-        // copies run behind whatever the queue was still executing
-        // (the previous frame, for a flush between frames), and ends
-        // with a transfer -> all-commands memory barrier, so whatever
-        // the frame reads after it in queue order sees the uploads.
-        // Nothing here waits the queue idle: the ring space and
-        // the dedicated staging buffers of a batch are reclaimed when
-        // its fence signals (begin_frame, or a ring-full wait for the
-        // oldest batch). The CPU-side image layout each vk_texture
-        // records is its layout in batch order; a compute pass moves a
-        // storage image to GENERAL inside the frame's command buffer and
-        // back before it ends, so no upload may target a texture bound
-        // by a compute pass that is still open.
-
-        // The open batch's command buffer, begun on first use. Returns
-        // VK_NULL_HANDLE (callers skip their upload, which is logged)
-        // when no batch can be begun or the device is lost.
-        VkCommandBuffer transfer_command_buffer();
-
-        // Source of a staged copy: @p offset bytes into @p buffer hold
-        // the caller's data, and @p cmd is the batch to record the copy
-        // into. Both are valid until the batch is flushed, which nothing
-        // does between stage_upload and the copy that follows it.
-        struct staged_upload
-        {
-            VkBuffer buffer{VK_NULL_HANDLE};
-            VkDeviceSize offset{0};
-            VkCommandBuffer cmd{VK_NULL_HANDLE};
-        };
-
-        // Copy @p size bytes of @p data into staging memory for the open
-        // batch: the ring when the upload fits (a full ring flushes the
-        // open batch and waits for the oldest submitted one, which is
-        // the only wait on the upload path), a dedicated host-visible
-        // buffer released with the batch when it does not. The ring
-        // offset is aligned for any vkCmdCopyBufferToImage texel block
-        // the engine's formats have. Returns false, with the reason
-        // logged, when nothing could be staged.
-        bool stage_upload(const void* data, size_t size, staged_upload& out);
-
-        // Record the copy of a staged upload into @p dst at
-        // @p dst_offset, with the transfer -> transfer barrier a second
-        // copy into the same buffer within one batch needs.
-        void record_buffer_copy(const staged_upload& source, VkBuffer dst, VkDeviceSize dst_offset, VkDeviceSize size);
-
-        // End and queue the open transfer batch on its fence; a batch
-        // that recorded nothing is returned to the pool unsubmitted.
-        // Returns false when the submission failed (the uploads it
-        // carried are lost, logged as an error) — the batch is still
-        // retired in order so the ring stays consistent.
-        bool flush_transfer_batch();
-
         // A primary command buffer for a command encoder, from the
         // current frame's pool. Buffers are handed out in order and
         // reclaimed together when begin_frame resets the pool after the
@@ -530,16 +470,10 @@ namespace rendering_engine::gpu::backend::vulkan
         // the physical device's properties and the grants recorded by
         // create_logical_device.
         void query_capabilities();
-        // The transfer pool the batches allocate from and the per-frame
-        // pools the encoders draw on. Throws when a pool cannot be
-        // created.
+        // The per-frame pools the encoders draw on. Throws when a pool
+        // cannot be created.
         void create_command_pools();
         void destroy_command_pools();
-        // The persistently mapped staging ring (k_staging_ring_bytes).
-        // Returns false, with the failure logged, when the buffer could
-        // not be allocated or mapped; init treats that as fatal.
-        bool create_staging_ring();
-        void destroy_staging_ring();
         // A compute VkPipeline over @p module and @p layout, through the
         // pipeline cache; VK_NULL_HANDLE (logged) on failure.
         VkPipeline build_compute_pipeline(VkShaderModule module, VkPipelineLayout layout);
@@ -606,65 +540,6 @@ namespace rendering_engine::gpu::backend::vulkan
         // read it, so its fence is waited (once; the wait disarms it).
         void wait_slot_before_host_write();
 
-        // One transfer batch: a command buffer from the transfer pool
-        // and the fence its submission signals. A slot cycles
-        // idle -> recording -> in_flight -> idle; the ring bytes and
-        // dedicated staging buffers it holds are released when it is
-        // retired.
-        struct transfer_batch
-        {
-            enum class batch_state
-            {
-                idle,
-                recording,
-                in_flight
-            };
-            struct dedicated_staging
-            {
-                VkBuffer buffer{VK_NULL_HANDLE};
-                VmaAllocation allocation{VK_NULL_HANDLE};
-            };
-
-            VkCommandBuffer cmd{VK_NULL_HANDLE};
-            VkFence fence{VK_NULL_HANDLE};
-            uint64_t id{0};
-            batch_state state{batch_state::idle};
-            // Something was recorded (or staged) into the open batch,
-            // so flush submits it; an untouched batch goes back idle.
-            bool recorded{false};
-            // The submission reached the queue, so retiring the batch
-            // has to wait for its fence. A batch whose submit failed is
-            // retired in turn without a wait.
-            bool submitted{false};
-            std::vector<dedicated_staging> dedicated;
-            // Destination buffers already copied into by this batch;
-            // a second copy into one of them is preceded by a
-            // transfer -> transfer barrier.
-            std::vector<VkBuffer> written_buffers;
-        };
-        // The open batch, begun (or reused from an idle slot) on first
-        // use. Null when none can be begun.
-        transfer_batch* open_transfer_batch();
-        // Release a completed batch: its ring bytes, its dedicated
-        // staging buffers, and the slot.
-        void retire_transfer_batch(transfer_batch& batch);
-        // Reclaim submitted batches in submission order, polling their
-        // fences: every batch up to the first one still executing.
-        void retire_transfer_batches();
-        // Block on the oldest submitted batch and retire it. Returns
-        // false when there is none or the wait failed.
-        bool wait_oldest_transfer_batch();
-        // The submitted batch with the lowest id, or null.
-        transfer_batch* oldest_transfer_batch();
-        // True while a batch with an id up to @p batch_id is still
-        // recording or executing — the gate a deferred destroy waits
-        // behind.
-        bool transfer_batch_live_up_to(uint64_t batch_id) const;
-        // Drop every batch without a fence wait, releasing what it
-        // holds: only under vkDeviceWaitIdle or once the device is
-        // lost, when nothing executes any more (quit).
-        void discard_transfer_batches();
-
         handle_pool<vk_buffer> m_buffers;
         handle_pool<vk_texture> m_textures;
         handle_pool<vk_sampler> m_samplers;
@@ -681,6 +556,7 @@ namespace rendering_engine::gpu::backend::vulkan
         vk_physical_device m_physical_device;
         vk_logical_device m_device{m_instance, m_physical_device};
         vk_pipeline_cache m_pipeline_cache;
+        vk_transfer m_transfer{m_physical_device, m_device};
         vk_descriptor_allocator m_descriptors{m_device};
 
         // Whether presentation waits for vertical sync
@@ -730,28 +606,6 @@ namespace rendering_engine::gpu::backend::vulkan
         // deferred destroy waits for and whether a host write to a
         // multi-buffered region must wait the slot's fence itself.
         bool m_in_frame{false};
-
-        // Transfer batches (see the upload section above). The pool
-        // allows per-buffer resets so an idle slot's buffer is reused
-        // without touching the others; slots are appended as needed and
-        // never freed before quit.
-        VkCommandPool m_transfer_command_pool{VK_NULL_HANDLE};
-        std::vector<transfer_batch> m_transfer_batches;
-        // Index into m_transfer_batches of the recording batch, or
-        // k_no_batch.
-        static constexpr size_t k_no_batch = static_cast<size_t>(-1);
-        size_t m_open_transfer_batch{k_no_batch};
-        uint64_t m_next_transfer_batch_id{1};
-
-        // The staging ring: one host-visible, host-coherent buffer,
-        // mapped for the lifetime of the device, whose bytes are
-        // handed out by m_staging_ring. Uploads larger than half of it
-        // take a dedicated buffer instead (stage_upload).
-        static constexpr VkDeviceSize k_staging_ring_bytes = 32ull * 1024ull * 1024ull;
-        VkBuffer m_staging_buffer{VK_NULL_HANDLE};
-        VmaAllocation m_staging_allocation{VK_NULL_HANDLE};
-        uint8_t* m_staging_mapped{nullptr};
-        staging_ring m_staging_ring;
 
         VkSampler m_fallback_sampler{VK_NULL_HANDLE};
 
