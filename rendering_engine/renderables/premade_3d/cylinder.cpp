@@ -19,16 +19,16 @@
 #include <rendering_engine/renderables/vertex_format_check.hpp>
 #include <rendering_engine/resources/asset_cache.hpp>
 #include <rendering_engine/resources/cache_key.hpp>
-#include <runtime/engine.hpp>
 
-rendering_engine::cylinder::cylinder(material* mat,
+rendering_engine::cylinder::cylinder(asset_cache& cache,
+                                     material* mat,
                                      float radius_top,
                                      float radius_bottom,
                                      float height,
                                      unsigned int radial_segments,
                                      unsigned int height_segments,
                                      bool open_ended)
-    : m_material{mat}, m_radius_top{radius_top}, m_radius_bottom{radius_bottom}, m_height{height},
+    : m_cache{&cache}, m_material{mat}, m_radius_top{radius_top}, m_radius_bottom{radius_bottom}, m_height{height},
       m_radial_segments{radial_segments}, m_height_segments{height_segments}, m_open_ended{open_ended}
 {
 }
@@ -44,7 +44,7 @@ void rendering_engine::cylinder::upload()
     // Build and upload through the asset cache, keyed by every geometry
     // parameter so two cylinders with identical parameters share one upload.
     // The builder only runs on a cache miss.
-    m_mesh = runtime::current_engine().assets->get_or_create_mesh(
+    m_mesh = m_cache->get_or_create_mesh(
         "cylinder:" + cache_key_number(m_radius_top) + ":" + cache_key_number(m_radius_bottom) + ":" +
             cache_key_number(m_height) + ":" + cache_key_number(m_radial_segments) + ":" +
             cache_key_number(m_height_segments) + ":" + cache_key_number(m_open_ended) + ":" +

@@ -16,6 +16,11 @@
 
 #include <core/math/vec2.hpp>
 
+namespace platform
+{
+    struct window;
+}
+
 namespace rendering_engine
 {
     /** @brief An axis-aligned rect in UI pixels. */
@@ -134,16 +139,16 @@ namespace rendering_engine
                                       const core::math::vec2& pixel_size);
 
     /**
-     * @brief @ref window_to_pixels against the engine's window: turns a
+     * @brief @ref window_to_pixels against @p window's live size: turns a
      *        mouse event's position into the UI pixel it is over. Main
-     *        thread, while the renderer is up.
+     *        thread, while the window is up.
      */
-    core::math::vec2 window_to_pixels(const core::math::vec2& point);
+    core::math::vec2 window_to_pixels(const platform::window& window, const core::math::vec2& point);
 
     /**
-     * @brief The engine's drawable as a UI rect, (0, 0) to its pixel size:
+     * @brief @p window's drawable as a UI rect, (0, 0) to its pixel size:
      *        the parent of every top-level element. Main thread, while the
-     *        renderer is up.
+     *        window is up.
      */
-    ui_rect drawable_rect();
+    ui_rect drawable_rect(const platform::window& window);
 } // namespace rendering_engine

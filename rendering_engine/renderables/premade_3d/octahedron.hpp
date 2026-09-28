@@ -7,12 +7,13 @@
 
 namespace rendering_engine
 {
+    struct asset_cache;
     struct material;
 
     // Regular octahedron (6 vertices, 8 triangular faces) built on the shared
     // polyhedron generator with the canonical base table.
     struct octahedron : public polyhedron
     {
-        explicit octahedron(material* mat, float radius = 1.0f, unsigned int detail = 0);
+        octahedron(asset_cache& cache, material* mat, float radius = 1.0f, unsigned int detail = 0);
     };
 } // namespace rendering_engine

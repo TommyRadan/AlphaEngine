@@ -71,8 +71,9 @@ namespace rendering_engine
     struct sprite_batch : public renderable
     {
         // @p mat is the ui material the quads draw with (not owned; the
-        // renderer's lives until renderer::quit).
-        explicit sprite_batch(ui_material* mat);
+        // renderer's lives until renderer::quit). The batch's buffers and
+        // bind groups live on @p device.
+        sprite_batch(gpu::device& device, ui_material* mat);
         ~sprite_batch() override;
 
         sprite_batch(const sprite_batch&) = delete;
@@ -130,6 +131,9 @@ namespace rendering_engine
         // Grows the shared index buffer to hold at least @p quads quads.
         void reserve_indices(std::size_t quads);
 
+        // The device this renderable's GPU resources are created on and
+        // released through; it outlives the renderable.
+        gpu::device* m_device{nullptr};
         ui_material* m_material{nullptr};
         std::vector<texture_group> m_groups;
         gpu::buffer m_index_buffer{};

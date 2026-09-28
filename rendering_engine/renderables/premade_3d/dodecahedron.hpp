@@ -7,6 +7,7 @@
 
 namespace rendering_engine
 {
+    struct asset_cache;
     struct material;
 
     // Regular dodecahedron (20 vertices, 12 pentagonal faces triangulated into
@@ -14,6 +15,6 @@ namespace rendering_engine
     // base table.
     struct dodecahedron : public polyhedron
     {
-        explicit dodecahedron(material* mat, float radius = 1.0f, unsigned int detail = 0);
+        dodecahedron(asset_cache& cache, material* mat, float radius = 1.0f, unsigned int detail = 0);
     };
 } // namespace rendering_engine

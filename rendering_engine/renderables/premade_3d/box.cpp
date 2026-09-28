@@ -19,16 +19,16 @@
 #include <rendering_engine/renderables/vertex_format_check.hpp>
 #include <rendering_engine/resources/asset_cache.hpp>
 #include <rendering_engine/resources/cache_key.hpp>
-#include <runtime/engine.hpp>
 
-rendering_engine::box::box(material* mat,
+rendering_engine::box::box(asset_cache& cache,
+                           material* mat,
                            float width,
                            float height,
                            float depth,
                            unsigned int width_segments,
                            unsigned int height_segments,
                            unsigned int depth_segments)
-    : m_material{mat}, m_width{width}, m_height{height}, m_depth{depth},
+    : m_cache{&cache}, m_material{mat}, m_width{width}, m_height{height}, m_depth{depth},
       m_width_segments{width_segments < 1 ? 1 : width_segments},
       m_height_segments{height_segments < 1 ? 1 : height_segments},
       m_depth_segments{depth_segments < 1 ? 1 : depth_segments}
@@ -46,7 +46,7 @@ void rendering_engine::box::upload()
     // Build and upload through the asset cache, keyed by dimensions and
     // segment counts so two boxes of the same geometry share one upload. The
     // builder only runs on a cache miss.
-    m_mesh = runtime::current_engine().assets->get_or_create_mesh(
+    m_mesh = m_cache->get_or_create_mesh(
         "box:" + cache_key_number(m_width) + "x" + cache_key_number(m_height) + "x" + cache_key_number(m_depth) + ":" +
             cache_key_number(m_width_segments) + "x" + cache_key_number(m_height_segments) + "x" +
             cache_key_number(m_depth_segments) + ":" +

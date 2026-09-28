@@ -3,12 +3,13 @@
 
 #include <rendering_engine/renderables/premade_3d/cone.hpp>
 
-rendering_engine::cone::cone(material* mat,
+rendering_engine::cone::cone(asset_cache& cache,
+                             material* mat,
                              float radius,
                              float height,
                              unsigned int radial_segments,
                              unsigned int height_segments,
                              bool open_ended)
-    : cylinder{mat, 0.0f, radius, height, radial_segments, height_segments, open_ended}
+    : cylinder{cache, mat, 0.0f, radius, height, radial_segments, height_segments, open_ended}
 {
 }

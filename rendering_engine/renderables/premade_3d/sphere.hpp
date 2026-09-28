@@ -12,6 +12,7 @@
 
 namespace rendering_engine
 {
+    struct asset_cache;
     struct material;
     struct mesh_asset;
 
@@ -21,7 +22,7 @@ namespace rendering_engine
     // per-vertex normals stay smooth.
     struct sphere : public renderable
     {
-        explicit sphere(material* mat, unsigned int stacks = 64, unsigned int slices = 128);
+        sphere(asset_cache& cache, material* mat, unsigned int stacks = 64, unsigned int slices = 128);
         ~sphere() override;
 
         core::transform transform;
@@ -40,6 +41,9 @@ namespace rendering_engine
         unsigned int get_index_count() const;
 
     private:
+        // The cache @ref upload fetches the shared geometry through; it
+        // outlives the shape.
+        asset_cache* m_cache{nullptr};
         material* m_material{nullptr};
         unsigned int m_stacks;
         unsigned int m_slices;

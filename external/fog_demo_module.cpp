@@ -72,6 +72,7 @@ namespace
 GAME_MODULE()
 {
     auto& material = runtime::current_engine().renderer->get_phong_material();
+    auto& cache = *runtime::current_engine().assets;
     material.set_diffuse(assets::color{230, 126, 34, 255});
     material.set_specular(assets::color{255, 255, 255, 255});
     material.set_shininess(48.0f);
@@ -93,8 +94,10 @@ GAME_MODULE()
         {
             const float x = static_cast<float>(row) * 4.0f;
             const float y = (static_cast<float>(col) - static_cast<float>(lateral_cols - 1) * 0.5f) * 3.0f;
-            spawn_prop(
-                scene, demo, core::math::vec3{x, y, 0.0f}, std::make_unique<rendering_engine::sphere>(&material));
+            spawn_prop(scene,
+                       demo,
+                       core::math::vec3{x, y, 0.0f},
+                       std::make_unique<rendering_engine::sphere>(cache, &material));
         }
     }
 
@@ -103,7 +106,7 @@ GAME_MODULE()
     spawn_prop(scene,
                demo,
                core::math::vec3{16.0f, 0.0f, -1.5f},
-               std::make_unique<rendering_engine::plane>(&material, 120.0f, 120.0f));
+               std::make_unique<rendering_engine::plane>(cache, &material, 120.0f, 120.0f));
 
     // The lights are components on nodes of their own; the light component
     // keeps the sun's direction on its node's forward (+X) axis.

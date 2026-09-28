@@ -117,9 +117,10 @@ GAME_MODULE()
     {
         return;
     }
+    auto& cache = *runtime::current_engine().assets;
 
     auto pedestal_box = std::make_unique<rendering_engine::box>(
-        dropper->make_material(assets::color{150, 150, 160, 255}), 3.0f, 3.0f, pedestal_height);
+        cache, dropper->make_material(assets::color{150, 150, 160, 255}), 3.0f, 3.0f, pedestal_height);
     pedestal_box->upload();
     runtime::node& pedestal = scene.create_node("pedestal", &demo);
     pedestal.transform.set_position(pedestal_center);
@@ -129,7 +130,8 @@ GAME_MODULE()
     rendering_engine::standard_material* crate_material = dropper->make_material(assets::color{230, 126, 34, 255});
     for (std::size_t i = 0; i < drop_offsets.size(); ++i)
     {
-        auto crate_box = std::make_unique<rendering_engine::box>(crate_material, crate_size, crate_size, crate_size);
+        auto crate_box =
+            std::make_unique<rendering_engine::box>(cache, crate_material, crate_size, crate_size, crate_size);
         crate_box->upload();
         runtime::node& crate = scene.create_node("crate", &demo);
         crate.add_component(runtime::renderable_component{std::move(crate_box)});

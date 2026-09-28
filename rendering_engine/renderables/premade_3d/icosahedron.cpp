@@ -25,8 +25,8 @@ namespace rendering_engine
         };
     } // namespace
 
-    icosahedron::icosahedron(material* mat, float radius, unsigned int detail)
-        : polyhedron{mat, base_vertices, base_indices, radius, detail}
+    icosahedron::icosahedron(asset_cache& cache, material* mat, float radius, unsigned int detail)
+        : polyhedron{cache, mat, base_vertices, base_indices, radius, detail}
     {
     }
 } // namespace rendering_engine

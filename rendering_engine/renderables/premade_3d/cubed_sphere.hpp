@@ -12,6 +12,7 @@
 
 namespace rendering_engine
 {
+    struct asset_cache;
     struct material;
     struct mesh_asset;
 
@@ -27,7 +28,7 @@ namespace rendering_engine
         // @p subdivisions is the per-face grid resolution (NxN quads).
         // Total mesh has 6*subdivisions*subdivisions quads = 12*N*N
         // triangles.
-        explicit cubed_sphere(material* mat, unsigned int subdivisions = 32);
+        cubed_sphere(asset_cache& cache, material* mat, unsigned int subdivisions = 32);
         ~cubed_sphere() override;
 
         core::transform transform;
@@ -46,6 +47,9 @@ namespace rendering_engine
         unsigned int get_index_count() const;
 
     private:
+        // The cache @ref upload fetches the shared geometry through; it
+        // outlives the shape.
+        asset_cache* m_cache{nullptr};
         material* m_material{nullptr};
         unsigned int m_subdivisions;
         unsigned int m_index_count{0};

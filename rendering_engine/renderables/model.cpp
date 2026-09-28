@@ -17,13 +17,12 @@
 #include <rendering_engine/renderables/per_draw_ubo.hpp>
 #include <rendering_engine/renderables/vertex_format_check.hpp>
 #include <rendering_engine/resources/mesh_asset.hpp>
-#include <runtime/engine.hpp>
 
-rendering_engine::model::model(material* mat) : m_material{mat} {}
+rendering_engine::model::model(gpu::device& device, material* mat) : m_device{&device}, m_material{mat} {}
 
 rendering_engine::model::~model()
 {
-    auto& gpu = *runtime::current_engine().gpu;
+    auto& gpu = *m_device;
     if (m_draw_bind_group.valid())
     {
         gpu.destroy(m_draw_bind_group);
@@ -69,7 +68,7 @@ void rendering_engine::model::upload_mesh(const assets::mesh_data& mesh)
         m_has_local_bounds = true;
     }
 
-    auto& gpu = *runtime::current_engine().gpu;
+    auto& gpu = *m_device;
 
     gpu::buffer_descriptor vertex_descriptor{};
     vertex_descriptor.size = m_vertex_count * m_vertex_stride;
@@ -219,7 +218,7 @@ void rendering_engine::model::collect_draw_items(std::vector<draw_item>& out)
 
 bool rendering_engine::model::bind_skinned(draw_item& item)
 {
-    auto& gpu = *runtime::current_engine().gpu;
+    auto& gpu = *m_device;
 
     const gpu::bind_group_layout layout = m_material->per_draw_layout();
     if (m_draw_bind_group.valid() && m_draw_bind_group_layout != layout)

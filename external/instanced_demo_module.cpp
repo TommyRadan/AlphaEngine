@@ -7,6 +7,7 @@
 #include <assets/vertex.hpp>
 #include <core/log.hpp>
 #include <core/math/math.hpp>
+#include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/materials/instanced_material.hpp>
 #include <rendering_engine/renderables/instanced_mesh.hpp>
 #include <rendering_engine/renderer.hpp>
@@ -140,7 +141,8 @@ GAME_MODULE()
             return assets::mesh_data::from_vertices(vertices, std::move(indices));
         });
 
-    auto cubes = std::make_unique<rendering_engine::instanced_mesh>(&material, instance_count);
+    auto cubes =
+        std::make_unique<rendering_engine::instanced_mesh>(*runtime::current_engine().gpu, &material, instance_count);
     cubes->set_geometry(std::move(cube));
 
     std::vector<core::math::vec3> base_positions;

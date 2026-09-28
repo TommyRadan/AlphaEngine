@@ -14,6 +14,11 @@
 
 namespace rendering_engine
 {
+    namespace gpu
+    {
+        struct device;
+    }
+
     struct material;
 
     // How successive vertices are joined into segments. @c strip joins
@@ -45,7 +50,7 @@ namespace rendering_engine
         // @ref line_material (its pipeline must bake line topology)
         // created by @ref rendering_engine::renderer and shared by every
         // line that draws under it.
-        explicit line(material* mat);
+        line(gpu::device& device, material* mat);
         ~line() override;
 
         core::transform transform;
@@ -77,6 +82,9 @@ namespace rendering_engine
         bool world_bounds(core::math::aabb& out) const final;
 
     private:
+        // The device this renderable's GPU resources are created on and
+        // released through; it outlives the renderable.
+        gpu::device* m_device{nullptr};
         material* m_material{nullptr};
         line_mode m_mode{line_mode::strip};
         std::vector<assets::vertex_position_color> m_vertices;

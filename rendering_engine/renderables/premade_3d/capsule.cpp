@@ -19,11 +19,14 @@
 #include <rendering_engine/renderables/vertex_format_check.hpp>
 #include <rendering_engine/resources/asset_cache.hpp>
 #include <rendering_engine/resources/cache_key.hpp>
-#include <runtime/engine.hpp>
 
-rendering_engine::capsule::capsule(
-    material* mat, float radius, float length, unsigned int cap_segments, unsigned int radial_segments)
-    : m_material{mat}, m_radius{radius}, m_length{length}, m_cap_segments{cap_segments},
+rendering_engine::capsule::capsule(asset_cache& cache,
+                                   material* mat,
+                                   float radius,
+                                   float length,
+                                   unsigned int cap_segments,
+                                   unsigned int radial_segments)
+    : m_cache{&cache}, m_material{mat}, m_radius{radius}, m_length{length}, m_cap_segments{cap_segments},
       m_radial_segments{radial_segments}
 {
 }
@@ -39,7 +42,7 @@ void rendering_engine::capsule::upload()
     // Build and upload through the asset cache, keyed by radius, length and
     // segment counts so two capsules of the same geometry share one upload. The
     // builder only runs on a cache miss.
-    m_mesh = runtime::current_engine().assets->get_or_create_mesh(
+    m_mesh = m_cache->get_or_create_mesh(
         "capsule:" + cache_key_number(m_radius) + ":" + cache_key_number(m_length) + ":" +
             cache_key_number(m_cap_segments) + "x" + cache_key_number(m_radial_segments) + ":" +
             assets::vertex_format_name(assets::vertex_format::position_uv_normal_tangent),

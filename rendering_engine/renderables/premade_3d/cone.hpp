@@ -7,6 +7,7 @@
 
 namespace rendering_engine
 {
+    struct asset_cache;
     struct material;
 
     // Cone primitive. A cone is just a
@@ -14,11 +15,12 @@ namespace rendering_engine
     // forwards to the cylinder generator with radius_top fixed at 0.
     struct cone : public cylinder
     {
-        explicit cone(material* mat,
-                      float radius = 1.0f,
-                      float height = 1.0f,
-                      unsigned int radial_segments = 32,
-                      unsigned int height_segments = 1,
-                      bool open_ended = false);
+        cone(asset_cache& cache,
+             material* mat,
+             float radius = 1.0f,
+             float height = 1.0f,
+             unsigned int radial_segments = 32,
+             unsigned int height_segments = 1,
+             bool open_ended = false);
     };
 } // namespace rendering_engine

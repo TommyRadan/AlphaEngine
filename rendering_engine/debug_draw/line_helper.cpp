@@ -3,6 +3,7 @@
 
 #include <rendering_engine/debug_draw/line_helper.hpp>
 
+#include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/materials/line_material.hpp>
 #include <rendering_engine/renderer.hpp>
 #include <runtime/engine.hpp>
@@ -10,7 +11,8 @@
 namespace rendering_engine::debug_draw
 {
     line_helper::line_helper(const char* name)
-        : helper(name, helper_layer::overlay), m_line(&runtime::current_engine().renderer->get_debug_line_material())
+        : helper(name, helper_layer::overlay),
+          m_line(*runtime::current_engine().gpu, &runtime::current_engine().renderer->get_debug_line_material())
     {
         // Every gizmo is a list of independent segments (vertex pairs).
         m_line.set_mode(line_mode::segments);

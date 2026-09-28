@@ -19,11 +19,11 @@
 #include <rendering_engine/renderables/vertex_format_check.hpp>
 #include <rendering_engine/resources/asset_cache.hpp>
 #include <rendering_engine/resources/cache_key.hpp>
-#include <runtime/engine.hpp>
 
 rendering_engine::circle::circle(
-    material* mat, float radius, unsigned int segments, float theta_start, float theta_length)
-    : m_material{mat}, m_radius{radius}, m_segments{segments}, m_theta_start{theta_start}, m_theta_length{theta_length}
+    asset_cache& cache, material* mat, float radius, unsigned int segments, float theta_start, float theta_length)
+    : m_cache{&cache}, m_material{mat}, m_radius{radius}, m_segments{segments}, m_theta_start{theta_start},
+      m_theta_length{theta_length}
 {
 }
 
@@ -38,7 +38,7 @@ void rendering_engine::circle::upload()
     // Build and upload through the asset cache, keyed by every geometry
     // parameter so two circles with identical parameters share one upload. The
     // builder only runs on a cache miss.
-    m_mesh = runtime::current_engine().assets->get_or_create_mesh(
+    m_mesh = m_cache->get_or_create_mesh(
         "circle:" + cache_key_number(m_radius) + ":" + cache_key_number(m_segments) + ":" +
             cache_key_number(m_theta_start) + ":" + cache_key_number(m_theta_length) + ":" +
             assets::vertex_format_name(assets::vertex_format::position_uv_normal_tangent),

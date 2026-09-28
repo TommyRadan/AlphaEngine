@@ -21,7 +21,6 @@
 #include <rendering_engine/renderables/per_draw_ubo.hpp>
 #include <rendering_engine/renderables/vertex_format_check.hpp>
 #include <rendering_engine/resources/asset_cache.hpp>
-#include <runtime/engine.hpp>
 
 namespace
 {
@@ -40,13 +39,14 @@ namespace
 
 namespace rendering_engine
 {
-    polyhedron::polyhedron(material* mat,
+    polyhedron::polyhedron(asset_cache& cache,
+                           material* mat,
                            std::vector<float> base_vertices,
                            std::vector<uint32_t> base_indices,
                            float radius,
                            unsigned int detail)
-        : m_material{mat}, m_base_vertices{std::move(base_vertices)}, m_base_indices{std::move(base_indices)},
-          m_radius{radius}, m_detail{detail}
+        : m_cache{&cache}, m_material{mat}, m_base_vertices{std::move(base_vertices)},
+          m_base_indices{std::move(base_indices)}, m_radius{radius}, m_detail{detail}
     {
     }
 
@@ -80,7 +80,7 @@ namespace rendering_engine
 
         // Build and upload through the asset cache. The builder only runs on a
         // cache miss; matching keys share one upload.
-        m_mesh = runtime::current_engine().assets->get_or_create_mesh(
+        m_mesh = m_cache->get_or_create_mesh(
             key,
             [this]
             {

@@ -8,7 +8,6 @@
 #include <initializer_list>
 
 #include <rendering_engine/gpu/device.hpp>
-#include <runtime/engine.hpp>
 
 namespace rendering_engine
 {
@@ -32,7 +31,7 @@ namespace rendering_engine
         }
     } // namespace
 
-    sprite_batch::sprite_batch(ui_material* mat) : m_material{mat} {}
+    sprite_batch::sprite_batch(gpu::device& device, ui_material* mat) : m_device{&device}, m_material{mat} {}
 
     sprite_batch::~sprite_batch()
     {
@@ -43,7 +42,7 @@ namespace rendering_engine
         m_groups.clear();
         if (m_index_buffer.valid())
         {
-            runtime::current_engine().gpu->destroy(m_index_buffer);
+            m_device->destroy(m_index_buffer);
             m_index_buffer = {};
         }
     }
@@ -142,7 +141,7 @@ namespace rendering_engine
 
     void sprite_batch::release(texture_group& group)
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
         if (group.bind_group.valid())
         {
             gpu.destroy(group.bind_group);
@@ -162,7 +161,7 @@ namespace rendering_engine
         {
             return;
         }
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
         if (m_index_buffer.valid())
         {
             gpu.destroy(m_index_buffer);
@@ -225,7 +224,7 @@ namespace rendering_engine
         // collect runs inside the frame bracket: the buffers are
         // dynamic_data, so the device writes this frame's copy of each
         // (one per frame in flight) and no frame still drawing reads it.
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
         for (texture_group& group : m_groups)
         {
             const std::size_t quads = group.vertices.size() / vertices_per_quad;

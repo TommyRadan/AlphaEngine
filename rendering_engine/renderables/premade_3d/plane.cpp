@@ -18,11 +18,14 @@
 #include <rendering_engine/renderables/vertex_format_check.hpp>
 #include <rendering_engine/resources/asset_cache.hpp>
 #include <rendering_engine/resources/cache_key.hpp>
-#include <runtime/engine.hpp>
 
-rendering_engine::plane::plane(
-    material* mat, float width, float height, unsigned int width_segments, unsigned int height_segments)
-    : m_material{mat}, m_width{width}, m_height{height}, m_width_segments{width_segments},
+rendering_engine::plane::plane(asset_cache& cache,
+                               material* mat,
+                               float width,
+                               float height,
+                               unsigned int width_segments,
+                               unsigned int height_segments)
+    : m_cache{&cache}, m_material{mat}, m_width{width}, m_height{height}, m_width_segments{width_segments},
       m_height_segments{height_segments}
 {
 }
@@ -38,7 +41,7 @@ void rendering_engine::plane::upload()
     // Build and upload through the asset cache, keyed by dimensions and segment
     // counts so two planes of the same geometry share one upload. The builder
     // only runs on a cache miss.
-    m_mesh = runtime::current_engine().assets->get_or_create_mesh(
+    m_mesh = m_cache->get_or_create_mesh(
         "plane:" + cache_key_number(m_width) + "x" + cache_key_number(m_height) + ":" +
             cache_key_number(m_width_segments) + "x" + cache_key_number(m_height_segments) + ":" +
             assets::vertex_format_name(assets::vertex_format::position_uv_normal_tangent),

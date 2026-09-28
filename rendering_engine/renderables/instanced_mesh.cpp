@@ -14,7 +14,6 @@
 #include <rendering_engine/materials/material.hpp>
 #include <rendering_engine/renderables/vertex_format_check.hpp>
 #include <rendering_engine/resources/mesh_asset.hpp>
-#include <runtime/engine.hpp>
 
 namespace
 {
@@ -26,8 +25,9 @@ namespace
     constexpr size_t indirect_command_size = indirect_command_uints * sizeof(uint32_t);
 } // namespace
 
-rendering_engine::instanced_mesh::instanced_mesh(material* mat, uint32_t instance_count)
-    : m_material{mat}, m_capacity{instance_count}, m_instance_count{instance_count}, m_instances(instance_count)
+rendering_engine::instanced_mesh::instanced_mesh(gpu::device& device, material* mat, uint32_t instance_count)
+    : m_device{&device}, m_material{mat}, m_capacity{instance_count}, m_instance_count{instance_count},
+      m_instances(instance_count)
 {
     // The per-instance record must match the stride the instanced material's
     // slot-1 vertex layout was built with.
@@ -37,7 +37,7 @@ rendering_engine::instanced_mesh::instanced_mesh(material* mat, uint32_t instanc
 
 rendering_engine::instanced_mesh::~instanced_mesh()
 {
-    auto& gpu = *runtime::current_engine().gpu;
+    auto& gpu = *m_device;
     if (m_indirect_buffer.valid())
     {
         gpu.destroy(m_indirect_buffer);
@@ -81,7 +81,7 @@ void rendering_engine::instanced_mesh::upload_geometry(const std::vector<assets:
     m_local_bounds = bounds.value_or(core::math::aabb{});
     m_world_bounds_dirty = true;
 
-    auto& gpu = *runtime::current_engine().gpu;
+    auto& gpu = *m_device;
 
     gpu::buffer_descriptor vertex_descriptor{};
     vertex_descriptor.size = vertices.size() * sizeof(assets::vertex_position_uv_normal);
@@ -236,7 +236,7 @@ void rendering_engine::instanced_mesh::collect_draw_items(std::vector<draw_item>
         return;
     }
 
-    auto& gpu = *runtime::current_engine().gpu;
+    auto& gpu = *m_device;
 
     // Per-instance vertex stream: one {mat4 model; vec4 color;} record per
     // instance, bound to slot 1 and stepped once per instance by the
