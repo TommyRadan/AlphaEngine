@@ -28,8 +28,7 @@ namespace
 
 namespace rendering_engine
 {
-    std::shared_ptr<material_template> instanced_material::create_template(gpu::device& device,
-                                                                           gpu::bind_group_layout frame_layout)
+    material_template_descriptor instanced_material::describe()
     {
         material_template_descriptor descriptor{};
         descriptor.name = "instanced";
@@ -61,14 +60,15 @@ namespace rendering_engine
         descriptor.vertex_layouts = {geometry_layout, instance_layout};
 
         // No per-draw bind group: the per-instance data is a vertex stream.
-        descriptor.frame_layout = frame_layout;
+        descriptor.frame = material_frame::scene;
 
         // Per-material layout (slot 2): the flat-tint UBO owned by each
         // instance.
         descriptor.material_layout.entries.push_back(
             {gpu::shader_bindings::material_params, gpu::binding_kind::uniform_buffer});
 
-        return std::make_shared<material_template>(device, std::move(descriptor));
+        descriptor.instance_factory = make_instance_factory<instanced_material>();
+        return descriptor;
     }
 
     instanced_material::instanced_material(std::shared_ptr<material_template> tmpl)

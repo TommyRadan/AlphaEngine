@@ -12,11 +12,13 @@
  * and in a debug build it also registers the module with the
  * @ref shader_hot_reload installed for the device, if any.
  *
- * The hot reload (debug builds only) watches the directory the shader
- * library's override root points at — the source tree's @c shaders/, or
- * @c ALPHAENGINE_SHADER_DIR — through a polling
- * @ref core::os::directory_watcher, about once a second. When files
- * change it drops their cached text from the library, works out which
+ * The hot reload (debug builds only) watches, about once a second, the
+ * directory the shader library's override root points at — the source
+ * tree's @c shaders/, or @c ALPHAENGINE_SHADER_DIR — through a polling
+ * @ref core::os::directory_watcher, and the asset shaders the library
+ * has read from the content directory, through their modification times
+ * (@ref shader_library::changed_asset_paths). When files change it
+ * drops their cached text from the library, works out which
  * registered modules read one of them (their own source or anything they
  * transitively @c #include, see @ref shader_dependencies), recompiles
  * those and hands the new SPIR-V to @c device::reload_shader_modules,
@@ -41,6 +43,7 @@
 #include <chrono>
 #include <cstddef>
 #include <filesystem>
+#include <optional>
 #include <set>
 #include <string>
 #include <vector>
@@ -90,7 +93,9 @@ namespace rendering_engine::gpu
          * @param device The device whose modules are reloaded; must
          *        outlive this object.
          * @param root   The directory to watch: the shader library's
-         *        override root, whose files the library reads.
+         *        override root, whose files the library reads, or empty
+         *        when overrides are off (the asset shaders are watched
+         *        either way).
          */
         shader_hot_reload(device& device, std::filesystem::path root);
         ~shader_hot_reload();
@@ -133,7 +138,8 @@ namespace rendering_engine::gpu
         void reload_pending();
 
         device* m_device{nullptr};
-        core::os::directory_watcher m_watcher;
+        // Absent while the library has no override root.
+        std::optional<core::os::directory_watcher> m_watcher;
         // The watched root as a generic path string ending in '/', the
         // prefix stripped from a change to get its library path.
         std::string m_root_prefix;

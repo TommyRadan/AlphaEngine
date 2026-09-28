@@ -31,8 +31,7 @@ namespace
 
 namespace rendering_engine
 {
-    std::shared_ptr<material_template> line_material::create_template(gpu::device& device,
-                                                                      gpu::bind_group_layout frame_layout)
+    material_template_descriptor line_material::describe()
     {
         material_template_descriptor descriptor{};
         descriptor.name = "line";
@@ -52,7 +51,7 @@ namespace rendering_engine
 
         // No per-draw bindings: the model + normal matrix are pushed
         // (per_draw_ubo.hpp), so the per-draw layout (slot 1) is empty.
-        descriptor.frame_layout = frame_layout;
+        descriptor.frame = material_frame::scene;
 
         // Per-material layout (slot 2): the tint params UBO owned by each
         // instance.
@@ -60,7 +59,8 @@ namespace rendering_engine
             {gpu::shader_bindings::material_params, gpu::binding_kind::uniform_buffer});
 
         descriptor.topology = gpu::primitive_topology::lines;
-        return std::make_shared<material_template>(device, std::move(descriptor));
+        descriptor.instance_factory = make_instance_factory<line_material>();
+        return descriptor;
     }
 
     line_material::line_material(std::shared_ptr<material_template> tmpl, bool depth_tested)

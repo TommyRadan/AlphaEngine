@@ -4,11 +4,15 @@
 #include <rendering_engine/materials/material_template.hpp>
 
 #include <algorithm>
+#include <initializer_list>
+#include <string>
 #include <utility>
 
 #include <core/log.hpp>
 #include <rendering_engine/gpu/device.hpp>
+#include <rendering_engine/gpu/shader_bindings.hpp>
 #include <rendering_engine/gpu/shader_hot_reload.hpp>
+#include <rendering_engine/gpu/shader_library.hpp>
 #include <rendering_engine/renderables/per_draw_ubo.hpp>
 
 namespace
@@ -46,12 +50,123 @@ namespace
         }
         return extent;
     }
+
+    // The slot-0 layout that reads every channel of the named @p format, in
+    // record order at locations 0, 1, 2, ...; no attributes for a record
+    // without a fixed channel list (custom, or the skinned one, whose
+    // joints need the skinning fields of the descriptor).
+    gpu::vertex_buffer_layout derived_vertex_layout(assets::vertex_format format)
+    {
+        struct channel
+        {
+            uint32_t components;
+        };
+        std::vector<channel> channels;
+        switch (format)
+        {
+        case assets::vertex_format::position:
+            channels = {{3}};
+            break;
+        case assets::vertex_format::position_color:
+        case assets::vertex_format::position_normal:
+            channels = {{3}, {3}};
+            break;
+        case assets::vertex_format::position_uv:
+            channels = {{3}, {2}};
+            break;
+        case assets::vertex_format::position_color_normal:
+            channels = {{3}, {3}, {3}};
+            break;
+        case assets::vertex_format::position_uv_normal:
+            channels = {{3}, {2}, {3}};
+            break;
+        case assets::vertex_format::position_uv_normal_tangent:
+            channels = {{3}, {2}, {3}, {4}};
+            break;
+        case assets::vertex_format::position_uv_normal_tangent_skin:
+        case assets::vertex_format::custom:
+            break;
+        }
+        gpu::vertex_buffer_layout layout{};
+        // The renderable supplies the stride per draw.
+        layout.stride = 0;
+        uint32_t offset = 0;
+        for (std::size_t i = 0; i < channels.size(); ++i)
+        {
+            layout.attributes.push_back(
+                {static_cast<uint32_t>(i), channels[i].components, gpu::scalar_type::float32, offset});
+            offset += channels[i].components * static_cast<uint32_t>(sizeof(float));
+        }
+        return layout;
+    }
+
+    bool derivable_vertex_format(assets::vertex_format format)
+    {
+        return !derived_vertex_layout(format).attributes.empty();
+    }
+
+    // The engine keyword whose define is @p name, as its key bit; 0 for none.
+    uint32_t engine_keyword_bit(std::string_view name)
+    {
+        for (const rendering_engine::material_keyword keyword : rendering_engine::all_material_keywords)
+        {
+            if (name == rendering_engine::keyword_define(keyword))
+            {
+                return rendering_engine::keyword_bit(keyword);
+            }
+        }
+        return 0;
+    }
+
+    // @p descriptor with what it leaves to derivation filled in: the
+    // slot-0 layout from the vertex format, the tangent-less format, the
+    // parameter block's size and the per-material layout from the
+    // declared parameters and textures.
+    rendering_engine::material_template_descriptor derive(rendering_engine::material_template_descriptor descriptor)
+    {
+        using rendering_engine::material_template_descriptor;
+        if (descriptor.vertex_layouts.empty() && derivable_vertex_format(descriptor.required_vertex_format))
+        {
+            descriptor.vertex_layouts.push_back(derived_vertex_layout(descriptor.required_vertex_format));
+        }
+        if (descriptor.vertex_format_without_tangents == assets::vertex_format::custom &&
+            descriptor.tangent_location == material_template_descriptor::no_tangent_location)
+        {
+            descriptor.vertex_format_without_tangents = descriptor.required_vertex_format;
+        }
+        if (descriptor.parameter_block_size == 0)
+        {
+            uint32_t end = 0;
+            for (const rendering_engine::material_parameter& parameter : descriptor.parameters)
+            {
+                end = std::max(end, parameter.offset + rendering_engine::material_parameter_size(parameter.type));
+            }
+            descriptor.parameter_block_size = (end + 15u) & ~15u;
+        }
+        if (descriptor.material_layout.entries.empty())
+        {
+            if (descriptor.parameter_block_size != 0)
+            {
+                descriptor.material_layout.entries.push_back(
+                    {gpu::shader_bindings::material_params, gpu::binding_kind::uniform_buffer});
+            }
+            for (const rendering_engine::material_texture_slot& slot : descriptor.textures)
+            {
+                gpu::bind_group_layout_entry entry{slot.binding, gpu::binding_kind::texture};
+                entry.dimension = slot.dimension;
+                descriptor.material_layout.entries.push_back(entry);
+            }
+        }
+        return descriptor;
+    }
 } // namespace
 
 namespace rendering_engine
 {
-    material_template::material_template(gpu::device& device, material_template_descriptor descriptor)
-        : m_device(&device), m_descriptor(std::move(descriptor))
+    material_template::material_template(gpu::device& device,
+                                         material_template_descriptor descriptor,
+                                         gpu::bind_group_layout frame_layout)
+        : m_device(&device), m_descriptor(derive(std::move(descriptor))), m_frame_layout(frame_layout)
     {
         // The per-draw layout is always created, even when empty, so the
         // slot numbering (frame, draw, material) is the same for every
@@ -121,6 +236,170 @@ namespace rendering_engine
         return m_descriptor;
     }
 
+    std::string material_template::validate(const material_template_descriptor& descriptor)
+    {
+        if (descriptor.name.empty())
+        {
+            return "the template has no name";
+        }
+        for (const gpu::shader_variant* stage : {&descriptor.vertex_shader, &descriptor.fragment_shader})
+        {
+            if (stage->path.empty() || !gpu::shader_library::contains(stage->path))
+            {
+                return "no shader named '" + stage->path + "' in the content directory's " +
+                       std::string{gpu::shader_library::asset_directory} + "/ or the engine's";
+            }
+        }
+        if (descriptor.vertex_layouts.empty() && !derivable_vertex_format(descriptor.required_vertex_format))
+        {
+            return std::string{"no vertex layout, and none can be derived from the vertex format "} +
+                   assets::vertex_format_name(descriptor.required_vertex_format);
+        }
+        const bool declared = !descriptor.parameters.empty() || !descriptor.textures.empty();
+        if (declared && !descriptor.material_layout.entries.empty())
+        {
+            return "both an explicit per-material layout and declared parameters or textures";
+        }
+
+        std::vector<const material_parameter*> by_offset;
+        for (const material_parameter& parameter : descriptor.parameters)
+        {
+            if (parameter.name.empty())
+            {
+                return "a parameter has no name";
+            }
+            if (parameter.offset % material_parameter_alignment(parameter.type) != 0)
+            {
+                return "parameter '" + parameter.name + "' is off its std140 alignment";
+            }
+            if (descriptor.parameter_block_size != 0 &&
+                parameter.offset + material_parameter_size(parameter.type) > descriptor.parameter_block_size)
+            {
+                return "parameter '" + parameter.name + "' ends past the parameter block";
+            }
+            for (const material_parameter* other : by_offset)
+            {
+                if (other->name == parameter.name)
+                {
+                    return "two parameters are named '" + parameter.name + "'";
+                }
+            }
+            by_offset.push_back(&parameter);
+        }
+        std::sort(by_offset.begin(),
+                  by_offset.end(),
+                  [](const material_parameter* a, const material_parameter* b) { return a->offset < b->offset; });
+        for (std::size_t i = 1; i < by_offset.size(); ++i)
+        {
+            if (by_offset[i - 1]->offset + material_parameter_size(by_offset[i - 1]->type) > by_offset[i]->offset)
+            {
+                return "parameters '" + by_offset[i - 1]->name + "' and '" + by_offset[i]->name + "' overlap";
+            }
+        }
+
+        if (descriptor.keywords.size() > material_template_descriptor::max_template_keywords)
+        {
+            return "more than " + std::to_string(material_template_descriptor::max_template_keywords) + " keywords";
+        }
+        for (std::size_t i = 0; i < descriptor.keywords.size(); ++i)
+        {
+            const std::string& keyword = descriptor.keywords[i];
+            if (keyword.empty() || engine_keyword_bit(keyword) != 0 ||
+                std::find(descriptor.keywords.begin() + static_cast<std::ptrdiff_t>(i) + 1,
+                          descriptor.keywords.end(),
+                          keyword) != descriptor.keywords.end())
+            {
+                return "keyword '" + keyword + "' is empty, an engine keyword or declared twice";
+            }
+        }
+
+        for (std::size_t i = 0; i < descriptor.textures.size(); ++i)
+        {
+            const material_texture_slot& slot = descriptor.textures[i];
+            if (slot.name.empty())
+            {
+                return "a texture slot has no name";
+            }
+            if (slot.binding == gpu::shader_bindings::material_params)
+            {
+                return "texture slot '" + slot.name + "' takes the parameter block's binding";
+            }
+            for (std::size_t j = 0; j < i; ++j)
+            {
+                if (descriptor.textures[j].name == slot.name || descriptor.textures[j].binding == slot.binding)
+                {
+                    return "texture slot '" + slot.name + "' repeats another slot's name or binding";
+                }
+            }
+            if (!slot.keyword.empty() && engine_keyword_bit(slot.keyword) == 0 &&
+                std::find(descriptor.keywords.begin(), descriptor.keywords.end(), slot.keyword) ==
+                    descriptor.keywords.end())
+            {
+                return "texture slot '" + slot.name + "' names the unknown keyword '" + slot.keyword + "'";
+            }
+        }
+        return {};
+    }
+
+    gpu::bind_group_layout material_template::frame_layout() const
+    {
+        return m_frame_layout;
+    }
+
+    const material_parameter* material_template::find_parameter(std::string_view name) const
+    {
+        for (const material_parameter& parameter : m_descriptor.parameters)
+        {
+            if (parameter.name == name)
+            {
+                return &parameter;
+            }
+        }
+        return nullptr;
+    }
+
+    int material_template::find_texture(std::string_view name) const
+    {
+        for (std::size_t i = 0; i < m_descriptor.textures.size(); ++i)
+        {
+            if (m_descriptor.textures[i].name == name)
+            {
+                return static_cast<int>(i);
+            }
+        }
+        return -1;
+    }
+
+    bool material_template::declares_resources() const
+    {
+        return !m_descriptor.parameters.empty() || !m_descriptor.textures.empty();
+    }
+
+    uint32_t material_template::keyword_bit_for(std::string_view name) const
+    {
+        if (const uint32_t bit = engine_keyword_bit(name); bit != 0)
+        {
+            return bit;
+        }
+        for (std::size_t i = 0; i < m_descriptor.keywords.size(); ++i)
+        {
+            if (m_descriptor.keywords[i] == name)
+            {
+                return 1u << (material_template_descriptor::first_template_keyword + static_cast<uint32_t>(i));
+            }
+        }
+        return 0;
+    }
+
+    uint32_t material_template::texture_keyword_bit(std::size_t slot) const
+    {
+        if (slot >= m_descriptor.textures.size() || m_descriptor.textures[slot].keyword.empty())
+        {
+            return 0;
+        }
+        return keyword_bit_for(m_descriptor.textures[slot].keyword);
+    }
+
     gpu::pipeline material_template::pipeline(const pipeline_variant_key& key)
     {
         const uint64_t packed = key.pack();
@@ -143,9 +422,9 @@ namespace rendering_engine
         pipeline_descriptor.depth = to_depth_state(key);
         pipeline_descriptor.blend = to_blend_state(key.blending);
         pipeline_descriptor.rasterizer = to_rasterizer_state(key);
-        if (m_descriptor.frame_layout.valid())
+        if (m_frame_layout.valid())
         {
-            pipeline_descriptor.bind_group_layouts.push_back(m_descriptor.frame_layout);
+            pipeline_descriptor.bind_group_layouts.push_back(m_frame_layout);
         }
         pipeline_descriptor.bind_group_layouts.push_back(per_draw_layout(key.keywords));
         if (m_per_material_layout.valid())
@@ -214,7 +493,7 @@ namespace rendering_engine
 
     bool material_template::has_frame_layout() const
     {
-        return m_descriptor.frame_layout.valid();
+        return m_frame_layout.valid();
     }
 
     bool material_template::has_material_layout() const
@@ -280,11 +559,11 @@ namespace rendering_engine
         // reload can swap an edited stage in behind these handles and
         // rebuild every variant built from them in place.
         gpu::shader_variant vertex = m_descriptor.vertex_shader;
-        vertex.defines = keyword_defines(keywords, m_descriptor.vertex_shader.defines);
+        vertex.defines = defines_for(keywords, m_descriptor.vertex_shader.defines);
         shaders.vertex = gpu::create_library_shader_module(*m_device, vertex, gpu::shader_stage::vertex);
 
         gpu::shader_variant fragment = m_descriptor.fragment_shader;
-        fragment.defines = keyword_defines(keywords, m_descriptor.fragment_shader.defines);
+        fragment.defines = defines_for(keywords, m_descriptor.fragment_shader.defines);
         shaders.fragment = gpu::create_library_shader_module(*m_device, fragment, gpu::shader_stage::fragment);
 
         return m_shaders.emplace(keywords, shaders).first->second;
@@ -319,6 +598,23 @@ namespace rendering_engine
                 attributes.end(), m_descriptor.skin_attributes.begin(), m_descriptor.skin_attributes.end());
         }
         return layouts;
+    }
+
+    gpu::shader_defines material_template::defines_for(uint32_t keywords, const gpu::shader_defines& base) const
+    {
+        // keyword_defines covers the engine keywords' bits; the template's
+        // own follow, in declaration order.
+        gpu::shader_defines defines = keyword_defines(keywords, base);
+        for (std::size_t i = 0; i < m_descriptor.keywords.size(); ++i)
+        {
+            const uint32_t bit =
+                1u << (material_template_descriptor::first_template_keyword + static_cast<uint32_t>(i));
+            if ((keywords & bit) != 0)
+            {
+                defines.emplace_back(m_descriptor.keywords[i], "");
+            }
+        }
+        return defines;
     }
 
     bool material_template::reads_tangents(uint32_t keywords) const

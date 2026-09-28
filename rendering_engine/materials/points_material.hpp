@@ -30,16 +30,16 @@ namespace rendering_engine
     // owned by each instance.
     struct points_material : public material
     {
-        // @p tmpl is the shared points template (see @ref create_template).
+        // @p tmpl is the shared points template (see @ref describe).
         explicit points_material(std::shared_ptr<material_template> tmpl);
         ~points_material() override;
 
-        // The template every points_material shares. @p frame_layout is
-        // the per-frame bind-group layout owned by the @ref scene_pass;
-        // it must match the layout the pass binds at slot 0 every frame
-        // so the pipelines and the runtime bind group agree on slot shape.
-        static std::shared_ptr<material_template> create_template(gpu::device& device,
-                                                                  gpu::bind_group_layout frame_layout);
+        // The descriptor of the template every points_material shares: the
+        // material library builds it (material_library::create_template)
+        // over the scene pass's per-frame set and registers it as
+        // "points"; material_library::create_material makes a points_material
+        // of it. Touches no gpu::device.
+        static material_template_descriptor describe();
 
         // Tint multiplied into every point's colour (white leaves the
         // per-point colour unchanged). Alpha participates when the

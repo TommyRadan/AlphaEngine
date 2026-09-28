@@ -26,16 +26,16 @@ namespace rendering_engine
     // each instance — every renderable that fronts it shares them.
     struct basic_material : public material
     {
-        // @p tmpl is the shared basic template (see @ref create_template).
+        // @p tmpl is the shared basic template (see @ref describe).
         explicit basic_material(std::shared_ptr<material_template> tmpl);
         ~basic_material() override;
 
-        // The template every basic_material shares. @p frame_layout is
-        // the per-frame bind-group layout owned by the @ref scene_pass;
-        // it must match the layout the pass binds at slot 0 every frame
-        // so the pipelines and the runtime bind group agree on slot shape.
-        static std::shared_ptr<material_template> create_template(gpu::device& device,
-                                                                  gpu::bind_group_layout frame_layout);
+        // The descriptor of the template every basic_material shares: the
+        // material library builds it (material_library::create_template)
+        // over the scene pass's per-frame set and registers it as
+        // "basic"; material_library::create_material makes a basic_material
+        // of it. Touches no gpu::device.
+        static material_template_descriptor describe();
 
         // Base colour tint. When an albedo texture is set the sampled
         // texel is multiplied by this tint (white leaves it unchanged).

@@ -26,16 +26,19 @@ namespace rendering_engine
     // origin grid). There is no per-material group.
     struct grid_material : public material
     {
-        // @p tmpl is the grid template (see @ref create_template).
+        // @p tmpl is a grid template (see @ref describe).
         explicit grid_material(std::shared_ptr<material_template> tmpl);
         ~grid_material() override;
 
-        // The grid template. @p frame_layout is the scene_pass per-frame
-        // layout bound at slot 0. @p fade_distance is the world-space
-        // radius (from the camera) past which the grid has fully faded to
-        // nothing; it is baked into the template's shaders as the
-        // @c GRID_FADE_DISTANCE define.
-        static std::shared_ptr<material_template>
-        create_template(gpu::device& device, gpu::bind_group_layout frame_layout, float fade_distance = 100.0f);
+        // The descriptor of a grid template over the scene pass's
+        // per-frame set. @p fade_distance is the world-space radius (from
+        // the camera) past which the grid has fully faded to nothing; it
+        // is baked into the template's shaders as the
+        // @c GRID_FADE_DISTANCE define, so each distance is a template of
+        // its own. The material library registers the default one as
+        // "grid" (material_library::create_template) and builds the others
+        // unregistered (material_library::create_grid_material). Touches no
+        // gpu::device.
+        static material_template_descriptor describe(float fade_distance = 100.0f);
     };
 } // namespace rendering_engine

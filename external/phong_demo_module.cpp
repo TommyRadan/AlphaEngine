@@ -21,10 +21,23 @@
 
 // A Blinn-Phong lit sphere turning above a ground plane, under an ambient
 // fill, a shadow-casting sun and a cool point light. Every object is a node
-// in the scene the engine hands the bootstrap, under one "phong_demo" node.
+// in the scene the engine hands the bootstrap, under one "phong_demo" node,
+// and each lit object draws with a phong instance of its own.
 
 namespace
 {
+    // A new phong instance with the showcase's orange diffuse and tight
+    // white highlight, for one object to own through its mesh component.
+    std::shared_ptr<rendering_engine::phong_material> make_material()
+    {
+        std::shared_ptr<rendering_engine::phong_material> material =
+            runtime::current_engine().renderer->materials().create_material<rendering_engine::phong_material>("phong");
+        material->set_diffuse(assets::color{230, 126, 34, 255});
+        material->set_specular(assets::color{255, 255, 255, 255});
+        material->set_shininess(48.0f);
+        return material;
+    }
+
     // Turns its node about the world up axis (+Z) at a constant rate.
     struct turntable final : runtime::behavior
     {
@@ -55,17 +68,13 @@ namespace
 
 GAME_MODULE()
 {
-    auto& material = runtime::current_engine().renderer->get_phong_material();
     auto& cache = *runtime::current_engine().assets;
-    material.set_diffuse(assets::color{230, 126, 34, 255});
-    material.set_specular(assets::color{255, 255, 255, 255});
-    material.set_shininess(48.0f);
 
     runtime::node& demo = scene.create_node("phong_demo");
 
     auto ball = cache.get_or_create_mesh(assets::mesh_generators::sphere{});
     runtime::node& sphere = scene.create_node("sphere", &demo);
-    sphere.add_component(runtime::mesh_component{&material, std::move(ball)});
+    sphere.add_component(runtime::mesh_component{make_material(), std::move(ball)});
     runtime::add_behavior<turntable>(sphere);
 
     // A large ground plane below the sphere to catch its shadow. World
@@ -74,7 +83,7 @@ GAME_MODULE()
     auto plane = cache.get_or_create_mesh(assets::mesh_generators::plane{.width = 30.0f, .height = 30.0f});
     runtime::node& ground = scene.create_node("ground", &demo);
     ground.transform.set_position(core::math::vec3{0.0f, 0.0f, -1.5f});
-    ground.add_component(runtime::mesh_component{&material, std::move(plane)});
+    ground.add_component(runtime::mesh_component{make_material(), std::move(plane)});
 
     auto ambient = std::make_unique<rendering_engine::ambient_light>();
     ambient->color = core::math::vec3{1.0f, 1.0f, 1.0f};

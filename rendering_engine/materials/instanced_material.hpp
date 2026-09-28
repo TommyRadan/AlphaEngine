@@ -34,16 +34,16 @@ namespace rendering_engine
     // group (slot 1) is unused.
     struct instanced_material : public material
     {
-        // @p tmpl is the shared instanced template (see @ref create_template).
+        // @p tmpl is the shared instanced template (see @ref describe).
         explicit instanced_material(std::shared_ptr<material_template> tmpl);
         ~instanced_material() override;
 
-        // The template every instanced_material shares. @p frame_layout
-        // is the per-frame bind-group layout owned by the @ref scene_pass;
-        // it must match the layout the pass binds at slot 0 every frame so
-        // the pipelines and the runtime bind group agree.
-        static std::shared_ptr<material_template> create_template(gpu::device& device,
-                                                                  gpu::bind_group_layout frame_layout);
+        // The descriptor of the template every instanced_material shares: the
+        // material library builds it (material_library::create_template)
+        // over the scene pass's per-frame set and registers it as
+        // "instanced"; material_library::create_material makes a instanced_material
+        // of it. Touches no gpu::device.
+        static material_template_descriptor describe();
 
         // Byte stride of one per-instance record: a mat4 model (64 bytes)
         // followed by a vec4 colour (16 bytes): one @ref mesh_instance.

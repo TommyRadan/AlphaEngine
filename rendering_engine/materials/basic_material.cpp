@@ -21,8 +21,7 @@ namespace
 
 namespace rendering_engine
 {
-    std::shared_ptr<material_template> basic_material::create_template(gpu::device& device,
-                                                                       gpu::bind_group_layout frame_layout)
+    material_template_descriptor basic_material::describe()
     {
         material_template_descriptor descriptor{};
         descriptor.name = "basic";
@@ -43,7 +42,7 @@ namespace rendering_engine
 
         // No per-draw bindings: the model + normal matrix are pushed
         // (per_draw_ubo.hpp), so the per-draw layout (slot 1) is empty.
-        descriptor.frame_layout = frame_layout;
+        descriptor.frame = material_frame::scene;
 
         // Per-material layout (slot 2): the {color, useTexture} UBO plus
         // the albedo sampler, both owned by each instance.
@@ -52,7 +51,8 @@ namespace rendering_engine
         descriptor.material_layout.entries.push_back(
             {gpu::shader_bindings::material_albedo_map, gpu::binding_kind::texture});
 
-        return std::make_shared<material_template>(device, std::move(descriptor));
+        descriptor.instance_factory = make_instance_factory<basic_material>();
+        return descriptor;
     }
 
     basic_material::basic_material(std::shared_ptr<material_template> tmpl)

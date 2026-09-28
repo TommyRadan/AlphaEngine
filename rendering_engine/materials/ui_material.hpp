@@ -58,7 +58,7 @@ namespace rendering_engine
         // Binding of the sampled texture in the per-draw group (set 1).
         static constexpr uint32_t texture_binding = 1;
 
-        // @p tmpl is the ui template (see @ref create_template). Creates
+        // @p tmpl is the ui template (see @ref describe). Creates
         // @ref white_texture on the template's device.
         explicit ui_material(std::shared_ptr<material_template> tmpl);
         ~ui_material() override;
@@ -67,11 +67,13 @@ namespace rendering_engine
         // one uniform buffer at @ref frame_binding.
         static gpu::bind_group_layout_descriptor frame_layout_descriptor();
 
-        // The template every ui_material shares, over the ui pass's
-        // per-frame layout @p frame_layout (built from
-        // @ref frame_layout_descriptor).
-        static std::shared_ptr<material_template> create_template(gpu::device& device,
-                                                                  gpu::bind_group_layout frame_layout);
+        // The descriptor of the template every ui_material shares: the
+        // material library builds it (material_library::create_template)
+        // over the ui pass's per-frame set (built from
+        // @ref frame_layout_descriptor) and registers it as "ui";
+        // material_library::create_material makes a ui_material of it.
+        // Touches no gpu::device.
+        static material_template_descriptor describe();
 
         // A 1x1 opaque white texture owned by the material: what an
         // untextured quad samples so texture x colour is the colour.

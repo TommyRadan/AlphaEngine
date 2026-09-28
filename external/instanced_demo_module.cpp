@@ -78,6 +78,13 @@ namespace
         build_face(ax, az, -ay);  // -Y
     }
 
+    // The showcase's root: owns the instanced material the lattice draws
+    // with. The lattice is its child, so the scene frees it before it.
+    struct lattice_showcase final : runtime::behavior
+    {
+        std::unique_ptr<rendering_engine::instanced_material> material;
+    };
+
     // Animates the lattice drawn by the renderable_component on its node:
     // the cubes' rest positions and the clock are its state.
     struct lattice_wave final : runtime::behavior
@@ -126,7 +133,16 @@ namespace
 
 GAME_MODULE()
 {
-    auto& material = runtime::current_engine().renderer->get_instanced_material();
+    runtime::node& demo = scene.create_node("instanced_demo");
+    lattice_showcase* showcase = runtime::add_behavior<lattice_showcase>(demo);
+    if (showcase == nullptr)
+    {
+        return;
+    }
+    showcase->material =
+        runtime::current_engine().renderer->materials().create_material<rendering_engine::instanced_material>(
+            "instanced");
+    rendering_engine::instanced_material& material = *showcase->material;
     material.set_color(assets::color{255, 255, 255, 255});
 
     // Fetch the cube geometry through the asset cache so the upload is
@@ -171,7 +187,7 @@ GAME_MODULE()
 
     // The instances carry world transforms, so the node only owns the
     // lattice and its animation.
-    runtime::node& lattice = scene.create_node("instanced_lattice");
+    runtime::node& lattice = scene.create_node("instanced_lattice", &demo);
     lattice.add_component(runtime::renderable_component{std::move(cubes)});
     runtime::add_behavior<lattice_wave>(lattice, std::move(base_positions));
     LOG_INF("instanced_demo_module: %u cubes in one instanced draw", instance_count);

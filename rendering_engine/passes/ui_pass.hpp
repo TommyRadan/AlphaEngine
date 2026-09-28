@@ -64,7 +64,7 @@ namespace rendering_engine
         }
 
         // The per-frame layout the ui material template is built
-        // against (see @c ui_material::create_template).
+        // against (material_frame::ui; see @c ui_material::describe).
         gpu::bind_group_layout frame_bind_group_layout() const;
 
     private:

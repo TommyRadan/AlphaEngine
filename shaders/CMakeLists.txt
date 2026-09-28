@@ -20,6 +20,7 @@ set(ALPHAENGINE_SHADER_SOURCES
     include/lights.glsl
     include/per_draw.glsl
     include/per_frame.glsl
+    include/per_material.glsl
     include/shadows.glsl
     materials/basic.frag.glsl
     materials/basic.vert.glsl

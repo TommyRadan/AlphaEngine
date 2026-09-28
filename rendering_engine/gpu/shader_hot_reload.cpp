@@ -125,19 +125,26 @@ namespace rendering_engine::gpu
 
 #if defined(_DEBUG)
     shader_hot_reload::shader_hot_reload(device& device, std::filesystem::path root)
-        : m_device(&device), m_watcher(std::move(root)), m_last_scan(std::chrono::steady_clock::now())
+        : m_device(&device), m_last_scan(std::chrono::steady_clock::now())
     {
         assert(installed_reload == nullptr && "only one shader_hot_reload may be installed at a time");
         installed_reload = this;
 
-        m_root_prefix = m_watcher.root().generic_string();
+        if (root.empty())
+        {
+            LOG_INF("Shader hot reload: watching the asset shaders (polled every %lld ms)",
+                    static_cast<long long>(poll_interval.count()));
+            return;
+        }
+        m_watcher.emplace(std::move(root));
+        m_root_prefix = m_watcher->root().generic_string();
         if (!m_root_prefix.empty() && m_root_prefix.back() != '/')
         {
             m_root_prefix += '/';
         }
-        LOG_INF("Shader hot reload: watching %s (%zu files, polled every %lld ms)",
-                m_watcher.root().string().c_str(),
-                m_watcher.tracked_count(),
+        LOG_INF("Shader hot reload: watching %s (%zu files) and the asset shaders (polled every %lld ms)",
+                m_watcher->root().string().c_str(),
+                m_watcher->tracked_count(),
                 static_cast<long long>(poll_interval.count()));
     }
 
@@ -178,8 +185,20 @@ namespace rendering_engine::gpu
         }
         m_last_scan = now;
 
-        const std::vector<core::os::file_change> changes = m_watcher.poll();
-        if (changes.empty())
+        // An asset shader the library read from the content directory
+        // changed (or went away): the next compile must read it again.
+        bool changed = false;
+        for (std::string& path : shader_library::changed_asset_paths())
+        {
+            shader_library::refresh(path);
+            m_pending.insert(std::move(path));
+            changed = true;
+        }
+
+        const std::vector<core::os::file_change> changes =
+            m_watcher.has_value() ? m_watcher->poll() : std::vector<core::os::file_change>{};
+        changed = changed || !changes.empty();
+        if (!changed)
         {
             return;
         }

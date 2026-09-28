@@ -25,6 +25,13 @@ namespace
     // Number of points on the Fibonacci-sphere cloud.
     constexpr int point_count = 2000;
 
+    // The showcase's root: owns the points instance the cloud draws with.
+    // The cloud is its child, so the scene frees it before it.
+    struct points_showcase final : runtime::behavior
+    {
+        std::unique_ptr<rendering_engine::points_material> material;
+    };
+
     // Turns its node about the world up axis (+Z) at a constant rate.
     struct turntable final : runtime::behavior
     {
@@ -43,7 +50,15 @@ namespace
 
 GAME_MODULE()
 {
-    auto& material = runtime::current_engine().renderer->get_points_material();
+    runtime::node& demo = scene.create_node("points_demo");
+    points_showcase* showcase = runtime::add_behavior<points_showcase>(demo);
+    if (showcase == nullptr)
+    {
+        return;
+    }
+    showcase->material =
+        runtime::current_engine().renderer->materials().create_material<rendering_engine::points_material>("points");
+    rendering_engine::points_material& material = *showcase->material;
     material.set_size(6.0f);
     material.set_size_attenuation(true);
     material.set_color(assets::color{255, 255, 255, 255});
@@ -71,7 +86,7 @@ GAME_MODULE()
     dots->set_positions(positions, colors);
 
     // The cloud turns with its node.
-    runtime::node& cloud = scene.create_node("point_cloud");
+    runtime::node& cloud = scene.create_node("point_cloud", &demo);
     cloud.add_component(runtime::renderable_component{std::move(dots)});
     runtime::add_behavior<turntable>(cloud);
 }

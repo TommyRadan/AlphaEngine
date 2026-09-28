@@ -4,7 +4,9 @@
 // The per-draw block of every 3D renderable: the model matrix and its
 // normal matrix, 128 bytes (rendering_engine::per_draw_payload). The
 // depth-only shadow pipelines read the same block, so a renderable's
-// per-draw data serves them unchanged.
+// per-draw data serves them unchanged, and so does every material
+// template's, a game's included (see per_material.glsl for the whole
+// binding model).
 //
 // The block is the pipeline's push constants (the renderer's per-draw
 // push range, vertex + fragment, offset 0), pushed by the pass before each

@@ -6,13 +6,35 @@
  * @brief One material *type*: its shaders, vertex and bind-group layouts,
  *        and the cache of pipeline variants its instances draw with.
  *
- * A @ref material_template is built once per material type (the
- * renderer's material library makes one standard, one phong, ...
- * template in @c material_library::init) and shared by every
- * @ref material instance of that type. It owns no per-instance state:
- * an instance carries its own parameter block, textures and
- * per-material bind group and points at the template for everything
- * else.
+ * A @ref material_template is built once per material type from a
+ * @ref material_template_descriptor and shared by every @ref material
+ * instance of that type. The renderer's material library builds and
+ * registers them (@c material_library::create_template): the eight
+ * built-in types in @c material_library::init, and any type a game
+ * declares the same way, with shaders of its own (asset shaders, see
+ * shader_library.hpp). It owns no per-instance state: an instance
+ * carries its own parameter block, textures and per-material bind group
+ * and points at the template for everything else.
+ *
+ * **Binding model.** Every template's pipelines share one slot order, so
+ * a shader written against it draws in the pass its template names
+ * (@ref material_template_descriptor::frame):
+ *
+ * - set 0, the per-frame set of that pass — for a scene template the
+ *   scene pass's view (@c include/per_frame.glsl, @c view_globals), its
+ *   lights (@c include/lights.glsl) and shadows (@c include/shadows.glsl);
+ *   for a UI template the UI pass's pixel projection;
+ * - the per-draw data: the 128-byte @c PerDraw push-constant block (model
+ *   and normal matrix, @c include/per_draw.glsl), which every template's
+ *   pipelines declare, plus set 1 for what a draw binds beyond it (a
+ *   skinned variant's joint palette);
+ * - set 2, the per-material set each instance owns (@c PER_MATERIAL_SET in
+ *   @c include/per_material.glsl): the parameter block at
+ *   @c BINDING_MATERIAL_PARAMS and the sampled maps at the
+ *   @c BINDING_MATERIAL_*_MAP numbers.
+ *
+ * A template with no per-frame set (@ref material_frame::none) shifts the
+ * per-draw and per-material sets down by one.
  *
  * Pipelines are built lazily, keyed by @ref pipeline_variant_key. The
  * first instance to need a given (keyword set, fixed-function state)
@@ -35,8 +57,12 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
+#include <memory>
 #include <string>
+#include <string_view>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include <assets/vertex.hpp>
@@ -45,6 +71,7 @@
 #include <rendering_engine/gpu/pipeline.hpp>
 #include <rendering_engine/gpu/shader.hpp>
 #include <rendering_engine/gpu/shader_compiler.hpp>
+#include <rendering_engine/materials/material_parameters.hpp>
 #include <rendering_engine/materials/pipeline_variant.hpp>
 
 namespace rendering_engine
@@ -55,33 +82,85 @@ namespace rendering_engine
     }
 
     struct material;
+    struct material_template;
+
+    /**
+     * @brief The per-frame set a template's pipelines reserve slot 0 for:
+     *        which pass the template's materials draw in.
+     */
+    enum class material_frame : uint8_t
+    {
+        /** @brief None; the per-draw group takes slot 0. */
+        none,
+        /** @brief The scene pass's view, lights and shadows (every 3D template). */
+        scene,
+        /** @brief The UI pass's pixel-space projection. */
+        ui,
+    };
+
+    /**
+     * @brief Makes an instance of a template; see
+     *        @ref material_template_descriptor::instance_factory.
+     */
+    using material_instance_factory = std::function<std::unique_ptr<material>(std::shared_ptr<material_template>)>;
+
+    /**
+     * @brief The factory that makes a @p M over the template it is handed:
+     *        a built-in type's @c instance_factory. @p M derives from
+     *        @ref material and constructs from the template alone.
+     */
+    template<typename M>
+    material_instance_factory make_instance_factory()
+    {
+        return [](std::shared_ptr<material_template> tmpl) -> std::unique_ptr<material>
+        { return std::make_unique<M>(std::move(tmpl)); };
+    }
 
     // Everything a material type declares up front. The template copies
-    // it and derives the rest (layouts, strides) at construction.
+    // it and derives the rest (layouts, strides) at construction. A game
+    // declares a type of its own by filling the shaders, the vertex
+    // format, the parameters and textures and the default render state,
+    // and hands it to material_library::create_template; the lower-level
+    // fields (explicit vertex and bind-group layouts, skinning) serve the
+    // built-in types.
     struct material_template_descriptor
     {
+        // Bit of the first keyword a template declares of its own
+        // (@ref keywords); the engine's keywords (material_keyword) sit
+        // below it.
+        static constexpr uint32_t first_template_keyword = 16;
+
+        // How many keywords a template can declare of its own.
+        static constexpr uint32_t max_template_keywords = 16;
+
         // Sentinel for @ref tangent_location: the slot-0 layout carries
         // no optional tangent channel.
         static constexpr uint32_t no_tangent_location = UINT32_MAX;
 
-        // Label for log lines.
+        // The name the material library registers the template under,
+        // and the label for log lines.
         std::string name;
 
-        // The two stages by shader-library path (see shaders/materials/)
-        // plus the defines every variant of this template is compiled
-        // with; the keyword defines are appended per variant.
+        // The two stages by shader-library path (see shader_library.hpp:
+        // an asset shader under the content directory's shaders/, or an
+        // engine one) plus the defines every variant of this template is
+        // compiled with; the keyword defines are appended per variant.
         gpu::shader_variant vertex_shader;
         gpu::shader_variant fragment_shader;
 
         // Vertex buffer slots in declaration order. Slot 0 is the
         // per-vertex geometry stream every renderable binds; a per-
-        // instance stream, if any, follows.
+        // instance stream, if any, follows. Left empty, slot 0 is derived
+        // from @ref required_vertex_format: each channel of the record in
+        // order at locations 0, 1, 2, ... (position, then colour or uv,
+        // normal, tangent), which is what the shader's inputs declare.
         std::vector<gpu::vertex_buffer_layout> vertex_layouts;
 
         // The record layout the slot-0 attributes read (see
         // @ref vertex_format), and the layout a variant without the
         // @c has_tangents keyword reads instead. Both @c custom when the
-        // material declares none.
+        // material declares none; the second defaults to the first for a
+        // template without a @ref tangent_location.
         assets::vertex_format required_vertex_format{assets::vertex_format::custom};
         assets::vertex_format vertex_format_without_tangents{assets::vertex_format::custom};
 
@@ -108,15 +187,49 @@ namespace rendering_engine
         assets::vertex_format skinned_vertex_format{assets::vertex_format::custom};
         gpu::bind_group_layout_descriptor skinned_draw_layout;
 
-        // The pass-owned per-frame layout bound at slot 0, or an invalid
-        // handle for materials without one (the per-draw group then
-        // takes slot 0).
-        gpu::bind_group_layout frame_layout{};
+        // The per-frame set slot 0 is reserved for, which picks the pass
+        // the template's materials draw in. The material library hands
+        // the template that pass's layout (material_library::frame_layout).
+        material_frame frame{material_frame::scene};
 
         // Per-material (trailing) bind-group layout: the instance's
         // parameter block and sampled maps. Leave empty for materials
-        // with no per-instance GPU resources.
+        // with no per-instance GPU resources, and for a template that
+        // declares @ref parameters or @ref textures, which derives it:
+        // the block at @c shader_bindings::material_params, then every
+        // texture slot at its binding.
         gpu::bind_group_layout_descriptor material_layout;
+
+        // The members of the per-material parameter block (std140, bound
+        // at @c shader_bindings::material_params), and its byte size: 0
+        // derives it from the members (the end of the last one, rounded
+        // up to 16 bytes). Every instance owns a buffer holding it,
+        // written through @ref material::set_float4 and friends.
+        std::vector<material_parameter> parameters;
+        uint32_t parameter_block_size{0};
+
+        // The per-material sampled textures, bound through
+        // @ref material::set_texture.
+        std::vector<material_texture_slot> textures;
+
+        // Keywords of the template's own, beyond the engine's
+        // (material_keyword): each is a preprocessor symbol defined in the
+        // variants that have it set, toggled per instance through
+        // @ref material::set_keyword_enabled or by a bound texture slot
+        // that names it. At most @ref max_template_keywords; they take the
+        // key bits from @ref first_template_keyword up, so the variant
+        // cache tells their variants apart like the engine keywords'.
+        std::vector<std::string> keywords;
+
+        // The render state a generic instance starts with (a built-in
+        // type's constructor passes its own).
+        material_params defaults{};
+
+        // What material_library::create_material makes for this template:
+        // a built-in type's instance (a phong_material for the phong
+        // template), or, left empty, the generic @ref material over the
+        // declared parameters and textures.
+        material_instance_factory instance_factory;
 
         gpu::primitive_topology topology{gpu::primitive_topology::triangles};
 
@@ -133,18 +246,56 @@ namespace rendering_engine
 
     struct material_template
     {
-        // Creates the bind-group layouts on @p device; no shader is
-        // compiled and no pipeline built until the first @ref pipeline
-        // request. @p device must outlive the template.
-        material_template(gpu::device& device, material_template_descriptor descriptor);
+        // Derives what @p descriptor leaves to derivation and creates the
+        // bind-group layouts on @p device; no shader is compiled and no
+        // pipeline built until the first @ref pipeline request.
+        // @p frame_layout is the layout of the per-frame set the
+        // descriptor's @c frame names (invalid for material_frame::none).
+        // @p device must outlive the template. The material library is
+        // what normally builds templates (material_library::create_template),
+        // having checked the descriptor with @ref validate.
+        material_template(gpu::device& device,
+                          material_template_descriptor descriptor,
+                          gpu::bind_group_layout frame_layout = {});
         ~material_template();
 
         material_template(const material_template&) = delete;
         material_template& operator=(const material_template&) = delete;
 
+        // Why @p descriptor cannot build a template (no name, a shader
+        // the shader library does not have, no vertex layout and no named
+        // vertex format to derive one from, a parameter off its std140
+        // alignment or overlapping another, a duplicate name or binding,
+        // an unknown slot keyword, too many keywords), or an empty string
+        // when it can.
+        static std::string validate(const material_template_descriptor& descriptor);
+
         gpu::device& device() const;
         const std::string& name() const;
         const material_template_descriptor& descriptor() const;
+
+        // The per-frame layout bound at slot 0; invalid for a template
+        // with none.
+        gpu::bind_group_layout frame_layout() const;
+
+        // The declared parameter named @p name, or null.
+        const material_parameter* find_parameter(std::string_view name) const;
+
+        // The index of the declared texture slot named @p name in
+        // descriptor().textures, or -1.
+        int find_texture(std::string_view name) const;
+
+        // Whether the template declares parameters or textures, which
+        // every instance then holds (see material_parameters.hpp).
+        bool declares_resources() const;
+
+        // The key bit of the keyword whose define is @p name: an engine
+        // keyword's or one the template declares; 0 for neither.
+        uint32_t keyword_bit_for(std::string_view name) const;
+
+        // The key bit a bound texture in slot @p slot sets; 0 when the
+        // slot names no keyword.
+        uint32_t texture_keyword_bit(std::size_t slot) const;
 
         // The pipeline for @p key: served from the cache, or compiled
         // (shader modules per keyword set) and created on first use. A
@@ -215,8 +366,13 @@ namespace rendering_engine
 
         bool reads_tangents(uint32_t keywords) const;
 
+        // The defines a variant with @p keywords compiles @p base with:
+        // the engine keywords' and the template's own.
+        gpu::shader_defines defines_for(uint32_t keywords, const gpu::shader_defines& base) const;
+
         gpu::device* m_device{nullptr};
         material_template_descriptor m_descriptor;
+        gpu::bind_group_layout m_frame_layout{};
 
         gpu::bind_group_layout m_per_draw_layout{};
         gpu::bind_group_layout m_per_material_layout{};

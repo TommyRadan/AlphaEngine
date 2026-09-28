@@ -12,6 +12,7 @@ target_sources(alpha_render PRIVATE
     line_material.hpp
     material.cpp
     material.hpp
+    material_parameters.hpp
     material_template.cpp
     material_template.hpp
     phong_material.cpp

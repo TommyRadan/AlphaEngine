@@ -28,8 +28,7 @@ namespace
 
 namespace rendering_engine
 {
-    std::shared_ptr<material_template>
-    grid_material::create_template(gpu::device& device, gpu::bind_group_layout frame_layout, float fade_distance)
+    material_template_descriptor grid_material::describe(float fade_distance)
     {
         material_template_descriptor descriptor{};
         descriptor.name = "grid";
@@ -51,7 +50,7 @@ namespace rendering_engine
 
         // No per-draw bindings: the model + normal matrix are pushed
         // (per_draw_ubo.hpp), so the per-draw layout (slot 1) is empty.
-        descriptor.frame_layout = frame_layout;
+        descriptor.frame = material_frame::scene;
 
         descriptor.topology = gpu::primitive_topology::triangles;
         // The fragment stage discards off-plane pixels and writes the
@@ -59,7 +58,8 @@ namespace rendering_engine
         // pipeline can reproduce, so the depth pre-pass never draws the
         // grid (even should a caller make it opaque).
         descriptor.depth_prepass = false;
-        return std::make_shared<material_template>(device, std::move(descriptor));
+        descriptor.instance_factory = make_instance_factory<grid_material>();
+        return descriptor;
     }
 
     grid_material::grid_material(std::shared_ptr<material_template> tmpl) : material(std::move(tmpl), grid_params()) {}

@@ -35,7 +35,7 @@ namespace rendering_engine
     // backend, so the @c linewidth knob is intentionally omitted.
     struct line_material : public material
     {
-        // @p tmpl is the shared line template (see @ref create_template).
+        // @p tmpl is the shared line template (see @ref describe).
         //
         // @p depth_tested keeps the default opaque scene behaviour
         // (depth tested and written). Pass @c false for lines drawn in a
@@ -48,12 +48,12 @@ namespace rendering_engine
         explicit line_material(std::shared_ptr<material_template> tmpl, bool depth_tested = true);
         ~line_material() override;
 
-        // The template every line_material shares. @p frame_layout is
-        // the per-frame bind-group layout owned by the @ref scene_pass;
-        // it must match the layout the pass binds at slot 0 every frame
-        // so the pipelines and the runtime bind group agree on slot shape.
-        static std::shared_ptr<material_template> create_template(gpu::device& device,
-                                                                  gpu::bind_group_layout frame_layout);
+        // The descriptor of the template every line_material shares: the
+        // material library builds it (material_library::create_template)
+        // over the scene pass's per-frame set and registers it as
+        // "line"; material_library::create_material makes a line_material
+        // of it. Touches no gpu::device.
+        static material_template_descriptor describe();
 
         // Tint multiplied into every vertex's colour (white leaves the
         // per-vertex colour unchanged). Alpha participates when the

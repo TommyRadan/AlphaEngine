@@ -70,8 +70,8 @@ namespace rendering_engine
      * - a @ref render_world — what is drawn: the mesh, UI, light and
      *   camera proxies (and the camera arbitration), the environment probe
      *   and the fog (@ref world);
-     * - a @ref material_library — the built-in material templates and
-     *   instances (@ref materials).
+     * - a @ref material_library — the material templates, built-in and
+     *   registered by game code, and the built-in instances (@ref materials).
      *
      * The material and environment calls below forward to those two, so
      * game code keeps reaching them through the renderer. The owner hands @ref init every subsystem and setting
@@ -197,8 +197,10 @@ namespace rendering_engine
         }
 
         /**
-         * @brief The built-in materials, built in @ref init; see
-         *        @ref material_library.
+         * @brief The material library: the built-in templates and
+         *        instances built in @ref init, and every material type game
+         *        code registers there (@ref material_library::create_template)
+         *        and makes instances of (@ref material_library::create_material).
          */
         material_library& materials() noexcept
         {
@@ -552,11 +554,11 @@ namespace rendering_engine
 
 #if _DEBUG
         // Debug-build shader hot reload over the shader library's
-        // override root (see gpu/shader_hot_reload.hpp). Installed in
-        // @ref init right after the device, before any pass or template
-        // creates a module, so every library module registers with it;
-        // polled at the top of @ref render, between frames; released at
-        // the start of @ref quit. Null when overrides are off.
+        // override root and asset shaders (see gpu/shader_hot_reload.hpp).
+        // Installed in @ref init right after the device, before any pass or
+        // template creates a module, so every library module registers
+        // with it; polled at the top of @ref render, between frames;
+        // released at the start of @ref quit.
         std::unique_ptr<gpu::shader_hot_reload> m_shader_hot_reload;
 #endif
 

@@ -28,16 +28,16 @@ namespace rendering_engine
     // per-material group at slot 2 owned by each instance.
     struct phong_material : public material
     {
-        // @p tmpl is the shared phong template (see @ref create_template).
+        // @p tmpl is the shared phong template (see @ref describe).
         explicit phong_material(std::shared_ptr<material_template> tmpl);
         ~phong_material() override;
 
-        // The template every phong_material shares. @p frame_layout is
-        // the per-frame bind-group layout owned by the @ref scene_pass;
-        // it must match the layout the pass binds at slot 0 every frame
-        // so the pipelines and the runtime bind group agree on slot shape.
-        static std::shared_ptr<material_template> create_template(gpu::device& device,
-                                                                  gpu::bind_group_layout frame_layout);
+        // The descriptor of the template every phong_material shares: the
+        // material library builds it (material_library::create_template)
+        // over the scene pass's per-frame set and registers it as
+        // "phong"; material_library::create_material makes a phong_material
+        // of it. Touches no gpu::device.
+        static material_template_descriptor describe();
 
         // Base diffuse (Lambertian) colour. When a diffuse map is set
         // the sampled texel modulates this tint (white leaves it

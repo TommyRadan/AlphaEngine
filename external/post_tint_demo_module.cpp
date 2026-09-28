@@ -201,6 +201,18 @@ namespace
         }
     };
 
+    // A new phong instance with the showcase's blue diffuse and white
+    // highlight, for one object to own through its mesh component.
+    std::shared_ptr<rendering_engine::phong_material> make_material()
+    {
+        std::shared_ptr<rendering_engine::phong_material> material =
+            runtime::current_engine().renderer->materials().create_material<rendering_engine::phong_material>("phong");
+        material->set_diffuse(assets::color{120, 170, 230, 255});
+        material->set_specular(assets::color{255, 255, 255, 255});
+        material->set_shininess(64.0f);
+        return material;
+    }
+
     // A child of @p parent carrying the light @p light.
     runtime::node&
     spawn_light(runtime::scene& scene, runtime::node& parent, std::unique_ptr<rendering_engine::light> light)
@@ -213,23 +225,19 @@ namespace
 
 GAME_MODULE()
 {
-    auto& material = runtime::current_engine().renderer->get_phong_material();
     auto& cache = *runtime::current_engine().assets;
-    material.set_diffuse(assets::color{120, 170, 230, 255});
-    material.set_specular(assets::color{255, 255, 255, 255});
-    material.set_shininess(64.0f);
 
     runtime::node& demo = scene.create_node("post_tint_demo");
     runtime::add_behavior<post_tint>(demo);
 
     auto ball = cache.get_or_create_mesh(assets::mesh_generators::sphere{});
     runtime::node& sphere = scene.create_node("sphere", &demo);
-    sphere.add_component(runtime::mesh_component{&material, std::move(ball)});
+    sphere.add_component(runtime::mesh_component{make_material(), std::move(ball)});
 
     auto plane = cache.get_or_create_mesh(assets::mesh_generators::plane{.width = 30.0f, .height = 30.0f});
     runtime::node& ground = scene.create_node("ground", &demo);
     ground.transform.set_position(core::math::vec3{0.0f, 0.0f, -1.5f});
-    ground.add_component(runtime::mesh_component{&material, std::move(plane)});
+    ground.add_component(runtime::mesh_component{make_material(), std::move(plane)});
 
     auto ambient = std::make_unique<rendering_engine::ambient_light>();
     ambient->color = core::math::vec3{1.0f, 1.0f, 1.0f};

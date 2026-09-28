@@ -56,26 +56,31 @@ namespace
     };
 
     // Hangs @p mesh, drawn with @p material, on a new child of @p parent at
-    // @p position.
+    // @p position; the child's mesh component shares ownership of the
+    // material.
     void spawn_prop(runtime::scene& scene,
                     runtime::node& parent,
                     const core::math::vec3& position,
-                    rendering_engine::material* material,
+                    std::shared_ptr<rendering_engine::material> material,
                     std::shared_ptr<rendering_engine::mesh_asset> mesh)
     {
         runtime::node& prop = scene.create_node({}, &parent);
         prop.transform.set_position(position);
-        prop.add_component(runtime::mesh_component{material, std::move(mesh)});
+        prop.add_component(runtime::mesh_component{std::move(material), std::move(mesh)});
     }
 } // namespace
 
 GAME_MODULE()
 {
-    auto& material = runtime::current_engine().renderer->get_phong_material();
+    // One phong instance of the showcase's own serves every prop, which all
+    // share its orange diffuse and white highlight; it lives as long as the
+    // last mesh component drawing with it.
+    std::shared_ptr<rendering_engine::phong_material> material =
+        runtime::current_engine().renderer->materials().create_material<rendering_engine::phong_material>("phong");
     auto& cache = *runtime::current_engine().assets;
-    material.set_diffuse(assets::color{230, 126, 34, 255});
-    material.set_specular(assets::color{255, 255, 255, 255});
-    material.set_shininess(48.0f);
+    material->set_diffuse(assets::color{230, 126, 34, 255});
+    material->set_specular(assets::color{255, 255, 255, 255});
+    material->set_shininess(48.0f);
 
     runtime::node& demo = scene.create_node("fog_demo");
     runtime::add_behavior<fog_zone>(demo);
@@ -97,7 +102,7 @@ GAME_MODULE()
             spawn_prop(scene,
                        demo,
                        core::math::vec3{x, y, 0.0f},
-                       &material,
+                       material,
                        cache.get_or_create_mesh(assets::mesh_generators::sphere{}));
         }
     }
@@ -107,7 +112,7 @@ GAME_MODULE()
     spawn_prop(scene,
                demo,
                core::math::vec3{16.0f, 0.0f, -1.5f},
-               &material,
+               material,
                cache.get_or_create_mesh(assets::mesh_generators::plane{.width = 120.0f, .height = 120.0f}));
 
     // The lights are components on nodes of their own; the light component

@@ -40,8 +40,7 @@ namespace rendering_engine
         return descriptor;
     }
 
-    std::shared_ptr<material_template> ui_material::create_template(gpu::device& device,
-                                                                    gpu::bind_group_layout frame_layout)
+    material_template_descriptor ui_material::describe()
     {
         material_template_descriptor descriptor{};
         descriptor.name = "ui";
@@ -69,10 +68,11 @@ namespace rendering_engine
         // binding 0); the per-draw group at slot 1 carries the texture at
         // binding 1, a number of its own so it stays unique across the
         // pipeline's sets.
-        descriptor.frame_layout = frame_layout;
+        descriptor.frame = material_frame::ui;
         descriptor.draw_layout.entries.push_back({texture_binding, gpu::binding_kind::texture});
 
-        return std::make_shared<material_template>(device, std::move(descriptor));
+        descriptor.instance_factory = make_instance_factory<ui_material>();
+        return descriptor;
     }
 
     ui_material::ui_material(std::shared_ptr<material_template> tmpl) : material(std::move(tmpl), ui_params())

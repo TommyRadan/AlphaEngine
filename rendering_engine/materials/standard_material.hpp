@@ -28,8 +28,8 @@ namespace rendering_engine
     // single biggest step toward physically based visual fidelity.
     //
     // One instance of the shared standard @ref material_template (built
-    // by @ref create_template; the renderer keeps one and hands every
-    // instance the same). Which maps the shaders sample is a compile-
+    // from @ref describe; the renderer's material library keeps one and
+    // hands every instance the same). Which maps the shaders sample is a compile-
     // time keyword set derived from the maps that are bound (see
     // @ref material_keyword), so an instance with no normal map draws a
     // variant with no normal-map code, and every instance with the same
@@ -52,20 +52,17 @@ namespace rendering_engine
     // @c ambient * albedo term driven by the per-frame ambient light.
     struct standard_material : public material
     {
-        // @p tmpl is the shared standard template (see @ref create_template).
+        // @p tmpl is the shared standard template (see @ref describe).
         explicit standard_material(std::shared_ptr<material_template> tmpl);
         ~standard_material() override;
 
-        // The template every standard_material shares. @p frame_layout is
-        // the per-frame bind-group layout owned by the @ref scene_pass; it
-        // must match the layout the pass binds at slot 0 every frame so
-        // the pipelines and the runtime bind group agree on slot shape.
-        static std::shared_ptr<material_template> create_template(gpu::device& device,
-                                                                  gpu::bind_group_layout frame_layout);
-
-        // The descriptor @ref create_template builds from, exposed as a
-        // separate, device-free step: it touches no gpu::device.
-        static material_template_descriptor template_descriptor(gpu::bind_group_layout frame_layout);
+        // The descriptor of the template every standard_material shares:
+        // the material library builds it (material_library::create_template)
+        // over the scene pass's per-frame set and registers it as
+        // "standard"; material_library::create_material makes a
+        // standard_material of it, lit by the current environment. Touches
+        // no gpu::device.
+        static material_template_descriptor describe();
 
         // Base (albedo) colour. When an albedo map is set the sampled
         // texel modulates this tint (white leaves it unchanged). The
@@ -206,7 +203,7 @@ namespace rendering_engine
         // standard instance at the top of each frame, once the device
         // frame is open and before any pass binds the group; returns
         // whether it rebuilt.
-        bool refresh_texture_assets();
+        bool refresh_texture_assets() override;
 
     protected:
         // Opacity lives in the parameter block, so a base params change

@@ -24,6 +24,13 @@ namespace
     // Number of samples along the helix strip.
     constexpr int sample_count = 400;
 
+    // The showcase's root: owns the line instance the helix draws with. The
+    // helix is its child, so the scene frees it before it.
+    struct line_showcase final : runtime::behavior
+    {
+        std::unique_ptr<rendering_engine::line_material> material;
+    };
+
     // Turns its node about the Y axis at a constant rate.
     struct turntable final : runtime::behavior
     {
@@ -42,7 +49,15 @@ namespace
 
 GAME_MODULE()
 {
-    auto& material = runtime::current_engine().renderer->get_line_material();
+    runtime::node& demo = scene.create_node("line_demo");
+    line_showcase* showcase = runtime::add_behavior<line_showcase>(demo);
+    if (showcase == nullptr)
+    {
+        return;
+    }
+    showcase->material =
+        runtime::current_engine().renderer->materials().create_material<rendering_engine::line_material>("line");
+    rendering_engine::line_material& material = *showcase->material;
     material.set_color(assets::color{255, 255, 255, 255});
 
     // Sample a vertical helix and colour each vertex along the way so the
@@ -67,7 +82,7 @@ GAME_MODULE()
     strip->set_positions(positions, colors);
 
     // The helix turns with its node.
-    runtime::node& helix = scene.create_node("helix");
+    runtime::node& helix = scene.create_node("helix", &demo);
     helix.add_component(runtime::renderable_component{std::move(strip)});
     runtime::add_behavior<turntable>(helix);
 }

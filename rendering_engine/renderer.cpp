@@ -146,13 +146,12 @@ void rendering_engine::renderer::init(const render_services& services)
 #if _DEBUG
     // Debug builds watch the directory the shader library reads its
     // overrides from (the source tree's shaders/, or
-    // ALPHAENGINE_SHADER_DIR) and swap an edited shader into every
-    // pipeline built from it. Installed before the passes and templates
-    // below create their modules, so each registers with it.
-    if (const std::filesystem::path& root = gpu::shader_library::override_root(); !root.empty())
-    {
-        m_shader_hot_reload = std::make_unique<gpu::shader_hot_reload>(device, root);
-    }
+    // ALPHAENGINE_SHADER_DIR; none while overrides are off) and the asset
+    // shaders it reads from the content directory, and swap an edited
+    // shader into every pipeline built from it. Installed before the
+    // passes and templates below create their modules, so each registers
+    // with it.
+    m_shader_hot_reload = std::make_unique<gpu::shader_hot_reload>(device, gpu::shader_library::override_root());
 #endif
 
     // Tell the device about the initial backbuffer dimensions so that

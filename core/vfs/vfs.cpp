@@ -90,6 +90,28 @@ namespace core
         return os::file_exists(path);
     }
 
+    bool vfs::mounted(const std::filesystem::path& path) const
+    {
+        if (is_native(path))
+        {
+            return false;
+        }
+        const std::optional<std::string> relative = mount_relative(path);
+        if (!relative.has_value())
+        {
+            return false;
+        }
+        std::shared_lock lock{m_mutex};
+        for (auto it = m_mounts.rbegin(); it != m_mounts.rend(); ++it)
+        {
+            if ((*it)->exists(*relative))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
     bool vfs::read_file(const std::filesystem::path& path, std::vector<std::byte>& out, std::string* error) const
     {
         std::string reason;

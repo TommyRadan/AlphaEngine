@@ -60,7 +60,7 @@ namespace
 
 namespace rendering_engine
 {
-    material_template_descriptor standard_material::template_descriptor(gpu::bind_group_layout frame_layout)
+    material_template_descriptor standard_material::describe()
     {
         material_template_descriptor descriptor{};
         descriptor.name = "standard";
@@ -81,7 +81,7 @@ namespace rendering_engine
         // No per-draw bindings for a rigid draw: the model + normal matrix
         // are pushed (per_draw_ubo.hpp), so the per-draw layout (slot 1)
         // is empty.
-        descriptor.frame_layout = frame_layout;
+        descriptor.frame = material_frame::scene;
 
         // Skinning (the SKINNED keyword): the joint indices, fetched as a
         // uvec4 of the record's four uint16 values, and the four weights,
@@ -129,13 +129,8 @@ namespace rendering_engine
         material_layout.entries.push_back({gpu::shader_bindings::material_brdf_lut, gpu::binding_kind::texture});
 
         descriptor.topology = gpu::primitive_topology::triangles;
+        descriptor.instance_factory = make_instance_factory<standard_material>();
         return descriptor;
-    }
-
-    std::shared_ptr<material_template> standard_material::create_template(gpu::device& device,
-                                                                          gpu::bind_group_layout frame_layout)
-    {
-        return std::make_shared<material_template>(device, template_descriptor(frame_layout));
     }
 
     standard_material::standard_material(std::shared_ptr<material_template> tmpl)

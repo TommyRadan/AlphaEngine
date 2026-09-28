@@ -160,7 +160,7 @@ namespace rendering_engine
                 // Every pipeline built on the ui template reads the
                 // UiFrame group at slot 0; a material with some other
                 // per-frame layout gets nothing bound there by this pass.
-                if (item.mat->get_template().descriptor().frame_layout == m_frame_layout)
+                if (item.mat->get_template().frame_layout() == m_frame_layout)
                 {
                     pass_encoder->set_bind_group(0, m_frame_bind_group);
                 }

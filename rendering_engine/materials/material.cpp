@@ -3,21 +3,32 @@
 
 #include <rendering_engine/materials/material.hpp>
 
+#include <algorithm>
+#include <cmath>
+#include <cstring>
+#include <string>
 #include <utility>
 
 #include <assets/color.hpp>
+#include <core/log.hpp>
+#include <rendering_engine/gpu/buffer.hpp>
 #include <rendering_engine/gpu/device.hpp>
+#include <rendering_engine/gpu/shader_bindings.hpp>
 #include <rendering_engine/gpu/texture.hpp>
 #include <rendering_engine/materials/material_template.hpp>
+#include <rendering_engine/resources/texture_asset.hpp>
 #include <rendering_engine/resources/texture_formats.hpp>
 
 namespace rendering_engine
 {
+    material::material(std::shared_ptr<material_template> tmpl) : material(tmpl, tmpl->descriptor().defaults) {}
+
     material::material(std::shared_ptr<material_template> tmpl, const material_params& params, uint32_t keywords)
         : m_template(std::move(tmpl)), m_params(params), m_keywords(keywords)
     {
         rebind_variant();
         m_template->register_instance(this);
+        create_declared_resources();
     }
 
     material::~material()
@@ -27,6 +38,11 @@ namespace rendering_engine
         // they share outlives them through the shared handle.
         m_template->unregister_instance(this);
         release_per_material_bind_group();
+        if (m_parameter_buffer.valid())
+        {
+            device().destroy(m_parameter_buffer);
+            m_parameter_buffer = {};
+        }
     }
 
     material_template& material::get_template() const
@@ -258,6 +274,192 @@ namespace rendering_engine
         }
         device().destroy(map);
         map = {};
+    }
+
+    bool material::set_float(std::string_view name, float value)
+    {
+        return write_parameter(name, material_parameter_type::float1, &value, sizeof(value));
+    }
+
+    bool material::set_float2(std::string_view name, const core::math::vec2& value)
+    {
+        const float data[2] = {value.x, value.y};
+        return write_parameter(name, material_parameter_type::float2, data, sizeof(data));
+    }
+
+    bool material::set_float3(std::string_view name, const core::math::vec3& value)
+    {
+        const float data[3] = {value.x, value.y, value.z};
+        return write_parameter(name, material_parameter_type::float3, data, sizeof(data));
+    }
+
+    bool material::set_float4(std::string_view name, const core::math::vec4& value)
+    {
+        const float data[4] = {value.x, value.y, value.z, value.w};
+        return write_parameter(name, material_parameter_type::float4, data, sizeof(data));
+    }
+
+    bool material::set_int(std::string_view name, int32_t value)
+    {
+        return write_parameter(name, material_parameter_type::int1, &value, sizeof(value));
+    }
+
+    bool material::set_uint(std::string_view name, uint32_t value)
+    {
+        return write_parameter(name, material_parameter_type::uint1, &value, sizeof(value));
+    }
+
+    bool material::set_texture(std::string_view name, std::shared_ptr<texture_asset> texture)
+    {
+        const int slot = m_template->find_texture(name);
+        if (slot < 0 || static_cast<std::size_t>(slot) >= m_textures.size())
+        {
+            warn_once(name, "declares no texture slot of that name");
+            return false;
+        }
+        m_textures[static_cast<std::size_t>(slot)].asset = std::move(texture);
+        if (const uint32_t bit = m_template->texture_keyword_bit(static_cast<std::size_t>(slot)); bit != 0)
+        {
+            const bool bound = m_textures[static_cast<std::size_t>(slot)].asset != nullptr;
+            set_keywords(bound ? (m_keywords | bit) : (m_keywords & ~bit));
+        }
+        rebuild_declared_bind_group();
+        return true;
+    }
+
+    bool material::set_keyword_enabled(std::string_view name, bool enabled)
+    {
+        const auto& declared = m_template->descriptor().keywords;
+        if (std::find(declared.begin(), declared.end(), name) == declared.end())
+        {
+            warn_once(name, "declares no keyword of that name");
+            return false;
+        }
+        const uint32_t bit = m_template->keyword_bit_for(name);
+        set_keywords(enabled ? (m_keywords | bit) : (m_keywords & ~bit));
+        return true;
+    }
+
+    bool material::refresh_texture_assets()
+    {
+        const bool stale =
+            std::any_of(m_textures.begin(),
+                        m_textures.end(),
+                        [](const texture_binding& binding)
+                        { return binding.asset != nullptr && binding.asset->generation != binding.generation; });
+        if (!stale)
+        {
+            return false;
+        }
+        rebuild_declared_bind_group();
+        return true;
+    }
+
+    void material::create_declared_resources()
+    {
+        if (!m_template->declares_resources())
+        {
+            return;
+        }
+        const material_template_descriptor& descriptor = m_template->descriptor();
+        m_textures.resize(descriptor.textures.size());
+
+        m_parameter_data.assign(descriptor.parameter_block_size, std::byte{0});
+        for (const material_parameter& parameter : descriptor.parameters)
+        {
+            std::byte* target = m_parameter_data.data() + parameter.offset;
+            const float components[4] = {parameter.default_value.x,
+                                         parameter.default_value.y,
+                                         parameter.default_value.z,
+                                         parameter.default_value.w};
+            if (parameter.type == material_parameter_type::int1)
+            {
+                const auto value = static_cast<int32_t>(std::lround(parameter.default_value.x));
+                std::memcpy(target, &value, sizeof(value));
+            }
+            else if (parameter.type == material_parameter_type::uint1)
+            {
+                const auto value = static_cast<uint32_t>(std::max(0l, std::lround(parameter.default_value.x)));
+                std::memcpy(target, &value, sizeof(value));
+            }
+            else
+            {
+                std::memcpy(target, components, material_parameter_size(parameter.type));
+            }
+        }
+        if (!m_parameter_data.empty())
+        {
+            gpu::buffer_descriptor buffer_descriptor{};
+            buffer_descriptor.size = m_parameter_data.size();
+            buffer_descriptor.usage = gpu::buffer_usage_uniform | gpu::buffer_usage_copy_dst;
+            buffer_descriptor.hint = gpu::buffer_usage_hint::dynamic_data;
+            buffer_descriptor.initial_data = m_parameter_data.data();
+            m_parameter_buffer = device().create_buffer(buffer_descriptor);
+        }
+        rebuild_declared_bind_group();
+    }
+
+    void material::rebuild_declared_bind_group()
+    {
+        release_per_material_bind_group();
+
+        gpu::bind_group_descriptor descriptor{};
+        descriptor.layout = m_template->per_material_layout();
+        if (m_parameter_buffer.valid())
+        {
+            gpu::binding_value block{};
+            block.binding = gpu::shader_bindings::material_params;
+            block.kind = gpu::binding_kind::uniform_buffer;
+            block.buffer_value = m_parameter_buffer;
+            descriptor.entries.push_back(block);
+        }
+        const auto& slots = m_template->descriptor().textures;
+        for (std::size_t i = 0; i < slots.size(); ++i)
+        {
+            texture_binding& binding = m_textures[i];
+            binding.generation = binding.asset != nullptr ? binding.asset->generation : 0;
+            // An empty slot stays invalid: the device binds its placeholder
+            // of the slot's dimension there.
+            gpu::binding_value map{};
+            map.binding = slots[i].binding;
+            map.kind = gpu::binding_kind::texture;
+            map.texture_value = binding.asset != nullptr ? binding.asset->texture : gpu::texture{};
+            descriptor.entries.push_back(map);
+        }
+        m_per_material_bind_group = device().create_bind_group(descriptor);
+    }
+
+    bool
+    material::write_parameter(std::string_view name, material_parameter_type type, const void* value, uint32_t size)
+    {
+        const material_parameter* parameter = m_template->find_parameter(name);
+        if (parameter == nullptr)
+        {
+            warn_once(name, "declares no parameter of that name");
+            return false;
+        }
+        if (parameter->type != type)
+        {
+            warn_once(name, "declares that parameter with another type");
+            return false;
+        }
+        std::memcpy(m_parameter_data.data() + parameter->offset, value, size);
+        device().write_buffer(m_parameter_buffer, m_parameter_data.data(), m_parameter_data.size(), 0);
+        return true;
+    }
+
+    void material::warn_once(std::string_view name, const char* message)
+    {
+        if (std::find(m_warned.begin(), m_warned.end(), name) != m_warned.end())
+        {
+            return;
+        }
+        m_warned.emplace_back(name);
+        LOG_WRN("material (template %s): '%.*s' ignored; the template %s",
+                m_template->name().c_str(),
+                static_cast<int>(name.size()),
+                name.data(),
+                message);
     }
 
     void material::rebind_variant()

@@ -129,6 +129,16 @@ namespace core
         bool exists(const std::filesystem::path& path) const;
 
         /**
+         * @brief Whether a mount holds the relative @p path: @ref exists
+         *        without the working-directory fallback, for a caller with a
+         *        source of its own for the files no mount holds (the shader
+         *        library's embedded registry), which must never read a file
+         *        that merely sits in the working directory. False for an
+         *        absolute path and while nothing is mounted.
+         */
+        bool mounted(const std::filesystem::path& path) const;
+
+        /**
          * @brief Reads the whole file @p path names into @p out.
          * @param error When non-null, receives a one-line reason on failure.
          * @return false when no file was found or it could not be read; @p out is then empty.

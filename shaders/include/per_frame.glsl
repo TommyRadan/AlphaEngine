@@ -4,9 +4,10 @@
 // The view-globals block the scene pass uploads once per frame into set 0,
 // binding BINDING_PER_FRAME: everything a scene shader knows about the
 // view it renders, in one buffer. This is the one declaration of that
-// block; every scene shader includes it rather than restating the layout.
-// The lights and the shadow data stay in their own blocks of the same set
-// (lights.glsl, shadows.glsl).
+// block; every scene shader — built-in or a game's asset shader — includes
+// it rather than restating the layout. The lights and the shadow data stay
+// in their own blocks of the same set (lights.glsl, shadows.glsl); see
+// per_material.glsl for the whole binding model.
 //
 // std140, 560 bytes, mirroring rendering_engine::view_globals
 // (rendering_engine/passes/view_globals.hpp) byte-for-byte:

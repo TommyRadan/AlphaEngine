@@ -4,14 +4,22 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <string>
+#include <string_view>
+#include <vector>
 
 #include <assets/image.hpp>
 #include <assets/vertex.hpp>
+#include <core/math/vec2.hpp>
+#include <core/math/vec3.hpp>
+#include <core/math/vec4.hpp>
 #include <rendering_engine/gpu/bind_group.hpp>
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/gpu/types.hpp>
+#include <rendering_engine/materials/material_parameters.hpp>
 #include <rendering_engine/materials/pipeline_variant.hpp>
 
 namespace rendering_engine
@@ -22,6 +30,7 @@ namespace rendering_engine
     }
 
     struct material_template;
+    struct texture_asset;
 
     // A material *instance*: the thing a @ref draw_item points at. It
     // owns the per-instance state — the shared @ref material_params
@@ -43,8 +52,24 @@ namespace rendering_engine
     // flipped to clockwise, resolved lazily on first use. The depth
     // pre-pass twins (@ref depth_prepass_pipeline and
     // @ref depth_prepassed_pipeline) are resolved the same way.
+    //
+    // An instance of a template that declares its per-material resources
+    // (material_template_descriptor::parameters and ::textures) holds them
+    // itself: a parameter buffer initialised from the declared defaults,
+    // one texture binding per slot, and the per-material bind group over
+    // both, which the setters below write by name. That is the whole of
+    // the generic material a game's template makes
+    // (material_library::create_material); the built-in types declare no
+    // such resources and keep typed setters of their own instead.
     struct material
     {
+        // A generic instance of @p tmpl: the template's default render
+        // state (material_template_descriptor::defaults) and its declared
+        // parameters and textures. Normally made through
+        // material_library::create_material. The template must outlive the
+        // instance's use; the shared handle keeps it alive.
+        explicit material(std::shared_ptr<material_template> tmpl);
+
         virtual ~material();
 
         material(const material&) = delete;
@@ -150,6 +175,41 @@ namespace rendering_engine
         // attribute.
         uint32_t min_vertex_stride() const;
 
+        // Write the declared parameter @p name of the template's
+        // parameter block (material_parameters.hpp). False, logged once
+        // per instance, when the template declares no parameter of that
+        // name or declares it with another type. The value reaches the
+        // GPU with the next frame that draws the instance.
+        bool set_float(std::string_view name, float value);
+        bool set_float2(std::string_view name, const core::math::vec2& value);
+        bool set_float3(std::string_view name, const core::math::vec3& value);
+        bool set_float4(std::string_view name, const core::math::vec4& value);
+        bool set_int(std::string_view name, int32_t value);
+        bool set_uint(std::string_view name, uint32_t value);
+
+        // Bind @p texture to the declared texture slot @p name (null
+        // clears it: the slot samples the device's placeholder) and set or
+        // clear the keyword the slot names. The instance keeps the asset
+        // alive and follows it when its texture is replaced (an
+        // asynchronous load landing, a hot reload; see
+        // @ref refresh_texture_assets). False, logged once per instance,
+        // for a slot the template does not declare.
+        bool set_texture(std::string_view name, std::shared_ptr<texture_asset> texture);
+
+        // Set or clear one of the template's own keywords
+        // (material_template_descriptor::keywords) and rebind the variant
+        // if that changed the key. False, logged once per instance, for a
+        // name the template does not declare.
+        bool set_keyword_enabled(std::string_view name, bool enabled);
+
+        // Rebuild the per-material bind group when a texture asset it
+        // samples had its texture replaced since it was built. The
+        // renderer calls it on every registered template's instances
+        // once per frame, with the frame open and before any pass
+        // records (material_library::refresh_texture_assets). Returns
+        // whether it rebuilt.
+        virtual bool refresh_texture_assets();
+
     protected:
         // Binds the instance to @p tmpl's variant for @p params and
         // @p keywords (built on demand). The template must outlive the
@@ -190,10 +250,35 @@ namespace rendering_engine
         gpu::bind_group m_per_material_bind_group{};
 
     private:
+        // One declared texture slot: the asset bound to it and the
+        // asset's generation the bind group was built with, which
+        // refresh_texture_assets compares against the asset's.
+        struct texture_binding
+        {
+            std::shared_ptr<texture_asset> asset;
+            uint64_t generation{0};
+        };
+
         // Recompute the key from params + keywords and refresh the bound
         // pipeline; the mirrored and depth pre-pass twins are dropped and
         // resolved lazily.
         void rebind_variant();
+
+        // Create the parameter buffer (holding the declared defaults) and
+        // the per-material bind group for a template that declares its
+        // resources; nothing otherwise.
+        void create_declared_resources();
+
+        // (Re)create the per-material bind group over the parameter
+        // buffer and the texture slots' current textures.
+        void rebuild_declared_bind_group();
+
+        // Copy @p size bytes of @p value into the declared parameter
+        // @p name, which must have @p type, and upload the block.
+        bool write_parameter(std::string_view name, material_parameter_type type, const void* value, uint32_t size);
+
+        // Log @p message for this instance once, keyed by @p name.
+        void warn_once(std::string_view name, const char* message);
 
         // The bound key, with the front face flipped to clockwise for a
         // @p mirrored draw.
@@ -208,5 +293,15 @@ namespace rendering_engine
         // invalid until first asked for.
         std::array<gpu::pipeline, 2> m_depth_prepass_pipelines{};
         std::array<gpu::pipeline, 2> m_depth_prepassed_pipelines{};
+
+        // The declared parameter block's CPU copy and the buffer it is
+        // uploaded to, and the declared texture slots; empty for a
+        // template that declares none.
+        std::vector<std::byte> m_parameter_data;
+        gpu::buffer m_parameter_buffer{};
+        std::vector<texture_binding> m_textures;
+
+        // Names a setter was refused for, so each is logged once.
+        std::vector<std::string> m_warned;
     };
 } // namespace rendering_engine

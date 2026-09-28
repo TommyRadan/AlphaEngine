@@ -30,6 +30,11 @@ target_sources(AlphaEngine PRIVATE
 # an executable of its own, alpha_demo_<name> (next to AlphaEngine in
 # Binaries/), with the camera and exit modules:
 #
+#   custom_material
+#                a material type declared by the module itself, drawn by
+#                three spheres: a rim-light shader read from the content
+#                directory (content/shaders/demo/), with a parameter block,
+#                a texture slot and a keyword of its own
 #   fog          Blinn-Phong spheres receding into linear distance fog
 #   gltf         the .gltf / .glb named by the ALPHAENGINE_GLTF environment
 #                variable, loaded through the glTF importer and framed
@@ -46,7 +51,7 @@ target_sources(AlphaEngine PRIVATE
 #
 # They are left out of the default build, which builds AlphaEngine alone;
 # the alpha_demos target builds them, and CI builds it on every build job.
-set(ALPHAENGINE_DEMOS fog gltf instanced line phong points post_tint scene_graph skybox)
+set(ALPHAENGINE_DEMOS custom_material fog gltf instanced line phong points post_tint scene_graph skybox)
 
 add_custom_target(alpha_demos)
 foreach(demo IN LISTS ALPHAENGINE_DEMOS)
