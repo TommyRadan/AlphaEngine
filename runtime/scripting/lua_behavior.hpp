@@ -244,4 +244,13 @@ namespace runtime
         std::string m_script;
         std::unique_ptr<instance> m_instance;
     };
+
+    /**
+     * @brief Registers @ref lua_behavior with @p registry as
+     *        @c "lua_behavior", with its script and the script's properties
+     *        as fields.
+     *
+     * Called once, by @ref default_type_registry when it is first used.
+     */
+    void register_lua_behavior(type_registry& registry);
 } // namespace runtime

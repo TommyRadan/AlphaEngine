@@ -4,7 +4,7 @@
 # The CPU asset module: decoders and importers that turn files into plain
 # data (images, font atlases, KTX2 levels, glTF documents, vertex records),
 # with no dependency on the renderer, the GPU device or the runtime.
-target_sources(AlphaEngine PRIVATE
+target_sources(alpha_assets PRIVATE
     color.hpp
     font.cpp
     font.hpp

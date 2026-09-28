@@ -4,6 +4,8 @@
 #include <runtime/reflection.hpp>
 
 #include <core/log.hpp>
+#include <runtime/components/component_types.hpp>
+#include <runtime/scripting/lua_behavior.hpp>
 
 const char* runtime::field_kind_name(field_kind kind) noexcept
 {
@@ -203,10 +205,29 @@ runtime::type_info& runtime::type_registry::add(std::string name, type_category 
     return added;
 }
 
+namespace
+{
+    // The process-wide registry, with the engine's own types in it from the
+    // start. They are registered by these calls and not from static
+    // initialisers in their own translation units: the engine is linked as
+    // a static library, and the linker leaves out a library object that
+    // nothing references, static initialiser and all.
+    struct default_registry
+    {
+        runtime::type_registry registry;
+
+        default_registry()
+        {
+            runtime::register_component_types(registry);
+            runtime::register_lua_behavior(registry);
+        }
+    };
+} // namespace
+
 runtime::type_registry& runtime::default_type_registry()
 {
-    static type_registry instance;
-    return instance;
+    static default_registry instance;
+    return instance.registry;
 }
 
 bool runtime::add_type_registration(type_registration registration)

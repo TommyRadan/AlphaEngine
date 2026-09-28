@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2015-2026 Tomislav Radanovic
 
-target_sources(AlphaEngine PRIVATE
+target_sources(alpha_platform PRIVATE
     audio_device.cpp
     audio_device.hpp
     dynamic_library.cpp

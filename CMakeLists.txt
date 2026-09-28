@@ -78,16 +78,80 @@ add_custom_target(build-time-make-directory ALL
 
 include_directories(${CMAKE_SOURCE_DIR})
 
-# Main executable. Sources are contributed by per-directory CMakeLists.txt
-# files via target_sources(). The initial source is supplied here so the
-# target is well-formed before subdirectories extend it.
-add_executable(AlphaEngine runtime/main_loop.cpp)
+# The engine modules, lowest layer first. Each is a static library whose
+# sources the per-directory CMakeLists.txt files contribute through
+# target_sources(), with explicit file lists.
+#
+#   alpha_core      math, containers, logging, events, jobs, time, hashing,
+#                   settings, OS services, the VFS and audio mixing
+#   alpha_platform  the SDL3 layer: window, event pump, input translation,
+#                   audio device, paths and dynamic libraries
+#   alpha_rhi       the gpu:: device interface, the Vulkan backend, the
+#                   shader compiler and the shader library
+#   alpha_assets    CPU import: images, fonts, KTX2, glTF, tangents and
+#                   vertex formats
+#   alpha_render    the renderer and its world, passes, materials,
+#                   renderables, GPU resources, lighting, cameras and debug
+#                   drawing
+#   alpha_world     scenes, nodes, components, physics, animation,
+#                   scripting, serialisation, reflection and the engine
+#   alpha_editor    the ImGui panels and gizmos (Debug; see below)
+#
+# The game executables are built from alpha_game, an object library with
+# the entry point (runtime/main_loop.cpp), the game-module API and the
+# modules every game shares, plus their own game modules (external/). A
+# game module registers itself from a static initialiser, which the
+# linker would leave out of a static library, so the modules are always
+# compiled straight into an executable.
+add_library(alpha_core STATIC)
+add_library(alpha_platform STATIC)
+add_library(alpha_rhi STATIC)
+add_library(alpha_assets STATIC)
+add_library(alpha_render STATIC)
+add_library(alpha_world STATIC)
+add_library(alpha_editor STATIC)
+add_library(alpha_game OBJECT)
+add_executable(AlphaEngine)
 
-add_subdirectory(runtime)
+# The module dependencies. A module's public headers use the types of the
+# modules it links PUBLIC, so those reach its dependents as well: the
+# world sees the gpu:: interface through the renderer. The third-party
+# libraries are linked where each is fetched, below.
+target_link_libraries(alpha_platform PUBLIC alpha_core)
+target_link_libraries(alpha_rhi PUBLIC alpha_core)
+target_link_libraries(alpha_assets PUBLIC alpha_core)
+target_link_libraries(alpha_render PUBLIC alpha_core alpha_rhi alpha_assets)
+target_link_libraries(alpha_world PUBLIC alpha_core alpha_platform alpha_assets alpha_render)
+target_link_libraries(alpha_editor PUBLIC alpha_world)
+target_link_libraries(alpha_game PUBLIC alpha_world alpha_editor)
+target_link_libraries(AlphaEngine PRIVATE alpha_game)
+
+# Compiler settings every first-party target shares: libc++ under Clang,
+# and format-string checking. core::logging::message carries a
+# printf-format attribute on GCC / Clang (ALPHAENGINE_PRINTF_FORMAT in
+# core/log.hpp), so -Wformat validates every LOG_* call site's
+# conversions against its arguments. MSVC has no equivalent outside
+# /analyze.
+function(alpha_target_settings target)
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
+        target_compile_options(${target} PRIVATE -stdlib=libc++)
+        target_link_options(${target} PRIVATE -stdlib=libc++)
+    endif()
+    if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+        target_compile_options(${target} PRIVATE -Wformat)
+    endif()
+endfunction()
+
+foreach(target IN ITEMS
+        alpha_core alpha_platform alpha_rhi alpha_assets alpha_render alpha_world alpha_editor alpha_game AlphaEngine)
+    alpha_target_settings(${target})
+endforeach()
+
 add_subdirectory(core)
 add_subdirectory(platform)
 add_subdirectory(assets)
 add_subdirectory(rendering_engine)
+add_subdirectory(runtime)
 add_subdirectory(editor)
 add_subdirectory(external)
 
@@ -98,28 +162,15 @@ add_subdirectory(external)
 # can be edited on disk and picked up at the next launch without a C++
 # rebuild (ALPHAENGINE_SHADER_DIR overrides the location).
 add_subdirectory(shaders)
-target_link_libraries(AlphaEngine shader_registry)
-target_compile_definitions(AlphaEngine PRIVATE
+target_link_libraries(alpha_rhi PRIVATE shader_registry)
+target_compile_definitions(alpha_rhi PRIVATE
     $<$<CONFIG:Debug>:ALPHAENGINE_SHADER_SOURCE_DIR="${CMAKE_SOURCE_DIR}/shaders">)
 
 # Threads — the core worker pool (core/job_pool) uses std::thread. MSVC links its
 # threading support implicitly; on Linux this pulls in pthread.
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
-target_link_libraries(AlphaEngine Threads::Threads)
-
-if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
-    target_compile_options(AlphaEngine PRIVATE -stdlib=libc++)
-    target_link_options(AlphaEngine PRIVATE -stdlib=libc++)
-endif()
-
-# Format-string checking. core::logging::message carries a printf-format
-# attribute on GCC / Clang (ALPHAENGINE_PRINTF_FORMAT in core/log.hpp), so
-# -Wformat validates every LOG_* call site's conversions against its
-# arguments. MSVC has no equivalent outside /analyze.
-if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
-    target_compile_options(AlphaEngine PRIVATE -Wformat)
-endif()
+target_link_libraries(alpha_core PUBLIC Threads::Threads)
 
 # SDL3 — fetched and built statically from source
 include(FetchContent)
@@ -137,9 +188,10 @@ FetchContent_Declare(
     GIT_SHALLOW TRUE
 )
 FetchContent_MakeAvailable(SDL3)
-target_link_libraries(AlphaEngine SDL3::SDL3-static)
+target_link_libraries(alpha_platform PRIVATE SDL3::SDL3-static)
 
-# GLM — header-only, fetched from upstream and pinned to 1.0.1
+# GLM — header-only, fetched from upstream and pinned to 1.0.1. Only
+# core/math includes it.
 FetchContent_Declare(
     glm
     GIT_REPOSITORY https://github.com/g-truc/glm.git
@@ -147,10 +199,11 @@ FetchContent_Declare(
     GIT_SHALLOW TRUE
 )
 FetchContent_MakeAvailable(glm)
-target_link_libraries(AlphaEngine glm::glm)
+target_link_libraries(alpha_core PRIVATE glm::glm)
 
 # nlohmann/json — header-only, fetched from upstream and pinned to v3.11.3.
-# Backs the settings.json loader in core/settings_parse. The FetchContent
+# Backs the settings.json loader in core/settings_parse, and core's
+# settings registry exposes it in its interface. The FetchContent
 # name is `json` so an offline build can point FETCHCONTENT_SOURCE_DIR_JSON
 # at a local checkout.
 set(JSON_BuildTests OFF CACHE INTERNAL "")
@@ -161,7 +214,7 @@ FetchContent_Declare(
     GIT_SHALLOW TRUE
 )
 FetchContent_MakeAvailable(json)
-target_link_libraries(AlphaEngine nlohmann_json::nlohmann_json)
+target_link_libraries(alpha_core PUBLIC nlohmann_json::nlohmann_json)
 
 # glslang — fetched and built statically. Compiles GLSL to SPIR-V at
 # runtime for the Vulkan backend's shader modules (cached on disk by
@@ -192,17 +245,19 @@ FetchContent_Declare(
     GIT_SHALLOW TRUE
 )
 FetchContent_MakeAvailable(glslang)
-target_link_libraries(AlphaEngine
+target_link_libraries(alpha_rhi PRIVATE
     glslang::glslang
     glslang::SPIRV
     glslang::glslang-default-resource-limits)
 
-target_include_directories(AlphaEngine PRIVATE ${VENDOR_ROOT}stb/ ${VENDOR_ROOT}cgltf/)
+# stb and cgltf — vendored single-header libraries behind the CPU asset
+# module's image, font and glTF decoders.
+target_include_directories(alpha_assets PRIVATE ${VENDOR_ROOT}stb/ ${VENDOR_ROOT}cgltf/)
 
 # Vulkan — the GPU backend at rendering_engine/gpu/backend/vulkan/
 # links against the loader from the system Vulkan SDK.
 find_package(Vulkan REQUIRED)
-target_link_libraries(AlphaEngine Vulkan::Vulkan)
+target_link_libraries(alpha_rhi PRIVATE Vulkan::Vulkan)
 
 # Vulkan Memory Allocator — header-only, fetched from upstream and
 # pinned by release tag like the other dependencies. Its CMakeLists
@@ -220,7 +275,7 @@ FetchContent_Declare(
     GIT_SHALLOW TRUE
 )
 FetchContent_MakeAvailable(vma)
-target_link_libraries(AlphaEngine GPUOpen::VulkanMemoryAllocator)
+target_link_libraries(alpha_rhi PRIVATE GPUOpen::VulkanMemoryAllocator)
 # Clang enables -Wnullability-completeness by default and VMA annotates
 # only its public API, so the implementation TU would emit some nine
 # hundred warnings per build; that one warning is silenced for that
@@ -239,12 +294,18 @@ endif()
 # renderer backend ourselves. The docking branch is pinned by tag so the
 # debug tooling can dock and tear off panels.
 #
-# ImGui is debug-only: it is linked into AlphaEngine and the
-# ALPHAENGINE_HAS_IMGUI macro is defined for Debug configurations only,
-# via generator expressions so this also holds for multi-config
-# generators (Visual Studio) where CMAKE_BUILD_TYPE is empty at configure
-# time. Release builds never link ImGui and the editor module (editor/)
-# compiles to nothing.
+# ImGui is debug-only: it is linked, and the ALPHAENGINE_HAS_IMGUI macro
+# defined, for Debug configurations only, via generator expressions so
+# this also holds for multi-config generators (Visual Studio) where
+# CMAKE_BUILD_TYPE is empty at configure time. Two modules use it: the
+# editor, which owns the ImGui context and its panels, and alpha_rhi,
+# whose Vulkan backend holds ImGui's Vulkan renderer (the GPU half of
+# the overlay, behind gpu::overlay_renderer, so the editor never names a
+# graphics API; every GPU backend carries its own ImGui renderer). That
+# link is the one exception to ImGui belonging to the editor alone, and
+# it is private to alpha_rhi. The macro is public on the editor for the
+# entry point, which installs the editor under it. Release builds never
+# link ImGui, and the editor module (editor/) compiles to nothing.
 FetchContent_Declare(
     imgui
     GIT_REPOSITORY https://github.com/ocornut/imgui.git
@@ -288,8 +349,10 @@ target_include_directories(imgui PUBLIC ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/
 # The SDL3 backend needs the SDL headers; the Vulkan backend links
 # against the loader (default Vulkan prototypes).
 target_link_libraries(imgui PUBLIC SDL3::SDL3-static Vulkan::Vulkan)
-target_link_libraries(AlphaEngine $<$<CONFIG:Debug>:imgui>)
-target_compile_definitions(AlphaEngine PRIVATE $<$<CONFIG:Debug>:ALPHAENGINE_HAS_IMGUI>)
+target_link_libraries(alpha_editor PRIVATE $<$<CONFIG:Debug>:imgui>)
+target_compile_definitions(alpha_editor PUBLIC $<$<CONFIG:Debug>:ALPHAENGINE_HAS_IMGUI>)
+target_link_libraries(alpha_rhi PRIVATE $<$<CONFIG:Debug>:imgui>)
+target_compile_definitions(alpha_rhi PRIVATE $<$<CONFIG:Debug>:ALPHAENGINE_HAS_IMGUI>)
 
 # Jolt Physics — fetched and built as a static library behind the engine's
 # physics subsystem (runtime/physics). Jolt keeps its CMake project under
@@ -361,16 +424,17 @@ FetchContent_MakeAvailable(JoltPhysics)
 # that must be identical in every translation unit that includes a Jolt
 # header (Jolt checks them against the library in RegisterTypes) plus the
 # matching instruction-set flags. Linking the target normally would push
-# all of that onto every engine source, so the engine links the library
-# alone — through an interface target whose $<LINK_ONLY:...> link carries
-# no usage requirements — and hands them to the physics implementation
-# unit, the only one that includes Jolt, as source properties (set here
-# because source properties apply to targets defined in the same
-# directory). Both sides evaluate the same properties per configuration,
-# so the Debug / Release defines always agree with the library's.
+# all of that onto every source of the world module, so the module links
+# the library alone — through an interface target whose $<LINK_ONLY:...>
+# link carries no usage requirements — and hands them to the physics
+# implementation unit, the only one that includes Jolt, as source
+# properties (set here because source properties apply to targets defined
+# in the same directory). Both sides evaluate the same properties per
+# configuration, so the Debug / Release defines always agree with the
+# library's.
 add_library(jolt_link_only INTERFACE)
 target_link_libraries(jolt_link_only INTERFACE $<LINK_ONLY:Jolt>)
-target_link_libraries(AlphaEngine jolt_link_only)
+target_link_libraries(alpha_world PRIVATE jolt_link_only)
 set_source_files_properties(
     ${CMAKE_SOURCE_DIR}/runtime/physics/physics_world.cpp
     PROPERTIES
@@ -415,7 +479,7 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(ktx)
 set(BUILD_SHARED_LIBS ${ALPHAENGINE_BUILD_SHARED_LIBS_SAVED})
 set_property(DIRECTORY ${ktx_SOURCE_DIR} PROPERTY EXCLUDE_FROM_ALL TRUE)
-target_link_libraries(AlphaEngine ktx_read)
+target_link_libraries(alpha_assets PRIVATE ktx_read)
 
 # Lua 5.4 and sol2 — the embedded scripting behind runtime/scripting (the
 # script host and lua_behavior).
@@ -438,7 +502,7 @@ target_link_libraries(AlphaEngine ktx_read)
 # FetchContent only populates the sources (FETCHCONTENT_SOURCE_DIR_SOL2
 # for an offline build).
 #
-# Neither is a usage requirement of the engine target: the scripting
+# Neither is a usage requirement of the world module: the scripting
 # implementation units are the only ones that include Lua or sol2, so the
 # include directories and sol2's configuration go to those files alone, as
 # source properties (set here because source properties apply to targets
@@ -492,7 +556,7 @@ add_library(lua STATIC
 target_compile_definitions(lua PRIVATE
     $<$<NOT:$<PLATFORM_ID:Windows>>:LUA_USE_POSIX>
     $<$<C_COMPILER_ID:MSVC>:_CRT_SECURE_NO_WARNINGS>)
-target_link_libraries(AlphaEngine lua)
+target_link_libraries(alpha_world PRIVATE lua)
 
 FetchContent_Declare(
     sol2
@@ -520,5 +584,5 @@ set_source_files_properties(
         COMPILE_OPTIONS "${ALPHAENGINE_SCRIPTING_OPTIONS}")
 
 if(APPLE)
-    target_link_libraries(AlphaEngine "-framework CoreFoundation -framework IOKit -framework CoreVideo")
+    target_link_libraries(alpha_platform PRIVATE "-framework CoreFoundation -framework IOKit -framework CoreVideo")
 endif(APPLE)
