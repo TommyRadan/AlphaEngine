@@ -32,6 +32,8 @@ target_sources(alpha_rhi PRIVATE
     vk_pipeline_cache.hpp
     vk_query_pool.cpp
     vk_query_pool.hpp
+    vk_render_pass_cache.cpp
+    vk_render_pass_cache.hpp
     vk_resources.hpp
     vk_staging_ring.cpp
     vk_staging_ring.hpp

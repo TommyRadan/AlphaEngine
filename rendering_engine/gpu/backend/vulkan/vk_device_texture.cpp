@@ -1018,44 +1018,6 @@ namespace rendering_engine::gpu::backend::vulkan
         return tex.storage_views[level];
     }
 
-    VkImageView vk_device::attachment_image_view(vk_texture& tex, uint32_t mip, uint32_t layer)
-    {
-        if (tex.image == VK_NULL_HANDLE || mip >= tex.mip_levels || layer >= tex.array_layers)
-        {
-            return VK_NULL_HANDLE;
-        }
-        const size_t index = static_cast<size_t>(layer) * tex.mip_levels + mip;
-        if (index >= tex.attachment_views.size())
-        {
-            return VK_NULL_HANDLE;
-        }
-        if (tex.attachment_views[index] != VK_NULL_HANDLE)
-        {
-            return tex.attachment_views[index];
-        }
-
-        // One level, one layer, as a plain 2D view whatever the image's
-        // own shape (a cube face or an array layer renders like any 2D
-        // image), carrying every aspect so a depth-stencil attachment
-        // clears and stores both planes.
-        VkImageViewCreateInfo vi{};
-        vi.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        vi.image = tex.image;
-        vi.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        vi.format = tex.vk_format;
-        vi.subresourceRange.aspectMask = tex.aspect;
-        vi.subresourceRange.baseMipLevel = mip;
-        vi.subresourceRange.levelCount = 1;
-        vi.subresourceRange.baseArrayLayer = layer;
-        vi.subresourceRange.layerCount = 1;
-        if (!vk_check(vkCreateImageView(m_device.handle(), &vi, nullptr, &tex.attachment_views[index]),
-                      "vkCreateImageView (attachment)"))
-        {
-            tex.attachment_views[index] = VK_NULL_HANDLE;
-        }
-        return tex.attachment_views[index];
-    }
-
     void vk_device::record_layout_transition(VkCommandBuffer cmd, vk_texture& tex, VkImageLayout new_layout)
     {
         if (cmd == VK_NULL_HANDLE || tex.image == VK_NULL_HANDLE || tex.layout == new_layout)
