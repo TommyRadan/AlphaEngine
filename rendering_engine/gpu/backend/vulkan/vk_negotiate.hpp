@@ -8,9 +8,11 @@
  *        budget of each pool in the grow-on-demand chain.
  *
  * Everything here is a pure function over Vulkan's header constants
- * — no @c VkDevice, no loader call — so @c vk_device can resolve its
- * tables once at init. The caller supplies the format-support query,
- * backed by @c vkGetPhysicalDeviceFormatProperties in the device.
+ * — no @c VkDevice, no loader call — so the backend can resolve its
+ * tables once at init (@c vk_physical_device the depth formats,
+ * @c vk_descriptor_allocator the pool budgets). The caller supplies the
+ * format-support query, backed by
+ * @c vkGetPhysicalDeviceFormatProperties.
  */
 
 #pragma once
