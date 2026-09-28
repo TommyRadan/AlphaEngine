@@ -402,6 +402,10 @@ namespace rendering_engine::gpu::backend::vulkan
 
     private:
         void create_default_textures();
+        // Release every resource still in a table, then empty the
+        // tables (quit, with the device idle and the deferred destroys
+        // drained). The query sets are vk_query_pool's.
+        void destroy_resource_tables();
         // Fill the base class's device_features / device_limits from
         // the physical device's properties and the grants recorded by
         // create_logical_device.
