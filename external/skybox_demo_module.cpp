@@ -167,12 +167,11 @@ namespace
         std::vector<std::unique_ptr<rendering_engine::standard_material>> m_materials;
     };
 
-    // Uploads @p shape and hangs it on a new child of @p parent at @p position.
+    // Hangs @p shape on a new child of @p parent at @p position.
     template<typename Shape>
     runtime::node&
     spawn_prop(runtime::scene& scene, runtime::node& parent, const math::vec3& position, std::unique_ptr<Shape> shape)
     {
-        shape->upload();
         runtime::node& prop = scene.create_node({}, &parent);
         prop.transform.set_position(position);
         prop.add_component(runtime::renderable_component{std::move(shape)});

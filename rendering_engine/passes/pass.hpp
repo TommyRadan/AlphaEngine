@@ -18,6 +18,7 @@
 #include <rendering_engine/fog.hpp>
 #include <rendering_engine/gpu/command_encoder.hpp>
 #include <rendering_engine/gpu/handle.hpp>
+#include <rendering_engine/mesh_draws.hpp>
 #include <rendering_engine/post_settings.hpp>
 #include <rendering_engine/render_proxies.hpp>
 
@@ -100,11 +101,17 @@ namespace rendering_engine
         // them (render_world::enabled_lights), gathered once per frame.
         std::span<const light_proxy* const> lights{};
 
-        // What this frame draws: the light and camera proxies, the
-        // renderable registries and the environment probe / fog. Passes
-        // reach it only through here, never through a global, so more than
-        // one render_world can exist in a process. Never null once the
-        // renderer is up.
+        // One entry per mesh proxy, in the world's proxy order, built once
+        // per frame (see @ref mesh_draw_builder): the draws the scene pass,
+        // the depth pre-pass (through it) and the shadow passes cull by
+        // view and pass kind.
+        std::span<const mesh_draw> scene_draws{};
+
+        // What this frame draws: the mesh, light and camera proxies, the
+        // UI and debug renderable registries and the environment probe /
+        // fog. Passes reach it only through here, never through a global,
+        // so more than one render_world can exist in a process. Never null
+        // once the renderer is up.
         const render_world* world{nullptr};
 
         // Pixel size of the off-screen scene / LDR targets (and so of

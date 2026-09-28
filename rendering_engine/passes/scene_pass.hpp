@@ -20,17 +20,15 @@ namespace core
 
 namespace rendering_engine
 {
-    struct renderable;
-
     /**
      * @brief 3D scene pass. Clears the HDR scene colour and depth (or
      *        loads the depth the @ref depth_prepass laid down this frame),
-     *        layer-filters and frustum-culls the scene-renderable
-     *        registry against the camera, collects draw items from the
-     *        survivors, sorts them by render queue / depth / pipeline via
-     *        @ref draw_item::sort_key, and dispatches them. Every draw
-     *        reaches the pass as a registered renderable's
-     *        @ref draw_item; @ref record runs no event listener.
+     *        layer-filters and frustum-culls the frame's mesh draws
+     *        (@ref frame_context::scene_draws, one per mesh proxy) against
+     *        the camera, collects the survivors' draw items, sorts them by
+     *        render queue / depth / pipeline via @ref draw_item::sort_key,
+     *        and dispatches them. Every draw reaches the pass as a mesh
+     *        proxy's @ref draw_item; @ref record runs no event listener.
      *
      * The per-frame uploads, the sorted draw list and the pipeline every
      * item binds are built once per frame by @ref prepare; @ref record
@@ -64,18 +62,16 @@ namespace rendering_engine
      * render stats are tallied from the list in @ref prepare, so they are
      * the same either way.
      *
-     * A renderable whose @ref renderable::layer_mask shares no bit with
-     * the camera's @ref camera::culling_mask is skipped outright. Culling
-     * then asks each survivor for its @ref renderable::world_bounds
-     * before @ref renderable::collect_draw_items and skips those that
-     * lie wholly outside the camera frustum, so they never build an item;
-     * a renderable that reports no bounds is always collected. The tallies
-     * land in @ref render_stats::submitted / @ref render_stats::culled.
-     * Each survivor's items are then keyed by @ref make_sort_key from the
-     * item's material queue (opaque or transparent), the view-space depth
-     * to the renderable's bounds centre, and the item's pipeline, so the
-     * final sort draws opaque geometry front-to-back and transparent
-     * geometry back-to-front.
+     * A mesh draw whose @ref mesh_draw::layer_mask shares no bit with the
+     * camera's culling mask is skipped outright. Culling then skips those
+     * whose @ref mesh_draw::bounds lie wholly outside the camera frustum; a
+     * draw without bounds is always collected. The tallies land in
+     * @ref render_stats::submitted / @ref render_stats::culled. Each
+     * survivor's item is then keyed by @ref make_sort_key from the item's
+     * material queue (opaque or transparent), the view-space depth to the
+     * draw's bounds centre, and the item's pipeline, so the final sort
+     * draws opaque geometry front-to-back and transparent geometry
+     * back-to-front.
      *
      * Owns the per-frame bind-group layout (the @ref view_globals block at
      * binding 0 and the packed lights block at binding 2, both in slot 0;
@@ -112,7 +108,6 @@ namespace rendering_engine
         // frame serial too.
         scene_pass(gpu::device& device,
                    core::job_pool* jobs,
-                   const std::vector<renderable*>* registry,
                    render_stats* stats,
                    bool taa_jitter,
                    uint32_t parallel_draw_threshold);
@@ -254,12 +249,6 @@ namespace rendering_engine
         // and draw call. Reads only what @ref prepare left, so several
         // chunks run on several threads at once.
         void dispatch(gpu::render_pass_encoder& pass_encoder, draw_phase phase, size_t first, size_t last) const;
-
-        // Non-owning back-pointer to the render world's
-        // scene-renderable registry. The world outlives every pass
-        // (see renderer.hpp), so the pointer stays valid for the pass's
-        // lifetime.
-        const std::vector<renderable*>* m_registry;
 
         // Per-frame state — owned by the pass; the layout and buffers are
         // created at construction, the groups by the first prepare(), and

@@ -15,7 +15,6 @@
 #include <rendering_engine/gpu/shader_hot_reload.hpp>
 #include <rendering_engine/lighting/lights_ubo.hpp>
 #include <rendering_engine/renderables/per_draw_ubo.hpp>
-#include <rendering_engine/renderables/renderable.hpp>
 
 namespace
 {
@@ -72,10 +71,8 @@ namespace
 
 namespace rendering_engine
 {
-    point_shadow_pass::point_shadow_pass(gpu::device& device,
-                                         const std::vector<renderable*>* registry,
-                                         const rendering_engine::shadow_settings& settings)
-        : m_device(&device), m_registry(registry)
+    point_shadow_pass::point_shadow_pass(gpu::device& device, const rendering_engine::shadow_settings& settings)
+        : m_device(&device)
     {
         auto& gpu = *m_device;
 
@@ -301,7 +298,7 @@ namespace rendering_engine
         // Nothing but the light list shapes an omni map: the six faces
         // are fixed 90-degree views from the light, independent of the
         // camera, so the pass reads only the world's lights and the
-        // renderable registry.
+        // frame's mesh draws.
         auto& gpu = *m_device;
         m_culled = 0;
 
@@ -343,28 +340,30 @@ namespace rendering_engine
             projection = math::perspective(face_fov_y, 1.0f, light_near, m_light_far);
         }
 
-        // Walk the registry once per frame, not once per face: every caster
-        // builds its draw items (and refreshes its per-draw block) exactly once,
-        // and its world bounds are recorded beside its item range so each
-        // face can cull against its own frustum without asking the
-        // renderable again. A caster that reports no bounds casts into
-        // every face.
+        // Walk the draws once per frame, not once per face: every caster's
+        // item is gathered exactly once, and its world bounds are recorded
+        // beside its item range so each face can cull against its own
+        // frustum. A caster without bounds casts into every face.
         m_items.clear();
         m_casters.clear();
         if (!m_has_shadow)
         {
             return;
         }
-        for (auto* r : *m_registry)
+        for (const mesh_draw& draw : ctx.scene_draws)
         {
-            if (!r->casts_shadow() || (r->layer_mask & m_caster_mask) == 0)
+            if (!draw.casts_shadow || (draw.layer_mask & m_caster_mask) == 0)
             {
                 continue;
             }
             caster_range range{};
             range.first = m_items.size();
-            range.bounded = r->world_bounds(range.bounds);
-            r->collect_draw_items(m_items);
+            range.bounded = draw.bounded;
+            range.bounds = draw.bounds;
+            if (draw.drawable)
+            {
+                m_items.push_back(draw.item);
+            }
             range.count = m_items.size() - range.first;
             if (range.count != 0)
             {

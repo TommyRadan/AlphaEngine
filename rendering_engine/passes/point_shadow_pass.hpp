@@ -13,13 +13,11 @@
 #include <rendering_engine/passes/pass.hpp>
 #include <rendering_engine/passes/shadow_casters.hpp>
 #include <rendering_engine/passes/shadow_settings.hpp>
+#include <rendering_engine/render_proxies.hpp>
 #include <rendering_engine/renderables/draw_item.hpp>
-#include <rendering_engine/renderables/renderable.hpp>
 
 namespace rendering_engine
 {
-    struct renderable;
-
     // Six faces of the omni shadow cube, in cube-map face order: +X, -X,
     // +Y, -Y, +Z, -Z (the order of @c gpu::cube_face).
     constexpr int point_shadow_face_count = 6;
@@ -39,28 +37,26 @@ namespace rendering_engine
      * lit fragment shader reconstructs the receiver's face depth from the
      * planes and compares it against the sampled depth.
      *
-     * Like @ref shadow_pass it reuses the scene-renderable registry and each
-     * renderable's existing per-draw model-matrix bind group (or, for an
-     * instanced batch, its per-instance transform stream through the
-     * instanced pipeline twin), so every scene renderable casts with no
-     * per-renderable wiring. The faces' far plane follows the caster's
-     * @ref point_light::range (a fixed default when the range is 0, "no
-     * cutoff"), so the depth precision is spent on the volume the light can
-     * actually reach. When no point light has @c cast_shadow set the pass
+     * Like @ref shadow_pass it culls the frame's mesh draws
+     * (@ref frame_context::scene_draws) and pushes the PerDraw block each
+     * carries (or, for an instanced batch, reads its per-instance transform
+     * stream through the instanced pipeline twin), so every mesh proxy
+     * casts with no per-proxy wiring. The faces' far plane follows the
+     * caster's @ref point_light::range (a fixed default when the range is
+     * 0, "no cutoff"), so the depth precision is spent on the volume the
+     * light can actually reach. When no point light has @c cast_shadow set the pass
      * still clears the faces and reports @ref has_shadow false so the lit
-     * shader falls back to unshadowed lighting. A renderable also needs
-     * @ref renderable::casts_shadow and a @ref renderable::layer_mask that
+     * shader falls back to unshadowed lighting. A draw also needs
+     * @ref mesh_draw::casts_shadow and a @ref mesh_draw::layer_mask that
      * overlaps @ref caster_mask to reach the map; both default to "every
-     * renderable casts".
+     * mesh casts".
      */
     struct point_shadow_pass : pass
     {
         // @p settings supplies the face resolution (half the configured
         // shadow resolution) and the rasteriser slope bias; both are fixed
         // for the pass's lifetime.
-        point_shadow_pass(gpu::device& device,
-                          const std::vector<renderable*>* registry,
-                          const rendering_engine::shadow_settings& settings);
+        point_shadow_pass(gpu::device& device, const rendering_engine::shadow_settings& settings);
         ~point_shadow_pass() override;
 
         point_shadow_pass(const point_shadow_pass&) = delete;
@@ -120,7 +116,7 @@ namespace rendering_engine
         uint32_t culled_count() const;
 
         // Layer bits this pass accepts casters from, on top of the
-        // existing @ref renderable::casts_shadow filter: a renderable
+        // existing @ref mesh_draw::casts_shadow filter: a mesh draw
         // whose layer_mask shares no bit with this mask casts no shadow
         // through it. Defaults to @ref layer_all, so nothing changes until
         // a caller narrows it.
@@ -134,10 +130,10 @@ namespace rendering_engine
 
         // One shadow caster's slice of @ref m_items plus the world bounds it
         // reported, recorded once per frame so each face culls against its
-        // own frustum without re-walking the registry, and the faces that
+        // own frustum without re-walking the draws, and the faces that
         // culling found it reaching (bit n for face n), which record()
-        // draws it into. @c bounded is false for a renderable that reports
-        // no bounds; it casts into every face.
+        // draws it into. @c bounded is false for a draw without bounds; it
+        // casts into every face.
         struct caster_range
         {
             std::size_t first{0};
@@ -146,10 +142,6 @@ namespace rendering_engine
             core::math::aabb bounds{};
             uint32_t faces{0};
         };
-
-        // Non-owning back-pointer to the render world's scene-renderable
-        // registry — the same one the scene and directional shadow passes walk.
-        const std::vector<renderable*>* m_registry;
 
         // The depth cube and the six depth-only targets attached to its
         // faces. The cube is owned here (the targets import it), so it is

@@ -3,61 +3,17 @@
 
 #include <rendering_engine/renderables/instanced_mesh.hpp>
 
-#include <array>
 #include <cstdint>
 
 #include <assets/mesh_data.hpp>
 #include <core/log.hpp>
-#include <rendering_engine/gpu/buffer.hpp>
-#include <rendering_engine/gpu/device.hpp>
-#include <rendering_engine/materials/instanced_material.hpp>
-#include <rendering_engine/materials/material.hpp>
-#include <rendering_engine/renderables/vertex_format_check.hpp>
+#include <rendering_engine/render_world.hpp>
 #include <rendering_engine/resources/mesh_asset.hpp>
 
-namespace
-{
-    // An indexed indirect draw record: index count, instance count, first
-    // index, base vertex, base instance. Mirrors Vulkan's
-    // @c VkDrawIndexedIndirectCommand, the five-uint32 shape the device's
-    // @c draw_indexed_indirect documents.
-    constexpr size_t indirect_command_uints = 5;
-    constexpr size_t indirect_command_size = indirect_command_uints * sizeof(uint32_t);
-} // namespace
-
 rendering_engine::instanced_mesh::instanced_mesh(gpu::device& device, material* mat, uint32_t instance_count)
-    : m_device{&device}, m_material{mat}, m_capacity{instance_count}, m_instance_count{instance_count},
+    : mesh_source{mat, "instanced_mesh"}, m_device{&device}, m_instance_count{instance_count},
       m_instances(instance_count)
 {
-    // The per-instance record must match the stride the instanced material's
-    // slot-1 vertex layout was built with.
-    static_assert(sizeof(instance_record) == instanced_material::instance_buffer_stride,
-                  "instance_record layout must match instanced_material::instance_buffer_stride");
-}
-
-rendering_engine::instanced_mesh::~instanced_mesh()
-{
-    auto& gpu = *m_device;
-    if (m_indirect_buffer.valid())
-    {
-        gpu.destroy(m_indirect_buffer);
-        m_indirect_buffer = {};
-    }
-    if (m_instance_buffer.valid())
-    {
-        gpu.destroy(m_instance_buffer);
-        m_instance_buffer = {};
-    }
-    if (m_index_buffer.valid())
-    {
-        gpu.destroy(m_index_buffer);
-        m_index_buffer = {};
-    }
-    if (m_vertex_buffer.valid())
-    {
-        gpu.destroy(m_vertex_buffer);
-        m_vertex_buffer = {};
-    }
 }
 
 void rendering_engine::instanced_mesh::upload_geometry(const std::vector<assets::vertex_position_uv_normal>& vertices,
@@ -69,68 +25,32 @@ void rendering_engine::instanced_mesh::upload_geometry(const std::vector<assets:
         return;
     }
 
-    m_index_count = static_cast<uint32_t>(indices.size());
-    m_vertex_stride = sizeof(assets::vertex_position_uv_normal);
-    m_vertex_format = assets::vertex_format::position_uv_normal;
-    m_vertex_format_reported = false;
-    m_indirect_dirty = true;
-
-    const auto bounds = assets::compute_position_bounds(
-        vertices.data(), vertices.size() * sizeof(assets::vertex_position_uv_normal), m_vertex_stride);
-    m_has_local_bounds = bounds.has_value();
-    m_local_bounds = bounds.value_or(core::math::aabb{});
+    const assets::mesh_data data = assets::mesh_data::from_vertices(vertices, indices);
+    set_mesh(upload_mesh(*m_device, data, data.format));
     m_world_bounds_dirty = true;
-
-    auto& gpu = *m_device;
-
-    gpu::buffer_descriptor vertex_descriptor{};
-    vertex_descriptor.size = vertices.size() * sizeof(assets::vertex_position_uv_normal);
-    vertex_descriptor.usage = gpu::buffer_usage_vertex;
-    vertex_descriptor.hint = gpu::buffer_usage_hint::static_data;
-    vertex_descriptor.initial_data = vertices.data();
-    m_vertex_buffer = gpu.create_buffer(vertex_descriptor);
-
-    gpu::buffer_descriptor index_descriptor{};
-    index_descriptor.size = indices.size() * sizeof(uint32_t);
-    index_descriptor.usage = gpu::buffer_usage_index;
-    index_descriptor.hint = gpu::buffer_usage_hint::static_data;
-    index_descriptor.initial_data = indices.data();
-    m_index_buffer = gpu.create_buffer(index_descriptor);
 }
 
 void rendering_engine::instanced_mesh::set_geometry(std::shared_ptr<mesh_asset> mesh)
 {
-    m_mesh = std::move(mesh);
-    if (m_mesh)
-    {
-        m_index_count = m_mesh->index_count;
-        m_vertex_stride = m_mesh->vertex_stride;
-        m_vertex_format = m_mesh->format;
-        m_local_bounds = m_mesh->bounds;
-    }
-    m_has_local_bounds = m_mesh != nullptr;
+    set_mesh(std::move(mesh));
     m_world_bounds_dirty = true;
-    m_vertex_format_reported = false;
-    // The command's index count changed with the geometry.
-    m_indirect_dirty = true;
 }
 
 uint32_t rendering_engine::instanced_mesh::instance_capacity() const
 {
-    return m_capacity;
+    return static_cast<uint32_t>(m_instances.size());
 }
 
 void rendering_engine::instanced_mesh::reserve_instances(uint32_t capacity)
 {
-    if (capacity <= m_capacity)
+    if (capacity <= instance_capacity())
     {
         return;
     }
-    // The new records keep instance_record's defaults (identity, white);
-    // collect_draw_items sees the buffer is too small, reallocates it and
-    // uploads every record.
+    // The new records keep mesh_instance's defaults (identity, white); the
+    // next capture copies every record, since the slot count changed.
     m_instances.resize(capacity);
-    m_capacity = capacity;
+    changed();
 }
 
 void rendering_engine::instanced_mesh::mark_dirty(uint32_t index)
@@ -139,20 +59,24 @@ void rendering_engine::instanced_mesh::mark_dirty(uint32_t index)
     {
         m_dirty_begin = index;
         m_dirty_end = index + 1;
-        return;
     }
-    m_dirty_begin = index < m_dirty_begin ? index : m_dirty_begin;
-    m_dirty_end = index + 1 > m_dirty_end ? index + 1 : m_dirty_end;
+    else
+    {
+        m_dirty_begin = index < m_dirty_begin ? index : m_dirty_begin;
+        m_dirty_end = index + 1 > m_dirty_end ? index + 1 : m_dirty_end;
+    }
+    changed();
 }
 
 void rendering_engine::instanced_mesh::set_instance_count(uint32_t count)
 {
-    const uint32_t clamped = count > m_capacity ? m_capacity : count;
+    const uint32_t capacity = instance_capacity();
+    const uint32_t clamped = count > capacity ? capacity : count;
     if (clamped != m_instance_count)
     {
         m_instance_count = clamped;
-        m_indirect_dirty = true;
         m_world_bounds_dirty = true;
+        changed();
     }
 }
 
@@ -163,19 +87,19 @@ uint32_t rendering_engine::instanced_mesh::instance_count() const
 
 void rendering_engine::instanced_mesh::set_instance_transform(uint32_t index, const core::math::mat4& transform)
 {
-    if (index >= m_capacity)
+    if (index >= instance_capacity())
     {
         LOG_WRN("instanced_mesh::set_instance_transform: index out of range");
         return;
     }
     m_instances[index].model = transform;
-    mark_dirty(index);
     m_world_bounds_dirty = true;
+    mark_dirty(index);
 }
 
 void rendering_engine::instanced_mesh::set_instance_color(uint32_t index, const assets::color& color)
 {
-    if (index >= m_capacity)
+    if (index >= instance_capacity())
     {
         LOG_WRN("instanced_mesh::set_instance_color: index out of range");
         return;
@@ -187,11 +111,15 @@ void rendering_engine::instanced_mesh::set_instance_color(uint32_t index, const 
     mark_dirty(index);
 }
 
-bool rendering_engine::instanced_mesh::world_bounds(core::math::aabb& out) const
+rendering_engine::mesh_description rendering_engine::instanced_mesh::describe() const
 {
-    if (!m_has_local_bounds || m_instance_count == 0)
+    mesh_description description = mesh_source::describe();
+    description.placed = false;
+    description.instanced = true;
+    if (mesh() == nullptr || m_instance_count == 0)
     {
-        return false;
+        description.bounds.reset();
+        return description;
     }
     if (m_world_bounds_dirty)
     {
@@ -199,118 +127,29 @@ bool rendering_engine::instanced_mesh::world_bounds(core::math::aabb& out) const
         // transform: each instance's transformed box is exact (the same
         // box the eight transformed corners span), so the union is the
         // tightest axis-aligned fit of the batch as a whole.
-        m_world_bounds = core::math::transform(m_local_bounds, m_instances[0].model);
+        const core::math::aabb& local = mesh()->bounds;
+        m_world_bounds = core::math::transform(local, m_instances[0].model);
         for (uint32_t i = 1; i < m_instance_count; ++i)
         {
-            m_world_bounds =
-                core::math::merge(m_world_bounds, core::math::transform(m_local_bounds, m_instances[i].model));
+            m_world_bounds = core::math::merge(m_world_bounds, core::math::transform(local, m_instances[i].model));
         }
         m_world_bounds_dirty = false;
     }
-    out = m_world_bounds;
-    return true;
+    description.bounds = m_world_bounds;
+    return description;
 }
 
-void rendering_engine::instanced_mesh::collect_draw_items(std::vector<draw_item>& out)
+std::optional<core::math::aabb> rendering_engine::instanced_mesh::local_bounds() const
 {
-    if (m_material == nullptr)
-    {
-        LOG_WRN("instanced_mesh::collect_draw_items: no material");
-        return;
-    }
-    // Draw the shared cached geometry if one was set, otherwise the buffers
-    // uploaded privately via upload_geometry.
-    const gpu::buffer vertex_buffer = m_mesh ? m_mesh->vertex_buffer : m_vertex_buffer;
-    const gpu::buffer index_buffer = m_mesh ? m_mesh->index_buffer : m_index_buffer;
-    if (!vertex_buffer.valid() || !index_buffer.valid())
-    {
-        return;
-    }
-    if (m_instance_count == 0 || m_capacity == 0)
-    {
-        return;
-    }
-    if (!validate_vertex_format(
-            *m_material, m_vertex_format, m_vertex_stride, "instanced_mesh", m_vertex_format_reported))
-    {
-        return;
-    }
+    return std::nullopt;
+}
 
-    auto& gpu = *m_device;
-
-    // Per-instance vertex stream: one {mat4 model; vec4 color;} record per
-    // instance, bound to slot 1 and stepped once per instance by the
-    // instanced material's per-instance vertex layout. Reallocated when
-    // reserve_instances grew the capacity past it; the old buffer is
-    // released through the device, which defers the free until no frame
-    // still reads it.
-    if (!m_instance_buffer.valid() || m_buffer_capacity < m_capacity)
-    {
-        if (m_instance_buffer.valid())
-        {
-            gpu.destroy(m_instance_buffer);
-        }
-        gpu::buffer_descriptor instance_descriptor{};
-        instance_descriptor.size = static_cast<size_t>(m_capacity) * sizeof(instance_record);
-        instance_descriptor.usage = gpu::buffer_usage_vertex | gpu::buffer_usage_copy_dst;
-        instance_descriptor.hint = gpu::buffer_usage_hint::dynamic_data;
-        m_instance_buffer = gpu.create_buffer(instance_descriptor);
-        m_buffer_capacity = m_instance_buffer.valid() ? m_capacity : 0;
-        // A fresh buffer holds nothing: fill every record, so a later
-        // count increase never samples uninitialised storage.
-        m_dirty_begin = 0;
-        m_dirty_end = m_capacity;
-        if (!m_instance_buffer.valid())
-        {
-            return;
-        }
-    }
-
-    // Indirect command buffer holding a single DrawElementsIndirectCommand;
-    // its index-count field selects the geometry and its instance-count
-    // field drives how many copies the one draw paints.
-    if (!m_indirect_buffer.valid())
-    {
-        gpu::buffer_descriptor indirect_descriptor{};
-        indirect_descriptor.size = indirect_command_size;
-        indirect_descriptor.usage = gpu::buffer_usage_indirect | gpu::buffer_usage_copy_dst;
-        indirect_descriptor.hint = gpu::buffer_usage_hint::dynamic_data;
-        m_indirect_buffer = gpu.create_buffer(indirect_descriptor);
-        m_indirect_dirty = true;
-    }
-
-    // Upload only the records changed since the last draw (all of them
-    // right after an allocation).
-    if (m_dirty_end > m_dirty_begin)
-    {
-        gpu.write_buffer(m_instance_buffer,
-                         m_instances.data() + m_dirty_begin,
-                         static_cast<size_t>(m_dirty_end - m_dirty_begin) * sizeof(instance_record),
-                         static_cast<size_t>(m_dirty_begin) * sizeof(instance_record));
-        m_dirty_begin = 0;
-        m_dirty_end = 0;
-    }
-
-    // Rewrite the command whenever either of its live fields changed: the
-    // active instance count, or the index count after a geometry swap (a
-    // stale index count would draw the old mesh's element range over the
-    // new buffers).
-    if (m_indirect_dirty)
-    {
-        const std::array<uint32_t, indirect_command_uints> command{m_index_count, m_instance_count, 0u, 0u, 0u};
-        gpu.write_buffer(m_indirect_buffer, command.data(), indirect_command_size, 0);
-        m_indirect_dirty = false;
-    }
-
-    draw_item item{};
-    item.mat = m_material;
-    item.vertex_buffer = vertex_buffer;
-    item.index_buffer = index_buffer;
-    item.indirect_buffer = m_indirect_buffer;
-    item.instance_buffer = m_instance_buffer;
-    item.index_count = m_index_count;
-    item.vertex_stride = m_vertex_stride;
-    item.instance_stride = static_cast<uint32_t>(sizeof(instance_record));
-    item.instance_count = m_instance_count;
-    out.push_back(item);
+void rendering_engine::instanced_mesh::write_instances(render_world& world, mesh_proxy_handle proxy)
+{
+    mesh_indirect_args args{};
+    args.index_count = mesh() != nullptr ? mesh()->index_count : 0;
+    args.instance_count = m_instance_count;
+    world.write_mesh_instances(proxy, m_instances, m_dirty_begin, m_dirty_end, args);
+    m_dirty_begin = 0;
+    m_dirty_end = 0;
 }

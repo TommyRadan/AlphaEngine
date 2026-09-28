@@ -121,7 +121,6 @@ GAME_MODULE()
 
     auto pedestal_box = std::make_unique<rendering_engine::box>(
         cache, dropper->make_material(assets::color{150, 150, 160, 255}), 3.0f, 3.0f, pedestal_height);
-    pedestal_box->upload();
     runtime::node& pedestal = scene.create_node("pedestal", &demo);
     pedestal.transform.set_position(pedestal_center);
     pedestal.add_component(runtime::renderable_component{std::move(pedestal_box)});
@@ -132,7 +131,6 @@ GAME_MODULE()
     {
         auto crate_box =
             std::make_unique<rendering_engine::box>(cache, crate_material, crate_size, crate_size, crate_size);
-        crate_box->upload();
         runtime::node& crate = scene.create_node("crate", &demo);
         crate.add_component(runtime::renderable_component{std::move(crate_box)});
         crate.add_component(runtime::rigidbody_component{runtime::physics::body_type::dynamic_body, 2.0f});

@@ -78,8 +78,7 @@ namespace rendering_engine
         void write_frame_block();
 
         // Non-owning back-pointer to the render world's
-        // ui-renderable registry. Same lifetime guarantee as
-        // @ref scene_pass::m_registry.
+        // ui-renderable registry. The world outlives every pass.
         const std::vector<renderable*>* m_registry;
 
         gpu::bind_group_layout m_frame_layout{};

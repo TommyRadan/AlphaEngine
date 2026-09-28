@@ -47,8 +47,7 @@ namespace rendering_engine
         descriptor.vertex_format_without_tangents = assets::vertex_format::position;
 
         // Slot 1: the per-instance stream (divisor 1). A mat4 model as four
-        // vec4 columns followed by a vec4 tint, matching the record
-        // @ref instanced_mesh uploads.
+        // vec4 columns followed by a vec4 tint: one @ref mesh_instance.
         gpu::vertex_buffer_layout instance_layout{};
         instance_layout.stride = instance_buffer_stride;
         instance_layout.step_mode = gpu::vertex_step_mode::instance;

@@ -13,12 +13,11 @@ namespace rendering_engine
     // each frame and surfaced read-only through
     // @ref renderer::get_render_stats (consumed by the debug overlay).
     //
-    // The scene pass skips a renderable whose @ref renderable::layer_mask
-    // shares no bit with the camera's culling mask, and frustum-culls
-    // every renderable that reports @ref renderable::world_bounds against
-    // the camera, before collecting its draw items, so @ref submitted +
-    // @ref culled equals @ref scene_renderables and @ref draw_calls
-    // counts only what the survivors emitted. The primitive / vertex
+    // The scene pass skips a mesh proxy whose layer bits share none with
+    // the camera's culling mask, and frustum-culls every mesh proxy that
+    // has world bounds against the camera, before taking its draw, so
+    // @ref submitted + @ref culled equals @ref scene_renderables and
+    // @ref draw_calls counts only what the survivors emitted. The primitive / vertex
     // counts are the geometry actually submitted to the pipeline this
     // frame, multiplied through instancing, with each draw tallied under
     // its own topology (see @ref tally_primitives). The shadow-pass
@@ -26,15 +25,15 @@ namespace rendering_engine
     // scene pass in the same frame.
     struct render_stats
     {
-        // Renderables registered with the scene-renderable registry.
+        // Mesh proxies in the render world.
         uint32_t scene_renderables{0};
 
-        // Renderables asked for draw items this frame: those whose world
+        // Mesh proxies whose draw was taken this frame: those whose world
         // bounds touch the camera frustum plus those with no bounds (always
-        // drawn).
+        // drawn), whether or not they had anything to draw.
         uint32_t submitted{0};
 
-        // Renderables skipped this frame because their layer_mask shared
+        // Mesh proxies skipped this frame because their layer bits shared
         // no bit with the camera's culling mask, or their world bounds
         // fell entirely outside the camera frustum.
         uint32_t culled{0};
@@ -53,8 +52,7 @@ namespace rendering_engine
         // bounds fell outside the light's perspective frustum.
         uint32_t spot_shadow_culled{0};
 
-        // Draw items submitted this frame (one GPU draw call each). A
-        // single renderable may emit more than one.
+        // Draw items submitted this frame (one GPU draw call each).
         uint32_t draw_calls{0};
 
         // Total instances drawn across every draw item (a non-instanced

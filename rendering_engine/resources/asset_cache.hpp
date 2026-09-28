@@ -332,9 +332,9 @@ namespace rendering_engine
          * would produce. @p builder is invoked only on a miss; on a hit the
          * cached upload is shared and @p builder is never called. This is how
          * many renderables sharing identical procedural geometry collapse to a
-         * single GPU upload. A builder that produces no geometry (no vertex
-         * bytes or a zero stride) is an error: it is logged, nothing is
-         * uploaded or cached, and @c nullptr is returned.
+         * single GPU upload. A builder that produces no geometry (not one
+         * whole vertex record, or a zero stride) is an error: it is logged,
+         * nothing is uploaded or cached, and @c nullptr is returned.
          */
         std::shared_ptr<mesh_asset> get_or_create_mesh(const std::string& key,
                                                        const std::function<assets::mesh_data()>& builder);

@@ -68,7 +68,8 @@ namespace runtime
      * that joint — rigid node animation, and bones other nodes can hang
      * off), and @ref bind_skin hands a skin's joint palette to the
      * @c mesh_component of a node each frame
-     * (@ref rendering_engine::model::set_joint_matrices). The palette is
+     * (@ref runtime::mesh_component::set_joint_matrices), which the render
+     * extraction hands to its proxy. The palette is
      * computed from the skeleton's own pose, not from the nodes' world
      * matrices, so it does not depend on the order the scene updates in.
      * @ref runtime::instantiate_gltf sets all of this up for an imported

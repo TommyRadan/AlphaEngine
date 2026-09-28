@@ -23,10 +23,11 @@ namespace runtime
      *
      * The object-space bounds of its @ref mesh_component's mesh, kept on the
      * CPU with the mesh asset (or computed from the mesh data a component
-     * built from a private upload was given); else the box of the premade
-     * shape its @ref renderable_component holds, which is that shape's mesh
-     * asset bounds under the shape's own local transform. Physics fits a
-     * collider to it (see @c runtime::physics::collider_settings).
+     * built from a private upload was given); else the box of the mesh
+     * source its @ref renderable_component holds
+     * (@c rendering_engine::mesh_source::local_bounds: a premade shape's
+     * mesh asset bounds). Physics fits a collider to it (see
+     * @c runtime::physics::collider_settings).
      */
     std::optional<core::math::aabb> drawn_bounds(node& owner);
 } // namespace runtime

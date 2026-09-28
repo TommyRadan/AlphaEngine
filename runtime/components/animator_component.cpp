@@ -11,7 +11,6 @@
 #include <core/event_engine.hpp>
 #include <core/log.hpp>
 #include <core/time.hpp>
-#include <rendering_engine/renderables/model.hpp>
 #include <runtime/components/mesh_component.hpp>
 #include <runtime/engine.hpp>
 #include <runtime/node.hpp>
@@ -394,12 +393,12 @@ namespace runtime
                         continue;
                     }
                     mesh_component* mesh = binding.mesh_node->get_component<mesh_component>();
-                    if (mesh == nullptr || mesh->model() == nullptr)
+                    if (mesh == nullptr || mesh->is_empty())
                     {
                         continue;
                     }
                     skeleton->skin_matrices(binding.skin, model, binding.mesh_joint, palette);
-                    mesh->model()->set_joint_matrices(palette);
+                    mesh->set_joint_matrices(palette);
                 }
             }
 

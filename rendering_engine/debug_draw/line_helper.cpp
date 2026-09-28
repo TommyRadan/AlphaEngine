@@ -5,36 +5,35 @@
 
 #include <rendering_engine/materials/line_material.hpp>
 #include <rendering_engine/renderer.hpp>
+#include <rendering_engine/resources/mesh_asset.hpp>
 
 namespace rendering_engine::debug_draw
 {
     line_helper::line_helper(renderer& owner, const char* name)
-        : helper(owner, name, helper_layer::overlay), m_line(owner.device(), &owner.get_debug_line_material())
+        : helper(owner, name), m_line(owner.device(), &owner.get_debug_line_material())
     {
         // Every gizmo is a list of independent segments (vertex pairs).
         m_line.set_mode(line_mode::segments);
+
+        owner.register_debug_renderable(this);
     }
 
-    line_helper::~line_helper() = default;
-
-    void line_helper::upload()
+    line_helper::~line_helper()
     {
-        // Geometry is uploaded eagerly in set_segments(); nothing to do
-        // when the pass requests an upload.
+        owner().unregister_debug_renderable(this);
     }
 
     void line_helper::set_segments(const std::vector<core::math::vec3>& positions,
                                    const std::vector<core::math::vec3>& colors)
     {
         m_line.set_positions(positions, colors);
-        m_line.upload();
     }
 
     void line_helper::refresh() {}
 
     void line_helper::collect_draw_items(std::vector<draw_item>& out)
     {
-        if (!visible)
+        if (!is_visible())
         {
             return;
         }
@@ -42,9 +41,22 @@ namespace rendering_engine::debug_draw
         // Let dynamic gizmos follow their target before they draw.
         refresh();
 
-        // Place the (mostly origin-baked) geometry; helpers that bake
-        // world-space vertices leave the transform at identity.
-        m_line.transform = transform;
-        m_line.collect_draw_items(out);
+        const mesh_description geometry = m_line.describe();
+        if (geometry.mat == nullptr || geometry.mesh == nullptr || !geometry.mesh->vertex_buffer.valid())
+        {
+            return;
+        }
+
+        // The segments draw their vertices directly, two per segment (an odd
+        // trailing vertex is dropped). The (mostly origin-baked) geometry is
+        // placed by the helper's transform; helpers that bake world-space
+        // vertices leave it at identity.
+        draw_item item{};
+        item.mat = geometry.mat;
+        m_per_draw.bind(transform, item);
+        item.vertex_buffer = geometry.mesh->vertex_buffer;
+        item.vertex_stride = geometry.mesh->vertex_stride;
+        item.vertex_count = geometry.vertex_count.value_or(geometry.mesh->vertex_count);
+        out.push_back(item);
     }
 } // namespace rendering_engine::debug_draw

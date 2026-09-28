@@ -6,23 +6,9 @@
 #include <assets/mesh_data.hpp>
 #include <core/log.hpp>
 #include <core/math/math.hpp>
-#include <rendering_engine/gpu/buffer.hpp>
-#include <rendering_engine/gpu/device.hpp>
-#include <rendering_engine/materials/material.hpp>
-#include <rendering_engine/renderables/per_draw_ubo.hpp>
 #include <rendering_engine/resources/mesh_asset.hpp>
 
-rendering_engine::points::points(gpu::device& device, material* mat) : m_device{&device}, m_material{mat} {}
-
-rendering_engine::points::~points()
-{
-    auto& gpu = *m_device;
-    if (m_vertex_buffer.valid())
-    {
-        gpu.destroy(m_vertex_buffer);
-        m_vertex_buffer = {};
-    }
-}
+rendering_engine::points::points(gpu::device& device, material* mat) : mesh_source{mat, "points"}, m_device{&device} {}
 
 void rendering_engine::points::set_positions(const std::vector<core::math::vec3>& positions)
 {
@@ -32,6 +18,7 @@ void rendering_engine::points::set_positions(const std::vector<core::math::vec3>
     {
         m_vertices.push_back({position, core::math::vec3{1.0f, 1.0f, 1.0f}});
     }
+    upload();
 }
 
 void rendering_engine::points::set_positions(const std::vector<core::math::vec3>& positions,
@@ -51,75 +38,36 @@ void rendering_engine::points::set_positions(const std::vector<core::math::vec3>
     {
         m_vertices.push_back({positions[i], colors[i]});
     }
+    upload();
 }
 
 void rendering_engine::points::upload()
 {
-    m_vertex_count = m_vertices.size();
-    m_vertex_stride = sizeof(assets::vertex_position_color);
-
-    // Box the staged points once per upload so world_bounds is a matrix
-    // transform per frame; an empty upload leaves the cloud unbounded.
-    const auto bounds = assets::compute_position_bounds(
-        m_vertices.data(), m_vertices.size() * sizeof(assets::vertex_position_color), m_vertex_stride);
-    m_has_local_bounds = bounds.has_value();
-    m_local_bounds = bounds.value_or(core::math::aabb{});
-
-    auto& gpu = *m_device;
-
-    // Re-uploading replaces the previous buffer, so drop it first.
-    if (m_vertex_buffer.valid())
-    {
-        gpu.destroy(m_vertex_buffer);
-        m_vertex_buffer = {};
-    }
-
+    // Box the points once per upload; an empty cloud is unbounded and draws
+    // nothing.
+    m_bounds = assets::compute_position_bounds(m_vertices.data(),
+                                               m_vertices.size() * sizeof(assets::vertex_position_color),
+                                               sizeof(assets::vertex_position_color));
     if (m_vertices.empty())
     {
+        set_mesh(nullptr);
         return;
     }
 
-    gpu::buffer_descriptor vertex_descriptor{};
-    vertex_descriptor.size = m_vertices.size() * sizeof(assets::vertex_position_color);
-    vertex_descriptor.usage = gpu::buffer_usage_vertex;
-    vertex_descriptor.hint = gpu::buffer_usage_hint::static_data;
-    vertex_descriptor.initial_data = m_vertices.data();
-    m_vertex_buffer = gpu.create_buffer(vertex_descriptor);
+    assets::mesh_data data = assets::mesh_data::from_vertices(m_vertices);
+    data.bounds = m_bounds;
+    set_mesh(upload_mesh(*m_device, data, data.format));
 }
 
-bool rendering_engine::points::world_bounds(core::math::aabb& out) const
+rendering_engine::mesh_description rendering_engine::points::describe() const
 {
-    if (!m_has_local_bounds)
-    {
-        return false;
-    }
-    out = core::math::transform(m_local_bounds, transform.get_world_matrix());
-    return true;
+    mesh_description description = mesh_source::describe();
+    description.bounds = m_bounds;
+    description.check_format = false;
+    return description;
 }
 
-void rendering_engine::points::collect_draw_items(std::vector<draw_item>& out)
+std::optional<core::math::aabb> rendering_engine::points::local_bounds() const
 {
-    if (m_material == nullptr)
-    {
-        LOG_WRN("points::collect_draw_items: no material");
-        return;
-    }
-    if (!m_vertex_buffer.valid())
-    {
-        return;
-    }
-
-    // Non-indexed point-list draw: an invalid index buffer tells the
-    // pass to call draw(vertex_count). The point topology is baked into
-    // the material's pipeline.
-    draw_item item{};
-    item.mat = m_material;
-    // The model + normal matrix the pass pushes (recomputed only when
-    // the transform moved); a mirroring transform flags the item so the
-    // pass draws it with the clockwise-front-face variant.
-    m_per_draw.bind(transform, item);
-    item.vertex_buffer = m_vertex_buffer;
-    item.vertex_count = static_cast<uint32_t>(m_vertex_count);
-    item.vertex_stride = m_vertex_stride;
-    out.push_back(item);
+    return std::nullopt;
 }

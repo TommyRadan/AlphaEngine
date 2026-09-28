@@ -45,7 +45,7 @@ namespace editor
                 {
                     for (auto* gizmo : helpers)
                     {
-                        gizmo->visible = true;
+                        gizmo->set_visible(true);
                     }
                 }
                 ImGui::SameLine();
@@ -53,7 +53,7 @@ namespace editor
                 {
                     for (auto* gizmo : helpers)
                     {
-                        gizmo->visible = false;
+                        gizmo->set_visible(false);
                     }
                 }
                 ImGui::Separator();
@@ -64,7 +64,11 @@ namespace editor
                 for (auto* gizmo : helpers)
                 {
                     ImGui::PushID(index++);
-                    ImGui::Checkbox(gizmo->name(), &gizmo->visible);
+                    bool shown = gizmo->is_visible();
+                    if (ImGui::Checkbox(gizmo->name(), &shown))
+                    {
+                        gizmo->set_visible(shown);
+                    }
                     ImGui::PopID();
                 }
             }

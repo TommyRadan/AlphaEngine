@@ -13,13 +13,11 @@
 #include <rendering_engine/passes/pass.hpp>
 #include <rendering_engine/passes/shadow_casters.hpp>
 #include <rendering_engine/passes/shadow_settings.hpp>
+#include <rendering_engine/render_proxies.hpp>
 #include <rendering_engine/renderables/draw_item.hpp>
-#include <rendering_engine/renderables/renderable.hpp>
 
 namespace rendering_engine
 {
-    struct renderable;
-
     // Upper bound of the directional cascades: the lit shaders' Shadow
     // block holds this many light-space matrices and split depths
     // (SHADOW_MAX_CASCADES in shaders/include/shadows.glsl).
@@ -53,26 +51,24 @@ namespace rendering_engine
      * reports @ref has_shadow as false so the lit shaders fall back to
      * unshadowed lighting.
      *
-     * The pass reuses the same scene-renderable registry as the
-     * @ref scene_pass and the per-draw model-matrix bind group each
-     * renderable already builds (binding 1), so every scene renderable
-     * casts without any per-renderable wiring; only the depth-only
-     * pipeline (vertex stage only, rasteriser depth bias against acne)
-     * and the light-space matrices differ. Instanced batches cast
-     * through the instanced twin of that pipeline, which reads their
-     * per-instance transform stream (see @ref shadow_caster_dispatch). A
-     * renderable also needs @ref renderable::casts_shadow and a
-     * @ref renderable::layer_mask that overlaps @ref caster_mask to reach
-     * the map; both default to "every renderable casts".
+     * The pass culls the same mesh draws as the @ref scene_pass
+     * (@ref frame_context::scene_draws) and pushes the same PerDraw block
+     * each carries, so every mesh proxy casts without any per-proxy
+     * wiring; only the depth-only pipeline (vertex stage only, rasteriser
+     * depth bias against acne) and the light-space matrices differ.
+     * Instanced batches cast through the instanced twin of that pipeline,
+     * which reads their per-instance transform stream (see
+     * @ref shadow_caster_dispatch). A draw also needs
+     * @ref mesh_draw::casts_shadow and a @ref mesh_draw::layer_mask that
+     * overlaps @ref caster_mask to reach the map; both default to "every
+     * mesh casts".
      */
     struct shadow_pass : pass
     {
         // @p settings supplies the map resolution, the shadow distance,
         // the cascade count, the receiver and slope biases and the PCF
         // kernel; they are fixed for the pass's lifetime.
-        shadow_pass(gpu::device& device,
-                    const std::vector<renderable*>* registry,
-                    const rendering_engine::shadow_settings& settings);
+        shadow_pass(gpu::device& device, const rendering_engine::shadow_settings& settings);
         ~shadow_pass() override;
 
         shadow_pass(const shadow_pass&) = delete;
@@ -155,7 +151,7 @@ namespace rendering_engine
         uint32_t culled_count() const;
 
         // Layer bits this pass accepts casters from, on top of the
-        // existing @ref renderable::casts_shadow filter: a renderable
+        // existing @ref mesh_draw::casts_shadow filter: a mesh draw
         // whose layer_mask shares no bit with this mask casts no shadow
         // through it. Defaults to @ref layer_all, so nothing changes until
         // a caller narrows it.
@@ -170,19 +166,13 @@ namespace rendering_engine
         // One shadow caster's slice of @ref m_items and the cascades its
         // bounds reach (bit n for cascade n), recorded once per frame so
         // each cascade draws only its own casters without re-walking the
-        // registry. A renderable that reports no bounds reaches every
-        // cascade.
+        // draws. A draw without bounds reaches every cascade.
         struct caster_range
         {
             std::size_t first{0};
             std::size_t count{0};
             uint32_t cascades{0};
         };
-
-        // Non-owning back-pointer to the render world's
-        // scene-renderable registry — the same one the scene pass
-        // walks. The world outlives every pass.
-        const std::vector<renderable*>* m_registry;
 
         // Configuration, fixed at construction (see rendering_engine::shadow_settings).
         uint32_t m_resolution{0};

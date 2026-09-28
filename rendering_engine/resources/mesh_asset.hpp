@@ -10,11 +10,17 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <string>
 
 #include <assets/vertex.hpp>
 #include <core/math/aabb.hpp>
 #include <rendering_engine/gpu/handle.hpp>
+
+namespace assets
+{
+    struct mesh_data;
+}
 
 namespace rendering_engine
 {
@@ -66,11 +72,10 @@ namespace rendering_engine
 
         // Object-space bounds of @ref vertex_buffer, kept on the CPU: the
         // builder-supplied @c assets::mesh_data::bounds when present,
-        // otherwise derived from the positions at upload. Renderables
-        // transform it by their world matrix to answer
-        // @ref renderable::world_bounds, so the passes can frustum-cull
-        // them, and world systems (physics collider fitting) read it
-        // without touching the GPU buffers. A zero box for empty geometry
+        // otherwise derived from the positions at upload. A mesh proxy
+        // transforms it by its world matrix (@ref mesh_proxy::world_bounds),
+        // so the passes can frustum-cull it, and world systems (physics
+        // collider fitting) read it without touching the GPU buffers. A zero box for empty geometry
         // (which draws nothing anyway).
         core::math::aabb bounds{};
 
@@ -83,4 +88,18 @@ namespace rendering_engine
     private:
         gpu::device* m_device;
     };
+
+    /**
+     * @brief Uploads @p data to @p device as a new mesh asset.
+     *
+     * The asset holds @p data's vertex records, recorded as @p format, and
+     * its indices when it carries any; its bounds are the box @p data
+     * supplies, else the one around its positions. @p key is recorded as
+     * @ref mesh_asset::key: the cache's structural key, or empty for geometry
+     * a renderable uploads for itself (a line, a point cloud, a mesh
+     * component's own mesh data). Returns null, uploading nothing, when
+     * @p data holds no whole vertex record.
+     */
+    std::shared_ptr<mesh_asset>
+    upload_mesh(gpu::device& device, const assets::mesh_data& data, assets::vertex_format format, std::string key = {});
 } // namespace rendering_engine

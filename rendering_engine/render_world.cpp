@@ -6,7 +6,11 @@
 #include <algorithm>
 #include <cassert>
 
+#include <core/log.hpp>
+#include <core/math/aabb.hpp>
 #include <rendering_engine/lighting/environment_probe.hpp>
+#include <rendering_engine/renderables/vertex_format_check.hpp>
+#include <rendering_engine/resources/mesh_asset.hpp>
 
 namespace
 {
@@ -42,20 +46,6 @@ void rendering_engine::render_world::end_frame() noexcept
     m_in_frame = false;
 }
 
-void rendering_engine::render_world::register_scene_renderable(renderable* r)
-{
-    if (r != nullptr)
-    {
-        m_scene_renderables.push_back(r);
-    }
-}
-
-void rendering_engine::render_world::unregister_scene_renderable(renderable* r)
-{
-    m_scene_renderables.erase(std::remove(m_scene_renderables.begin(), m_scene_renderables.end(), r),
-                              m_scene_renderables.end());
-}
-
 void rendering_engine::render_world::register_ui_renderable(renderable* r)
 {
     if (r != nullptr)
@@ -81,6 +71,143 @@ void rendering_engine::render_world::unregister_debug_renderable(renderable* r)
 {
     m_debug_renderables.erase(std::remove(m_debug_renderables.begin(), m_debug_renderables.end(), r),
                               m_debug_renderables.end());
+}
+
+rendering_engine::mesh_proxy_handle rendering_engine::render_world::create_mesh(const mesh_description& source,
+                                                                                const core::math::mat4& world)
+{
+    assert(!m_in_frame && "mesh proxies are created between frames");
+    const mesh_proxy_handle created = m_meshes.insert(mesh_proxy{});
+    set_mesh_source(created, source);
+    set_mesh_world(created, world);
+    return created;
+}
+
+void rendering_engine::render_world::destroy_mesh(mesh_proxy_handle mesh)
+{
+    assert(!m_in_frame && "mesh proxies are destroyed between frames");
+    m_meshes.erase(mesh);
+}
+
+void rendering_engine::render_world::set_mesh_source(mesh_proxy_handle mesh, const mesh_description& source)
+{
+    mesh_proxy* proxy = m_meshes.get(mesh);
+    if (proxy == nullptr)
+    {
+        return;
+    }
+
+    // A mismatch or a missing material is reported once per geometry and
+    // material the proxy is given, not on every write of the same pair.
+    if (proxy->source.mesh != source.mesh || proxy->source.mat != source.mat)
+    {
+        proxy->format_reported = false;
+        if (source.mat == nullptr)
+        {
+            LOG_WRN("%s: no material; nothing is drawn", source.name);
+        }
+    }
+    proxy->source = source;
+    proxy->format_ok = true;
+    if (source.check_format && source.mat != nullptr && source.mesh != nullptr)
+    {
+        proxy->format_ok = validate_vertex_format(*source.mat, *source.mesh, source.name, proxy->format_reported);
+    }
+
+    if (source.bounds.has_value())
+    {
+        proxy->world_bounds = source.placed ? core::math::transform(*source.bounds, proxy->world) : *source.bounds;
+    }
+}
+
+void rendering_engine::render_world::set_mesh_world(mesh_proxy_handle mesh, const core::math::mat4& world)
+{
+    mesh_proxy* proxy = m_meshes.get(mesh);
+    if (proxy == nullptr)
+    {
+        return;
+    }
+    proxy->world = world;
+    proxy->per_draw = make_per_draw_payload(world);
+    proxy->mirrored = is_mirrored(proxy->per_draw.model);
+    if (proxy->source.bounds.has_value() && proxy->source.placed)
+    {
+        proxy->world_bounds = core::math::transform(*proxy->source.bounds, world);
+    }
+}
+
+void rendering_engine::render_world::set_mesh_visible(mesh_proxy_handle mesh, bool visible)
+{
+    if (mesh_proxy* proxy = m_meshes.get(mesh))
+    {
+        proxy->visible = visible;
+    }
+}
+
+void rendering_engine::render_world::set_mesh_joints(mesh_proxy_handle mesh, std::span<const core::math::mat4> joints)
+{
+    if (mesh_proxy* proxy = m_meshes.get(mesh))
+    {
+        proxy->joints.assign(joints.begin(), joints.end());
+        ++proxy->joints_revision;
+    }
+}
+
+void rendering_engine::render_world::write_mesh_instances(mesh_proxy_handle mesh,
+                                                          std::span<const mesh_instance> records,
+                                                          uint32_t changed_begin,
+                                                          uint32_t changed_end,
+                                                          const mesh_indirect_args& args)
+{
+    mesh_proxy* proxy = m_meshes.get(mesh);
+    if (proxy == nullptr)
+    {
+        return;
+    }
+    mesh_instances& snapshot = proxy->instances;
+    const auto slots = static_cast<uint32_t>(records.size());
+    if (snapshot.records.size() != records.size())
+    {
+        // A new slot count: every record is copied, and the renderer
+        // reallocates its stream and uploads it whole on its own.
+        snapshot.records.assign(records.begin(), records.end());
+        changed_begin = 0;
+        changed_end = slots;
+    }
+    else
+    {
+        changed_end = std::min(changed_end, slots);
+        if (changed_begin < changed_end)
+        {
+            std::copy(records.begin() + changed_begin,
+                      records.begin() + changed_end,
+                      snapshot.records.begin() + changed_begin);
+        }
+    }
+    if (changed_begin < changed_end)
+    {
+        if (snapshot.dirty_begin == snapshot.dirty_end)
+        {
+            snapshot.dirty_begin = changed_begin;
+            snapshot.dirty_end = changed_end;
+        }
+        else
+        {
+            snapshot.dirty_begin = std::min(snapshot.dirty_begin, changed_begin);
+            snapshot.dirty_end = std::max(snapshot.dirty_end, changed_end);
+        }
+    }
+    snapshot.args = args;
+}
+
+rendering_engine::mesh_proxy* rendering_engine::render_world::mesh(mesh_proxy_handle mesh) noexcept
+{
+    return m_meshes.get(mesh);
+}
+
+const rendering_engine::mesh_proxy* rendering_engine::render_world::mesh(mesh_proxy_handle mesh) const noexcept
+{
+    return m_meshes.get(mesh);
 }
 
 rendering_engine::light_proxy_handle rendering_engine::render_world::create_light(const light_proxy& proxy,

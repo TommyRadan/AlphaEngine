@@ -9,16 +9,20 @@
 #include <core/math/transform.hpp>
 #include <rendering_engine/debug_draw/helper.hpp>
 #include <rendering_engine/renderables/line.hpp>
+#include <rendering_engine/renderables/per_draw_ubo.hpp>
+#include <rendering_engine/renderables/renderable.hpp>
 
 namespace rendering_engine::debug_draw
 {
     // A helper whose geometry is a list of independent line segments
     // (vertex pairs) drawn through its renderer's shared depth-disabled
-    // debug line material, in the always-on-top overlay pass. The line-based gizmos
-    // (axes, bounding box, light and camera wireframes) derive from this;
-    // they fill geometry via @ref set_segments and optionally follow a
-    // moving target via @ref refresh.
-    struct line_helper : public helper
+    // debug line material, in the always-on-top overlay pass: it registers
+    // itself with that renderer's debug-renderable registry on construction
+    // and leaves it on destruction. The line-based gizmos (axes, bounding
+    // box, light and camera wireframes) derive from this; they fill geometry
+    // via @ref set_segments and optionally follow a moving target via
+    // @ref refresh.
+    struct line_helper : public helper, public renderable
     {
         line_helper(renderer& owner, const char* name);
         ~line_helper() override;
@@ -28,7 +32,9 @@ namespace rendering_engine::debug_draw
         // geometry directly (box, light, camera) leave it at identity.
         core::transform transform;
 
-        void upload() final;
+        // Geometry is uploaded eagerly by @ref set_segments; nothing to do.
+        void upload() final {}
+
         void collect_draw_items(std::vector<draw_item>& out) final;
 
     protected:
@@ -45,5 +51,8 @@ namespace rendering_engine::debug_draw
 
     private:
         line m_line;
+
+        // The PerDraw block the pass pushes, built from @ref transform.
+        per_draw_binding m_per_draw;
     };
 } // namespace rendering_engine::debug_draw

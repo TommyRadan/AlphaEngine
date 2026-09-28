@@ -9,32 +9,18 @@
 #include <assets/mesh_data.hpp>
 #include <core/log.hpp>
 #include <core/math/math.hpp>
-#include <rendering_engine/gpu/buffer.hpp>
-#include <rendering_engine/gpu/device.hpp>
-#include <rendering_engine/materials/material.hpp>
-#include <rendering_engine/renderables/per_draw_ubo.hpp>
+#include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/resources/mesh_asset.hpp>
 
-rendering_engine::line::line(gpu::device& device, material* mat) : m_device{&device}, m_material{mat} {}
-
-rendering_engine::line::~line()
-{
-    auto& gpu = *m_device;
-    if (m_index_buffer.valid())
-    {
-        gpu.destroy(m_index_buffer);
-        m_index_buffer = {};
-    }
-    if (m_vertex_buffer.valid())
-    {
-        gpu.destroy(m_vertex_buffer);
-        m_vertex_buffer = {};
-    }
-}
+rendering_engine::line::line(gpu::device& device, material* mat) : mesh_source{mat, "line"}, m_device{&device} {}
 
 void rendering_engine::line::set_mode(line_mode mode)
 {
     m_mode = mode;
+    if (!m_vertices.empty())
+    {
+        upload();
+    }
 }
 
 void rendering_engine::line::set_positions(const std::vector<core::math::vec3>& positions)
@@ -45,6 +31,7 @@ void rendering_engine::line::set_positions(const std::vector<core::math::vec3>& 
     {
         m_vertices.push_back({position, core::math::vec3{1.0f, 1.0f, 1.0f}});
     }
+    upload();
 }
 
 void rendering_engine::line::set_positions(const std::vector<core::math::vec3>& positions,
@@ -64,126 +51,58 @@ void rendering_engine::line::set_positions(const std::vector<core::math::vec3>& 
     {
         m_vertices.push_back({positions[i], colors[i]});
     }
+    upload();
 }
 
 void rendering_engine::line::upload()
 {
-    m_vertex_count = m_vertices.size();
-    m_vertex_stride = sizeof(assets::vertex_position_color);
-    m_index_count = 0;
-
-    // Box the staged vertices once per upload so world_bounds is a matrix
-    // transform per frame; an empty upload leaves the line unbounded.
-    const auto bounds = assets::compute_position_bounds(
-        m_vertices.data(), m_vertices.size() * sizeof(assets::vertex_position_color), m_vertex_stride);
-    m_has_local_bounds = bounds.has_value();
-    m_local_bounds = bounds.value_or(core::math::aabb{});
-
-    auto& gpu = *m_device;
-
-    // Re-uploading replaces the previous buffers, so drop them first.
-    if (m_vertex_buffer.valid())
-    {
-        gpu.destroy(m_vertex_buffer);
-        m_vertex_buffer = {};
-    }
-    if (m_index_buffer.valid())
-    {
-        gpu.destroy(m_index_buffer);
-        m_index_buffer = {};
-    }
-
+    // Box the vertices once per upload; an empty line is unbounded and
+    // draws nothing.
+    m_bounds = assets::compute_position_bounds(m_vertices.data(),
+                                               m_vertices.size() * sizeof(assets::vertex_position_color),
+                                               sizeof(assets::vertex_position_color));
     if (m_vertices.empty())
     {
-        return;
-    }
-
-    gpu::buffer_descriptor vertex_descriptor{};
-    vertex_descriptor.size = m_vertices.size() * sizeof(assets::vertex_position_color);
-    vertex_descriptor.usage = gpu::buffer_usage_vertex;
-    vertex_descriptor.hint = gpu::buffer_usage_hint::static_data;
-    vertex_descriptor.initial_data = m_vertices.data();
-    m_vertex_buffer = gpu.create_buffer(vertex_descriptor);
-
-    if (m_mode != line_mode::strip)
-    {
-        // Segments draw the vertices directly, two per segment; nothing
-        // to index. An odd trailing vertex has no partner, so it is
-        // dropped from the draw (the buffer still holds it).
-        return;
-    }
-
-    // A strip joins consecutive vertices, but the backend bakes line-list
-    // topology, so expand the polyline into segment pairs: vertex i pairs
-    // with i + 1 for every i in [0, count - 1). Fewer than two vertices
-    // span no segment.
-    if (m_vertices.size() < 2)
-    {
+        set_mesh(nullptr);
         return;
     }
 
     std::vector<uint32_t> indices;
-    indices.reserve((m_vertices.size() - 1) * 2);
-    for (uint32_t i = 0; i + 1 < static_cast<uint32_t>(m_vertices.size()); ++i)
+    if (m_mode == line_mode::strip && m_vertices.size() >= 2)
     {
-        indices.push_back(i);
-        indices.push_back(i + 1);
+        // A strip joins consecutive vertices, but the backend bakes
+        // line-list topology, so expand the polyline into segment pairs:
+        // vertex i pairs with i + 1 for every i in [0, count - 1). Fewer
+        // than two vertices span no segment.
+        indices.reserve((m_vertices.size() - 1) * 2);
+        for (uint32_t i = 0; i + 1 < static_cast<uint32_t>(m_vertices.size()); ++i)
+        {
+            indices.push_back(i);
+            indices.push_back(i + 1);
+        }
     }
-    m_index_count = indices.size();
 
-    gpu::buffer_descriptor index_descriptor{};
-    index_descriptor.size = indices.size() * sizeof(uint32_t);
-    index_descriptor.usage = gpu::buffer_usage_index;
-    index_descriptor.hint = gpu::buffer_usage_hint::static_data;
-    index_descriptor.initial_data = indices.data();
-    m_index_buffer = gpu.create_buffer(index_descriptor);
+    assets::mesh_data data = assets::mesh_data::from_vertices(m_vertices, std::move(indices));
+    data.bounds = m_bounds;
+    set_mesh(upload_mesh(*m_device, data, data.format));
 }
 
-bool rendering_engine::line::world_bounds(core::math::aabb& out) const
+rendering_engine::mesh_description rendering_engine::line::describe() const
 {
-    if (!m_has_local_bounds)
+    mesh_description description = mesh_source::describe();
+    description.bounds = m_bounds;
+    description.check_format = false;
+    if (mesh() != nullptr && !mesh()->index_buffer.valid())
     {
-        return false;
+        // Segments draw the vertices directly, two per segment; an odd
+        // trailing vertex has no partner, so it is dropped from the draw
+        // (the buffer still holds it).
+        description.vertex_count = mesh()->vertex_count & ~1u;
     }
-    out = core::math::transform(m_local_bounds, transform.get_world_matrix());
-    return true;
+    return description;
 }
 
-void rendering_engine::line::collect_draw_items(std::vector<draw_item>& out)
+std::optional<core::math::aabb> rendering_engine::line::local_bounds() const
 {
-    if (m_material == nullptr)
-    {
-        LOG_WRN("line::collect_draw_items: no material");
-        return;
-    }
-    if (!m_vertex_buffer.valid())
-    {
-        return;
-    }
-
-    // The line topology is baked into the material's pipeline. A strip
-    // carries an index buffer expanding the polyline into segment pairs;
-    // segments draw the vertices directly, two per segment (an odd
-    // trailing vertex is dropped).
-    draw_item item{};
-    item.mat = m_material;
-    // The model + normal matrix the pass pushes (recomputed only when
-    // the transform moved); a mirroring transform flags the item so the
-    // pass draws it with the clockwise-front-face variant.
-    m_per_draw.bind(transform, item);
-    item.vertex_buffer = m_vertex_buffer;
-    item.vertex_stride = m_vertex_stride;
-
-    if (m_index_buffer.valid())
-    {
-        item.index_buffer = m_index_buffer;
-        item.index_count = static_cast<uint32_t>(m_index_count);
-        item.index_format = gpu::index_format::uint32;
-    }
-    else
-    {
-        item.vertex_count = static_cast<uint32_t>(m_vertex_count & ~static_cast<size_t>(1));
-    }
-
-    out.push_back(item);
+    return std::nullopt;
 }

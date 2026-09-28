@@ -19,6 +19,7 @@
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/gpu_profiler.hpp>
 #include <rendering_engine/material_library.hpp>
+#include <rendering_engine/mesh_draws.hpp>
 #include <rendering_engine/passes/pass_list.hpp>
 #include <rendering_engine/post_settings.hpp>
 #include <rendering_engine/render_services.hpp>
@@ -75,9 +76,9 @@ namespace rendering_engine
      *
      * Owned by @ref runtime::engine. It owns two parts it hands out:
      *
-     * - a @ref render_world — what is drawn: the renderable registries,
-     *   the lights and cameras (and the camera arbitration), the
-     *   environment probe and the fog (@ref world);
+     * - a @ref render_world — what is drawn: the mesh, light and camera
+     *   proxies (and the camera arbitration), the UI and debug renderable
+     *   registries, the environment probe and the fog (@ref world);
      * - a @ref material_library — the built-in material templates and
      *   instances (@ref materials).
      *
@@ -127,22 +128,24 @@ namespace rendering_engine
          * camera proxy) evaluated once here, so a camera destroyed or
          * disabled since the last frame is replaced by the runner-up
          * without any owner bookkeeping, and the enabled light proxies are
-         * gathered once here in packing order. Everything a pass reads
-         * about the world's cameras and lights is a proxy its owner wrote
-         * before the frame; the world refuses to create or destroy a proxy
-         * until the frame ends (@ref render_world::begin_frame). The
-         * renderer is the only
-         * place that advances the frame index, the jitter sequence
-         * and the previous-frame matrix, and it drops the latter
-         * across a no-camera frame or a change of arbitrated camera.
-         * Every draw a pass records comes from its renderable
-         * registry (plus, for the debug pass, the ImGui draw data
-         * built before the walk); no event is broadcast while a pass
-         * is recording, so debug / gizmo callers register a
-         * renderable rather than subscribe. The walk is bracketed by
-         * @c gpu::device::begin_frame / @c end_frame: the device
-         * waits for the previous frame before any pass writes its
-         * per-frame buffers and presents inside @c end_frame.
+         * gathered once here in packing order. The mesh proxies become
+         * the frame's draw list once here too (@ref mesh_draw_builder,
+         * which also uploads the instance snapshots and joint palettes
+         * the proxies carry), before any pass prepares. Everything a pass
+         * reads about the world's meshes, cameras and lights is a proxy
+         * its owner wrote before the frame; the world refuses to create or
+         * destroy a proxy until the frame ends
+         * (@ref render_world::begin_frame). The renderer is the only place
+         * that advances the frame index, the jitter sequence and the
+         * previous-frame matrix, and it drops the latter across a
+         * no-camera frame or a change of arbitrated camera. Every other
+         * draw a pass records comes from its renderable registry (plus,
+         * for the debug pass, the ImGui draw data built before the walk);
+         * no event is broadcast while a pass is recording, so debug /
+         * gizmo callers register a renderable rather than subscribe. The
+         * walk is bracketed by @c gpu::device::begin_frame / @c end_frame:
+         * the device waits for the previous frame before any pass writes
+         * its per-frame buffers and presents inside @c end_frame.
          */
         void render();
 
@@ -208,12 +211,6 @@ namespace rendering_engine
         {
             return m_materials;
         }
-
-        /** @brief @ref render_world::register_scene_renderable on @ref world. */
-        void register_scene_renderable(renderable* r);
-
-        /** @brief @ref render_world::unregister_scene_renderable on @ref world. */
-        void unregister_scene_renderable(renderable* r);
 
         /** @brief @ref render_world::register_ui_renderable on @ref world. */
         void register_ui_renderable(renderable* r);
@@ -566,8 +563,9 @@ namespace rendering_engine
 
         // Built-in debug gizmos (ground grid + world axes) created in
         // @ref init for debug builds and toggled from the debug UI. They
-        // auto-register into the world's registries on construction and
-        // draw through the material library's line and grid materials, so
+        // join the world on construction (the grid as a mesh proxy, the
+        // axes in the debug-renderable registry) and draw through the
+        // material library's line and grid materials, so
         // they go (in @ref quit, and by declaration order) before both.
         // Empty in release builds, where the debug pass is dropped
         // entirely.
@@ -632,6 +630,12 @@ namespace rendering_engine
         // order; refilled by every @ref render and published as
         // frame_context::lights.
         std::vector<const light_proxy*> m_frame_lights;
+
+        // The frame's mesh draws, rebuilt by every @ref render from the
+        // world's mesh proxies and published as frame_context::scene_draws,
+        // and the GPU resources those draws bind; released in @ref quit
+        // before the materials.
+        mesh_draw_builder m_mesh_draws;
 
         // Allocates the HDR scene-colour target (+ depth) and the LDR
         // target at @p width x @p height, pointing the four target members

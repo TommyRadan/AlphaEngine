@@ -19,10 +19,9 @@ namespace runtime
             }
         }
         const renderable_component* drawn = owner.get_component<renderable_component>();
-        core::math::aabb bounds;
-        if (drawn != nullptr && drawn->get() != nullptr && drawn->get()->local_bounds(bounds))
+        if (drawn != nullptr && drawn->get() != nullptr)
         {
-            return bounds;
+            return drawn->get()->local_bounds();
         }
         return std::nullopt;
     }

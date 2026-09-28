@@ -3,14 +3,13 @@
 
 #pragma once
 
+#include <optional>
 #include <vector>
 
 #include <assets/vertex.hpp>
+#include <core/math/aabb.hpp>
 #include <core/math/math.hpp>
-#include <core/math/transform.hpp>
-#include <rendering_engine/gpu/handle.hpp>
-#include <rendering_engine/renderables/per_draw_ubo.hpp>
-#include <rendering_engine/renderables/renderable.hpp>
+#include <rendering_engine/renderables/mesh_source.hpp>
 
 namespace rendering_engine
 {
@@ -21,60 +20,48 @@ namespace rendering_engine
 
     struct material;
 
-    // A point cloud. It owns a list
-    // of point positions (with optional per-point colours) and submits
-    // a single non-indexed @ref draw_item against a point-list material
-    // (@ref points_material), so the scene pass rasterizes one point
-    // sprite per vertex. Size, tint and the optional sprite live on the
-    // material; the geometry and the model transform live here.
-    struct points : public renderable
+    // A point cloud. It owns a list of point positions (with optional
+    // per-point colours) and describes a single non-indexed draw against a
+    // point-list material (@ref points_material), so the scene pass
+    // rasterizes one point sprite per vertex. Size, tint and the optional
+    // sprite live on the material, the geometry here, and the placement on
+    // the proxy of whoever owns the cloud. Every change uploads the points
+    // again, as a private @ref mesh_asset the cloud alone draws.
+    struct points : public mesh_source
     {
         // The material is non-owning; it is typically a
         // @ref points_material (its pipeline must bake point topology)
         // created by @ref rendering_engine::renderer and shared by every
-        // point cloud that draws under it.
+        // point cloud that draws under it. The points are uploaded to
+        // @p device.
         points(gpu::device& device, material* mat);
-        ~points() override;
 
-        core::transform transform;
-
-        // Set the cloud positions; every point defaults to white and is
-        // tinted by the material colour. Replaces any previous data.
-        // Call @ref upload afterwards to push it to the GPU.
+        // Set the cloud positions and upload them; every point defaults to
+        // white and is tinted by the material colour. Replaces any previous
+        // data.
         void set_positions(const std::vector<core::math::vec3>& positions);
 
-        // Set positions with a matching per-point colour list. The two
-        // vectors must be the same length; a size mismatch logs and the
-        // call is ignored. Call @ref upload afterwards.
+        // Set positions with a matching per-point colour list and upload
+        // them. The two vectors must be the same length; a size mismatch
+        // logs and the call is ignored.
         void set_positions(const std::vector<core::math::vec3>& positions, const std::vector<core::math::vec3>& colors);
 
-        // Upload the staged point data into a GPU vertex buffer. Safe to
-        // call again after a @ref set_positions to re-upload; the
-        // previous buffer is released first.
-        void upload() final;
+        // The uploaded points and their box (none before any point is set);
+        // the format is not checked against the material.
+        mesh_description describe() const override;
 
-        void collect_draw_items(std::vector<draw_item>& out) final;
-
-        // Box over the uploaded points under @ref transform; false until
-        // @ref upload has pushed at least one point.
-        bool world_bounds(core::math::aabb& out) const final;
+        // None: a point cloud has no box a collider would fit.
+        std::optional<core::math::aabb> local_bounds() const override;
 
     private:
-        // The device this renderable's GPU resources are created on and
-        // released through; it outlives the renderable.
+        // Uploads @ref m_vertices as the drawn geometry.
+        void upload();
+
+        // The device the points are uploaded to; it outlives the cloud.
         gpu::device* m_device{nullptr};
-        material* m_material{nullptr};
         std::vector<assets::vertex_position_color> m_vertices;
 
-        // Object-space box over the points at the last @ref upload.
-        core::math::aabb m_local_bounds{};
-        bool m_has_local_bounds{false};
-
-        gpu::buffer m_vertex_buffer{};
-        // The PerDraw block the pass pushes; no buffer of its own.
-        per_draw_binding m_per_draw;
-
-        size_t m_vertex_count{0};
-        uint32_t m_vertex_stride{0};
+        // Object-space box over the points at the last upload.
+        std::optional<core::math::aabb> m_bounds;
     };
 } // namespace rendering_engine

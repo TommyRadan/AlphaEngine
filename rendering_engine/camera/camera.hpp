@@ -74,7 +74,7 @@ namespace rendering_engine
 
         /**
          * @brief Layer bits this camera renders. The scene pass skips a
-         *        renderable whenever @c (renderable::layer_mask &
+         *        mesh proxy whenever @c (mesh_description::layer_mask &
          *        culling_mask()) == 0, the same way it skips one wholly
          *        outside the frustum. Defaults to @ref layer_all, so a
          *        fresh camera renders every layer, including the editor
