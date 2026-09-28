@@ -938,7 +938,7 @@ namespace rendering_engine::gpu::backend::vulkan
     void vk_device::create_pipeline_cache()
     {
         VkPhysicalDeviceProperties properties{};
-        vkGetPhysicalDeviceProperties(m_physical_device, &properties);
+        vkGetPhysicalDeviceProperties(m_physical_device.handle(), &properties);
 
         std::vector<uint8_t> seed;
         m_pipeline_cache = VK_NULL_HANDLE;

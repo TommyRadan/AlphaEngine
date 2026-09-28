@@ -63,6 +63,7 @@
 #include <rendering_engine/gpu/backend/vulkan/vk_allocator.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_check.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_instance.hpp>
+#include <rendering_engine/gpu/backend/vulkan/vk_physical_device.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_resources.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_staging_ring.hpp>
 #include <rendering_engine/gpu/device.hpp>
@@ -531,7 +532,6 @@ namespace rendering_engine::gpu::backend::vulkan
 
     private:
         void create_default_textures();
-        void pick_physical_device();
         void create_logical_device();
         // Fill the base class's device_features / device_limits from
         // the physical device's properties and the grants recorded by
@@ -568,12 +568,6 @@ namespace rendering_engine::gpu::backend::vulkan
         // A compute VkPipeline over @p module and @p layout, through the
         // pipeline cache; VK_NULL_HANDLE (logged) on failure.
         VkPipeline build_compute_pipeline(VkShaderModule module, VkPipelineLayout layout);
-        // Resolve the three engine depth formats against
-        // vkGetPhysicalDeviceFormatProperties through the fallback
-        // chains in vk_negotiate.hpp, log the outcome, and throw when a
-        // chain resolves to nothing (the spec mandates D32_SFLOAT, so
-        // only a broken driver gets there).
-        void resolve_depth_formats();
         // The sampler substituted for a texture whose own sampler
         // failed to create, so a null sampler never reaches a
         // combined-image-sampler descriptor.
@@ -718,19 +712,14 @@ namespace rendering_engine::gpu::backend::vulkan
         // The components, in bring-up order; quit shuts them down in
         // reverse (see quit), and their destructors release nothing.
         vk_instance m_instance;
+        vk_physical_device m_physical_device;
 
         // Whether presentation waits for vertical sync
         // (surface_desc::vsync), read at every swapchain build.
         bool m_vsync{false};
-        VkPhysicalDevice m_physical_device{VK_NULL_HANDLE};
         VkDevice m_device{VK_NULL_HANDLE};
         VkQueue m_graphics_queue{VK_NULL_HANDLE};
         VkQueue m_present_queue{VK_NULL_HANDLE};
-        uint32_t m_graphics_queue_family{0};
-        uint32_t m_present_queue_family{0};
-        // timestampValidBits of the graphics queue family: 0 means the
-        // queue writes no usable timestamps.
-        uint32_t m_timestamp_valid_bits{0};
         VmaAllocator m_allocator{VK_NULL_HANDLE};
         // See pipeline_cache(). m_pipeline_cache_file is empty when the
         // shader cache directory is disabled; m_pipeline_cache_digest is
@@ -805,11 +794,6 @@ namespace rendering_engine::gpu::backend::vulkan
         VmaAllocation m_staging_allocation{VK_NULL_HANDLE};
         uint8_t* m_staging_mapped{nullptr};
         staging_ring m_staging_ring;
-        // Offset alignment of every ring reservation: the device's
-        // optimalBufferCopyOffsetAlignment rounded up to a power of
-        // two, at least 16 so any texel block of the engine's formats
-        // (and the 4 bytes a depth copy needs) divides it.
-        VkDeviceSize m_staging_alignment{16};
 
         // Grow-on-demand descriptor pool chain; allocations come from
         // the back, sets are freed to the pool recorded on their bind
@@ -817,13 +801,6 @@ namespace rendering_engine::gpu::backend::vulkan
         // allocate_descriptor_set.
         std::vector<VkDescriptorPool> m_descriptor_pools;
         VkSampler m_fallback_sampler{VK_NULL_HANDLE};
-
-        // Resolved depth formats, indexed depth24 / depth32_float /
-        // depth24_stencil8; see vk_format_for.
-        std::array<VkFormat, 3> m_depth_formats{VK_FORMAT_UNDEFINED, VK_FORMAT_UNDEFINED, VK_FORMAT_UNDEFINED};
-        // The physical device lists VK_KHR_portability_subset, which
-        // the spec then requires the logical device to enable.
-        bool m_has_portability_subset{false};
 
         // See device_lost(). m_device_lost_thrown records that
         // end_frame has already raised the loss to the main loop, so
