@@ -9,6 +9,7 @@
 #include <runtime/components/light_component.hpp>
 #include <runtime/components/mesh_component.hpp>
 #include <runtime/components/renderable_component.hpp>
+#include <runtime/components/ui_element_component.hpp>
 #include <runtime/node.hpp>
 #include <runtime/scene.hpp>
 #include <runtime/scene_manager.hpp>
@@ -26,5 +27,6 @@ void runtime::extract_render_proxies(scene_manager& scenes)
         target.each<camera_component>([](node& owner, camera_component& camera) { camera.extract(owner); });
         target.each<mesh_component>([](node& owner, mesh_component& mesh) { mesh.extract(owner); });
         target.each<renderable_component>([](node& owner, renderable_component& drawn) { drawn.extract(owner); });
+        target.each<ui_element_component>([](node& owner, ui_element_component& ui) { ui.extract(owner); });
     }
 }

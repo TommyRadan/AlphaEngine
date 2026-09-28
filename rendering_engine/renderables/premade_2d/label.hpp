@@ -11,15 +11,10 @@
 #include <core/math/vec2.hpp>
 #include <rendering_engine/renderables/premade_2d/rect_transform.hpp>
 #include <rendering_engine/renderables/premade_2d/sprite_batch.hpp>
-#include <rendering_engine/renderables/renderable.hpp>
+#include <rendering_engine/renderables/premade_2d/ui_element.hpp>
 
 namespace rendering_engine
 {
-    namespace gpu
-    {
-        struct device;
-    }
-
     struct font_asset;
     struct ui_material;
 
@@ -41,17 +36,14 @@ namespace rendering_engine
      * The placement is a @ref rect_transform whose size is the laid-out
      * block (@ref get_size): the pivot is a fraction of the block, so a
      * centred pivot centres the text on its position. It starts at the
-     * drawable's top-left corner, pivot top-left, in opaque white.
-     *
-     * Register it with @c renderer::register_ui_renderable and unregister
-     * it before destroying it.
+     * drawable's top-left corner, pivot top-left, in opaque white. A
+     * @c runtime::ui_element_component draws it.
      */
-    struct label : public renderable
+    struct label : public ui_element
     {
         // @p font supplies the atlas and metrics and is held for the
-        // label's lifetime; @p mat is the ui material (not owned). The
-        // glyph quads' buffers live on @p device.
-        label(gpu::device& device, std::shared_ptr<font_asset> font, ui_material* mat, const std::string& text = {});
+        // label's lifetime; @p mat is the ui material (not owned).
+        label(std::shared_ptr<font_asset> font, ui_material* mat, const std::string& text = {});
         ~label() override;
 
         label(const label&) = delete;
@@ -84,9 +76,8 @@ namespace rendering_engine
          */
         bool contains(const ui_rect& drawable, const core::math::vec2& point) const;
 
-        /** @brief Nothing to upload up front: the quads are streamed at collect time. */
-        void upload() final;
-        void collect_draw_items(std::vector<draw_item>& out) final;
+        /** @brief The glyph quads, rebuilt first if the text, colour or placement changed. */
+        ui_element_data capture() override;
 
     private:
         // One glyph's quad and atlas rect, in pixels from the block's

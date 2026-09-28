@@ -40,7 +40,6 @@
 #include <rendering_engine/passes/spot_shadow_pass.hpp>
 #include <rendering_engine/passes/ui_pass.hpp>
 #include <rendering_engine/post_process_settings.hpp>
-#include <rendering_engine/renderables/renderable.hpp>
 #include <rendering_engine/resources/asset_cache.hpp>
 #include <rendering_engine/resources/texture_asset.hpp>
 
@@ -305,7 +304,7 @@ void rendering_engine::renderer::init(const render_services& services)
     auto fxaa = std::make_unique<fxaa_pass>(device, width, height, taa_enabled);
     // The UI pass owns the pixel-space projection the ui template reads at
     // slot 0; it follows the drawable through pass::resize.
-    auto ui = std::make_unique<ui_pass>(device, &m_world.ui_renderables(), width, height);
+    auto ui = std::make_unique<ui_pass>(device, width, height);
     const gpu::bind_group_layout ui_frame_layout = ui->frame_bind_group_layout();
 #if _DEBUG
     // The debug pass binds the scene pass's per-frame camera group at
@@ -313,7 +312,7 @@ void rendering_engine::renderer::init(const render_services& services)
     // It uses the unjittered overlay group: the debug pass paints after the
     // TAA resolve, so the projection jitter would otherwise show up as a
     // sub-pixel wobble on the gizmos rather than being averaged away.
-    auto debug = std::make_unique<debug_draw::debug_pass>(&m_world.debug_renderables());
+    auto debug = std::make_unique<debug_draw::debug_pass>();
     m_debug = debug.get();
 #endif
 
@@ -347,11 +346,11 @@ void rendering_engine::renderer::init(const render_services& services)
     // onto the swapchain, and the UI pass composites on top. The
     // debug pass is appended in debug builds only so debug visuals read on
     // top of the game UI; release builds drop it entirely so the
-    // overlay registry has no consumer and the stage costs nothing.
+    // overlay mesh draws have no consumer and the stage costs nothing.
     // Further post effects insert between scene and ui by pushing into
     // this list; future debug consumers (wireframe, gizmos, frustum
-    // visualisations) register with the debug-renderable registry
-    // rather than adding new passes.
+    // visualisations) create overlay mesh proxies rather than adding new
+    // passes.
     // The shadow pass renders the light's depth map first so the scene
     // pass can sample it the same frame. The depth pre-pass follows the
     // shadow passes (the scene pass's per-frame uploads, which the
@@ -413,13 +412,12 @@ void rendering_engine::renderer::init(const render_services& services)
     // Provide a couple of always-available reference gizmos (the infinite
     // ground grid + world axes) so a fresh debug build has something to
     // toggle from the overlay's Helpers panel. They join the world's
-    // helper list on construction, and the world itself: the infinite grid
-    // as a mesh proxy the scene pass draws (depth-tested), the axes in the
-    // debug-renderable registry of the always-on-top debug pass. Game code
-    // can add the box / light / camera helpers against its own objects the
-    // same way.
-    // The debug pass is dropped in release, so this whole block compiles
-    // out there.
+    // helper list on construction and draw through mesh proxies: the
+    // infinite grid one the scene pass draws (depth-tested), the axes an
+    // overlay one the always-on-top debug pass draws. Game code can add
+    // the box / light / camera helpers against its own objects the same
+    // way. The debug pass is dropped in release, so this whole block
+    // compiles out there.
     m_debug_helpers.push_back(std::make_unique<debug_draw::infinite_grid>(*this));
     m_debug_helpers.push_back(std::make_unique<debug_draw::axes_helper>(*this));
 #endif
@@ -442,8 +440,8 @@ void rendering_engine::renderer::quit()
 #endif
 
     // Release the built-in debug helpers before the line material and the
-    // GPU device they reference; their destructors leave the world (the
-    // grid destroys its proxy) and free their geometry. Empty in release.
+    // GPU device they reference; their destructors destroy their proxies,
+    // leave the helper list and free their geometry. Empty in release.
     // Game-owned helpers must likewise be released before quit.
     m_debug_helpers.clear();
 
@@ -473,11 +471,13 @@ void rendering_engine::renderer::quit()
     m_has_prev_view_projection = false;
     m_frame_lights.clear();
 
-    // The per-proxy buffers and bind groups the mesh draws bind; the
-    // skinned groups were built against layouts the materials own.
+    // The per-proxy buffers and bind groups the mesh and UI draws bind;
+    // the skinned and UI groups were built against layouts the materials
+    // own.
     if (m_services.device != nullptr)
     {
         m_mesh_draws.release(*m_services.device);
+        m_ui_draws.release(*m_services.device);
     }
 
     // The grading LUT is a cached asset whose texture this handle keeps
@@ -496,8 +496,8 @@ void rendering_engine::renderer::quit()
     release_color_targets();
 
     // Last, the world: withdraw the drawable aspect it hands to attaching
-    // cameras, since there is no drawable to match now. Every renderable,
-    // pass and helper that pointed into its registries is gone.
+    // cameras, since there is no drawable left to match. Every pass and
+    // helper that pointed into it is gone.
     m_world.quit();
 
     // Forget the subsystems init was handed; the owner takes them down
@@ -559,10 +559,12 @@ void rendering_engine::renderer::render()
     // without waiting), so its per-pass timestamps can be read now.
     m_gpu_profiler.resolve(gpu);
 
-    // The mesh proxies become this frame's draw list, in proxy order: the
-    // instance snapshots and joint palettes the extraction captured are
-    // uploaded here, with the frame open and before any pass prepares.
+    // The mesh and UI proxies become this frame's draw lists, in proxy
+    // order: the instance snapshots, joint palettes and UI quads the
+    // extraction captured are uploaded here, with the frame open and
+    // before any pass prepares.
     m_mesh_draws.build(m_world, gpu);
+    m_ui_draws.build(m_world, gpu);
 
     // Capture per-frame state once so passes cannot disagree about
     // which camera or backbuffer is active mid-frame, and so they
@@ -576,7 +578,9 @@ void rendering_engine::renderer::render()
     ctx.active_camera = m_world.camera(ctx.active_camera_handle);
     m_world.collect_enabled_lights(m_frame_lights);
     ctx.lights = m_frame_lights;
-    ctx.scene_draws = m_mesh_draws.draws();
+    ctx.scene_draws = m_mesh_draws.scene_draws();
+    ctx.overlay_draws = m_mesh_draws.overlay_draws();
+    ctx.ui_draws = m_ui_draws.draws();
     ctx.world = &m_world;
     ctx.viewport_width = m_target_width;
     ctx.viewport_height = m_target_height;
@@ -796,26 +800,6 @@ rendering_engine::gpu::device& rendering_engine::renderer::device() const
 {
     assert(m_services.device != nullptr && "renderer::device is only valid between init and quit");
     return *m_services.device;
-}
-
-void rendering_engine::renderer::register_ui_renderable(renderable* r)
-{
-    m_world.register_ui_renderable(r);
-}
-
-void rendering_engine::renderer::unregister_ui_renderable(renderable* r)
-{
-    m_world.unregister_ui_renderable(r);
-}
-
-void rendering_engine::renderer::register_debug_renderable(renderable* r)
-{
-    m_world.register_debug_renderable(r);
-}
-
-void rendering_engine::renderer::unregister_debug_renderable(renderable* r)
-{
-    m_world.unregister_debug_renderable(r);
 }
 
 void rendering_engine::renderer::set_overlay(gpu::overlay_renderer* overlay)

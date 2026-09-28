@@ -13,7 +13,6 @@ target_sources(alpha_render PRIVATE
     per_draw_ubo.hpp
     points.cpp
     points.hpp
-    renderable.hpp
     vertex_format_check.cpp
     vertex_format_check.hpp
 )

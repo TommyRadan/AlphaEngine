@@ -4,59 +4,74 @@
 #include <rendering_engine/debug_draw/line_helper.hpp>
 
 #include <rendering_engine/materials/line_material.hpp>
+#include <rendering_engine/render_world.hpp>
 #include <rendering_engine/renderer.hpp>
-#include <rendering_engine/resources/mesh_asset.hpp>
 
 namespace rendering_engine::debug_draw
 {
     line_helper::line_helper(renderer& owner, const char* name)
-        : helper(owner, name), m_line(owner.device(), &owner.get_debug_line_material())
+        : helper(owner, name), m_line(owner.device(), &owner.get_debug_line_material()), m_world(&owner.world())
     {
         // Every gizmo is a list of independent segments (vertex pairs).
         m_line.set_mode(line_mode::segments);
 
-        owner.register_debug_renderable(this);
+        m_placed_version = transform.get_world_version();
+        m_proxy = m_world->create_mesh(describe(), transform.get_world_matrix());
     }
 
     line_helper::~line_helper()
     {
-        owner().unregister_debug_renderable(this);
+        m_world->destroy_mesh(m_proxy);
+    }
+
+    mesh_description line_helper::describe() const
+    {
+        // Debug gizmos are editor-only geometry: they stay on the default
+        // camera mask (layer_all includes layer_editor) so nothing changes
+        // visually, but a game can build a camera that clears the editor
+        // bit to hide them from gameplay views. The overlay pass draws
+        // them on top, never culled and never casting a shadow.
+        mesh_description description = m_line.describe();
+        description.bounds.reset();
+        description.layer_mask = layer_editor;
+        description.casts_shadow = false;
+        description.overlay = true;
+        description.name = name();
+        return description;
     }
 
     void line_helper::set_segments(const std::vector<core::math::vec3>& positions,
                                    const std::vector<core::math::vec3>& colors)
     {
         m_line.set_positions(positions, colors);
+        m_world->set_mesh_source(m_proxy, describe());
     }
 
     void line_helper::refresh() {}
 
-    void line_helper::collect_draw_items(std::vector<draw_item>& out)
+    void line_helper::set_visible(bool visible)
+    {
+        helper::set_visible(visible);
+        m_world->set_mesh_visible(m_proxy, visible);
+    }
+
+    void line_helper::update()
     {
         if (!is_visible())
         {
             return;
         }
 
-        // Let dynamic gizmos follow their target before they draw.
+        // Let dynamic gizmos follow their target.
         refresh();
 
-        const mesh_description geometry = m_line.describe();
-        if (geometry.mat == nullptr || geometry.mesh == nullptr || !geometry.mesh->vertex_buffer.valid())
+        // Place the (mostly origin-baked) geometry; helpers that bake
+        // world-space vertices leave the transform at identity.
+        const uint64_t version = transform.get_world_version();
+        if (version != m_placed_version)
         {
-            return;
+            m_world->set_mesh_world(m_proxy, transform.get_world_matrix());
+            m_placed_version = version;
         }
-
-        // The segments draw their vertices directly, two per segment (an odd
-        // trailing vertex is dropped). The (mostly origin-baked) geometry is
-        // placed by the helper's transform; helpers that bake world-space
-        // vertices leave it at identity.
-        draw_item item{};
-        item.mat = geometry.mat;
-        m_per_draw.bind(transform, item);
-        item.vertex_buffer = geometry.mesh->vertex_buffer;
-        item.vertex_stride = geometry.mesh->vertex_stride;
-        item.vertex_count = geometry.vertex_count.value_or(geometry.mesh->vertex_count);
-        out.push_back(item);
     }
 } // namespace rendering_engine::debug_draw

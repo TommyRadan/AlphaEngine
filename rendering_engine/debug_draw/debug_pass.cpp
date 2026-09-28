@@ -11,23 +11,24 @@
 #include <rendering_engine/materials/material.hpp>
 #include <rendering_engine/passes/scene_pass.hpp>
 #include <rendering_engine/renderables/per_draw_ubo.hpp>
-#include <rendering_engine/renderables/renderable.hpp>
 
 namespace rendering_engine::debug_draw
 {
-    debug_pass::debug_pass(const std::vector<renderable*>* registry) : m_registry(registry) {}
-
     void debug_pass::set_overlay(gpu::overlay_renderer* overlay)
     {
         m_overlay = overlay;
     }
 
-    void debug_pass::prepare(const frame_context& /*ctx*/)
+    void debug_pass::prepare(const frame_context& ctx)
     {
+        // Every overlay draw, in proxy order: the overlay is never culled.
         m_items.clear();
-        for (auto* r : *m_registry)
+        for (const mesh_draw& draw : ctx.overlay_draws)
         {
-            r->collect_draw_items(m_items);
+            if (draw.drawable)
+            {
+                m_items.push_back(draw.item);
+            }
         }
         // Sorted by (pipeline, material instance) so instances sharing
         // a pipeline sit together; the per-material group is rebound
@@ -95,7 +96,7 @@ namespace rendering_engine::debug_draw
             }
 
             // The PerDraw block pushed or bound, as in the scene pass; a
-            // renderable without per-draw resources records nothing.
+            // draw without per-draw resources records nothing.
             bind_per_draw(*pass_encoder, item, item.mat->per_draw_slot());
             pass_encoder->set_vertex_buffer(0, item.vertex_buffer, 0, item.vertex_stride);
             if (item.index_buffer.valid())

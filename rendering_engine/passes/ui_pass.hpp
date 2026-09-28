@@ -12,15 +12,12 @@
 
 namespace rendering_engine
 {
-    struct renderable;
-
     /**
      * @brief 2D overlay pass. Loads the previous colour, disables
-     *        depth, collects draw items from the UI-renderable
-     *        registry, sorts them by pipeline, and dispatches them.
-     *        Every overlay reaches the pass as a registered
-     *        renderable's @ref draw_item; @ref record runs no event
-     *        listener.
+     *        depth, takes the frame's UI draws
+     *        (@ref frame_context::ui_draws, built from the UI proxies in
+     *        paint order), sorts them by pipeline, and dispatches them.
+     *        @ref record runs no event listener.
      *
      * Owns the UI's per-frame state: the @c UiFrame block the
      * @c ui_material reads at slot 0 — an orthographic projection that
@@ -39,14 +36,14 @@ namespace rendering_engine
     {
         // @p width x @p height is the drawable's pixel size at
         // construction; @ref resize follows it from then on.
-        ui_pass(gpu::device& device, const std::vector<renderable*>* registry, uint32_t width, uint32_t height);
+        ui_pass(gpu::device& device, uint32_t width, uint32_t height);
         ~ui_pass() override;
 
         ui_pass(const ui_pass&) = delete;
         ui_pass& operator=(const ui_pass&) = delete;
 
-        // Rewrites the UiFrame block after a resize and collects and
-        // sorts this frame's draw items.
+        // Rewrites the UiFrame block after a resize and sorts this frame's
+        // draw items.
         void prepare(const frame_context& ctx) override;
 
         // Draws the items @ref prepare sorted over the swapchain.
@@ -77,10 +74,6 @@ namespace rendering_engine
         // Rewrites the UiFrame block for m_width x m_height.
         void write_frame_block();
 
-        // Non-owning back-pointer to the render world's
-        // ui-renderable registry. The world outlives every pass.
-        const std::vector<renderable*>* m_registry;
-
         gpu::bind_group_layout m_frame_layout{};
         gpu::buffer m_frame_ubo{};
         gpu::bind_group m_frame_bind_group{};
@@ -92,7 +85,7 @@ namespace rendering_engine
         bool m_frame_dirty{true};
 
         // Reused across frames so the underlying allocation persists.
-        // Collected and sorted by prepare(), drawn by record().
+        // Copied and sorted by prepare(), drawn by record().
         std::vector<draw_item> m_items;
     };
 } // namespace rendering_engine

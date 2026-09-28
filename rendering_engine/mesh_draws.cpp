@@ -27,8 +27,9 @@ namespace rendering_engine
     void mesh_draw_builder::build(render_world& world, gpu::device& device)
     {
         const std::span<const mesh_proxy> proxies = world.meshes();
-        m_draws.clear();
-        m_draws.reserve(proxies.size());
+        m_scene_draws.clear();
+        m_overlay_draws.clear();
+        m_scene_draws.reserve(proxies.size());
 
         for (std::size_t position = 0; position < proxies.size(); ++position)
         {
@@ -54,7 +55,7 @@ namespace rendering_engine
             const bool skinned = source.mat != nullptr && source.mat->is_skinned();
             const mesh_asset* geometry = source.mesh.get();
 
-            mesh_draw& draw = m_draws.emplace_back();
+            mesh_draw& draw = (source.overlay ? m_overlay_draws : m_scene_draws).emplace_back();
             draw.layer_mask = source.layer_mask;
             draw.bounds = proxy.world_bounds;
             draw.bounded = source.bounds.has_value() && !skinned;
@@ -257,7 +258,8 @@ namespace rendering_engine
             release(device, resources);
         }
         m_resources.clear();
-        m_draws.clear();
+        m_scene_draws.clear();
+        m_overlay_draws.clear();
     }
 
     void mesh_draw_builder::release(gpu::device& device, proxy_resources& resources)

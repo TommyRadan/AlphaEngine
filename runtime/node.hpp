@@ -138,11 +138,11 @@ namespace runtime
          * @brief Enables or disables this node (and, by inheritance, its subtree).
          *
          * A disabled subtree is skipped by @ref update_subtree and its components
-         * are told to hide via @c on_active_changed (a @c mesh_component or
-         * @c renderable_component destroys its mesh proxy, a
-         * @c light_component takes its light out of the enabled lights, a
-         * @c camera_component disables its camera), so it stops both updating
-         * and drawing. Re-enabling restores it, provided every
+         * are told to hide via @c on_active_changed (a @c mesh_component,
+         * @c renderable_component or @c ui_element_component destroys its
+         * proxy, a @c light_component takes its light out of the enabled
+         * lights, a @c camera_component disables its camera), so it stops
+         * both updating and drawing. Re-enabling restores it, provided every
          * ancestor is active. Detaching a node from a disabled parent (via
          * @ref remove or the parent's destruction) likewise restores it: a root
          * is effectively active whenever its own flag is.

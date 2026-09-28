@@ -13,6 +13,7 @@
 #include <rendering_engine/renderables/premade_2d/pane.hpp>
 #include <rendering_engine/renderer.hpp>
 #include <rendering_engine/resources/asset_cache.hpp>
+#include <runtime/components/ui_element_component.hpp>
 #include <runtime/engine.hpp>
 
 #include <cstdlib>
@@ -32,13 +33,14 @@ namespace
     constexpr assets::color hover_color{200, 60, 50, 220};
 
     /**
-     * The quit button: a pane that recolours under the cursor and quits the
-     * engine when clicked, with an optional "Esc" caption.
+     * The quit button's behaviour: recolours the pane its node draws under
+     * the cursor and quits the engine when it is clicked.
      *
-     * The pane and its caption are created once, in on_start, and released
-     * in on_destroy; the mouse input they react to is only listened for
-     * while the behaviour is enabled, subscribed in on_enable and dropped in
-     * on_disable, the same way fly_camera holds its input tokens.
+     * The pane and its caption are UI element components, on the button's
+     * node and a child of it, created with the node; the mouse input they
+     * react to is only listened for while the behaviour is enabled,
+     * subscribed in on_enable and dropped in on_disable, the same way
+     * fly_camera holds its input tokens.
      */
     struct ui_quit_button final : runtime::behavior
     {
@@ -58,58 +60,18 @@ namespace
             m_hovered = false;
         }
 
-        void on_start() override
-        {
-            auto& eng = runtime::current_engine();
-            auto& renderer = *eng.renderer;
-
-            m_button = std::make_unique<rendering_engine::pane>(*eng.gpu, &renderer.get_ui_material(), button_size);
-            m_button->set_anchor(rendering_engine::ui_anchor::bottom_right);
-            m_button->set_pivot(rendering_engine::ui_anchor::bottom_right);
-            m_button->set_position(-button_margin);
-            m_button->set_color(idle_color);
-            renderer.register_ui_renderable(m_button.get());
-
-            const char* font_path = std::getenv("ALPHAENGINE_UI_FONT");
-            if (font_path == nullptr || *font_path == '\0')
-            {
-                return;
-            }
-            try
-            {
-                m_caption = std::make_unique<rendering_engine::label>(
-                    *eng.gpu, eng.assets->load_font(font_path, 18.0f), &renderer.get_ui_material(), "Esc");
-                // Centred on the button: same anchor, pivot at the text's centre.
-                m_caption->set_anchor(rendering_engine::ui_anchor::bottom_right);
-                m_caption->set_pivot(rendering_engine::ui_anchor::center);
-                m_caption->set_position(-(button_margin + button_size * 0.5f));
-                renderer.register_ui_renderable(m_caption.get());
-            }
-            catch (const std::exception& e)
-            {
-                LOG_WRN("ui_demo_module: no caption for the quit button: %s", e.what());
-            }
-        }
-
-        void on_destroy() override
-        {
-            auto& renderer = *runtime::current_engine().renderer;
-            if (m_caption)
-            {
-                renderer.unregister_ui_renderable(m_caption.get());
-                m_caption.reset();
-            }
-            if (m_button)
-            {
-                renderer.unregister_ui_renderable(m_button.get());
-                m_button.reset();
-            }
-        }
-
     private:
+        // The pane the button's node draws, or null without one.
+        rendering_engine::pane* button() const
+        {
+            const auto* element = owner().get_component<runtime::ui_element_component>();
+            return element != nullptr ? element->get_as<rendering_engine::pane>() : nullptr;
+        }
+
         bool is_over_button(float x, float y) const
         {
-            if (m_button == nullptr)
+            const rendering_engine::pane* pane = button();
+            if (pane == nullptr)
             {
                 return false;
             }
@@ -118,17 +80,18 @@ namespace
             const platform::window_extent pixels = window.pixel_size();
             const math::vec2 window_size{static_cast<float>(logical.width), static_cast<float>(logical.height)};
             const math::vec2 pixel_size{static_cast<float>(pixels.width), static_cast<float>(pixels.height)};
-            return m_button->contains(rendering_engine::drawable_rect(pixel_size),
-                                      rendering_engine::window_to_pixels(math::vec2{x, y}, window_size, pixel_size));
+            return pane->contains(rendering_engine::drawable_rect(pixel_size),
+                                  rendering_engine::window_to_pixels(math::vec2{x, y}, window_size, pixel_size));
         }
 
         void update_hover(const core::mouse_move& event)
         {
             const bool hovered = is_over_button(event.m_x, event.m_y);
-            if (m_button != nullptr && hovered != m_hovered)
+            rendering_engine::pane* pane = button();
+            if (pane != nullptr && hovered != m_hovered)
             {
                 m_hovered = hovered;
-                m_button->set_color(hovered ? hover_color : idle_color);
+                pane->set_color(hovered ? hover_color : idle_color);
             }
         }
 
@@ -140,8 +103,6 @@ namespace
             }
         }
 
-        std::unique_ptr<rendering_engine::pane> m_button;
-        std::unique_ptr<rendering_engine::label> m_caption;
         bool m_hovered{false};
 
         // Input listeners, held only while the button is enabled.
@@ -157,6 +118,36 @@ REFLECT_TYPES()
 
 GAME_MODULE()
 {
+    auto& eng = runtime::current_engine();
+    rendering_engine::ui_material& material = eng.renderer->get_ui_material();
+
+    auto face = std::make_unique<rendering_engine::pane>(*eng.gpu, &material, button_size);
+    face->set_anchor(rendering_engine::ui_anchor::bottom_right);
+    face->set_pivot(rendering_engine::ui_anchor::bottom_right);
+    face->set_position(-button_margin);
+    face->set_color(idle_color);
     runtime::node& button = scene.create_node("ui_quit_button");
+    button.add_component(runtime::ui_element_component{std::move(face)});
     runtime::add_behavior<ui_quit_button>(button);
+
+    const char* font_path = std::getenv("ALPHAENGINE_UI_FONT");
+    if (font_path == nullptr || *font_path == '\0')
+    {
+        return;
+    }
+    try
+    {
+        auto caption =
+            std::make_unique<rendering_engine::label>(eng.assets->load_font(font_path, 18.0f), &material, "Esc");
+        // Centred on the button: same anchor, pivot at the text's centre.
+        caption->set_anchor(rendering_engine::ui_anchor::bottom_right);
+        caption->set_pivot(rendering_engine::ui_anchor::center);
+        caption->set_position(-(button_margin + button_size * 0.5f));
+        // A child created after the button, so the caption paints over it.
+        scene.create_node("caption", &button).add_component(runtime::ui_element_component{std::move(caption)});
+    }
+    catch (const std::exception& e)
+    {
+        LOG_WRN("ui_demo_module: no caption for the quit button: %s", e.what());
+    }
 }

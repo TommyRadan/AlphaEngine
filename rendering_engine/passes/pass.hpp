@@ -107,11 +107,20 @@ namespace rendering_engine
         // view and pass kind.
         std::span<const mesh_draw> scene_draws{};
 
-        // What this frame draws: the mesh, light and camera proxies, the
-        // UI and debug renderable registries and the environment probe /
-        // fog. Passes reach it only through here, never through a global,
-        // so more than one render_world can exist in a process. Never null
-        // once the renderer is up.
+        // One entry per overlay mesh proxy (@ref mesh_description::overlay),
+        // in the world's proxy order, built with @ref scene_draws: the
+        // debug pass draws them on top of everything, never culled.
+        std::span<const mesh_draw> overlay_draws{};
+
+        // The UI proxies' draws, one per quad group, in paint order, built
+        // once per frame (see @ref ui_draw_builder): what the UI pass
+        // sorts and draws.
+        std::span<const draw_item> ui_draws{};
+
+        // What this frame draws: the mesh, UI, light and camera proxies and
+        // the environment probe / fog. Passes reach it only through here,
+        // never through a global, so more than one render_world can exist in
+        // a process. Never null once the renderer is up.
         const render_world* world{nullptr};
 
         // Pixel size of the off-screen scene / LDR targets (and so of

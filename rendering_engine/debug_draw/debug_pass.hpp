@@ -8,11 +8,6 @@
 #include <rendering_engine/passes/pass.hpp>
 #include <rendering_engine/renderables/draw_item.hpp>
 
-namespace rendering_engine
-{
-    struct renderable;
-}
-
 namespace rendering_engine::gpu
 {
     struct overlay_renderer;
@@ -22,17 +17,19 @@ namespace rendering_engine::debug_draw
 {
     /**
      * @brief Debug-overlay pass. Loads the previous colour, disables
-     *        depth, collects draw items from the debug-renderable
-     *        registry, sorts them by pipeline, and dispatches them;
-     *        then records the Dear ImGui overlay's draw data into the
-     *        same open pass through its @ref gpu::overlay_renderer.
+     *        depth, takes the frame's overlay mesh draws
+     *        (@ref frame_context::overlay_draws), sorts them by pipeline,
+     *        and dispatches them; then records the Dear ImGui overlay's
+     *        draw data into the same open pass through its
+     *        @ref gpu::overlay_renderer.
      *
-     * Everything the pass records is either a registered renderable's
+     * Everything the pass records is either an overlay mesh proxy's
      * @ref draw_item or ImGui draw data built earlier in the frame, so
      * @ref record runs no event listener and does not depend on the
      * main-thread event bus. Debug-line / gizmo / frustum / bounds
-     * visualisations reach it through
-     * @ref renderer::register_debug_renderable.
+     * visualisations reach it as mesh proxies with
+     * @ref mesh_description::overlay set, such as the @ref line_helper
+     * family's.
      *
      * Only appended to the engine's pass list in debug builds — the
      * `#if _DEBUG` gate at the construction site in
@@ -47,13 +44,13 @@ namespace rendering_engine::debug_draw
      */
     struct debug_pass : pass
     {
-        explicit debug_pass(const std::vector<renderable*>* registry);
+        debug_pass() = default;
         ~debug_pass() override = default;
 
         debug_pass(const debug_pass&) = delete;
         debug_pass& operator=(const debug_pass&) = delete;
 
-        // Collects and sorts this frame's debug draw items.
+        // Gathers and sorts this frame's debug draw items.
         void prepare(const frame_context& ctx) override;
 
         // The debug helpers draw through the line material, whose
@@ -89,13 +86,8 @@ namespace rendering_engine::debug_draw
         void set_overlay(gpu::overlay_renderer* overlay);
 
     private:
-        // Non-owning back-pointer to the render world's
-        // debug-renderable registry. Same lifetime guarantee as
-        // @ref ui_pass::m_registry.
-        const std::vector<renderable*>* m_registry;
-
         // Reused across frames so the underlying allocation persists.
-        // Collected and sorted by prepare(), drawn by record().
+        // Gathered and sorted by prepare(), drawn by record().
         std::vector<draw_item> m_items;
 
         // See set_overlay.

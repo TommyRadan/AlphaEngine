@@ -12,7 +12,7 @@
 #include <rendering_engine/gpu/types.hpp>
 #include <rendering_engine/renderables/premade_2d/rect_transform.hpp>
 #include <rendering_engine/renderables/premade_2d/sprite_batch.hpp>
-#include <rendering_engine/renderables/renderable.hpp>
+#include <rendering_engine/renderables/premade_2d/ui_element.hpp>
 
 namespace rendering_engine
 {
@@ -32,13 +32,12 @@ namespace rendering_engine
      * resolved in the vertex shader, so moving, recolouring and resizing
      * the window all just work. It starts pinned to the drawable's
      * top-left corner, pivot top-left, @p size pixels large, drawing
-     * opaque white.
-     *
-     * Register it with @c renderer::register_ui_renderable and unregister
-     * it before destroying it.
+     * opaque white. A @c runtime::ui_element_component draws it.
      */
-    struct pane : public renderable
+    struct pane : public ui_element
     {
+        // @p mat is the ui material (not owned); a texture @ref set_image
+        // uploads lives on @p device.
         pane(gpu::device& device, ui_material* mat, const core::math::vec2& size);
         ~pane() override;
 
@@ -86,9 +85,8 @@ namespace rendering_engine
          */
         bool contains(const ui_rect& drawable, const core::math::vec2& point) const;
 
-        /** @brief Nothing to upload up front: the quad is streamed at collect time. */
-        void upload() final;
-        void collect_draw_items(std::vector<draw_item>& out) final;
+        /** @brief The pane's quad, rebuilt first if a setter changed it. */
+        ui_element_data capture() override;
 
     private:
         void release_owned_texture();

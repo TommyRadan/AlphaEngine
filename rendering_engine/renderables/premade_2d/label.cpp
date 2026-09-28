@@ -81,11 +81,8 @@ namespace
     }
 } // namespace
 
-rendering_engine::label::label(gpu::device& device,
-                               std::shared_ptr<font_asset> font,
-                               ui_material* mat,
-                               const std::string& text)
-    : m_font{std::move(font)}, m_batch{device, mat}, m_text{text},
+rendering_engine::label::label(std::shared_ptr<font_asset> font, ui_material* mat, const std::string& text)
+    : m_font{std::move(font)}, m_batch{mat}, m_text{text},
       m_rect{rect_transform::anchored(
           ui_anchor::top_left, ui_anchor::top_left, core::math::vec2{0.0f, 0.0f}, core::math::vec2{0.0f, 0.0f})}
 {
@@ -113,6 +110,7 @@ void rendering_engine::label::set_color(const assets::color& color)
 {
     m_color = color;
     m_dirty = true;
+    changed();
 }
 
 const assets::color& rendering_engine::label::get_color() const
@@ -124,6 +122,7 @@ void rendering_engine::label::set_position(const core::math::vec2& position)
 {
     m_rect.position = position;
     m_dirty = true;
+    changed();
 }
 
 void rendering_engine::label::set_anchor(const core::math::vec2& anchor)
@@ -131,18 +130,21 @@ void rendering_engine::label::set_anchor(const core::math::vec2& anchor)
     m_rect.anchor_min = anchor;
     m_rect.anchor_max = anchor;
     m_dirty = true;
+    changed();
 }
 
 void rendering_engine::label::set_pivot(const core::math::vec2& pivot)
 {
     m_rect.pivot = pivot;
     m_dirty = true;
+    changed();
 }
 
 void rendering_engine::label::set_rotation(float radians)
 {
     m_rect.rotation = radians;
     m_dirty = true;
+    changed();
 }
 
 const rendering_engine::rect_transform& rendering_engine::label::get_rect() const
@@ -169,6 +171,7 @@ void rendering_engine::label::layout()
 {
     m_glyphs.clear();
     m_dirty = true;
+    changed();
     if (m_font == nullptr)
     {
         m_rect.size = core::math::vec2{0.0f, 0.0f};
@@ -238,13 +241,11 @@ void rendering_engine::label::layout()
     m_rect.size = core::math::vec2{std::ceil(widest), std::ceil(height)};
 }
 
-void rendering_engine::label::upload() {}
-
-void rendering_engine::label::collect_draw_items(std::vector<draw_item>& out)
+rendering_engine::ui_element_data rendering_engine::label::capture()
 {
     if (m_font == nullptr)
     {
-        return;
+        return m_batch.capture();
     }
     if (m_dirty)
     {
@@ -268,5 +269,5 @@ void rendering_engine::label::collect_draw_items(std::vector<draw_item>& out)
         }
         m_dirty = false;
     }
-    m_batch.collect_draw_items(out);
+    return m_batch.capture();
 }

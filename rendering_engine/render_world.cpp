@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <utility>
 
 #include <core/log.hpp>
 #include <core/math/aabb.hpp>
@@ -44,33 +45,6 @@ void rendering_engine::render_world::begin_frame() noexcept
 void rendering_engine::render_world::end_frame() noexcept
 {
     m_in_frame = false;
-}
-
-void rendering_engine::render_world::register_ui_renderable(renderable* r)
-{
-    if (r != nullptr)
-    {
-        m_ui_renderables.push_back(r);
-    }
-}
-
-void rendering_engine::render_world::unregister_ui_renderable(renderable* r)
-{
-    m_ui_renderables.erase(std::remove(m_ui_renderables.begin(), m_ui_renderables.end(), r), m_ui_renderables.end());
-}
-
-void rendering_engine::render_world::register_debug_renderable(renderable* r)
-{
-    if (r != nullptr)
-    {
-        m_debug_renderables.push_back(r);
-    }
-}
-
-void rendering_engine::render_world::unregister_debug_renderable(renderable* r)
-{
-    m_debug_renderables.erase(std::remove(m_debug_renderables.begin(), m_debug_renderables.end(), r),
-                              m_debug_renderables.end());
 }
 
 rendering_engine::mesh_proxy_handle rendering_engine::render_world::create_mesh(const mesh_description& source,
@@ -198,6 +172,35 @@ void rendering_engine::render_world::write_mesh_instances(mesh_proxy_handle mesh
         }
     }
     snapshot.args = args;
+}
+
+rendering_engine::ui_proxy_handle rendering_engine::render_world::create_ui_element(ui_element_data data)
+{
+    assert(!m_in_frame && "UI proxies are created between frames");
+    ui_proxy proxy{};
+    proxy.data = std::move(data);
+    proxy.revision = 1;
+    return m_ui_elements.insert(std::move(proxy));
+}
+
+void rendering_engine::render_world::destroy_ui_element(ui_proxy_handle element)
+{
+    assert(!m_in_frame && "UI proxies are destroyed between frames");
+    m_ui_elements.erase(element);
+}
+
+void rendering_engine::render_world::set_ui_element(ui_proxy_handle element, ui_element_data data)
+{
+    if (ui_proxy* proxy = m_ui_elements.get(element))
+    {
+        proxy->data = std::move(data);
+        ++proxy->revision;
+    }
+}
+
+const rendering_engine::ui_proxy* rendering_engine::render_world::ui_element(ui_proxy_handle element) const noexcept
+{
+    return m_ui_elements.get(element);
 }
 
 rendering_engine::mesh_proxy* rendering_engine::render_world::mesh(mesh_proxy_handle mesh) noexcept

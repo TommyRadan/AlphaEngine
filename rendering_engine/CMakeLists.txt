@@ -24,6 +24,9 @@ target_sources(alpha_render PRIVATE
     renderer.hpp
     settings_registration.cpp
     settings_registration.hpp
+    ui_draws.cpp
+    ui_draws.hpp
+    ui_proxy.hpp
 )
 
 add_subdirectory(camera)

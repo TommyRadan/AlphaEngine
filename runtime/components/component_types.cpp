@@ -16,10 +16,10 @@
  * - @c "mesh": the mesh as an asset reference (runtime/scene_assets.hpp)
  *   and the material as an object — @c "standard" (a full description),
  *   or @c "phong" / @c "basic" (the renderer's built-in instance).
- * - @c "renderable" and @c "animator": registered so they have names, but
- *   what they hold (a renderable built in code, a skeleton and clips from an
- *   imported model) has no data form yet, so a populated one is saved as a
- *   placeholder.
+ * - @c "renderable", @c "ui_element" and @c "animator": registered so they
+ *   have names, but what they hold (a mesh source or a UI element built in
+ *   code, a skeleton and clips from an imported model) has no data form
+ *   yet, so a populated one is saved as a placeholder.
  * - @c "rigidbody": body type, mass, friction, restitution, damping,
  *   gravity scale and, for a dynamic body, its current velocities.
  * - @c "collider": shape, fitting, dimensions, offset and the trigger flag.
@@ -61,6 +61,7 @@
 #include <runtime/components/mesh_component.hpp>
 #include <runtime/components/renderable_component.hpp>
 #include <runtime/components/rigidbody_component.hpp>
+#include <runtime/components/ui_element_component.hpp>
 #include <runtime/engine.hpp>
 #include <runtime/engine_settings.hpp>
 #include <runtime/reflection.hpp>
@@ -960,6 +961,10 @@ void runtime::register_component_types(type_registry& registry)
     registry.register_component<runtime::renderable_component>("renderable")
         .placeholder_reason([](const runtime::renderable_component& c) -> std::string
                             { return c.get() != nullptr ? "a renderable built in code has no data form yet" : ""; });
+
+    registry.register_component<runtime::ui_element_component>("ui_element")
+        .placeholder_reason([](const runtime::ui_element_component& c) -> std::string
+                            { return c.get() != nullptr ? "a UI element built in code has no data form yet" : ""; });
 
     registry.register_component<runtime::animator_component>("animator")
         .placeholder_reason(

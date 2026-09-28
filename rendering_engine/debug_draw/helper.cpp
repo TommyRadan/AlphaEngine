@@ -32,6 +32,8 @@ namespace rendering_engine::debug_draw
         m_visible = visible;
     }
 
+    void helper::update() {}
+
     renderer& helper::owner() const noexcept
     {
         return *m_renderer;
@@ -46,5 +48,13 @@ namespace rendering_engine::debug_draw
     {
         return core::math::vec3{
             static_cast<float>(c.r) / 255.0f, static_cast<float>(c.g) / 255.0f, static_cast<float>(c.b) / 255.0f};
+    }
+
+    void update_helpers(const render_world& world)
+    {
+        for (helper* h : world.helpers())
+        {
+            h->update();
+        }
     }
 } // namespace rendering_engine::debug_draw

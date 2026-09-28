@@ -9,7 +9,7 @@
 #include <rendering_engine/resources/texture_formats.hpp>
 
 rendering_engine::pane::pane(gpu::device& device, ui_material* mat, const core::math::vec2& size)
-    : m_device{&device}, m_batch{device, mat},
+    : m_device{&device}, m_batch{mat},
       m_rect{rect_transform::anchored(ui_anchor::top_left, ui_anchor::top_left, core::math::vec2{0.0f, 0.0f}, size)}
 {
 }
@@ -33,6 +33,7 @@ void rendering_engine::pane::set_color(const assets::color& color)
 {
     m_color = color;
     m_dirty = true;
+    changed();
 }
 
 const assets::color& rendering_engine::pane::get_color() const
@@ -42,8 +43,8 @@ const assets::color& rendering_engine::pane::get_color() const
 
 void rendering_engine::pane::set_image(const assets::image& image, assets::color_space space)
 {
-    // The batch still names the old texture until the next collect
-    // rebuilds the quad; it draws nothing with it in between, and the
+    // The proxy still names the old texture until the next extraction
+    // captures the quad again; no frame is drawn in between, and the
     // device defers the release past any frame still reading it.
     release_owned_texture();
 
@@ -69,6 +70,7 @@ void rendering_engine::pane::set_image(const assets::image& image, assets::color
     m_uv_min = core::math::vec2{0.0f, 0.0f};
     m_uv_max = core::math::vec2{1.0f, 1.0f};
     m_dirty = true;
+    changed();
 }
 
 void rendering_engine::pane::set_texture(gpu::texture texture,
@@ -80,6 +82,7 @@ void rendering_engine::pane::set_texture(gpu::texture texture,
     m_uv_min = uv_min;
     m_uv_max = uv_max;
     m_dirty = true;
+    changed();
 }
 
 const rendering_engine::rect_transform& rendering_engine::pane::get_rect() const
@@ -91,18 +94,21 @@ void rendering_engine::pane::set_rect(const rect_transform& rect)
 {
     m_rect = rect;
     m_dirty = true;
+    changed();
 }
 
 void rendering_engine::pane::set_position(const core::math::vec2& position)
 {
     m_rect.position = position;
     m_dirty = true;
+    changed();
 }
 
 void rendering_engine::pane::set_size(const core::math::vec2& size)
 {
     m_rect.size = size;
     m_dirty = true;
+    changed();
 }
 
 void rendering_engine::pane::set_anchor(const core::math::vec2& anchor)
@@ -110,18 +116,21 @@ void rendering_engine::pane::set_anchor(const core::math::vec2& anchor)
     m_rect.anchor_min = anchor;
     m_rect.anchor_max = anchor;
     m_dirty = true;
+    changed();
 }
 
 void rendering_engine::pane::set_pivot(const core::math::vec2& pivot)
 {
     m_rect.pivot = pivot;
     m_dirty = true;
+    changed();
 }
 
 void rendering_engine::pane::set_rotation(float radians)
 {
     m_rect.rotation = radians;
     m_dirty = true;
+    changed();
 }
 
 bool rendering_engine::pane::contains(const ui_rect& drawable, const core::math::vec2& point) const
@@ -129,9 +138,7 @@ bool rendering_engine::pane::contains(const ui_rect& drawable, const core::math:
     return m_rect.contains(drawable, point);
 }
 
-void rendering_engine::pane::upload() {}
-
-void rendering_engine::pane::collect_draw_items(std::vector<draw_item>& out)
+rendering_engine::ui_element_data rendering_engine::pane::capture()
 {
     if (m_dirty)
     {
@@ -139,5 +146,5 @@ void rendering_engine::pane::collect_draw_items(std::vector<draw_item>& out)
         m_batch.add(m_texture, m_rect, m_color, m_uv_min, m_uv_max);
         m_dirty = false;
     }
-    m_batch.collect_draw_items(out);
+    return m_batch.capture();
 }

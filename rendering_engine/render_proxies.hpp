@@ -4,9 +4,10 @@
 /**
  * @file render_proxies.hpp
  * @brief The renderer's copies of what the world places: light and camera
- *        proxies (mesh proxies are in mesh_proxy.hpp), the handles that name
- *        every proxy in a @ref render_world, and the layer bits drawables
- *        and cameras filter each other by.
+ *        proxies (mesh and UI proxies are in mesh_proxy.hpp and
+ *        ui_proxy.hpp), the handles that name every proxy in a
+ *        @ref render_world, and the layer bits drawables and cameras filter
+ *        each other by.
  */
 
 #pragma once
@@ -54,6 +55,7 @@ namespace rendering_engine
     struct light_proxy_tag;
     struct camera_proxy_tag;
     struct mesh_proxy_tag;
+    struct ui_proxy_tag;
 
     /** @brief Names a @ref light_proxy in the @ref render_world that created it. */
     using light_proxy_handle = core::pool_handle<light_proxy_tag>;
@@ -63,6 +65,9 @@ namespace rendering_engine
 
     /** @brief Names a @ref mesh_proxy in the @ref render_world that created it. */
     using mesh_proxy_handle = core::pool_handle<mesh_proxy_tag>;
+
+    /** @brief Names a @ref ui_proxy in the @ref render_world that created it. */
+    using ui_proxy_handle = core::pool_handle<ui_proxy_tag>;
 
     /**
      * @brief Everything the renderer reads about one light: its kind, its

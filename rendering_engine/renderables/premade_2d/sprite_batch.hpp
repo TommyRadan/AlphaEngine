@@ -12,7 +12,8 @@
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/materials/ui_material.hpp>
 #include <rendering_engine/renderables/premade_2d/rect_transform.hpp>
-#include <rendering_engine/renderables/renderable.hpp>
+#include <rendering_engine/renderables/premade_2d/ui_element.hpp>
+#include <rendering_engine/ui_proxy.hpp>
 
 namespace rendering_engine
 {
@@ -42,44 +43,30 @@ namespace rendering_engine
     };
 
     /**
-     * @brief Batched 2D quads for the UI pass: one dynamic vertex buffer
-     *        and one draw per texture.
+     * @brief Batched 2D quads for the UI pass: one draw per texture.
      *
      * Quads are queued with @ref add and stay queued until @ref clear, so
      * a batch serves both a retained client that rebuilds its quads only
      * when it changes (@ref label, @ref pane) and an immediate one that
-     * clears and refills it every frame. At collect time the quads are
-     * grouped by texture in first-use order; each group owns a
-     * host-visible vertex buffer (grown in powers of two, rewritten only
-     * when its quads changed since the last frame) and a per-draw bind
-     * group over its texture, and the batch shares one static index
-     * buffer across the groups. A group left empty at collect time is
-     * released. All GPU writes happen inside @ref collect_draw_items,
-     * i.e. inside the frame bracket, so nothing written races a frame the
-     * device still has in flight.
+     * clears and refills it every frame. The quads are grouped by texture
+     * in first-use order, and @ref capture hands them over in that order;
+     * a texture nothing was queued for since the last @ref clear is dropped
+     * from the order there. The batch holds only CPU data: the renderer
+     * uploads what its UI proxy captured, inside the frame bracket.
      *
      * Draw order: the groups of one batch draw in first-use order and,
-     * since the ui pass keeps the registry's order among draws of one
-     * material, a batch registered later paints over one registered
-     * earlier.
-     *
-     * Register the batch (or the client that owns it) with
-     * @c renderer::register_ui_renderable, and unregister it before it is
-     * destroyed. The textures it draws are borrowed: each must stay alive
-     * until the quads using it are cleared and a frame has been collected.
+     * since the ui pass keeps the proxies' order among draws of one
+     * material, an element whose proxy was created later paints over one
+     * created earlier. The textures it draws are borrowed: each must stay
+     * alive until the quads using it are cleared and captured again.
      */
-    struct sprite_batch : public renderable
+    struct sprite_batch : public ui_element
     {
         // @p mat is the ui material the quads draw with (not owned; the
-        // renderer's lives until renderer::quit). The batch's buffers and
-        // bind groups live on @p device.
-        sprite_batch(gpu::device& device, ui_material* mat);
-        ~sprite_batch() override;
+        // renderer's lives until renderer::quit).
+        explicit sprite_batch(ui_material* mat);
 
-        sprite_batch(const sprite_batch&) = delete;
-        sprite_batch& operator=(const sprite_batch&) = delete;
-
-        /** @brief Drops every queued quad; the GPU buffers are kept for reuse. */
+        /** @brief Drops every queued quad. */
         void clear();
 
         /**
@@ -104,35 +91,14 @@ namespace rendering_engine
         /** @brief Quads queued, over every texture. */
         std::size_t quad_count() const;
 
-        /** @brief Nothing to do up front: buffers are created on first collect. */
-        void upload() final;
-
-        void collect_draw_items(std::vector<draw_item>& out) final;
+        /** @brief The queued quads, one group per texture in first-use order. */
+        ui_element_data capture() override;
 
     private:
-        struct texture_group
-        {
-            gpu::texture texture{};
-            std::vector<ui_vertex> vertices;
-            gpu::buffer vertex_buffer{};
-            std::size_t capacity{0}; // quads the vertex buffer holds
-            gpu::bind_group bind_group{};
-            bool dirty{true};
-        };
+        ui_quad_group& group_for(gpu::texture texture);
 
-        texture_group& group_for(gpu::texture texture);
-        void release(texture_group& group);
-
-        // Grows the shared index buffer to hold at least @p quads quads.
-        void reserve_indices(std::size_t quads);
-
-        // The device this renderable's GPU resources are created on and
-        // released through; it outlives the renderable.
-        gpu::device* m_device{nullptr};
         ui_material* m_material{nullptr};
-        std::vector<texture_group> m_groups;
-        gpu::buffer m_index_buffer{};
-        std::size_t m_index_capacity{0}; // quads the index buffer covers
+        std::vector<ui_quad_group> m_groups;
         std::size_t m_quad_count{0};
     };
 } // namespace rendering_engine

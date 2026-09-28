@@ -3,21 +3,22 @@
 
 /**
  * @file per_draw_ubo.hpp
- * @brief The @c PerDraw block every 3D renderable hands its pass
- *        (shaders/include/per_draw.glsl), the per-renderable cache of it
- *        and the helpers that build and record it.
+ * @brief The @c PerDraw block every placed 3D draw hands its pass
+ *        (shaders/include/per_draw.glsl) and the helpers that build and
+ *        record it.
  *
  * The block carries the model matrix and its normal matrix (the inverse-
- * transpose of the model's upper-left 3x3), computed once per draw here
+ * transpose of the model's upper-left 3x3), computed on the CPU here
  * so no vertex shader runs an @c inverse() per vertex. The same pass
  * over the matrix also tells whether the transform mirrors — a negative
- * determinant reverses every triangle's winding — which the renderable
- * records in @ref draw_item::mirrored so the pass can draw it with the
+ * determinant reverses every triangle's winding — which a mesh proxy
+ * records, for @ref draw_item::mirrored, so the pass can draw it with the
  * material's clockwise-front-face pipeline variant instead of culling
  * its outside.
  *
- * The block is the pipeline's push constants: a renderable hands the
- * pass its cached block (@ref draw_item::per_draw_push) and the pass
+ * The block is the pipeline's push constants: a mesh proxy carries the
+ * block built from its world matrix (@ref mesh_proxy::per_draw), each
+ * draw points at it (@ref draw_item::per_draw_push) and the pass
  * pushes it right before the draw (@ref bind_per_draw), so no buffer,
  * descriptor set or upload is involved. Every material template's
  * pipelines and the single-draw shadow pipelines declare
@@ -36,11 +37,6 @@
 #include <core/math/mat4.hpp>
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/gpu/pipeline.hpp>
-
-namespace core
-{
-    struct transform;
-}
 
 namespace rendering_engine
 {
@@ -112,28 +108,4 @@ namespace rendering_engine
     // Upload @p matrices into the palette @p joints, which must have room
     // for all of them.
     void write_joint_buffer(gpu::device& device, gpu::buffer joints, std::span<const core::math::mat4> matrices);
-
-    /**
-     * @brief A renderable's view of its PerDraw block.
-     *
-     * Holds the block built from the renderable's transform, recomputed —
-     * model matrix, normal matrix, mirror test — only when the transform's
-     * world version moves. @ref bind points the draw item at the cached
-     * block and the pass pushes it, so a static object costs no matrix
-     * work and no buffer write at all.
-     */
-    class per_draw_binding
-    {
-    public:
-        // Rebuild the cached block from @p transform if its world matrix
-        // changed since the last call, then point @p item at it
-        // (@ref draw_item::per_draw_push) and set its mirror flag. The
-        // block keeps its address for the binding's lifetime.
-        void bind(const core::transform& transform, draw_item& item);
-
-    private:
-        per_draw_payload m_payload{};
-        bool m_mirrored{false};
-        uint64_t m_world_version{0};
-    };
 } // namespace rendering_engine
