@@ -24,6 +24,11 @@
 #include <core/math/vec3.hpp>
 #include <runtime/physics/physics_body.hpp>
 
+namespace core
+{
+    struct job_pool;
+} // namespace core
+
 namespace runtime
 {
     struct node;
@@ -88,9 +93,10 @@ namespace runtime::physics
      * main thread once it returns, then emitted on the event bus and handed
      * to the per-component listeners (see physics_events.hpp).
      *
-     * **Threads.** The simulation runs on a small pool of physics worker
-     * threads (half the hardware threads, between one and four) plus the
-     * calling thread; every member function is main-thread only.
+     * **Threads.** The library starts no threads of its own: its jobs run
+     * on the engine's worker pool (the @c core::job_pool handed to
+     * @ref init), and the calling thread runs them too while it waits for
+     * a step to finish; every member function is main-thread only.
      *
      * **Debug draw.** @ref debug_lines describes every collider — green
      * dynamic (dim when asleep), blue kinematic, grey static, yellow
@@ -114,8 +120,10 @@ namespace runtime::physics
          * @brief Brings the physics library and the simulation up.
          *
          * Needs the event bus to be up already.
+         * @param jobs The worker pool the simulation's jobs run on; must
+         *             outlive @ref quit.
          */
-        void init();
+        void init(core::job_pool& jobs);
 
         /**
          * @brief Destroys every body and shuts the simulation down.

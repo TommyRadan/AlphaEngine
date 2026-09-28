@@ -320,7 +320,9 @@ namespace runtime
         // changes on disk (polled from assets->pump()).
         assets->enable_hot_reload(content_root);
 #endif
-        physics->init();
+        // Jolt runs its jobs on the engine's worker pool rather than on
+        // threads of its own.
+        physics->init(*jobs);
 #if _DEBUG
         // After the renderer and the world: the line helper that draws the
         // world's colliders.
@@ -346,10 +348,17 @@ namespace runtime
         // into the active scene, where the scenes own and tear them down.
         log_registered_types();
         install_game_modules(scenes->active_scene());
+
+        // From here on the log reaches its sinks in batches: every frame
+        // ends with a flush (see tick), and a warning or worse goes out at
+        // once.
+        core::logging::set_buffered(true);
     }
 
     void engine::quit()
     {
+        // The teardown logs line by line again.
+        core::logging::set_buffered(false);
         // Nothing runs a frame from here on; the systems go before the
         // subsystems they call into.
         m_engine_systems.clear();
@@ -488,8 +497,10 @@ namespace runtime
             [this](const frame_time&) { scenes->propagate_transforms(); });
 
         // Audio, from the settled poses; independent of the drawable, so it
-        // keeps playing while the window is minimized. The mixer runs on
-        // real time and plays its voices at the time scale.
+        // keeps being fed while the window is minimized. The poses, the time
+        // scale and every other change reach the mixer through its command
+        // queue; it mixes on the audio device's own thread, on real time,
+        // and plays its voices at the time scale.
         add(stage::audio,
             "audio_poses",
             order::audio_poses,
@@ -502,8 +513,8 @@ namespace runtime
                     *scenes, [](node& owner, audio_source_component& source) { source.sync(owner); });
             });
         add(stage::audio,
-            "audio_mix",
-            order::audio_mix,
+            "audio_sync",
+            order::audio_sync,
             always,
             [this](const frame_time& frame)
             {
@@ -571,6 +582,9 @@ namespace runtime
                 events->emit<core::quit_requested>();
             }
         }
+
+        // The frame's log lines reach the sinks together.
+        core::logging::flush();
     }
 
     void engine::broadcast_engine_start()

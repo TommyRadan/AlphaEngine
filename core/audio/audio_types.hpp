@@ -54,7 +54,7 @@ namespace core
      * directly. A spatial one is mixed against the active listener instead
      * (see @ref audio_listener_component): @ref position, @ref min_distance,
      * @ref max_distance and @ref rolloff feed the distance attenuation and
-     * stereo panning computed each mix (@ref audio::update); @ref pan is
+     * stereo panning computed for every block the mix renders; @ref pan is
      * then unused. A spatial voice mixed with no listener attached plays
      * silently (its playback position still advances) rather than guessing
      * a placement.

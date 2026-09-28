@@ -43,7 +43,7 @@ namespace runtime
         update,        ///< Render-rate game logic (@c on_update, in hierarchy order), then the deferred commands.
         animation,     ///< Animated poses, sampled between the last two fixed steps.
         transform_propagation, ///< Every world matrix settled.
-        audio,                 ///< Listener and source poses handed to the mixer, the mixer fed.
+        audio,                 ///< Listener and source poses, the time scale and changes handed to the mixer.
         render_extract,        ///< The tool overlay built, the render proxies and debug helpers written.
     };
 
@@ -146,7 +146,7 @@ namespace runtime
 
         // stage::audio
         inline constexpr int audio_poses = -100; ///< Listener and source poses are handed to the mixer.
-        inline constexpr int audio_mix = 0;      ///< The mixer tops the device up, at the time scale.
+        inline constexpr int audio_sync = 0;     ///< The time scale and the listener pose go to the mixer's thread.
 
         // stage::render_extract
         inline constexpr int overlay = -100;      ///< The tool overlay (the editor) builds its frame.

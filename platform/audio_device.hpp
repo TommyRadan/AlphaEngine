@@ -22,14 +22,17 @@ struct SDL_AudioStream;
 namespace platform
 {
     /**
-     * @brief The default playback device, opened through SDL3 as a plain
+     * @brief The default playback device, opened through SDL3 as an
      *        @c SDL_AudioStream bound to an @c SDL_OpenAudioDevice handle.
      *
-     * The bound stream rather than the callback-driven
-     * @c SDL_OpenAudioDeviceStream form keeps mixing a main-thread call:
-     * @ref queue hands the stream samples in the mixer's format and the
-     * stream converts them to whatever the device runs at. @ref open brings
-     * SDL's audio subsystem up and @ref close takes it down again.
+     * The stream's get callback runs on SDL's audio device thread whenever
+     * the device needs more to play: it has the render function fill blocks
+     * of samples in the mixer's format and puts them into the stream, which
+     * converts them to whatever the device runs at. The callback runs under
+     * the stream's lock, so @ref close, which clears it under that lock
+     * before destroying the stream, returns only once no call is running.
+     * @ref open brings SDL's audio subsystem up and @ref close takes it
+     * down again.
      */
     struct sdl_audio_output : core::audio_output
     {
@@ -41,16 +44,21 @@ namespace platform
         sdl_audio_output(sdl_audio_output&&) = delete;
         sdl_audio_output& operator=(sdl_audio_output&&) = delete;
 
-        bool open(std::uint32_t sample_rate, std::uint32_t channels, std::string& error) override;
+        bool
+        open(std::uint32_t sample_rate, std::uint32_t channels, render_function render, std::string& error) override;
         void close() override;
         std::string name() const override;
-        std::size_t queued_frames() const override;
-        void queue(const float* samples, std::size_t frame_count) override;
 
     private:
+        // The stream's get callback: fills @p additional_amount bytes, block
+        // by block. Runs on SDL's audio device thread.
+        static void on_stream_request(void* user, SDL_AudioStream* stream, int additional_amount, int total_amount);
+
         std::uint32_t m_device{0}; // an SDL_AudioDeviceID; 0 is SDL's "invalid" value
         SDL_AudioStream* m_stream{nullptr};
         std::uint32_t m_channels{0};
+        render_function m_render;
+        std::vector<float> m_block; // one block of rendered samples, reused by every request
     };
 
     /**

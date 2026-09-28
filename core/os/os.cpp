@@ -11,6 +11,8 @@
 #include <fstream>
 #include <system_error>
 
+#include <core/log.hpp>
+
 namespace core::os
 {
     namespace
@@ -39,6 +41,7 @@ namespace core::os
 
         void on_fatal_signal(int signal)
         {
+            core::logging::flush_after_crash();
             if (const crash_handler handler = g_crash_handler.load(std::memory_order_relaxed); handler != nullptr)
             {
                 handler(signal_name(signal));
@@ -51,6 +54,7 @@ namespace core::os
 
         void on_terminate()
         {
+            core::logging::flush_after_crash();
             if (const crash_handler handler = g_crash_handler.load(std::memory_order_relaxed); handler != nullptr)
             {
                 handler("std::terminate");

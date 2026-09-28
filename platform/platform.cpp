@@ -78,7 +78,8 @@ namespace platform
             SDL_SetLogPriorities(level_to_sdl(core::logging::level_for(k_sdl_category)));
         }
 
-        // The engine.log mirror. Every line is flushed as it is written, like stderr, so a crash loses nothing.
+        // The engine.log mirror. The logger flushes it after every batch of lines it hands over, the crash path's
+        // batch included, so the file holds everything that reached stderr.
         struct file_sink : core::logging::sink
         {
             explicit file_sink(std::FILE* file) : m_file{file} {}
@@ -94,10 +95,9 @@ namespace platform
             file_sink(file_sink&&) = delete;
             file_sink& operator=(file_sink&&) = delete;
 
-            void write(std::string_view line) override
+            void write(std::string_view lines) override
             {
-                std::fwrite(line.data(), 1, line.size(), m_file);
-                std::fflush(m_file);
+                std::fwrite(lines.data(), 1, lines.size(), m_file);
             }
 
             void flush() override

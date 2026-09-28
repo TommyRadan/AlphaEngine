@@ -29,6 +29,13 @@
  * platform module adds an engine.log mirror beside the executable and routes its OS library's own diagnostics in
  * through @ref core::logging::forward.
  *
+ * Buffering: while @ref core::logging::set_buffered is on — the engine turns it on for its frame loop — formatted
+ * lines collect in memory and reach the sinks in batches: at once for a warning or worse (with everything buffered
+ * before it), when the buffer grows large, at every @ref core::logging::flush (the engine's is at the end of each
+ * frame), at @ref core::logging::shutdown (process exit) and on the crash path (@ref core::logging::flush_after_crash,
+ * which @c core::os::install_crash_handler's handlers run). Otherwise every line is written and flushed as it is
+ * logged.
+ *
  * Every message that reaches the sinks is also kept in a bounded in-memory ring (@ref core::logging::recent_messages)
  * so a debug console can display the recent log without re-parsing the file.
  */
@@ -128,15 +135,16 @@ namespace core
          * @brief A destination every message is written to besides stderr (see @ref add_sink).
          *
          * Calls are serialised under the logger's sink lock, so a sink needs no locking of its own; it must not log.
+         * The logger hands it batches of lines and calls @ref flush after each batch.
          */
         struct sink
         {
             virtual ~sink() = default;
 
             /** @brief Writes one message as the complete formatted line stderr receives, trailing newline included. */
-            virtual void write(std::string_view line) = 0;
+            virtual void write(std::string_view lines) = 0;
 
-            /** @brief Pushes anything buffered to its destination. */
+            /** @brief Pushes anything it buffered to its destination. */
             virtual void flush() = 0;
         };
 
@@ -150,8 +158,9 @@ namespace core
         void init(int argc, char* argv[]);
 
         /**
-         * @brief Flushes and destroys every sink @ref add_sink added. Registered with @c atexit by @ref init; safe
-         * to call earlier and more than once. Messages logged afterwards still reach stderr and the ring.
+         * @brief Writes out the buffered lines, then flushes and destroys every sink @ref add_sink added, and turns
+         * buffering off. Registered with @c atexit by @ref init; safe to call earlier and more than once. Messages
+         * logged afterwards still reach stderr and the ring.
          */
         void shutdown();
 
@@ -174,8 +183,21 @@ namespace core
          */
         void set_level_observer(level_observer observer);
 
-        /** @brief Flushes every sink. Called after each fatal message. */
+        /** @brief Hands the buffered lines to the sinks and flushes them. Thread-safe. */
         void flush();
+
+        /**
+         * @brief Turns buffering (see the file notes) on or off. Turning it off writes out and flushes whatever is
+         * buffered. Off until turned on. Thread-safe.
+         */
+        void set_buffered(bool buffered);
+
+        /**
+         * @brief The crash path's @ref flush: writes out the buffered lines and flushes the sinks, best effort. It
+         * only tries the sink lock (a crashing thread may hold it) and gives up if the lock stays taken. Called by
+         * the handlers @c core::os::install_crash_handler installs, before the installed crash handler.
+         */
+        void flush_after_crash() noexcept;
 
         /**
          * @brief Logs a message

@@ -23,9 +23,12 @@ namespace core
      * @brief Process-wide worker pool that runs engine work in parallel.
      *
      * Owned by @ref runtime::engine and constructed early so any subsystem can
-     * hand it work during init or per frame. The pool starts
-     * @c hardware_concurrency() - 1 worker threads — the main thread is the Nth
-     * participant. On a single-core host it starts none, and every call below
+     * hand it work during init or per frame. It is the engine's one worker
+     * pool, sized once: it starts @c hardware_concurrency() - 1 worker
+     * threads — the main thread is the Nth participant — and every parallel
+     * workload shares them, the physics library's jobs included
+     * (@c runtime::physics::world runs them here rather than on threads of
+     * its own). On a single-core host it starts none, and every call below
      * degrades to running inline on the caller, so behaviour is identical minus
      * the parallelism.
      *

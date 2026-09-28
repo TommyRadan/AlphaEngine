@@ -63,8 +63,8 @@ namespace
     }
 
     // The crash hook runs inside a signal handler, so it stays within what is
-    // safe there: one line to stderr. Every logged line is already flushed to
-    // engine.log as it is written, so nothing else is lost.
+    // safe there: one line to stderr. The crash path writes out the log's
+    // buffered lines before calling it, so nothing else is lost.
     void on_crash(const char* reason)
     {
         std::fputs("AlphaEngine: fatal ", stderr);

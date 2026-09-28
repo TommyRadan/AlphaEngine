@@ -109,17 +109,20 @@ namespace runtime
          * @brief Initializes every subsystem in dependency order — the
          *        window, then the GPU device against it, then the renderer —
          *        then installs the game modules (runtime/game_module.hpp)
-         *        into the active scene.
+         *        into the active scene, and turns log buffering on
+         *        (@c core::logging::set_buffered) for the frame loop.
          */
         void init();
 
-        /** @brief Tears every subsystem down in reverse order. */
+        /** @brief Turns log buffering off, then tears every subsystem down in reverse order. */
         void quit();
 
         /**
          * @brief Runs one iteration of the main loop: advances the clock,
          *        runs the frame's schedule (@ref systems), then, unless the
-         *        window is minimized, its render extraction and the renderer.
+         *        window is minimized, its render extraction and the renderer,
+         *        and finally flushes the frame's log lines
+         *        (@c core::logging::flush).
          *
          * The engine's own systems, which @ref init adds to @ref systems,
          * are listed stage by stage, with their orders, in

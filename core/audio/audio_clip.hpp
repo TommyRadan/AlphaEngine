@@ -21,8 +21,10 @@ namespace core
      * Holds interleaved 32-bit float samples already converted to the
      * mixer's fixed format (@ref audio::k_mixer_sample_rate stereo,
      * @ref audio::k_mixer_channels channels): the format conversion runs
-     * once in @ref audio::load_clip, so mixing a voice each tick is a plain
-     * gain-scaled, pitch-resampled read with no per-frame conversion.
+     * once in @ref audio::load_clip, so mixing a voice is a plain
+     * gain-scaled, pitch-resampled read with no per-block conversion. The
+     * samples are never written after the clip is built, so the mix reads
+     * them on the audio device's thread without a lock.
      *
      * Unlike @c texture_asset this owns no device resource — it is host
      * memory decoded up front — so there is nothing to release beyond the

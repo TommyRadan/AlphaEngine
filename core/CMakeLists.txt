@@ -20,6 +20,7 @@ target_sources(alpha_core PRIVATE
     settings_parse.hpp
     settings_registry.cpp
     settings_registry.hpp
+    spsc_queue.hpp
     string_id.cpp
     string_id.hpp
     subscription.cpp

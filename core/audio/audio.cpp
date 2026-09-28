@@ -22,6 +22,10 @@ namespace core
         // listener and the voice as coincident rather than divide by ~0.
         constexpr float degenerate_length = 1e-6f;
 
+        // Commands the queue holds before the main thread holds further ones
+        // back: many frames' worth of voice changes and poses.
+        constexpr std::size_t k_command_capacity = 4096;
+
         // Simple linear pan law: full signal to one side at |pan| == 1,
         // equal signal to both at pan == 0. Not equal-power, but this
         // subsystem keeps its DSP deliberately minimal.
@@ -31,10 +35,20 @@ namespace core
             left = gain * std::clamp(1.0f - p, 0.0f, 1.0f);
             right = gain * std::clamp(1.0f + p, 0.0f, 1.0f);
         }
+
+        float sanitized_pitch(float pitch) noexcept
+        {
+            return pitch > 0.0f ? pitch : 1.0f;
+        }
+
+        bool same_pose(const core::math::vec3& a, const core::math::vec3& b) noexcept
+        {
+            return a.x == b.x && a.y == b.y && a.z == b.z;
+        }
     } // namespace
 
     audio::audio(std::unique_ptr<audio_output> output, std::unique_ptr<audio_decoder> decoder)
-        : m_output{std::move(output)}, m_decoder{std::move(decoder)}
+        : m_output{std::move(output)}, m_decoder{std::move(decoder)}, m_commands{k_command_capacity}
     {
     }
 
@@ -54,15 +68,21 @@ namespace core
         }
 
         std::string error;
-        if (!m_output->open(k_mixer_sample_rate, k_mixer_channels, error))
+        if (!m_output->open(
+                k_mixer_sample_rate,
+                k_mixer_channels,
+                [this](float* samples, std::size_t frame_count) { render(samples, frame_count); },
+                error))
         {
             LOG_WRN("core::audio: %s; audio is disabled", error.c_str());
             return;
         }
 
         m_available = true;
-        LOG_INF(
-            "core::audio: opened '%s' (%u Hz, %u ch)", m_output->name().c_str(), k_mixer_sample_rate, k_mixer_channels);
+        LOG_INF("core::audio: opened '%s' (%u Hz, %u ch), mixing on the device's thread",
+                m_output->name().c_str(),
+                k_mixer_sample_rate,
+                k_mixer_channels);
     }
 
     void audio::quit()
@@ -74,14 +94,31 @@ namespace core
         if (m_available)
         {
             LOG_INF("Quit core::audio");
+            // No render call runs once this returns: the mix is the main
+            // thread's again.
             m_output->close();
         }
         m_available = false;
 
-        for (voice& v : m_voices)
+        command discarded;
+        while (m_commands.try_pop(discarded))
         {
-            free_voice(v);
         }
+        m_overflow.clear();
+        m_mixer = mixer_state{};
+        for (std::size_t index = 0; index < m_slots.size(); ++index)
+        {
+            if (m_slots[index].active)
+            {
+                free_slot(index, true);
+            }
+            m_finished[index].store(0, std::memory_order_relaxed);
+        }
+        m_retired_clips.clear();
+        m_commands_posted = 0;
+        m_commands_applied.store(0, std::memory_order_relaxed);
+        m_posted_listener = listener_pose{};
+        m_time_scale = 1.0f;
         m_listeners.clear();
         m_clips.clear();
     }
@@ -143,16 +180,101 @@ namespace core
         return clip;
     }
 
-    std::size_t audio::find_free_voice() const noexcept
+    // --- Main thread --------------------------------------------------------
+
+    void audio::post(const command& change)
     {
-        for (std::size_t i = 0; i < m_voices.size(); ++i)
+        ++m_commands_posted;
+        if (m_overflow.empty() && m_commands.try_push(change))
         {
-            if (!m_voices[i].active)
+            return;
+        }
+        // The mix has not drained the queue for a long while (a device that
+        // stopped pulling); hold the change back rather than drop or reorder
+        // it, and hand it over as the queue frees up.
+        if (!m_overflow_warned)
+        {
+            LOG_WRN("core::audio: the command queue is full; holding changes until the mix catches up");
+            m_overflow_warned = true;
+        }
+        m_overflow.push_back(change);
+        pump_overflow();
+    }
+
+    void audio::pump_overflow()
+    {
+        std::size_t handed = 0;
+        while (handed < m_overflow.size() && m_commands.try_push(m_overflow[handed]))
+        {
+            ++handed;
+        }
+        m_overflow.erase(m_overflow.begin(), m_overflow.begin() + static_cast<std::ptrdiff_t>(handed));
+    }
+
+    const audio::voice_slot* audio::resolve(audio_voice_id id) const noexcept
+    {
+        if (!id.valid() || id.index >= m_slots.size())
+        {
+            return nullptr;
+        }
+        const voice_slot& slot = m_slots[id.index];
+        if (!slot.active || slot.generation != id.generation ||
+            m_finished[id.index].load(std::memory_order_acquire) == slot.generation)
+        {
+            return nullptr;
+        }
+        return &slot;
+    }
+
+    std::size_t audio::find_free_slot() const noexcept
+    {
+        for (std::size_t i = 0; i < m_slots.size(); ++i)
+        {
+            if (!m_slots[i].active)
             {
                 return i;
             }
         }
-        return m_voices.size();
+        return m_slots.size();
+    }
+
+    void audio::free_slot(std::size_t index, bool mixer_released) noexcept
+    {
+        voice_slot& slot = m_slots[index];
+        slot.active = false;
+        if (mixer_released)
+        {
+            slot.clip.reset();
+        }
+        else
+        {
+            m_retired_clips.emplace_back(m_commands_posted, std::move(slot.clip));
+            slot.clip = nullptr;
+        }
+        if (++slot.generation == 0)
+        {
+            // Skip the invalid handle value on wrap, exactly like core::pool.
+            slot.generation = 1;
+        }
+    }
+
+    void audio::reap_finished_voices() noexcept
+    {
+        for (std::size_t index = 0; index < m_slots.size(); ++index)
+        {
+            // The mix drops its pointer to the clip before it reports the
+            // voice finished (a release store), so the clip can go at once.
+            if (m_slots[index].active && m_finished[index].load(std::memory_order_acquire) == m_slots[index].generation)
+            {
+                free_slot(index, true);
+            }
+        }
+    }
+
+    void audio::release_retired_clips()
+    {
+        const std::uint64_t applied = m_commands_applied.load(std::memory_order_acquire);
+        std::erase_if(m_retired_clips, [applied](const auto& retired) { return retired.first <= applied; });
     }
 
     audio_voice_id audio::play(const audio_play_params& params)
@@ -162,8 +284,9 @@ namespace core
             return {};
         }
 
-        const std::size_t slot = find_free_voice();
-        if (slot == m_voices.size())
+        reap_finished_voices();
+        const std::size_t index = find_free_slot();
+        if (index == m_slots.size())
         {
             if (!m_voice_cap_warned)
             {
@@ -173,21 +296,26 @@ namespace core
             return {};
         }
 
-        voice& v = m_voices[slot];
-        v.active = true;
-        v.clip = params.clip;
-        v.cursor = 0.0;
-        v.paused = false;
-        v.gain = params.gain;
-        v.pitch = params.pitch > 0.0f ? params.pitch : 1.0f;
-        v.pan = params.pan;
-        v.loop = params.loop;
-        v.spatial = params.spatial;
-        v.position = params.position;
-        v.min_distance = std::max(params.min_distance, 0.0f);
-        v.max_distance = std::max(params.max_distance, v.min_distance + 1e-3f);
-        v.rolloff = std::max(params.rolloff, 0.0f);
-        return audio_voice_id{static_cast<std::uint32_t>(slot), v.generation};
+        voice_slot& slot = m_slots[index];
+        slot.active = true;
+        slot.clip = params.clip;
+
+        command change;
+        change.kind = command_kind::play;
+        change.index = static_cast<std::uint32_t>(index);
+        change.generation = slot.generation;
+        change.clip = params.clip.get();
+        change.gain = params.gain;
+        change.pitch = sanitized_pitch(params.pitch);
+        change.pan = params.pan;
+        change.loop = params.loop;
+        change.spatial = params.spatial;
+        change.position = params.position;
+        change.min_distance = std::max(params.min_distance, 0.0f);
+        change.max_distance = std::max(params.max_distance, change.min_distance + 1e-3f);
+        change.rolloff = std::max(params.rolloff, 0.0f);
+        post(change);
+        return audio_voice_id{change.index, change.generation};
     }
 
     void audio::play_one_shot(const std::shared_ptr<audio_clip>& clip, float gain, float pan)
@@ -199,51 +327,32 @@ namespace core
         play(params);
     }
 
-    audio::voice* audio::resolve(audio_voice_id id) noexcept
-    {
-        if (!id.valid() || id.index >= m_voices.size())
-        {
-            return nullptr;
-        }
-        voice& v = m_voices[id.index];
-        return (v.active && v.generation == id.generation) ? &v : nullptr;
-    }
-
-    const audio::voice* audio::resolve(audio_voice_id id) const noexcept
-    {
-        if (!id.valid() || id.index >= m_voices.size())
-        {
-            return nullptr;
-        }
-        const voice& v = m_voices[id.index];
-        return (v.active && v.generation == id.generation) ? &v : nullptr;
-    }
-
-    void audio::free_voice(voice& v) noexcept
-    {
-        v.active = false;
-        v.paused = false;
-        v.clip.reset();
-        if (++v.generation == 0)
-        {
-            // Skip the invalid handle value on wrap, exactly like core::pool.
-            v.generation = 1;
-        }
-    }
-
     void audio::stop(audio_voice_id id)
     {
-        if (voice* v = resolve(id))
+        if (resolve(id) == nullptr)
         {
-            free_voice(*v);
+            return;
         }
+        command change;
+        change.kind = command_kind::stop;
+        change.index = id.index;
+        change.generation = id.generation;
+        post(change);
+        // The mix may be playing the voice until it applies the stop, so the
+        // clip is retired rather than dropped.
+        free_slot(id.index, false);
     }
 
     void audio::set_paused(audio_voice_id id, bool paused)
     {
-        if (voice* v = resolve(id))
+        if (resolve(id) != nullptr)
         {
-            v->paused = paused;
+            command change;
+            change.kind = command_kind::set_paused;
+            change.index = id.index;
+            change.generation = id.generation;
+            change.paused = paused;
+            post(change);
         }
     }
 
@@ -254,49 +363,83 @@ namespace core
 
     void audio::set_gain(audio_voice_id id, float gain)
     {
-        if (voice* v = resolve(id))
+        if (resolve(id) != nullptr)
         {
-            v->gain = gain;
+            command change;
+            change.kind = command_kind::set_gain;
+            change.index = id.index;
+            change.generation = id.generation;
+            change.gain = gain;
+            post(change);
         }
     }
 
     void audio::set_pitch(audio_voice_id id, float pitch)
     {
-        if (voice* v = resolve(id))
+        if (resolve(id) != nullptr)
         {
-            v->pitch = pitch > 0.0f ? pitch : 1.0f;
+            command change;
+            change.kind = command_kind::set_pitch;
+            change.index = id.index;
+            change.generation = id.generation;
+            change.pitch = sanitized_pitch(pitch);
+            post(change);
         }
     }
 
     void audio::set_pan(audio_voice_id id, float pan)
     {
-        if (voice* v = resolve(id))
+        if (resolve(id) != nullptr)
         {
-            v->pan = pan;
+            command change;
+            change.kind = command_kind::set_pan;
+            change.index = id.index;
+            change.generation = id.generation;
+            change.pan = pan;
+            post(change);
         }
     }
 
     void audio::set_position(audio_voice_id id, const core::math::vec3& position)
     {
-        if (voice* v = resolve(id))
+        if (resolve(id) != nullptr)
         {
-            v->position = position;
+            command change;
+            change.kind = command_kind::set_position;
+            change.index = id.index;
+            change.generation = id.generation;
+            change.position = position;
+            post(change);
         }
     }
 
     void audio::set_attenuation(audio_voice_id id, float min_distance, float max_distance, float rolloff)
     {
-        if (voice* v = resolve(id))
+        if (resolve(id) != nullptr)
         {
-            v->min_distance = std::max(min_distance, 0.0f);
-            v->max_distance = std::max(max_distance, v->min_distance + 1e-3f);
-            v->rolloff = std::max(rolloff, 0.0f);
+            command change;
+            change.kind = command_kind::set_attenuation;
+            change.index = id.index;
+            change.generation = id.generation;
+            change.min_distance = std::max(min_distance, 0.0f);
+            change.max_distance = std::max(max_distance, change.min_distance + 1e-3f);
+            change.rolloff = std::max(rolloff, 0.0f);
+            post(change);
         }
     }
 
     void audio::set_time_scale(float scale)
     {
-        m_time_scale = scale > 0.0f ? scale : 0.0f;
+        const float clamped = scale > 0.0f ? scale : 0.0f;
+        if (clamped == m_time_scale)
+        {
+            return;
+        }
+        m_time_scale = clamped;
+        command change;
+        change.kind = command_kind::set_time_scale;
+        change.time_scale = clamped;
+        post(change);
     }
 
     float audio::time_scale() const noexcept
@@ -364,17 +507,173 @@ namespace core
         return nullptr;
     }
 
-    void audio::mix_frames(float* out, std::size_t frame_count)
+    void audio::post_listener_pose()
+    {
+        listener_pose pose;
+        if (const listener_record* listener = active_listener())
+        {
+            pose.present = true;
+            pose.position = listener->position;
+            pose.right = listener->right;
+        }
+        if (pose.present == m_posted_listener.present && same_pose(pose.position, m_posted_listener.position) &&
+            same_pose(pose.right, m_posted_listener.right))
+        {
+            return;
+        }
+        m_posted_listener = pose;
+        command change;
+        change.kind = command_kind::set_listener;
+        change.has_listener = pose.present;
+        change.position = pose.position;
+        change.right = pose.right;
+        post(change);
+    }
+
+    void audio::update(double delta_seconds)
+    {
+        pump_overflow();
+        post_listener_pose();
+
+        if (!m_available)
+        {
+            // No device thread, so this thread runs the mix: apply what was
+            // posted, then advance the voices by wall-clock time, capped so
+            // one catch-up call (a debugger pause) never mixes more than
+            // half a second.
+            do
+            {
+                apply_commands();
+                pump_overflow();
+            } while (!m_overflow.empty());
+
+            constexpr std::size_t k_max_frames_per_update = k_mixer_sample_rate / 2;
+            const auto frames = std::min(static_cast<std::size_t>(std::clamp(delta_seconds, 0.0, 1.0) *
+                                                                  static_cast<double>(k_mixer_sample_rate)),
+                                         k_max_frames_per_update);
+            if (frames > 0)
+            {
+                m_mixer.scratch.assign(frames * k_mixer_channels, 0.0f);
+                mix_frames(m_mixer.scratch.data(), frames);
+            }
+        }
+
+        reap_finished_voices();
+        release_retired_clips();
+    }
+
+    // --- The mix ------------------------------------------------------------
+
+    void audio::apply(const command& change) noexcept
+    {
+        if (change.kind == command_kind::set_time_scale)
+        {
+            m_mixer.time_scale = change.time_scale;
+            return;
+        }
+        if (change.kind == command_kind::set_listener)
+        {
+            m_mixer.listener.present = change.has_listener;
+            m_mixer.listener.position = change.position;
+            m_mixer.listener.right = change.right;
+            return;
+        }
+
+        voice& v = m_mixer.voices[change.index];
+        if (change.kind == command_kind::play)
+        {
+            v.active = true;
+            v.generation = change.generation;
+            v.clip = change.clip;
+            v.cursor = 0.0;
+            v.paused = false;
+            v.gain = change.gain;
+            v.pitch = change.pitch;
+            v.pan = change.pan;
+            v.loop = change.loop;
+            v.spatial = change.spatial;
+            v.position = change.position;
+            v.min_distance = change.min_distance;
+            v.max_distance = change.max_distance;
+            v.rolloff = change.rolloff;
+            return;
+        }
+
+        // Every other change names a voice that may have finished or been
+        // replaced since it was posted; the generation tells.
+        if (!v.active || v.generation != change.generation)
+        {
+            return;
+        }
+        switch (change.kind)
+        {
+        case command_kind::stop:
+            v.active = false;
+            v.clip = nullptr;
+            break;
+        case command_kind::set_paused:
+            v.paused = change.paused;
+            break;
+        case command_kind::set_gain:
+            v.gain = change.gain;
+            break;
+        case command_kind::set_pitch:
+            v.pitch = change.pitch;
+            break;
+        case command_kind::set_pan:
+            v.pan = change.pan;
+            break;
+        case command_kind::set_position:
+            v.position = change.position;
+            break;
+        case command_kind::set_attenuation:
+            v.min_distance = change.min_distance;
+            v.max_distance = change.max_distance;
+            v.rolloff = change.rolloff;
+            break;
+        case command_kind::play:
+        case command_kind::set_time_scale:
+        case command_kind::set_listener:
+            break;
+        }
+    }
+
+    void audio::apply_commands() noexcept
+    {
+        std::uint64_t applied = 0;
+        command change;
+        while (m_commands.try_pop(change))
+        {
+            apply(change);
+            ++applied;
+        }
+        if (applied > 0)
+        {
+            // Only the mix writes the count; the release store lets the main
+            // thread drop the clips of the voices the commands stopped.
+            m_commands_applied.store(m_commands_applied.load(std::memory_order_relaxed) + applied,
+                                     std::memory_order_release);
+        }
+    }
+
+    void audio::render(float* out, std::size_t frame_count) noexcept
+    {
+        apply_commands();
+        mix_frames(out, frame_count);
+    }
+
+    void audio::mix_frames(float* out, std::size_t frame_count) noexcept
     {
         std::fill(out, out + frame_count * k_mixer_channels, 0.0f);
-        const listener_record* listener = active_listener();
+        const listener_pose& listener = m_mixer.listener;
 
-        for (voice& v : m_voices)
+        for (std::size_t index = 0; index < m_mixer.voices.size(); ++index)
         {
+            voice& v = m_mixer.voices[index];
             // The voice's playback rate: its pitch at the game's time scale.
             // At 0 it holds its place and contributes nothing.
-            const double rate = static_cast<double>(v.pitch) * static_cast<double>(m_time_scale);
-            if (!v.active || v.paused || !v.clip || !(rate > 0.0))
+            const double rate = static_cast<double>(v.pitch) * static_cast<double>(m_mixer.time_scale);
+            if (!v.active || v.paused || v.clip == nullptr || !(rate > 0.0))
             {
                 continue;
             }
@@ -385,15 +684,15 @@ namespace core
             {
                 // No listener: keep the voice advancing (see the class docs
                 // on update) but contribute nothing audible.
-                if (listener != nullptr)
+                if (listener.present)
                 {
-                    const core::math::vec3 offset = v.position - listener->position;
+                    const core::math::vec3 offset = v.position - listener.position;
                     const float distance = core::math::length(offset);
 
                     float pan = 0.0f;
                     if (distance > degenerate_length)
                     {
-                        pan = std::clamp(core::math::dot(offset / distance, listener->right), -1.0f, 1.0f);
+                        pan = std::clamp(core::math::dot(offset / distance, listener.right), -1.0f, 1.0f);
                     }
 
                     const float span = std::max(v.max_distance - v.min_distance, 1e-4f);
@@ -435,7 +734,11 @@ namespace core
                     }
                     else
                     {
-                        free_voice(v);
+                        // Let go of the clip before reporting the end: the
+                        // main thread may drop it as soon as it sees it.
+                        v.active = false;
+                        v.clip = nullptr;
+                        m_finished[index].store(v.generation, std::memory_order_release);
                         break;
                     }
                 }
@@ -446,43 +749,6 @@ namespace core
         for (std::size_t i = 0; i < frame_count * k_mixer_channels; ++i)
         {
             out[i] = std::clamp(out[i], -1.0f, 1.0f);
-        }
-    }
-
-    void audio::update(double delta_seconds)
-    {
-        // ~100 ms of buffered audio absorbs ordinary frame-time jitter
-        // without adding noticeable latency; a stall (a debugger pause, a
-        // minimized window returning) is capped so one catch-up tick never
-        // mixes more than half a second in one call.
-        constexpr std::size_t k_target_buffered_frames = k_mixer_sample_rate / 10;
-        constexpr std::size_t k_max_frames_per_update = k_mixer_sample_rate / 2;
-
-        std::size_t frames_needed = 0;
-        if (m_available)
-        {
-            const std::size_t queued_frames = m_output->queued_frames();
-            frames_needed = queued_frames < k_target_buffered_frames ? k_target_buffered_frames - queued_frames : 0;
-        }
-        else
-        {
-            // No device to keep topped up: advance voices by wall-clock time
-            // instead, so is_playing()/looping bookkeeping stays correct.
-            frames_needed = static_cast<std::size_t>(std::clamp(delta_seconds, 0.0, 1.0) *
-                                                     static_cast<double>(k_mixer_sample_rate));
-        }
-        frames_needed = std::min(frames_needed, k_max_frames_per_update);
-        if (frames_needed == 0)
-        {
-            return;
-        }
-
-        m_scratch.assign(frames_needed * k_mixer_channels, 0.0f);
-        mix_frames(m_scratch.data(), frames_needed);
-
-        if (m_available)
-        {
-            m_output->queue(m_scratch.data(), frames_needed);
         }
     }
 } // namespace core
