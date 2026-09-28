@@ -8,6 +8,7 @@
 #include <core/os/os.hpp>
 #include <core/time.hpp>
 #include <platform/window.hpp>
+#include <platform/window_settings.hpp>
 #include <rendering_engine/camera/camera_registry.hpp>
 #include <rendering_engine/camera/perspective_camera.hpp>
 #include <rendering_engine/debug_draw/axes_helper.hpp>
@@ -45,8 +46,6 @@
 #include <rendering_engine/renderables/renderable.hpp>
 #include <rendering_engine/resources/asset_cache.hpp>
 #include <rendering_engine/resources/texture_asset.hpp>
-#include <runtime/engine.hpp>
-#include <runtime/engine_settings.hpp>
 
 #include <algorithm>
 #include <cassert>
@@ -116,11 +115,14 @@ namespace
 rendering_engine::renderer::renderer() = default;
 rendering_engine::renderer::~renderer() = default;
 
-void rendering_engine::renderer::init()
+void rendering_engine::renderer::init(const render_services& services)
 {
     LOG_INF("Init Rendering Engine");
 
-    auto& eng = runtime::current_engine();
+    assert(services.device != nullptr && services.window != nullptr && services.events != nullptr &&
+           "renderer::init: the device, the window and the event bus are required");
+    m_services = services;
+    gpu::device& device = *services.device;
 
 #if _DEBUG
     // Debug builds watch the directory the shader library reads its
@@ -130,7 +132,7 @@ void rendering_engine::renderer::init()
     // below create their modules, so each registers with it.
     if (const std::filesystem::path& root = gpu::shader_library::override_root(); !root.empty())
     {
-        m_shader_hot_reload = std::make_unique<gpu::shader_hot_reload>(*eng.gpu, root);
+        m_shader_hot_reload = std::make_unique<gpu::shader_hot_reload>(device, root);
     }
 #endif
 
@@ -139,26 +141,27 @@ void rendering_engine::renderer::init()
     // drawable is measured in pixels rather than taken from the settings'
     // logical size: on a high-density display the two differ by the
     // display scale, and the swapchain and render targets follow pixels.
-    const platform::window_extent drawable = eng.window->pixel_size();
+    const platform::window_extent drawable = services.window->pixel_size();
     const uint32_t width = drawable.width;
     const uint32_t height = drawable.height;
-    eng.gpu->resize_swapchain(width, height);
+    device.resize_swapchain(width, height);
 
     // Report the drawable's aspect to the world's cameras: every attached
     // camera takes it now and any camera attached later takes it on
     // attach, so the projection always matches the drawable. The settings'
     // logical size stands in while the window has no drawable.
-    m_world.set_drawable_aspect(drawable_aspect_ratio(width, height, eng.settings->window.aspect_ratio()));
+    const float settings_aspect = services.window_settings != nullptr ? services.window_settings->aspect_ratio() : 1.0f;
+    m_world.set_drawable_aspect(drawable_aspect_ratio(width, height, settings_aspect));
 
     // Keep the swapchain extent, the off-screen targets and the passes in
     // step with the drawable as the window is resized, maximised, restored
     // or moved across displays. The listener runs from the window's event
     // pump in engine::tick, before the frame is built, so on_resize never
     // recreates a target a command buffer is being recorded against.
-    m_window_resized_subscription = eng.events->subscribe<core::window_resized>(
-        [this, &eng](const core::window_resized& e)
+    m_window_resized_subscription = services.events->subscribe<core::window_resized>(
+        [this](const core::window_resized& e)
         {
-            eng.gpu->resize_swapchain(e.m_pixel_width, e.m_pixel_height);
+            m_services.device->resize_swapchain(e.m_pixel_width, e.m_pixel_height);
             on_resize(e.m_pixel_width, e.m_pixel_height);
         });
 
@@ -171,8 +174,8 @@ void rendering_engine::renderer::init()
     // for the debug pass), the velocity and TAA passes below, and which
     // input FXAA declares. Off when the setting is off or the drawable is
     // degenerate, in which case the LDR target flows straight into FXAA.
-    const bool taa_enabled =
-        (eng.settings != nullptr) && eng.settings->graphics.temporal_aa && width != 0 && height != 0;
+    const graphics_settings graphics = services.graphics != nullptr ? *services.graphics : graphics_settings{};
+    const bool taa_enabled = graphics.temporal_aa && width != 0 && height != 0;
 
     // Construct the built-in passes first — each pass owns the
     // per-frame bind-group layout its matching material reads at
@@ -182,8 +185,7 @@ void rendering_engine::renderer::init()
     // ahead of the scene pass, which reads their maps and each frame's
     // fitted matrices through the frame context (render() publishes the
     // passes there), so no pass is handed another at construction.
-    const rendering_engine::shadow_settings shadow_config =
-        eng.settings != nullptr ? eng.settings->shadows : rendering_engine::shadow_settings{};
+    const shadow_settings shadow_config = services.shadows != nullptr ? *services.shadows : shadow_settings{};
     auto shadow = std::make_unique<shadow_pass>(&m_world.scene_renderables(), shadow_config);
     m_shadow = shadow.get();
     // The omni shadow pass renders six depth faces from the first shadow-casting
@@ -197,8 +199,7 @@ void rendering_engine::renderer::init()
     m_spot_shadow = spot_shadow.get();
     // Above the parallel draw threshold the scene pass records its draws
     // from the job pool's workers (Vulkan only); 0 keeps it serial.
-    const uint32_t parallel_draw_threshold =
-        eng.settings != nullptr ? eng.settings->graphics.parallel_draw_threshold : 0u;
+    const uint32_t parallel_draw_threshold = graphics.parallel_draw_threshold;
     auto scene = std::make_unique<scene_pass>(
         &m_world.scene_renderables(), &m_render_stats, taa_enabled, parallel_draw_threshold);
     m_scene = scene.get();
@@ -208,7 +209,7 @@ void rendering_engine::renderer::init()
     // target for it to load. It is always in the pass list and records
     // nothing while disabled, so set_depth_prepass can flip it at runtime.
     auto depth_pre = std::make_unique<depth_prepass>();
-    m_depth_prepass_enabled = (eng.settings != nullptr) && eng.settings->graphics.depth_prepass;
+    m_depth_prepass_enabled = graphics.depth_prepass;
     // The material library below is built against the same per-frame
     // layout the scene pass binds at slot 0.
     const gpu::bind_group_layout scene_frame_layout = scene->frame_bind_group_layout();
@@ -279,7 +280,7 @@ void rendering_engine::renderer::init()
     // just built and overwrites post_settings::taa.enabled with the TAA
     // pass's real presence: temporal AA is only ever decided here, at
     // init, from graphics.temporal_aa.
-    set_post_settings(eng.settings != nullptr ? startup_post_settings(eng.settings->post) : post_settings{});
+    set_post_settings(startup_post_settings(services.post != nullptr ? *services.post : post_process_settings{}));
     // FXAA closes the post chain: it samples the TAA resolve when one is
     // published (else the LDR target) and writes the anti-aliased image to
     // the swapchain. It declares whichever of the two it will actually
@@ -303,7 +304,7 @@ void rendering_engine::renderer::init()
     // the per-frame layouts the passes above expose (the 3D templates
     // reserve slot 0 for the scene_pass's per-frame group, the ui template
     // for the ui_pass's), and the built-in instance of each.
-    m_materials.init(*eng.gpu, scene_frame_layout, ui_frame_layout);
+    m_materials.init(device, scene_frame_layout, ui_frame_layout);
 
     // Every built-in pipeline has compiled by now; report how much of it
     // the on-disk SPIR-V cache served (see gpu/shader_compiler.hpp).
@@ -389,7 +390,7 @@ void rendering_engine::renderer::init()
 
     // Per-pass GPU timings over the pass list; disabled on a device
     // without timestamp queries.
-    m_gpu_profiler.init(*eng.gpu, m_passes.pass_names());
+    m_gpu_profiler.init(device, m_passes.pass_names());
 
 #if _DEBUG
     // Provide a couple of always-available reference gizmos (the infinite
@@ -408,8 +409,6 @@ void rendering_engine::renderer::init()
 
 void rendering_engine::renderer::quit()
 {
-    auto& eng = runtime::current_engine();
-
     // The teardown walks the members from the last declared to the first
     // (see renderer.hpp); the engine takes the device and the window down
     // after it.
@@ -430,8 +429,12 @@ void rendering_engine::renderer::quit()
     // Game-owned helpers must likewise be released before quit.
     m_debug_helpers.clear();
 
-    // The profiler's query sets go before the device does.
-    m_gpu_profiler.shutdown(*eng.gpu);
+    // The profiler's query sets go before the device does. Without a
+    // device init never ran, and there is nothing to release.
+    if (m_services.device != nullptr)
+    {
+        m_gpu_profiler.shutdown(*m_services.device);
+    }
 
     // Drop the passes first; their record() bodies reach for the
     // event bus we're about to release, and the passes own per-frame
@@ -471,13 +474,16 @@ void rendering_engine::renderer::quit()
     // pass and helper that pointed into its registries is gone.
     m_world.quit();
 
+    // Forget the subsystems init was handed; the owner takes them down
+    // next.
+    m_services = render_services{};
+
     LOG_INF("Quit Rendering Engine");
 }
 
 void rendering_engine::renderer::render()
 {
-    auto& eng = runtime::current_engine();
-    auto& gpu = *eng.gpu;
+    auto& gpu = *m_services.device;
 
 #if _DEBUG
     // Pick up shader edits between frames: a rebuilt pipeline replaces
@@ -537,10 +543,10 @@ void rendering_engine::renderer::render()
     ctx.frame_index = m_frame_index;
     // The engine clock ticked at the top of this frame; core::time reports
     // milliseconds, the shaders see seconds.
-    if (eng.time != nullptr)
+    if (m_services.time != nullptr)
     {
-        ctx.time_seconds = eng.time->total_time() / 1000.0f;
-        ctx.delta_seconds = static_cast<float>(eng.time->delta_time() / 1000.0);
+        ctx.time_seconds = m_services.time->total_time() / 1000.0f;
+        ctx.delta_seconds = static_cast<float>(m_services.time->delta_time() / 1000.0);
     }
     // The temporal-AA jitter is computed here from the live target size
     // (so a resize rescales it without any pass being told) and published
@@ -656,8 +662,7 @@ void rendering_engine::renderer::on_resize(uint32_t pixel_width, uint32_t pixel_
         return;
     }
 
-    auto& eng = runtime::current_engine();
-    auto& gpu = *eng.gpu;
+    auto& gpu = *m_services.device;
 
     // Recreate the renderer-owned targets: new ones first, so every
     // consumer that compares the handle it bound against the one
@@ -696,7 +701,7 @@ void rendering_engine::renderer::on_resize(uint32_t pixel_width, uint32_t pixel_
 
 void rendering_engine::renderer::create_color_targets(uint32_t width, uint32_t height)
 {
-    auto& gpu = *runtime::current_engine().gpu;
+    auto& gpu = *m_services.device;
 
     // The HDR scene-colour target the scene pass renders into: rgba16f
     // instead of straight to the swapchain so tonemap, bloom and any
@@ -729,17 +734,17 @@ void rendering_engine::renderer::create_color_targets(uint32_t width, uint32_t h
 
 void rendering_engine::renderer::release_color_targets()
 {
-    auto& gpu = *runtime::current_engine().gpu;
-
+    // A valid target was created on the device init was handed, so the
+    // device is only reached when there is one to release.
     if (m_ldr_color_target.valid())
     {
-        gpu.destroy(m_ldr_color_target);
+        m_services.device->destroy(m_ldr_color_target);
         m_ldr_color_target = {};
         m_ldr_color_texture = {};
     }
     if (m_scene_color_target.valid())
     {
-        gpu.destroy(m_scene_color_target);
+        m_services.device->destroy(m_scene_color_target);
         m_scene_color_target = {};
         m_scene_color_texture = {};
     }
@@ -889,8 +894,7 @@ void rendering_engine::renderer::update_grading_lut()
         return;
     }
 
-    auto& eng = runtime::current_engine();
-    if (eng.assets == nullptr)
+    if (m_services.assets == nullptr)
     {
         LOG_WRN("Colour grading: no asset cache to load '%s' through; grading stays off", path.c_str());
         return;
@@ -901,7 +905,7 @@ void rendering_engine::renderer::update_grading_lut()
     std::shared_ptr<texture_asset> lut;
     try
     {
-        lut = eng.assets->load_texture(core::os::utf8_path(path), assets::color_space::linear);
+        lut = m_services.assets->load_texture(core::os::utf8_path(path), assets::color_space::linear);
     }
     catch (const std::exception& error)
     {
@@ -959,7 +963,8 @@ rendering_engine::gpu::texture rendering_engine::renderer::scene_color_texture()
 
 rendering_engine::gpu::texture rendering_engine::renderer::scene_depth_texture() const
 {
-    return runtime::current_engine().gpu->render_target_depth_texture(m_scene_color_target);
+    return m_services.device != nullptr ? m_services.device->render_target_depth_texture(m_scene_color_target)
+                                        : gpu::texture{};
 }
 
 rendering_engine::gpu::texture rendering_engine::renderer::ldr_color_texture() const

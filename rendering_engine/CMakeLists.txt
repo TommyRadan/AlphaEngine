@@ -11,6 +11,7 @@ target_sources(AlphaEngine PRIVATE
     post_process_settings.cpp
     post_process_settings.hpp
     post_settings.hpp
+    render_services.hpp
     render_stats.hpp
     render_world.cpp
     render_world.hpp

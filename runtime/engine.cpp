@@ -185,10 +185,23 @@ namespace runtime
 
         // The window first, then the gpu device against its surface, then
         // the renderer, which builds its passes and materials on the live
-        // device.
+        // device. The renderer is handed every subsystem and setting it
+        // reads; it loads through the asset cache only from its first frame,
+        // after the cache is initialised below.
         window->init(settings->window);
         gpu->init(surface_for(*window, *settings), settings->graphics.frames_in_flight);
-        renderer->init();
+        rendering_engine::render_services render{};
+        render.device = gpu.get();
+        render.window = window.get();
+        render.window_settings = &settings->window;
+        render.events = events.get();
+        render.jobs = jobs.get();
+        render.assets = assets.get();
+        render.time = time.get();
+        render.graphics = &settings->graphics;
+        render.shadows = &settings->shadows;
+        render.post = &settings->post;
+        renderer->init(render);
         // The overlay draws through the window, the device and the
         // renderer's debug pass, all live from here on.
         if (m_overlay != nullptr)

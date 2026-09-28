@@ -21,6 +21,7 @@
 #include <rendering_engine/material_library.hpp>
 #include <rendering_engine/passes/pass_list.hpp>
 #include <rendering_engine/post_settings.hpp>
+#include <rendering_engine/render_services.hpp>
 #include <rendering_engine/render_stats.hpp>
 #include <rendering_engine/render_world.hpp>
 
@@ -83,14 +84,15 @@ namespace rendering_engine
      *
      * The registration, material and environment calls below forward to
      * those two, so renderables and game code keep reaching them through
-     * the renderer. The engine brings the window and the GPU device up
-     * before @ref init and takes them down after @ref quit. @ref init
-     * constructs the built-in passes (which own their per-frame bind-group
-     * layouts) and then the material library (which reads those layouts
-     * when building its pipelines); @ref quit tears them down in reverse
-     * order, and the members are declared so that their destruction
-     * follows the same order. All methods must be called from the main
-     * thread.
+     * the renderer. The owner hands @ref init every subsystem and setting
+     * the renderer reads (see @ref render_services), brings the window and
+     * the GPU device up before @ref init and takes them down after
+     * @ref quit. @ref init constructs the built-in passes (which own their
+     * per-frame bind-group layouts) and then the material library (which
+     * reads those layouts when building its pipelines); @ref quit tears
+     * them down in reverse order, and the members are declared so that
+     * their destruction follows the same order. All methods must be called
+     * from the main thread.
      */
     struct renderer
     {
@@ -101,10 +103,12 @@ namespace rendering_engine
         ~renderer();
 
         /**
-         * @brief Initializes the built-in passes / materials against the live window and gpu device.
-         *        Must be called once before @ref render.
+         * @brief Initializes the built-in passes / materials against the live window and gpu device
+         *        @p services names, and keeps @p services for the frames that follow (see
+         *        @ref render_services for what each member is read for). Must be called once before
+         *        @ref render.
          */
-        void init();
+        void init(const render_services& services);
 
         /** @brief Tears the materials and passes down, ahead of the gpu device and the window. */
         void quit();
@@ -443,6 +447,10 @@ namespace rendering_engine
         // the same order explicitly, since the GPU device the resources are
         // freed through goes down right after it, before this object is
         // destroyed.
+
+        // The subsystems and settings handed to @ref init, read by the
+        // frames that follow; cleared at the end of @ref quit.
+        render_services m_services{};
 
         // What is drawn (see @ref world). Owns no GPU resource; declared
         // first so every renderable, pass and helper below that points
