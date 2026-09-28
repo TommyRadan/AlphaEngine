@@ -12,8 +12,8 @@
 
 namespace rendering_engine::debug_draw
 {
-    camera_helper::camera_helper(const camera* cam, assets::color color)
-        : line_helper("Camera"), m_camera(cam), m_color(color)
+    camera_helper::camera_helper(renderer& owner, const camera* cam, assets::color color)
+        : line_helper(owner, "Camera"), m_camera(cam), m_color(color)
     {
     }
 

@@ -14,6 +14,6 @@ namespace rendering_engine::debug_draw
     {
         // @p size is the length of each axis line. Geometry is baked once
         // at construction.
-        explicit axes_helper(float size = 1.0f);
+        explicit axes_helper(renderer& owner, float size = 1.0f);
     };
 } // namespace rendering_engine::debug_draw

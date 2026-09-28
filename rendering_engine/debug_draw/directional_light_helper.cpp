@@ -24,8 +24,8 @@ namespace rendering_engine::debug_draw
         }
     } // namespace
 
-    directional_light_helper::directional_light_helper(const directional_light* light, float size)
-        : line_helper("Directional light"), m_light(light), m_size(size)
+    directional_light_helper::directional_light_helper(renderer& owner, const directional_light* light, float size)
+        : line_helper(owner, "Directional light"), m_light(light), m_size(size)
     {
     }
 

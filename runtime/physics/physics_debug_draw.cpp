@@ -7,7 +7,10 @@
 
 namespace runtime::physics
 {
-    debug_draw::debug_draw(const world& source) : line_helper("Physics"), m_world{source} {}
+    debug_draw::debug_draw(rendering_engine::renderer& renderer, const world& source)
+        : line_helper(renderer, "Physics"), m_world{source}
+    {
+    }
 
     void debug_draw::refresh()
     {

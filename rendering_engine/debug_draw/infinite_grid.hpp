@@ -12,8 +12,13 @@
 
 namespace rendering_engine
 {
+    namespace gpu
+    {
+        struct device;
+    }
+
     struct grid_material;
-}
+} // namespace rendering_engine
 
 namespace rendering_engine::debug_draw
 {
@@ -33,15 +38,19 @@ namespace rendering_engine::debug_draw
         // @p fade_distance is the world-space radius past which the grid
         // has fully faded. It is baked into the grid template's shader, so
         // the grid builds its own material on a template for that distance
-        // through @ref renderer::create_grid_material (the shaders are
-        // served from the SPIR-V cache after the first compile).
-        explicit infinite_grid(float fade_distance = 100.0f);
+        // through @p owner's @ref renderer::create_grid_material (the
+        // shaders are served from the SPIR-V cache after the first
+        // compile), and its vertex buffer on @p owner's device.
+        explicit infinite_grid(renderer& owner, float fade_distance = 100.0f);
         ~infinite_grid() override;
 
         void upload() final;
         void collect_draw_items(std::vector<draw_item>& out) final;
 
     private:
+        // The device the vertex buffer is created on and released through.
+        gpu::device* m_device;
+
         // The material (and the grid template it keeps alive) at this
         // grid's fade distance; released with the grid, before the device.
         std::unique_ptr<grid_material> m_material;

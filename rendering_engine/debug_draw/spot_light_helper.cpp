@@ -31,8 +31,8 @@ namespace rendering_engine::debug_draw
         constexpr int spoke_stride = ring_segments / 4;
     } // namespace
 
-    spot_light_helper::spot_light_helper(const spot_light* light, float size)
-        : line_helper("Spot light"), m_light(light), m_size(size)
+    spot_light_helper::spot_light_helper(renderer& owner, const spot_light* light, float size)
+        : line_helper(owner, "Spot light"), m_light(light), m_size(size)
     {
     }
 

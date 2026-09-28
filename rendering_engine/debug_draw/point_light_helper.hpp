@@ -20,7 +20,7 @@ namespace rendering_engine::debug_draw
     // light it points at.
     struct point_light_helper : public line_helper
     {
-        explicit point_light_helper(const point_light* light, float size = 0.25f);
+        point_light_helper(renderer& owner, const point_light* light, float size = 0.25f);
 
     protected:
         void refresh() override;

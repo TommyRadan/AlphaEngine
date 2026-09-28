@@ -10,8 +10,9 @@
 
 namespace rendering_engine::debug_draw
 {
-    grid_helper::grid_helper(float size, int divisions, assets::color color, assets::color center_color)
-        : line_helper("Grid")
+    grid_helper::grid_helper(
+        renderer& owner, float size, int divisions, assets::color color, assets::color center_color)
+        : line_helper(owner, "Grid")
     {
         namespace math = core::math;
 

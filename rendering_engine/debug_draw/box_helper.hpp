@@ -15,7 +15,8 @@ namespace rendering_engine::debug_draw
     // @ref set_box to follow a box that moves.
     struct box_helper : public line_helper
     {
-        explicit box_helper(const core::math::aabb& box = core::math::aabb{},
+        explicit box_helper(renderer& owner,
+                            const core::math::aabb& box = core::math::aabb{},
                             assets::color color = assets::color{255, 255, 0, 255});
 
         // Replace the box and rebuild the wireframe.

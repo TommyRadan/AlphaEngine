@@ -20,7 +20,7 @@ namespace rendering_engine::debug_draw
     // outlive the light it points at.
     struct directional_light_helper : public line_helper
     {
-        explicit directional_light_helper(const directional_light* light, float size = 1.0f);
+        directional_light_helper(renderer& owner, const directional_light* light, float size = 1.0f);
 
     protected:
         void refresh() override;

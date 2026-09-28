@@ -21,7 +21,7 @@ namespace rendering_engine::debug_draw
     // the light it points at.
     struct spot_light_helper : public line_helper
     {
-        explicit spot_light_helper(const spot_light* light, float size = 1.0f);
+        spot_light_helper(renderer& owner, const spot_light* light, float size = 1.0f);
 
     protected:
         void refresh() override;

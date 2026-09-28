@@ -11,8 +11,8 @@
 
 namespace rendering_engine::debug_draw
 {
-    box_helper::box_helper(const core::math::aabb& box, assets::color color)
-        : line_helper("Box"), m_box(box), m_color(color)
+    box_helper::box_helper(renderer& owner, const core::math::aabb& box, assets::color color)
+        : line_helper(owner, "Box"), m_box(box), m_color(color)
     {
         rebuild();
     }

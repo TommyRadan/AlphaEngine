@@ -176,6 +176,14 @@ namespace rendering_engine
          */
         void on_resize(uint32_t pixel_width, uint32_t pixel_height);
 
+        /**
+         * @brief The GPU device @ref init was handed, which the passes, the
+         *        materials, the render targets and the built-in debug
+         *        helpers are built on. Valid between @ref init and
+         *        @ref quit.
+         */
+        gpu::device& device() const;
+
         /** @brief What the renderer draws; see @ref render_world. */
         render_world& world() noexcept
         {

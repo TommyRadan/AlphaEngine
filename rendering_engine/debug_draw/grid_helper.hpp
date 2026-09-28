@@ -21,7 +21,8 @@ namespace rendering_engine::debug_draw
         // middle of a cell, so a centre line is added on top of the
         // spaced ones (see @ref grid_lines). Geometry is baked once at
         // construction.
-        explicit grid_helper(float size = 10.0f,
+        explicit grid_helper(renderer& owner,
+                             float size = 10.0f,
                              int divisions = 10,
                              assets::color color = assets::color{120, 120, 120, 255},
                              assets::color center_color = assets::color{70, 70, 70, 255});
