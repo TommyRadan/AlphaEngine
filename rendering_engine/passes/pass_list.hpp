@@ -8,8 +8,10 @@
  *
  * The renderer owns one @ref pass_list; every pass enters it through
  * @ref renderer::add_pass with a @ref pass_placement. Every frame the list
- * prepares its enabled passes in order, then records them in that order,
- * and whenever it changes it validates the resources each pass declares
+ * prepares its enabled passes in order, then records them in that order —
+ * the shadow stage once, the scene to UI stages once per view, the overlay
+ * stage once — and whenever it changes it validates the resources each
+ * pass declares
  * through @ref pass::declare_io. It does not reorder, allocate, alias or
  * cull anything, and derives no barriers — resource ownership stays with
  * the renderer and the passes, and synchronisation with the render-pass
@@ -32,20 +34,25 @@ namespace rendering_engine
     /**
      * @brief The stages of a frame, in the order they run. Every pass
      *        belongs to one.
+     *
+     * The shadow and overlay stages run once per frame, before and after
+     * the views; the scene, post and UI stages run once per view (see
+     * @ref renderer::render).
      */
     enum class render_stage : uint8_t
     {
         // Light-space depth the scene samples: the directional, omni and
-        // spot shadow maps.
+        // spot shadow maps, shared by every view.
         shadow,
-        // The HDR scene target: the depth pre-pass, the scene pass and the
-        // skybox.
+        // The view's HDR scene target: the depth pre-pass, the scene pass
+        // and the skybox.
         scene,
-        // Full-screen effects from the HDR scene colour to the swapchain:
-        // velocity, volumetric fog, motion blur, bloom, auto exposure,
-        // tonemap, TAA and FXAA, which writes the swapchain.
+        // Full-screen effects from the view's HDR scene colour to its
+        // output: velocity, volumetric fog, motion blur, bloom, auto
+        // exposure, tonemap, TAA and FXAA, which writes the output.
         post,
-        // The game UI, composited over the swapchain.
+        // The game UI, composited over the view's output, for the views
+        // that want it.
         ui,
         // Tool overlays on top of everything: the debug pass in Debug
         // builds.
@@ -155,14 +162,17 @@ namespace rendering_engine
 
         /**
          * @brief Enables or disables the pass named @p name; false when
-         *        there is none. A disabled pass keeps its place, is still
-         *        resized and validated, but is neither prepared nor
+         *        there is none. A disabled pass keeps its place and is
+         *        still validated, but is neither prepared nor
          *        recorded, so it publishes nothing.
          */
         bool set_enabled(std::string_view name, bool enabled);
 
         /// Whether a pass named @p name is in the list and enabled.
         bool enabled(std::string_view name) const;
+
+        /// The pass named @p name, or null when there is none.
+        pass* find(std::string_view name) const;
 
         /**
          * @brief Validate the declared dependencies.
@@ -180,17 +190,19 @@ namespace rendering_engine
         bool validate() const;
 
         /**
-         * @brief Run every enabled pass's @ref pass::prepare in order.
+         * @brief Run the @ref pass::prepare of every enabled pass of the
+         *        stages @p first through @p last, in order.
          *
-         * The producer-before-consumer walk of the frame's per-pass
-         * state: a pass looks up what the passes before it published in
-         * @p ctx's store. Called once per frame before @ref record.
+         * The producer-before-consumer walk of one scope's per-pass state
+         * (the shadow stage, one view's scene to UI stages, the overlay
+         * stage): a pass looks up what the passes before it published in
+         * @p ctx's store. Called once per scope before @ref record.
          */
-        void prepare(const frame_context& ctx) const;
+        void prepare(const frame_context& ctx, render_stage first, render_stage last) const;
 
         /**
-         * @brief Record every enabled pass into @p encoder in order, after
-         *        @ref prepare.
+         * @brief Record every enabled pass of the stages @p first through
+         *        @p last into @p encoder in order, after @ref prepare.
          *
          * Each pass is wrapped in a debug group carrying its name (so a
          * graphics debugger shows the frame as a tree of passes) and, when
@@ -199,10 +211,19 @@ namespace rendering_engine
          * and joins inside its own @ref pass::record, so the group and the
          * hooks bracket the whole of it.
          */
-        void record(gpu::command_encoder& encoder, const frame_context& ctx, pass_hooks* hooks = nullptr) const;
+        void record(gpu::command_encoder& encoder,
+                    const frame_context& ctx,
+                    render_stage first,
+                    render_stage last,
+                    pass_hooks* hooks = nullptr) const;
 
-        /** @brief Calls @ref pass::resize on every pass, in order, enabled or not. */
-        void resize(uint32_t width, uint32_t height) const;
+        /**
+         * @brief Calls @p hooks around every pass of the stages @p first
+         *        through @p last, recording nothing: for a scope that skips
+         *        those stages, so a hook's per-index state stays aligned
+         *        with @ref pass_names.
+         */
+        void skip(gpu::command_encoder& encoder, render_stage first, render_stage last, pass_hooks& hooks) const;
 
         /// Names of the passes, in recording order.
         std::vector<std::string> pass_names() const;

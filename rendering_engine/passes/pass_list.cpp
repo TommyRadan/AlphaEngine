@@ -162,6 +162,12 @@ namespace rendering_engine
         return index != m_entries.size() && m_entries[index].enabled;
     }
 
+    pass* pass_list::find(std::string_view name) const
+    {
+        const size_t index = index_of(name);
+        return index != m_entries.size() ? m_entries[index].instance.get() : nullptr;
+    }
+
     bool pass_list::validate() const
     {
         // A resource is "produced" once an imported external declares it or
@@ -250,11 +256,11 @@ namespace rendering_engine
         return hazard_free;
     }
 
-    void pass_list::prepare(const frame_context& ctx) const
+    void pass_list::prepare(const frame_context& ctx, render_stage first, render_stage last) const
     {
         for (const entry& e : m_entries)
         {
-            if (!e.enabled)
+            if (!e.enabled || e.stage < first || e.stage > last)
             {
                 continue;
             }
@@ -263,11 +269,19 @@ namespace rendering_engine
         }
     }
 
-    void pass_list::record(gpu::command_encoder& encoder, const frame_context& ctx, pass_hooks* hooks) const
+    void pass_list::record(gpu::command_encoder& encoder,
+                           const frame_context& ctx,
+                           render_stage first,
+                           render_stage last,
+                           pass_hooks* hooks) const
     {
         for (size_t i = 0; i < m_entries.size(); ++i)
         {
             const entry& e = m_entries[i];
+            if (e.stage < first || e.stage > last)
+            {
+                continue;
+            }
             pass& p = *e.instance;
             const char* name = p.name();
             if (!e.enabled)
@@ -300,11 +314,17 @@ namespace rendering_engine
         }
     }
 
-    void pass_list::resize(uint32_t width, uint32_t height) const
+    void pass_list::skip(gpu::command_encoder& encoder, render_stage first, render_stage last, pass_hooks& hooks) const
     {
-        for (const entry& e : m_entries)
+        for (size_t i = 0; i < m_entries.size(); ++i)
         {
-            e.instance->resize(width, height);
+            const entry& e = m_entries[i];
+            if (e.stage < first || e.stage > last)
+            {
+                continue;
+            }
+            hooks.before_pass(encoder, i, e.instance->name());
+            hooks.after_pass(encoder, i, e.instance->name());
         }
     }
 

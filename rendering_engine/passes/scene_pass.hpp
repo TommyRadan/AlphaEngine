@@ -81,8 +81,11 @@ namespace rendering_engine
      * the numbers in gpu/shader_bindings.hpp).
      * The matching lit materials read the layout via
      * @ref frame_bind_group_layout so the pipeline and the runtime bind
-     * group agree on slot shape. Every frame the pass publishes the layout
-     * and its groups as @ref frame_resources::scene_view, for the passes
+     * group agree on slot shape. The view_globals block and the groups over
+     * it are the view's (kept in its resource set); the lights and shadow
+     * blocks are the same for every view of a frame and shared. Every
+     * frame the pass publishes, per view, the layout and the view's groups
+     * as @ref frame_resources::scene_view, for the passes
      * that draw with the scene's camera, lights and shadows later in the
      * frame (the volumetric fog, the debug pass) and for the depth
      * pre-pass, which records this pass's list through it.
@@ -106,7 +109,7 @@ namespace rendering_engine
         // @p taa_jitter says whether the renderer will publish a temporal-AA
         // jitter through @ref frame_context::jitter: the pass then applies
         // it to the projection it uploads and builds the unjittered overlay
-        // twin of its per-frame bind group (see @ref overlay_frame_bind_group).
+        // twin of each view's per-frame bind group (see @ref view_data).
         // @p parallel_draw_threshold is the draw count above which a frame
         // is recorded in parallel, and the fewest draws per chunk (see the
         // class comment); 0 keeps every frame serial. The chunks record on
@@ -172,10 +175,6 @@ namespace rendering_engine
         // reserve slot 0 for this layout.
         gpu::bind_group_layout frame_bind_group_layout() const;
 
-        // No resize override: the pass renders into the scene target the
-        // renderer publishes each frame, and the jitter it applies arrives
-        // through frame_context already scaled to the live target size.
-
     private:
         // The device this pass creates its resources on and releases them
         // through; handed in by the renderer and outlives the pass.
@@ -208,11 +207,43 @@ namespace rendering_engine
             gpu::pipeline depth{};
         };
 
-        // (Re)builds @ref m_frame_bind_group and its overlay twin when they
-        // do not exist yet or a shadow map differs from the one they were
-        // built with; a null shadow binds nothing for that kind. Called by
-        // @ref prepare.
-        void update_frame_bind_groups(const directional_shadow_data* shadow,
+        // What the pass keeps per view: the view_globals block (camera
+        // matrices, viewport, clock, jitter and fog) at binding 0, its
+        // unjittered twin, and the per-frame groups built over them. The
+        // twin exists only while temporal-AA jitter is active; it backs the
+        // group passes that draw after the TAA resolve (the debug pass)
+        // bind, which would otherwise show the projection jitter as an
+        // un-averaged sub-pixel wobble, and shares every other binding with
+        // the main group. The shadow maps and sampler the groups were built
+        // with, as the shadow passes published them (invalid for a shadow
+        // that is not published), are kept so @ref update_frame_bind_groups
+        // rebuilds when they differ.
+        struct view_data final : pass_view_state
+        {
+            view_data(gpu::device& device, bool taa_jitter);
+            ~view_data() override;
+
+            view_data(const view_data&) = delete;
+            view_data& operator=(const view_data&) = delete;
+
+            gpu::device* device{nullptr};
+            gpu::buffer frame_ubo{};
+            gpu::buffer overlay_frame_ubo{};
+            gpu::bind_group frame_bind_group{};
+            gpu::bind_group overlay_frame_bind_group{};
+
+            gpu::texture bound_shadow_map{};
+            gpu::sampler bound_shadow_sampler{};
+            gpu::texture bound_point_shadow_map{};
+            gpu::texture bound_spot_shadow_map{};
+        };
+
+        // (Re)builds @p view's per-frame group and its overlay twin when
+        // they do not exist yet or a shadow map differs from the one they
+        // were built with; a null shadow binds nothing for that kind.
+        // Called by @ref prepare.
+        void update_frame_bind_groups(view_data& view,
+                                      const directional_shadow_data* shadow,
                                       const point_shadow_data* point_shadow,
                                       const spot_shadow_data* spot_shadow);
 
@@ -238,42 +269,20 @@ namespace rendering_engine
         // chunks run on several threads at once.
         void dispatch(gpu::render_pass_encoder& pass_encoder, draw_phase phase, size_t first, size_t last) const;
 
-        // Per-frame state — owned by the pass; the layout and buffers are
-        // created at construction, the groups by the first prepare(), and
-        // the buffers refilled every prepare(). Released in the destructor before
-        // the device tears its pools down. The frame UBO carries the
-        // @ref view_globals block (camera matrices, viewport, clock,
-        // jitter and fog) at binding 0; the lights UBO carries the
-        // packed @ref gpu_lights block at binding 2. Both live in the
-        // single per-frame bind group bound at slot 0.
+        // The per-frame layout, created at construction, and the blocks
+        // every view's group shares, refilled by every prepare() with what
+        // is the same for every view of a frame: the packed @ref gpu_lights
+        // block at binding 2 and the three shadow blocks. Released in the
+        // destructor before the device tears its pools down.
         gpu::bind_group_layout m_frame_layout{};
-        gpu::buffer m_frame_ubo{};
         gpu::buffer m_lights_ubo{};
         gpu::buffer m_shadow_ubo{};
         gpu::buffer m_point_shadow_ubo{};
         gpu::buffer m_spot_shadow_ubo{};
+
+        // The per-frame group of the view being rendered, set by
+        // @ref prepare for the dispatches that follow.
         gpu::bind_group m_frame_bind_group{};
-
-        // Unjittered twin of @ref m_frame_bind_group for passes that draw
-        // after the TAA resolve (the debug pass), which would otherwise
-        // show the projection jitter as an un-averaged sub-pixel wobble.
-        // Only created when temporal-AA jitter is active; otherwise the
-        // published @ref scene_view_data::overlay_frame_group is the main
-        // group (the matrices are identical).
-        // Shares every other binding with the main group — only its
-        // view_globals block differs, describing the view without the
-        // sub-pixel offset.
-        gpu::buffer m_overlay_frame_ubo{};
-        gpu::bind_group m_overlay_frame_bind_group{};
-
-        // The shadow maps and sampler the groups above were built with, as
-        // the shadow passes published them (invalid for a shadow that is not
-        // published); @ref update_frame_bind_groups rebuilds when they
-        // differ.
-        gpu::texture m_bound_shadow_map{};
-        gpu::sampler m_bound_shadow_sampler{};
-        gpu::texture m_bound_point_shadow_map{};
-        gpu::texture m_bound_spot_shadow_map{};
 
         // Non-owning; filled each prepare() with this frame's draw stats.
         // Owned by the renderer, which outlives the pass. Null
@@ -283,7 +292,7 @@ namespace rendering_engine
         // Temporal-AA projection jitter. When set, each prepare() offsets
         // the camera projection by the sub-pixel jitter the renderer
         // published in frame_context::jitter (a Halton step computed from
-        // the live target size) before uploading it, so consecutive frames
+        // the view's size) before uploading it, so consecutive frames
         // sample the scene at slightly different positions for the
         // @ref taa_pass to accumulate. Decided at construction because the
         // overlay bind group only exists when jitter runs.

@@ -75,20 +75,10 @@ namespace
 
 namespace rendering_engine
 {
-    volumetric_fog_pass::volumetric_fog_pass(gpu::device& device,
-                                             gpu::bind_group_layout frame_layout,
-                                             uint32_t width,
-                                             uint32_t height)
+    volumetric_fog_pass::volumetric_fog_pass(gpu::device& device, gpu::bind_group_layout frame_layout)
         : m_device(&device)
     {
         auto& gpu = *m_device;
-
-        // Degenerate backbuffer (no settings, zero-sized window): leave the
-        // pass disabled so the scene colour flows through untouched.
-        if (width == 0 || height == 0)
-        {
-            return;
-        }
 
         // -- Shaders --------------------------------------------------
         m_vertex_shader =
@@ -107,14 +97,6 @@ namespace rendering_engine
         vb_descriptor.hint = gpu::buffer_usage_hint::static_data;
         vb_descriptor.initial_data = fullscreen_triangle_vertices.data();
         m_vertex_buffer = gpu.create_buffer(vb_descriptor);
-
-        // The params follow the live settings, frame and camera, so the
-        // buffer is rewritten every drawn frame: dynamic and copy-dst.
-        gpu::buffer_descriptor ubo_descriptor{};
-        ubo_descriptor.size = params_ubo_size;
-        ubo_descriptor.usage = gpu::buffer_usage_uniform | gpu::buffer_usage_copy_dst;
-        ubo_descriptor.hint = gpu::buffer_usage_hint::dynamic_data;
-        m_params_ubo = gpu.create_buffer(ubo_descriptor);
 
         // -- Layouts --------------------------------------------------
         // The march's slot 1 sits beside the scene's per-frame set, so its
@@ -185,35 +167,17 @@ namespace rendering_engine
         m_upsample_pipeline = make_pipeline(m_upsample_shader, opaque_blend, {m_upsample_layout});
         m_composite_pipeline = make_pipeline(m_composite_shader, composite_blend, {m_composite_layout});
 
-        // -- Targets --------------------------------------------------
-        // The bind groups are built lazily by prepare(): the march and the
-        // upsample sample the scene depth, which is looked up in the
-        // frame's store and rebound whenever that handle changes.
-        create_targets(width, height);
-
-        m_enabled = true;
+        // Each view's targets, params and bind groups are built lazily by
+        // prepare(): the march and the upsample sample the scene depth,
+        // which is looked up in the view's store and rebound whenever that
+        // handle changes.
     }
 
     volumetric_fog_pass::~volumetric_fog_pass()
     {
         auto& gpu = *m_device;
 
-        // Bind groups first, then the targets and buffers they reference,
-        // then the pipelines, layouts and shaders.
-        release_bind_groups();
-
-        if (m_upsample_target.valid())
-        {
-            gpu.destroy(m_upsample_target);
-            m_upsample_target = {};
-            m_upsample_texture = {};
-        }
-        if (m_march_target.valid())
-        {
-            gpu.destroy(m_march_target);
-            m_march_target = {};
-            m_march_texture = {};
-        }
+        // The pipelines, then the layouts, buffers and shaders.
         if (m_composite_pipeline.valid())
         {
             gpu.destroy(m_composite_pipeline);
@@ -244,11 +208,6 @@ namespace rendering_engine
             gpu.destroy(m_march_layout);
             m_march_layout = {};
         }
-        if (m_params_ubo.valid())
-        {
-            gpu.destroy(m_params_ubo);
-            m_params_ubo = {};
-        }
         if (m_vertex_buffer.valid())
         {
             gpu.destroy(m_vertex_buffer);
@@ -276,77 +235,92 @@ namespace rendering_engine
         }
     }
 
-    void volumetric_fog_pass::create_targets(uint32_t width, uint32_t height)
+    volumetric_fog_pass::view_data::view_data(gpu::device& device) : device{&device}
     {
-        auto& gpu = *m_device;
-
-        m_march_target = gpu.create_render_target(gpu::render_target_descriptor::single_color(
-            gpu::texture_format::rgba16_float, half_extent(width), half_extent(height)));
-        m_march_texture = gpu.render_target_color_texture(m_march_target);
-
-        m_upsample_target = gpu.create_render_target(
-            gpu::render_target_descriptor::single_color(gpu::texture_format::rgba16_float, width, height));
-        m_upsample_texture = gpu.render_target_color_texture(m_upsample_target);
+        // The params follow the live settings, frame and camera, so the
+        // buffer is rewritten every drawn frame: dynamic and copy-dst.
+        gpu::buffer_descriptor ubo_descriptor{};
+        ubo_descriptor.size = params_ubo_size;
+        ubo_descriptor.usage = gpu::buffer_usage_uniform | gpu::buffer_usage_copy_dst;
+        ubo_descriptor.hint = gpu::buffer_usage_hint::dynamic_data;
+        params_ubo = device.create_buffer(ubo_descriptor);
     }
 
-    void volumetric_fog_pass::resize(uint32_t width, uint32_t height)
+    volumetric_fog_pass::view_data::~view_data()
     {
-        if (!m_enabled || width == 0 || height == 0)
-        {
-            return;
-        }
-        auto& gpu = *m_device;
-
-        // Every consumer of the two targets is one of this pass's own bind
-        // groups, so they go first and the next drawn frame rebuilds them
-        // against the new targets. The releases are safe here: resize runs
-        // between frames, and a deferred-execution backend retires the
-        // attachments only once the last command buffer that used them has
-        // finished.
+        // Bind groups first, then the targets and buffers they reference.
         release_bind_groups();
-        const gpu::render_target old_march = m_march_target;
-        const gpu::render_target old_upsample = m_upsample_target;
-        create_targets(width, height);
+        if (upsample_target.valid())
+        {
+            device->destroy(upsample_target);
+        }
+        if (march_target.valid())
+        {
+            device->destroy(march_target);
+        }
+        if (params_ubo.valid())
+        {
+            device->destroy(params_ubo);
+        }
+    }
+
+    void volumetric_fog_pass::view_data::resize(uint32_t new_width, uint32_t new_height)
+    {
+        // Every consumer of the two targets is one of this pass's own bind
+        // groups, so they go first and the frame rebuilds them against the
+        // new targets. The device retires the old attachments only once
+        // the last command buffer that used them has finished.
+        release_bind_groups();
+        const gpu::render_target old_march = march_target;
+        const gpu::render_target old_upsample = upsample_target;
+
+        march_target = device->create_render_target(gpu::render_target_descriptor::single_color(
+            gpu::texture_format::rgba16_float, half_extent(new_width), half_extent(new_height)));
+        march_texture = device->render_target_color_texture(march_target);
+        upsample_target = device->create_render_target(
+            gpu::render_target_descriptor::single_color(gpu::texture_format::rgba16_float, new_width, new_height));
+        upsample_texture = device->render_target_color_texture(upsample_target);
+
         if (old_upsample.valid())
         {
-            gpu.destroy(old_upsample);
+            device->destroy(old_upsample);
         }
         if (old_march.valid())
         {
-            gpu.destroy(old_march);
+            device->destroy(old_march);
         }
+        width = new_width;
+        height = new_height;
     }
 
-    void volumetric_fog_pass::release_bind_groups()
+    void volumetric_fog_pass::view_data::release_bind_groups()
     {
-        auto& gpu = *m_device;
-
         // Safe mid-frame as well as between frames: the device defers each
         // destroy until the command buffer that may still reference the
         // group has retired.
-        if (m_composite_bind_group.valid())
+        if (composite_bind_group.valid())
         {
-            gpu.destroy(m_composite_bind_group);
-            m_composite_bind_group = {};
+            device->destroy(composite_bind_group);
+            composite_bind_group = {};
         }
-        if (m_upsample_bind_group.valid())
+        if (upsample_bind_group.valid())
         {
-            gpu.destroy(m_upsample_bind_group);
-            m_upsample_bind_group = {};
+            device->destroy(upsample_bind_group);
+            upsample_bind_group = {};
         }
-        if (m_march_bind_group.valid())
+        if (march_bind_group.valid())
         {
-            gpu.destroy(m_march_bind_group);
-            m_march_bind_group = {};
+            device->destroy(march_bind_group);
+            march_bind_group = {};
         }
-        m_bound_depth = {};
+        bound_depth = {};
     }
 
-    void volumetric_fog_pass::rebuild_bind_groups(gpu::texture scene_depth)
+    void volumetric_fog_pass::rebuild_bind_groups(view_data& view, gpu::texture scene_depth)
     {
         auto& gpu = *m_device;
 
-        release_bind_groups();
+        view.release_bind_groups();
 
         auto texture_entry = [](uint32_t binding, gpu::texture texture_handle)
         {
@@ -367,28 +341,28 @@ namespace rendering_engine
 
         gpu::bind_group_descriptor march_descriptor{};
         march_descriptor.layout = m_march_layout;
-        march_descriptor.entries.push_back(buffer_entry(gpu::shader_bindings::volumetric_fog_params, m_params_ubo));
+        march_descriptor.entries.push_back(buffer_entry(gpu::shader_bindings::volumetric_fog_params, view.params_ubo));
         march_descriptor.entries.push_back(texture_entry(gpu::shader_bindings::volumetric_fog_depth, scene_depth));
-        m_march_bind_group = gpu.create_bind_group(march_descriptor);
+        view.march_bind_group = gpu.create_bind_group(march_descriptor);
 
         gpu::bind_group_descriptor upsample_descriptor{};
         upsample_descriptor.layout = m_upsample_layout;
-        upsample_descriptor.entries.push_back(texture_entry(0, m_march_texture));
+        upsample_descriptor.entries.push_back(texture_entry(0, view.march_texture));
         upsample_descriptor.entries.push_back(texture_entry(1, scene_depth));
-        upsample_descriptor.entries.push_back(buffer_entry(2, m_params_ubo));
-        m_upsample_bind_group = gpu.create_bind_group(upsample_descriptor);
+        upsample_descriptor.entries.push_back(buffer_entry(2, view.params_ubo));
+        view.upsample_bind_group = gpu.create_bind_group(upsample_descriptor);
 
         gpu::bind_group_descriptor composite_descriptor{};
         composite_descriptor.layout = m_composite_layout;
-        composite_descriptor.entries.push_back(texture_entry(0, m_upsample_texture));
-        m_composite_bind_group = gpu.create_bind_group(composite_descriptor);
+        composite_descriptor.entries.push_back(texture_entry(0, view.upsample_texture));
+        view.composite_bind_group = gpu.create_bind_group(composite_descriptor);
 
-        m_bound_depth = scene_depth;
+        view.bound_depth = scene_depth;
     }
 
-    void volumetric_fog_pass::upload_params(const frame_context& ctx)
+    void volumetric_fog_pass::upload_params(const frame_context& ctx, const view_data& view)
     {
-        auto& gpu = *m_device;
+        auto& gpu = *view.device;
 
         // The noise only moves while temporal AA is there to average it;
         // without it a static dither reads better than one that crawls
@@ -399,7 +373,7 @@ namespace rendering_engine
         const core::math::mat4 inverse_projection = core::math::inverse(ctx.active_camera->projection);
         const std::array<float, params_floats> params =
             pack_params(ctx.post.volumetric, frame_offset, inverse_projection);
-        gpu.write_buffer(m_params_ubo, params.data(), params_ubo_size, 0);
+        gpu.write_buffer(view.params_ubo, params.data(), params_ubo_size, 0);
     }
 
     void volumetric_fog_pass::prepare(const frame_context& ctx)
@@ -411,30 +385,38 @@ namespace rendering_engine
         // draw nothing, leaving the scene colour exactly as the scene and
         // skybox passes wrote it. The medium is the height fog, so a zero
         // height density means empty air.
-        const scene_view_data* view = ctx.resources->find(frame_resources::scene_view);
+        const scene_view_data* scene_view = ctx.resources->find(frame_resources::scene_view);
         const gpu::texture scene_depth = ctx.resources->get(frame_resources::scene_depth);
-        m_draws = m_enabled && volumetric_fog_active(settings) && ctx.active_camera != nullptr && view != nullptr &&
+        m_draws = volumetric_fog_active(settings) && ctx.active_camera != nullptr && scene_view != nullptr &&
                   scene_depth.valid() && ctx.fog.height_density > 0.0f;
         if (!m_draws)
         {
             return;
         }
-        m_frame_group = view->frame_group;
+        m_frame_group = scene_view->frame_group;
         m_target = ctx.resources->get(frame_resources::scene_color).target;
 
-        upload_params(ctx);
+        // The view's targets follow the view's size.
+        view_data& view = ctx.view->state<view_data>(*this, *m_device);
+        if (view.width != ctx.viewport_width || view.height != ctx.viewport_height)
+        {
+            view.resize(ctx.viewport_width, ctx.viewport_height);
+        }
+
+        upload_params(ctx, view);
 
         // Rebind when the scene depth changes (a resize recreates it) or a
         // resize dropped the groups — the first drawn frame included.
-        if (scene_depth != m_bound_depth || !m_march_bind_group.valid())
+        if (scene_depth != view.bound_depth || !view.march_bind_group.valid())
         {
-            rebuild_bind_groups(scene_depth);
+            rebuild_bind_groups(view, scene_depth);
         }
     }
 
-    void volumetric_fog_pass::record(gpu::command_encoder& encoder, const frame_context& /*ctx*/)
+    void volumetric_fog_pass::record(gpu::command_encoder& encoder, const frame_context& ctx)
     {
-        if (!m_draws)
+        const view_data* view = m_draws ? ctx.view->find_state<view_data>(*this) : nullptr;
+        if (view == nullptr)
         {
             return;
         }
@@ -450,7 +432,7 @@ namespace rendering_engine
         //    full transmittance) only keeps the target in a known state.
         {
             gpu::render_pass_descriptor descriptor{};
-            descriptor.target = m_march_target;
+            descriptor.target = view->march_target;
             descriptor.color[0].load = gpu::load_op::clear;
             descriptor.color[0].clear_color = {0.0f, 0.0f, 0.0f, 1.0f};
             descriptor.use_depth = false;
@@ -458,7 +440,7 @@ namespace rendering_engine
             auto pass_encoder = encoder.begin_render_pass(descriptor);
             pass_encoder->set_pipeline(m_march_pipeline);
             pass_encoder->set_bind_group(0, m_frame_group);
-            pass_encoder->set_bind_group(1, m_march_bind_group);
+            pass_encoder->set_bind_group(1, view->march_bind_group);
             draw_fullscreen(*pass_encoder);
             pass_encoder->end();
         }
@@ -466,14 +448,14 @@ namespace rendering_engine
         // 2. Depth-aware upsample to full resolution.
         {
             gpu::render_pass_descriptor descriptor{};
-            descriptor.target = m_upsample_target;
+            descriptor.target = view->upsample_target;
             descriptor.color[0].load = gpu::load_op::clear;
             descriptor.color[0].clear_color = {0.0f, 0.0f, 0.0f, 1.0f};
             descriptor.use_depth = false;
 
             auto pass_encoder = encoder.begin_render_pass(descriptor);
             pass_encoder->set_pipeline(m_upsample_pipeline);
-            pass_encoder->set_bind_group(0, m_upsample_bind_group);
+            pass_encoder->set_bind_group(0, view->upsample_bind_group);
             draw_fullscreen(*pass_encoder);
             pass_encoder->end();
         }
@@ -489,7 +471,7 @@ namespace rendering_engine
 
             auto pass_encoder = encoder.begin_render_pass(descriptor);
             pass_encoder->set_pipeline(m_composite_pipeline);
-            pass_encoder->set_bind_group(0, m_composite_bind_group);
+            pass_encoder->set_bind_group(0, view->composite_bind_group);
             draw_fullscreen(*pass_encoder);
             pass_encoder->end();
         }

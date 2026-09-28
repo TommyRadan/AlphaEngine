@@ -29,6 +29,8 @@ target_sources(alpha_render PRIVATE
     ui_pass.hpp
     view_globals.cpp
     view_globals.hpp
+    view_resources.cpp
+    view_resources.hpp
 )
 
 add_subdirectory(post)

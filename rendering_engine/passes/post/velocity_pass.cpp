@@ -34,16 +34,9 @@ namespace
 
 namespace rendering_engine
 {
-    velocity_pass::velocity_pass(gpu::device& device, uint32_t width, uint32_t height) : m_device(&device)
+    velocity_pass::velocity_pass(gpu::device& device) : m_device(&device)
     {
         auto& gpu = *m_device;
-
-        // Degenerate backbuffer (no settings, zero-sized window): leave the
-        // pass disabled so it publishes no motion vectors.
-        if (width == 0 || height == 0)
-        {
-            return;
-        }
 
         m_vertex_shader =
             gpu::create_library_shader_module(gpu, "passes/fullscreen.vert.glsl", gpu::shader_stage::vertex);
@@ -57,20 +50,10 @@ namespace rendering_engine
         vb_descriptor.initial_data = fullscreen_triangle_vertices.data();
         m_vertex_buffer = gpu.create_buffer(vb_descriptor);
 
-        // The reprojection matrix is rewritten every frame from the live
-        // camera, so the buffer is dynamic and copy-dst.
-        gpu::buffer_descriptor ubo_descriptor{};
-        ubo_descriptor.size = reproj_ubo_size;
-        ubo_descriptor.usage = gpu::buffer_usage_uniform | gpu::buffer_usage_copy_dst;
-        ubo_descriptor.hint = gpu::buffer_usage_hint::dynamic_data;
-        m_reproj_ubo = gpu.create_buffer(ubo_descriptor);
-
         gpu::bind_group_layout_descriptor layout{};
         layout.entries.push_back({0, gpu::binding_kind::texture});
         layout.entries.push_back({1, gpu::binding_kind::uniform_buffer});
         m_layout = gpu.create_bind_group_layout(layout);
-
-        create_target(width, height);
 
         gpu::vertex_buffer_layout vertex_layout{};
         vertex_layout.stride = sizeof(float) * 2;
@@ -99,27 +82,15 @@ namespace rendering_engine
         pipeline_descriptor.bind_group_layouts.push_back(m_layout);
         m_pipeline = gpu.create_pipeline(pipeline_descriptor);
 
-        // The input bind group is built lazily by prepare(): the scene depth
-        // it samples is looked up in the frame's store and rebound whenever
-        // that handle changes.
-        m_enabled = true;
+        // Each view's target, reprojection block and input bind group are
+        // built by prepare(): the scene depth the group samples is looked
+        // up in the view's store and rebound whenever that handle changes.
     }
 
     velocity_pass::~velocity_pass()
     {
         auto& gpu = *m_device;
 
-        if (m_bind_group.valid())
-        {
-            gpu.destroy(m_bind_group);
-            m_bind_group = {};
-        }
-        if (m_velocity_target.valid())
-        {
-            gpu.destroy(m_velocity_target);
-            m_velocity_target = {};
-            m_velocity_texture = {};
-        }
         if (m_pipeline.valid())
         {
             gpu.destroy(m_pipeline);
@@ -129,11 +100,6 @@ namespace rendering_engine
         {
             gpu.destroy(m_layout);
             m_layout = {};
-        }
-        if (m_reproj_ubo.valid())
-        {
-            gpu.destroy(m_reproj_ubo);
-            m_reproj_ubo = {};
         }
         if (m_vertex_buffer.valid())
         {
@@ -152,56 +118,70 @@ namespace rendering_engine
         }
     }
 
-    void velocity_pass::create_target(uint32_t width, uint32_t height)
+    velocity_pass::view_data::view_data(gpu::device& device) : device{&device}
     {
-        auto& gpu = *m_device;
+        // The reprojection matrix is rewritten every frame from the live
+        // camera, so the buffer is dynamic and copy-dst.
+        gpu::buffer_descriptor ubo_descriptor{};
+        ubo_descriptor.size = reproj_ubo_size;
+        ubo_descriptor.usage = gpu::buffer_usage_uniform | gpu::buffer_usage_copy_dst;
+        ubo_descriptor.hint = gpu::buffer_usage_hint::dynamic_data;
+        reproj_ubo = device.create_buffer(ubo_descriptor);
+    }
 
+    velocity_pass::view_data::~view_data()
+    {
+        if (bind_group.valid())
+        {
+            device->destroy(bind_group);
+        }
+        if (velocity_target.valid())
+        {
+            device->destroy(velocity_target);
+        }
+        if (reproj_ubo.valid())
+        {
+            device->destroy(reproj_ubo);
+        }
+    }
+
+    void velocity_pass::view_data::resize(uint32_t new_width, uint32_t new_height)
+    {
         // Two-channel signed motion needs a float target; the engine has no
         // RG format, so rgba16f carries the vector in xy and leaves zw at 0.
         gpu::render_target_descriptor velocity_descriptor{};
         velocity_descriptor.color = {{gpu::texture_format::rgba16_float}};
-        velocity_descriptor.width = width;
-        velocity_descriptor.height = height;
+        velocity_descriptor.width = new_width;
+        velocity_descriptor.height = new_height;
         velocity_descriptor.with_depth = false;
-        m_velocity_target = gpu.create_render_target(velocity_descriptor);
-        m_velocity_texture = gpu.render_target_color_texture(m_velocity_target);
-    }
 
-    void velocity_pass::resize(uint32_t width, uint32_t height)
-    {
-        if (!m_enabled || width == 0 || height == 0)
-        {
-            return;
-        }
-        auto& gpu = *m_device;
-
-        // Create the replacement before releasing the old target so the
-        // TAA resolve, which compares the published velocity texture
-        // against the handle it bound, sees a different handle. The
-        // release is safe here: resize runs between frames, and a
-        // deferred-execution backend retires the attachment only once the
-        // last command buffer that sampled it has finished.
-        const gpu::render_target old_target = m_velocity_target;
-        create_target(width, height);
+        // The replacement first, so the TAA resolve, which compares the
+        // published velocity texture against the handle it bound, sees a
+        // different handle. The device defers freeing the old target until
+        // the last command buffer that sampled it has retired. The input
+        // bind group samples the scene depth, not this target, and follows
+        // that handle on its own.
+        const gpu::render_target old_target = velocity_target;
+        velocity_target = device->create_render_target(velocity_descriptor);
+        velocity_texture = device->render_target_color_texture(velocity_target);
         if (old_target.valid())
         {
-            gpu.destroy(old_target);
+            device->destroy(old_target);
         }
-        // The input bind group samples the scene depth, not this target,
-        // so it stays valid; the previous view-projection lives on the
-        // frame context and is unaffected by the target size.
+        width = new_width;
+        height = new_height;
     }
 
-    void velocity_pass::rebuild_bind_group(gpu::texture scene_depth)
+    void velocity_pass::rebuild_bind_group(view_data& view, gpu::texture scene_depth)
     {
         auto& gpu = *m_device;
 
         // Safe mid-frame: the device defers the destroy until the command
         // buffer that may still reference the old group has retired.
-        if (m_bind_group.valid())
+        if (view.bind_group.valid())
         {
-            gpu.destroy(m_bind_group);
-            m_bind_group = {};
+            gpu.destroy(view.bind_group);
+            view.bind_group = {};
         }
 
         gpu::bind_group_descriptor bind_group_descriptor{};
@@ -216,24 +196,27 @@ namespace rendering_engine
         gpu::binding_value reproj_slot{};
         reproj_slot.binding = 1;
         reproj_slot.kind = gpu::binding_kind::uniform_buffer;
-        reproj_slot.buffer_value = m_reproj_ubo;
+        reproj_slot.buffer_value = view.reproj_ubo;
         bind_group_descriptor.entries.push_back(reproj_slot);
 
-        m_bind_group = gpu.create_bind_group(bind_group_descriptor);
-        m_bound_depth = scene_depth;
+        view.bind_group = gpu.create_bind_group(bind_group_descriptor);
+        view.bound_depth = scene_depth;
     }
 
     void velocity_pass::prepare(const frame_context& ctx)
     {
         m_action = frame_action::none;
-        if (!m_enabled)
-        {
-            return;
-        }
 
-        // Published every frame, drawn or not: a consumer only samples it on
-        // frames that make this pass draw.
-        ctx.resources->publish(frame_resources::velocity, m_velocity_texture);
+        // The view's target follows the view's size. Published every frame,
+        // drawn or not: a consumer only samples it on frames that make this
+        // pass draw.
+        view_data& state = ctx.view->state<view_data>(*this, *m_device);
+        if (state.width != ctx.viewport_width || state.height != ctx.viewport_height)
+        {
+            state.resize(ctx.viewport_width, ctx.viewport_height);
+        }
+        m_target = state.velocity_target;
+        ctx.resources->publish(frame_resources::velocity, state.velocity_texture);
 
         // Only the TAA resolve and motion blur read the motion vectors;
         // with neither running this frame there is nothing to write.
@@ -246,9 +229,9 @@ namespace rendering_engine
 
         // No camera, or no scene depth to reconstruct positions from: clear
         // the motion to zero so the TAA resolve falls back to same-pixel
-        // history. The renderer drops the previous view-projection across
-        // such a frame, so the next camera frame starts fresh (zero motion)
-        // rather than reprojecting across the gap.
+        // history. The renderer drops the view's previous view-projection
+        // across such a frame, so the next camera frame starts fresh (zero
+        // motion) rather than reprojecting across the gap.
         const gpu::texture scene_depth = ctx.resources->get(frame_resources::scene_depth);
         if (ctx.active_camera == nullptr || !scene_depth.valid())
         {
@@ -263,25 +246,26 @@ namespace rendering_engine
         const core::math::mat4& projection = ctx.active_camera->projection;
         const core::math::mat4 view_proj = projection * view;
 
-        // Without a usable previous matrix (first camera frame, camera
-        // switch, the frame after a no-camera frame) reproject against this
-        // frame so every pixel reports zero motion.
+        // Without a usable previous matrix (the view's first frame, the
+        // frame after a camera-less one) reproject against this frame so
+        // every pixel reports zero motion.
         const core::math::mat4& prev_view_proj = ctx.has_prev_view_projection ? ctx.prev_view_projection : view_proj;
         const core::math::mat4 reprojection = prev_view_proj * core::math::inverse(view_proj);
         std::array<float, 20> reproj_payload{};
         std::memcpy(reproj_payload.data(), reprojection.data(), sizeof(core::math::mat4));
         reproj_payload[16] = ctx.jitter.x;
         reproj_payload[17] = ctx.jitter.y;
-        gpu.write_buffer(m_reproj_ubo, reproj_payload.data(), reproj_ubo_size, 0);
+        gpu.write_buffer(state.reproj_ubo, reproj_payload.data(), reproj_ubo_size, 0);
 
         // Bind this frame's scene depth. The handle is stable today, but a
         // resized scene target swaps its attachment, so compare against the
         // one the bind group was built with and rebuild on change (the first
         // camera frame included).
-        if (scene_depth != m_bound_depth)
+        if (scene_depth != state.bound_depth || !state.bind_group.valid())
         {
-            rebuild_bind_group(scene_depth);
+            rebuild_bind_group(state, scene_depth);
         }
+        m_bind_group = state.bind_group;
         m_action = frame_action::draw;
     }
 
@@ -293,7 +277,7 @@ namespace rendering_engine
         }
 
         gpu::render_pass_descriptor descriptor{};
-        descriptor.target = m_velocity_target;
+        descriptor.target = m_target;
         descriptor.color[0].load = gpu::load_op::clear;
         descriptor.color[0].clear_color = {0.0f, 0.0f, 0.0f, 0.0f};
         descriptor.use_depth = false;

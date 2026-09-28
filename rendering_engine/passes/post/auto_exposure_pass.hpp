@@ -49,14 +49,17 @@ namespace rendering_engine
      * its synchronisation to the post chain; the log-average reduction
      * reuses the render-pass machinery every post pass already relies on.
      *
-     * Every target is a fixed size, independent of the drawable, so
-     * @ref resize has nothing to rebuild: the adapted value (a property of
-     * the scene's brightness, not of the window) carries over a resize
+     * Each view meters and adapts on its own (see @ref view_data), so two
+     * views of differently lit places each settle on their own exposure.
+     * Every target is a fixed size, independent of the view's, so a view's
+     * resize has nothing to rebuild: the adapted value (a property of the
+     * scene's brightness, not of the window) carries over a resize
      * untouched, and only the luminance stage's input bind group is rebuilt
      * when it looks up a new HDR handle.
      *
-     * The first metered frame — at startup, or after auto exposure is
-     * re-enabled — snaps to the target instead of easing in from an
+     * A view's first metered frame — when the view appears, or after auto
+     * exposure is re-enabled — snaps to the target instead of easing in
+     * from an
      * undefined history, so nothing flashes. A frame without a camera
      * meters nothing and keeps the last adapted value (the scene pass
      * clears the HDR image to black then, which would otherwise drag the
@@ -107,15 +110,49 @@ namespace rendering_engine
             gpu::bind_group source_bind_group{};
         };
 
+        // What the pass keeps per view: the adaptation params UBO, the
+        // reduction levels (64 x 64, 16 x 16 and 4 x 4), the adaptation
+        // result tonemap samples and the copy of it the next frame's
+        // adaptation reads as history, with the bind groups over them, the
+        // HDR texture level 0's bind group was built against (invalid until
+        // the view's first metered frame builds it), and whether the
+        // history holds a real adapted value: false before the view's first
+        // metered frame and again whenever auto exposure is disabled, so
+        // the next metered frame snaps to its target.
+        struct view_data final : pass_view_state
+        {
+            explicit view_data(gpu::device& device) : device{&device} {}
+            ~view_data() override;
+
+            view_data(const view_data&) = delete;
+            view_data& operator=(const view_data&) = delete;
+
+            gpu::device* device{nullptr};
+            gpu::buffer params_ubo{};
+            std::array<reduction_level, 3> levels{};
+            gpu::render_target adapted_target{};
+            gpu::texture adapted_texture{};
+            gpu::render_target history_target{};
+            gpu::texture history_texture{};
+            gpu::bind_group adapt_bind_group{};
+            gpu::bind_group store_bind_group{};
+            gpu::texture bound_input{};
+            bool has_history{false};
+        };
+
         // A 1x1-or-larger rgba16f target without depth.
         gpu::render_target create_target(uint32_t size) const;
 
         // A {texture @0} bind group on @ref m_texture_layout.
         gpu::bind_group create_texture_bind_group(gpu::texture texture) const;
 
+        // Builds @p view's params UBO, targets and the bind groups between
+        // them; level 0's input group waits for prepare().
+        void build_view(view_data& view) const;
+
         // Packs this frame's adaptation params (the settings, whether to
-        // snap, the frame delta) into @ref m_params_ubo.
-        void upload_params(const frame_context& ctx, bool reset);
+        // snap, the frame delta) into @p view's params UBO.
+        static void upload_params(const frame_context& ctx, const view_data& view, bool reset);
 
         gpu::shader_module m_vertex_shader{};
         gpu::shader_module m_luminance_shader{};
@@ -123,7 +160,6 @@ namespace rendering_engine
         gpu::shader_module m_adapt_shader{};
         gpu::shader_module m_store_shader{};
         gpu::buffer m_vertex_buffer{};
-        gpu::buffer m_params_ubo{};
 
         // {texture @0} for the luminance, reduction and store stages;
         // {luminance @0, history @1, params @2} for the adaptation.
@@ -134,28 +170,6 @@ namespace rendering_engine
         gpu::pipeline m_downsample_pipeline{};
         gpu::pipeline m_adapt_pipeline{};
         gpu::pipeline m_store_pipeline{};
-
-        // 64 x 64, 16 x 16 and 4 x 4.
-        std::array<reduction_level, 3> m_levels{};
-
-        // The adaptation result tonemap samples, and the copy of it the
-        // next frame's adaptation reads as history.
-        gpu::render_target m_adapted_target{};
-        gpu::texture m_adapted_texture{};
-        gpu::render_target m_history_target{};
-        gpu::texture m_history_texture{};
-        gpu::bind_group m_adapt_bind_group{};
-        gpu::bind_group m_store_bind_group{};
-
-        // The HDR texture level 0's bind group was built against; invalid
-        // until the first metered frame builds it.
-        gpu::texture m_bound_input{};
-
-        // Whether the history holds a real adapted value: false before
-        // the first metered frame and again whenever auto exposure is
-        // disabled, so the next metered frame snaps to its target. Set
-        // by prepare() for the frame record() meters.
-        bool m_has_history{false};
 
         // Whether this frame's record() meters (enabled and a camera),
         // decided by prepare().

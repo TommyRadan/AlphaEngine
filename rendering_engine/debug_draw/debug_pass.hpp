@@ -36,7 +36,11 @@ namespace rendering_engine::debug_draw
      *
      * The pass owns no GPU resources of its own: the line-based gizmos
      * bind the scene pass's camera group, looked up in the published
-     * @ref frame_resources::scene_view (see @ref record).
+     * @ref frame_resources::scene_view (see @ref record). It runs once per
+     * frame, after every view, with the primary view's store, so the gizmos
+     * project with the primary view's camera and are drawn in its
+     * rectangle of the swapchain (@ref frame_resources::output), while the
+     * ImGui overlay covers the whole swapchain.
      */
     struct debug_pass : pass
     {
@@ -70,6 +74,7 @@ namespace rendering_engine::debug_draw
         void declare_io(pass_io_builder& io) const override
         {
             io.read_optional(frame_resources::scene_view);
+            io.read_optional(frame_resources::output);
             io.read(frame_resources::swapchain);
             io.write(frame_resources::swapchain);
         }
@@ -79,10 +84,11 @@ namespace rendering_engine::debug_draw
         // Gathered and sorted by prepare(), drawn by record().
         std::vector<draw_item> m_items;
 
-        // The swapchain target and the scene pass's unjittered camera
-        // group (invalid without a scene view) this frame, looked up by
-        // prepare().
+        // The swapchain target, the scene pass's unjittered camera group
+        // (invalid without a scene view) and the primary view's output
+        // this frame, looked up by prepare().
         gpu::render_target m_target{};
         gpu::bind_group m_frame_group{};
+        view_output m_output{};
     };
 } // namespace rendering_engine::debug_draw

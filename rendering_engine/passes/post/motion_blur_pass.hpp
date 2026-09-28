@@ -42,20 +42,20 @@ namespace rendering_engine
      * motion vectors), it publishes nothing, @ref record returns at once
      * and they read the scene colour: the previous stage, at no cost.
      *
-     * The output target is only allocated the first time motion blur is
-     * switched on, so the default configuration does not pay for a
-     * full-resolution target it never draws; once allocated it stays for
-     * the pass's lifetime. The inputs are looked up every frame and the
-     * bind group is rebuilt whenever either handle differs from the one it
-     * was built against; @ref resize recreates an allocated output target
-     * (new before old, so the published handle changes for its consumers).
-     * The params UBO is rewritten every frame the pass draws, inside the
-     * frame bracket. A degenerate backbuffer leaves the pass disabled.
+     * Each view gets an output target at its size, a params UBO and a bind
+     * group of its own (see @ref view_data), allocated the first time
+     * motion blur is switched on for the view, so the default
+     * configuration does not pay for a full-resolution target it never
+     * draws; once allocated they stay as long as the view does, the target
+     * recreated when the view's size changes (new before old, so the
+     * published handle changes for its consumers). The inputs are looked
+     * up every frame and the bind group is rebuilt whenever either handle
+     * differs from the one it was built against. The params UBO is
+     * rewritten every frame the pass draws, inside the frame bracket.
      */
     struct motion_blur_pass : pass
     {
-        // @p width / @p height size the output target.
-        motion_blur_pass(gpu::device& device, uint32_t width, uint32_t height);
+        explicit motion_blur_pass(gpu::device& device);
         ~motion_blur_pass() override;
 
         motion_blur_pass(const motion_blur_pass&) = delete;
@@ -83,58 +83,59 @@ namespace rendering_engine
             io.write(frame_resources::scene_color);
         }
 
-        // Notes the new drawable size and, once the output target exists,
-        // recreates it at that size (new before old, so bloom, auto
-        // exposure and tonemap see a different handle and rebind); the new
-        // size reaches the params UBO on the next drawn prepare(). The bind
-        // group samples only the inputs, whose new handles their owners
-        // publish, so it needs no work here. No-op while the pass is
-        // disabled.
-        void resize(uint32_t width, uint32_t height) override;
-
     private:
         // The device this pass creates its resources on and releases them
         // through; handed in by the renderer and outlives the pass.
         gpu::device* m_device{nullptr};
 
-        // Allocates the rgba16f output target at @ref m_width x
-        // @ref m_height.
-        void create_target();
+        // What the pass keeps per view: the rgba16f output target at the
+        // view's size (@ref width x @ref height, which the params block
+        // describes), the params UBO, and the bind group over the inputs
+        // it was built against (invalid until the view's first drawn frame
+        // builds it) and that UBO.
+        struct view_data final : pass_view_state
+        {
+            explicit view_data(gpu::device& device);
+            ~view_data() override;
 
-        // Rebuilds the bind group against @p scene_color and @p velocity
-        // plus the params UBO, remembering both handles.
-        void rebuild_bind_group(gpu::texture scene_color, gpu::texture velocity);
+            view_data(const view_data&) = delete;
+            view_data& operator=(const view_data&) = delete;
+
+            // (Re)allocates the output target at @p width x @p height, the
+            // new one before the old one is released.
+            void resize(uint32_t width, uint32_t height);
+
+            gpu::device* device{nullptr};
+            gpu::buffer params_ubo{};
+            gpu::render_target target{};
+            gpu::texture texture{};
+            gpu::bind_group bind_group{};
+            gpu::texture bound_color{};
+            gpu::texture bound_velocity{};
+            uint32_t width{0};
+            uint32_t height{0};
+        };
+
+        // Rebuilds @p view's bind group against @p scene_color and
+        // @p velocity plus its params UBO, remembering both handles.
+        void rebuild_bind_group(view_data& view, gpu::texture scene_color, gpu::texture velocity);
 
         // Packs this frame's params block (the settings, the noise frame
-        // and the target size) into @ref m_params_ubo.
-        void upload_params(const frame_context& ctx);
+        // and the view's size) into @p view's params UBO.
+        void upload_params(const frame_context& ctx, const view_data& view);
 
         gpu::shader_module m_vertex_shader{};
         gpu::shader_module m_fragment_shader{};
         gpu::buffer m_vertex_buffer{};
-        gpu::buffer m_params_ubo{};
 
         // {scene colour @0, velocity @1, params @2}.
         gpu::bind_group_layout m_layout{};
         gpu::pipeline m_pipeline{};
 
+        // The view's output target and bind group this frame's record()
+        // draws with, looked up by prepare().
         gpu::render_target m_target{};
-        gpu::texture m_texture{};
         gpu::bind_group m_bind_group{};
-
-        // The inputs @ref m_bind_group was built against; invalid until
-        // the first drawn frame builds it.
-        gpu::texture m_bound_color{};
-        gpu::texture m_bound_velocity{};
-
-        // The drawable size the output target is (or will be) allocated
-        // at, and the size the params block describes.
-        uint32_t m_width{0};
-        uint32_t m_height{0};
-
-        // False when the backbuffer dimensions are degenerate (no
-        // settings, zero-sized window); record() then no-ops.
-        bool m_enabled{false};
 
         // Whether this frame's record() draws, decided by prepare().
         bool m_draws{false};

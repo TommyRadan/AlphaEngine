@@ -20,6 +20,7 @@ namespace rendering_engine::debug_draw
         const scene_view_data* view = ctx.resources->find(frame_resources::scene_view);
         m_frame_group = view != nullptr ? view->overlay_frame_group : gpu::bind_group{};
         m_target = ctx.resources->get(frame_resources::swapchain);
+        m_output = ctx.resources->get(frame_resources::output);
 
         // Every overlay draw, in proxy order: the overlay is never culled.
         m_items.clear();
@@ -58,6 +59,15 @@ namespace rendering_engine::debug_draw
         descriptor.use_depth = false;
 
         auto pass_encoder = encoder.begin_render_pass(descriptor);
+
+        // The gizmos project with the primary view's camera, so they are
+        // drawn in its rectangle when it shares the swapchain with others.
+        const bool in_view_rectangle = m_output.target == m_target && !m_output.covers_target();
+        if (in_view_rectangle)
+        {
+            pass_encoder->set_viewport(
+                m_output.x, m_output.y, static_cast<int>(m_output.width), static_cast<int>(m_output.height));
+        }
 
         uint64_t last_pipeline_id = 0;
         const material* last_material = nullptr;
@@ -111,6 +121,11 @@ namespace rendering_engine::debug_draw
         // record(). No overlay without ImGui.
         if (ctx.overlay != nullptr)
         {
+            if (in_view_rectangle)
+            {
+                pass_encoder->set_viewport(
+                    0, 0, static_cast<int>(m_output.target_width), static_cast<int>(m_output.target_height));
+            }
             ctx.overlay->render(*pass_encoder);
         }
         pass_encoder->end();

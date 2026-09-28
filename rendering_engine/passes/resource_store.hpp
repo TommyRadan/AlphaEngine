@@ -182,6 +182,12 @@ namespace rendering_engine
      * Values are copied in and live until the next @ref clear; a lookup
      * returns a pointer that stays valid until then. Nothing is allocated
      * per frame once each name has been published once. Main-thread only.
+     *
+     * Each view renders with a store of its own (@ref view_resources),
+     * which falls back to the frame-global store the renderer owns for a
+     * name it does not hold (see @ref set_fallback): what the shadow
+     * stage, which runs once per frame, publishes there reaches every
+     * view, while what a view's passes publish stays the view's.
      */
     class resource_store
     {
@@ -235,6 +241,17 @@ namespace rendering_engine
         void clear() noexcept;
 
         /**
+         * @brief Makes @p fallback answer the lookups of names this store
+         *        does not hold this frame, or null for none. Publishing
+         *        never reaches it. Non-owning: the fallback outlives the
+         *        lookups.
+         */
+        void set_fallback(const resource_store* fallback) noexcept
+        {
+            m_fallback = fallback;
+        }
+
+        /**
          * @brief Names the pass whose publishes and lookups follow, and what
          *        it declared, or null for none.
          *
@@ -283,7 +300,7 @@ namespace rendering_engine
         void* publish_slot(std::string_view name, const std::type_info& type, std::size_t size);
 
         // Storage of @p name when it was published this generation as a
-        // @p type; null otherwise.
+        // @p type, or else the fallback's; null otherwise.
         const void* find_slot(std::string_view name, const std::type_info& type) const;
 
 #if _DEBUG
@@ -301,5 +318,8 @@ namespace rendering_engine
         // Bumped by clear(): a slot holds a value only while its
         // generation matches.
         uint64_t m_generation{1};
+
+        // The store a lookup falls back to (see set_fallback).
+        const resource_store* m_fallback{nullptr};
     };
 } // namespace rendering_engine

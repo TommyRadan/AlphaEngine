@@ -44,9 +44,10 @@ namespace rendering_engine
      * vertex buffers beyond the @ref fullscreen_triangle_vertices).
      *
      * The threshold / knee and the per-level composite weights are baked
-     * into per-stage UBOs when the pyramid is built (at construction and
-     * again by @ref resize, from whichever @ref bloom_settings were last
-     * applied) and are live-tunable: @ref record compares
+     * into per-stage UBOs when a view's pyramid is built (on the view's
+     * first frame and again when its size changes, from whichever
+     * @ref bloom_settings were last applied) and are live-tunable:
+     * @ref prepare compares
      * @ref frame_context::post's @c bloom fields against what it last
      * uploaded and rewrites only the UBO(s) a changed field affects. The
      * blur offsets stay static — they depend only on the target
@@ -57,14 +58,14 @@ namespace rendering_engine
      */
     struct bloom_pass : pass
     {
-        // @p width / @p height are the backbuffer dimensions the mip
-        // pyramid is sized against. The HDR image the bright-pass samples
-        // is not a constructor input: it is looked up every frame
-        // (@ref frame_resources::scene_color: the scene colour, or motion
-        // blur's output while that runs), and the threshold bind group is
-        // (re)built whenever that handle differs from the one it was last
-        // built against. The composite target is the same image's target.
-        bloom_pass(gpu::device& device, uint32_t width, uint32_t height);
+        // The HDR image the bright-pass samples is not a constructor
+        // input: it is looked up every frame (@ref frame_resources::scene_color:
+        // the scene colour, or motion blur's output while that runs), and a
+        // view's threshold bind group is (re)built whenever that handle
+        // differs from the one it was last built against. The composite
+        // target is the same image's target. The mip pyramid is sized
+        // against each view's size (see @ref view_data).
+        explicit bloom_pass(gpu::device& device);
         ~bloom_pass() override;
 
         bloom_pass(const bloom_pass&) = delete;
@@ -86,14 +87,6 @@ namespace rendering_engine
             io.read(frame_resources::scene_color);
             io.write(frame_resources::scene_color);
         }
-
-        // Rebuilds the bright-pass target and the whole blur pyramid (its
-        // targets, per-level texel-step UBOs and bind groups) for the new
-        // drawable size. Every consumer of the pyramid textures is this
-        // pass's own bind groups, so they are rebuilt here directly; the
-        // threshold bind group is rebound by prepare() when the scene
-        // colour handle changes. No-op while the pass is disabled.
-        void resize(uint32_t width, uint32_t height) override;
 
     private:
         // The device this pass creates its resources on and releases them
@@ -123,6 +116,41 @@ namespace rendering_engine
             uint32_t height{0};
         };
 
+        // What the pass keeps per view: the half-resolution bright-pass
+        // output (also the input to mip 0) with its threshold UBO and bind
+        // group, the HDR texture that group was built against (invalid
+        // until the view's first prepare() builds it), the blur pyramid
+        // sized against the view (@ref width x @ref height), and the
+        // bloom_settings currently baked into the threshold UBO and every
+        // level's weight UBO. The settings start at the struct's own
+        // compiled-in defaults, so a caller that never touches
+        // frame_context::post sees those; the pyramid is baked from them
+        // (so a resize rebuilds at whatever was last applied) and prepare()
+        // updates them as it rewrites a UBO.
+        struct view_data final : pass_view_state
+        {
+            explicit view_data(gpu::device& device) : device{&device} {}
+            ~view_data() override;
+
+            view_data(const view_data&) = delete;
+            view_data& operator=(const view_data&) = delete;
+
+            // Releases the bright-pass target and the pyramid, bind groups
+            // first.
+            void release_pyramid();
+
+            gpu::device* device{nullptr};
+            gpu::render_target bright_target{};
+            gpu::texture bright_texture{};
+            gpu::buffer threshold_ubo{};
+            gpu::bind_group threshold_bind_group{};
+            gpu::texture bound_scene_color{};
+            std::vector<bloom_level> levels;
+            bloom_settings settings{};
+            uint32_t width{0};
+            uint32_t height{0};
+        };
+
         gpu::shader_module m_vertex_shader{};
         gpu::shader_module m_threshold_shader{};
         gpu::shader_module m_blur_shader{};
@@ -140,18 +168,6 @@ namespace rendering_engine
         gpu::pipeline m_blur_pipeline{};
         gpu::pipeline m_composite_pipeline{};
 
-        // Half-resolution bright-pass output; also the input to mip 0.
-        gpu::render_target m_bright_target{};
-        gpu::texture m_bright_texture{};
-        gpu::buffer m_threshold_ubo{};
-        gpu::bind_group m_threshold_bind_group{};
-
-        // The HDR texture @ref m_threshold_bind_group was built against;
-        // invalid until the first prepare() builds the group.
-        gpu::texture m_bound_scene_color{};
-
-        std::vector<bloom_level> m_levels;
-
         // Resource helpers shared by every stage: an rgba16f target of the
         // given size, a static vec4 params UBO, and a {texture @0, ubo @1}
         // bind group on @ref m_io_layout.
@@ -159,44 +175,27 @@ namespace rendering_engine
         gpu::buffer create_params_ubo(const std::array<float, 4>& values) const;
         gpu::bind_group create_bind_group(gpu::texture input, gpu::buffer ubo) const;
 
-        // Builds the bright-pass target and the blur pyramid (targets,
-        // per-level UBOs and bind groups) for a @p width x @p height
-        // backbuffer. Expects @ref m_levels to be empty and the bright
-        // target to be invalid.
-        void create_pyramid(uint32_t width, uint32_t height);
+        // Builds @p view's bright-pass target and blur pyramid (targets,
+        // per-level UBOs and bind groups) for a @p width x @p height view.
+        // Expects the view's pyramid to be empty.
+        void create_pyramid(view_data& view, uint32_t width, uint32_t height);
 
-        // Releases everything create_pyramid built, bind groups first.
-        void release_pyramid();
+        // Rebuild @p view's threshold bind group against @p scene_color
+        // (this frame's HDR image) and its threshold UBO, remembering the
+        // handle.
+        void rebuild_threshold_bind_group(view_data& view, gpu::texture scene_color);
 
-        // Rebuild the threshold bind group against @p scene_color (this
-        // frame's HDR image) and the threshold UBO, remembering the handle
-        // in @ref m_bound_scene_color.
-        void rebuild_threshold_bind_group(gpu::texture scene_color);
+        // Rewrites @p view's threshold UBO from {threshold, knee}; called
+        // from prepare() whenever either differs from the view's settings.
+        static void write_threshold_ubo(view_data& view, float threshold, float knee);
 
-        // The bloom_settings currently baked into m_threshold_ubo and every
-        // level's weight_ubo. Starts at the struct's own compiled-in
-        // defaults, so a caller that never touches frame_context::post
-        // sees those. create_pyramid bakes the initial UBOs from this (so
-        // a resize rebuilds at whatever was last applied, not the
-        // compiled-in defaults) and record() updates it as it rewrites a
-        // UBO.
-        bloom_settings m_settings{};
+        // Rewrites every level's weight UBO of @p view from strength;
+        // called from prepare() whenever it differs from the view's
+        // settings.
+        static void write_weights(view_data& view, float strength);
 
-        // Rewrites m_threshold_ubo from {threshold, knee}; called from
-        // prepare() whenever either differs from m_settings.
-        void write_threshold_ubo(float threshold, float knee);
-
-        // Rewrites every level's weight_ubo from strength; called from
-        // prepare() whenever it differs from m_settings.
-        void write_weights(float strength);
-
-        // False when the backbuffer dimensions are degenerate (no
-        // settings, zero-sized window); record() then no-ops so the scene
-        // target passes straight through to tonemap.
-        bool m_enabled{false};
-
-        // Whether this frame's record() draws (the pass is live and bloom
-        // is enabled), decided by prepare().
+        // Whether this frame's record() draws (bloom is enabled), decided by
+        // prepare().
         bool m_draws{false};
 
         // The HDR target the composite blends into this frame, looked up

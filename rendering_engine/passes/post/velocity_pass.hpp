@@ -50,19 +50,20 @@ namespace rendering_engine
      * runs (temporal AA is on or @ref motion_blur_active holds), so with
      * both off it costs nothing. Pipeline state mirrors the other
      * fullscreen-triangle passes (depth off, blend off, no culling). A
-     * degenerate backbuffer leaves the pass disabled; a frame with no
-     * camera, or without a usable previous view-projection (the first
-     * camera frame, a camera switch), reports zero motion.
+     * frame with no camera, or without a usable previous view-projection
+     * (the view's first frame), reports zero motion.
+     *
+     * Each view gets a target, a reprojection block and an input bind
+     * group of its own (see @ref view_data), the target at the view's size.
      */
     struct velocity_pass : pass
     {
-        // @p width / @p height size the velocity target. The scene depth the
-        // pass samples is not a constructor input: it is looked up every
-        // frame (@ref frame_resources::scene_depth), and the input bind
-        // group is (re)built whenever that handle differs from the one it
-        // was last built against, so a resized scene target is picked up
-        // without any re-plumbing.
-        velocity_pass(gpu::device& device, uint32_t width, uint32_t height);
+        // The scene depth the pass samples is not a constructor input: it
+        // is looked up every frame (@ref frame_resources::scene_depth), and
+        // a view's input bind group is (re)built whenever that handle
+        // differs from the one it was last built against, so a resized
+        // scene target is picked up without any re-plumbing.
+        explicit velocity_pass(gpu::device& device);
         ~velocity_pass() override;
 
         velocity_pass(const velocity_pass&) = delete;
@@ -87,50 +88,59 @@ namespace rendering_engine
             io.write(frame_resources::velocity);
         }
 
-        // Recreates the velocity target at the new drawable size. The new
-        // target is created before the old one is released so the handle
-        // published as frame_resources::velocity changes and the TAA
-        // resolve and motion blur rebind. No-op while the pass is disabled.
-        void resize(uint32_t width, uint32_t height) override;
-
     private:
         // The device this pass creates its resources on and releases them
         // through; handed in by the renderer and outlives the pass.
         gpu::device* m_device{nullptr};
 
-        // Rebuild the input bind group against @p scene_depth and the
-        // reprojection UBO, remembering the handle in @ref m_bound_depth.
-        void rebuild_bind_group(gpu::texture scene_depth);
+        // What the pass keeps per view: the rgba16f velocity target at the
+        // view's size, the reprojection block, and the input bind group
+        // over the view's scene depth (@ref bound_depth, invalid until the
+        // view's first camera frame builds the group) and that block.
+        struct view_data final : pass_view_state
+        {
+            explicit view_data(gpu::device& device);
+            ~view_data() override;
 
-        // Allocates the rgba16f velocity target at @p width x @p height
-        // and points @ref m_velocity_target / @ref m_velocity_texture at it.
-        void create_target(uint32_t width, uint32_t height);
+            view_data(const view_data&) = delete;
+            view_data& operator=(const view_data&) = delete;
+
+            // (Re)allocates the target at @p width x @p height: the new
+            // one first, so the handle published as
+            // frame_resources::velocity changes and the TAA resolve and
+            // motion blur rebind; then the old one is released.
+            void resize(uint32_t width, uint32_t height);
+
+            gpu::device* device{nullptr};
+            gpu::buffer reproj_ubo{};
+            gpu::render_target velocity_target{};
+            gpu::texture velocity_texture{};
+            gpu::bind_group bind_group{};
+            gpu::texture bound_depth{};
+            uint32_t width{0};
+            uint32_t height{0};
+        };
+
+        // Rebuilds @p view's input bind group against @p scene_depth and
+        // its reprojection UBO, remembering the handle.
+        void rebuild_bind_group(view_data& view, gpu::texture scene_depth);
 
         gpu::shader_module m_vertex_shader{};
         gpu::shader_module m_fragment_shader{};
 
         gpu::buffer m_vertex_buffer{};
-        gpu::buffer m_reproj_ubo{};
 
         // {sceneDepth @0, reprojection @1}.
         gpu::bind_group_layout m_layout{};
         gpu::pipeline m_pipeline{};
 
-        gpu::render_target m_velocity_target{};
-        gpu::texture m_velocity_texture{};
+        // The view's target and input group this frame's record() draws
+        // with, looked up by prepare().
+        gpu::render_target m_target{};
         gpu::bind_group m_bind_group{};
 
-        // The scene depth texture @ref m_bind_group was built against;
-        // invalid until the first camera frame builds the group.
-        gpu::texture m_bound_depth{};
-
-        // False when the backbuffer dimensions are degenerate (no settings,
-        // zero-sized window); record() then no-ops and nothing is
-        // published.
-        bool m_enabled{false};
-
         // What this frame's record() does, decided by prepare(): nothing
-        // (disabled, or no consumer this frame), clear the target to zero
+        // (no consumer this frame), clear the target to zero
         // motion (no camera or no scene depth), or draw the reprojection.
         enum class frame_action
         {

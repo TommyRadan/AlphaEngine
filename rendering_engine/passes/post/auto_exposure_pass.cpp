@@ -64,14 +64,6 @@ namespace rendering_engine
         vb_descriptor.initial_data = fullscreen_triangle_vertices.data();
         m_vertex_buffer = gpu.create_buffer(vb_descriptor);
 
-        // Rewritten every metered frame (the frame delta changes), so
-        // host-visible: the device keeps one copy per frame in flight.
-        gpu::buffer_descriptor ubo_descriptor{};
-        ubo_descriptor.size = params_ubo_size;
-        ubo_descriptor.usage = gpu::buffer_usage_uniform | gpu::buffer_usage_copy_dst;
-        ubo_descriptor.hint = gpu::buffer_usage_hint::dynamic_data;
-        m_params_ubo = gpu.create_buffer(ubo_descriptor);
-
         // -- Layouts --------------------------------------------------
         gpu::bind_group_layout_descriptor texture_layout{};
         texture_layout.entries.push_back({0, gpu::binding_kind::texture});
@@ -118,55 +110,53 @@ namespace rendering_engine
         m_adapt_pipeline = make_pipeline(m_adapt_shader, m_adapt_layout);
         m_store_pipeline = make_pipeline(m_store_shader, m_texture_layout);
 
-        // -- Targets and the fixed bind groups ------------------------
-        // Every target is a fixed size, so everything but level 0's input
-        // group (which samples the HDR image the frame context hands over)
-        // is built once, here.
-        uint32_t size = luminance_size;
-        for (size_t i = 0; i < m_levels.size(); ++i)
-        {
-            m_levels[i].target = create_target(size);
-            m_levels[i].texture = gpu.render_target_color_texture(m_levels[i].target);
-            if (i > 0)
-            {
-                m_levels[i].source_bind_group = create_texture_bind_group(m_levels[i - 1].texture);
-            }
-            size /= 4;
-        }
-
-        m_adapted_target = create_target(1);
-        m_adapted_texture = gpu.render_target_color_texture(m_adapted_target);
-        m_history_target = create_target(1);
-        m_history_texture = gpu.render_target_color_texture(m_history_target);
-
-        gpu::bind_group_descriptor adapt_group{};
-        adapt_group.layout = m_adapt_layout;
-        gpu::binding_value luminance_slot{};
-        luminance_slot.binding = 0;
-        luminance_slot.kind = gpu::binding_kind::texture;
-        luminance_slot.texture_value = m_levels.back().texture;
-        adapt_group.entries.push_back(luminance_slot);
-        gpu::binding_value history_slot{};
-        history_slot.binding = 1;
-        history_slot.kind = gpu::binding_kind::texture;
-        history_slot.texture_value = m_history_texture;
-        adapt_group.entries.push_back(history_slot);
-        gpu::binding_value params_slot{};
-        params_slot.binding = 2;
-        params_slot.kind = gpu::binding_kind::uniform_buffer;
-        params_slot.buffer_value = m_params_ubo;
-        adapt_group.entries.push_back(params_slot);
-        m_adapt_bind_group = gpu.create_bind_group(adapt_group);
-
-        m_store_bind_group = create_texture_bind_group(m_adapted_texture);
+        // Each view's targets and the fixed bind groups between them are
+        // built by prepare() the first time auto exposure runs for it.
     }
 
     auto_exposure_pass::~auto_exposure_pass()
     {
         auto& gpu = *m_device;
 
-        // Bind groups first, then the targets and buffers they reference,
-        // then the pipelines, layouts and shaders.
+        // The pipelines, then the layouts, buffers and shaders.
+        for (gpu::pipeline* pipeline :
+             {&m_store_pipeline, &m_adapt_pipeline, &m_downsample_pipeline, &m_luminance_pipeline})
+        {
+            if (pipeline->valid())
+            {
+                gpu.destroy(*pipeline);
+                *pipeline = {};
+            }
+        }
+        for (gpu::bind_group_layout* layout : {&m_adapt_layout, &m_texture_layout})
+        {
+            if (layout->valid())
+            {
+                gpu.destroy(*layout);
+                *layout = {};
+            }
+        }
+        if (m_vertex_buffer.valid())
+        {
+            gpu.destroy(m_vertex_buffer);
+            m_vertex_buffer = {};
+        }
+        for (gpu::shader_module* shader :
+             {&m_store_shader, &m_adapt_shader, &m_downsample_shader, &m_luminance_shader, &m_vertex_shader})
+        {
+            if (shader->valid())
+            {
+                gpu.destroy(*shader);
+                *shader = {};
+            }
+        }
+    }
+
+    auto_exposure_pass::view_data::~view_data()
+    {
+        auto& gpu = *device;
+
+        // Bind groups first, then the targets and buffers they reference.
         const auto destroy_group = [&gpu](gpu::bind_group& group)
         {
             if (group.valid())
@@ -187,53 +177,76 @@ namespace rendering_engine
             }
         };
 
-        destroy_group(m_store_bind_group);
-        destroy_group(m_adapt_bind_group);
-        for (auto& level : m_levels)
+        destroy_group(store_bind_group);
+        destroy_group(adapt_bind_group);
+        for (auto& level : levels)
         {
             destroy_group(level.source_bind_group);
         }
-        destroy_target(m_history_target, m_history_texture);
-        destroy_target(m_adapted_target, m_adapted_texture);
-        for (auto& level : m_levels)
+        destroy_target(history_target, history_texture);
+        destroy_target(adapted_target, adapted_texture);
+        for (auto& level : levels)
         {
             destroy_target(level.target, level.texture);
         }
+        if (params_ubo.valid())
+        {
+            gpu.destroy(params_ubo);
+        }
+    }
 
-        for (gpu::pipeline* pipeline :
-             {&m_store_pipeline, &m_adapt_pipeline, &m_downsample_pipeline, &m_luminance_pipeline})
+    void auto_exposure_pass::build_view(view_data& view) const
+    {
+        auto& gpu = *m_device;
+
+        // Rewritten every metered frame (the frame delta changes), so
+        // host-visible: the device keeps one copy per frame in flight.
+        gpu::buffer_descriptor ubo_descriptor{};
+        ubo_descriptor.size = params_ubo_size;
+        ubo_descriptor.usage = gpu::buffer_usage_uniform | gpu::buffer_usage_copy_dst;
+        ubo_descriptor.hint = gpu::buffer_usage_hint::dynamic_data;
+        view.params_ubo = gpu.create_buffer(ubo_descriptor);
+
+        // Every target is a fixed size, so everything but level 0's input
+        // group (which samples the HDR image the view's store hands over)
+        // is built once, here.
+        uint32_t size = luminance_size;
+        for (size_t i = 0; i < view.levels.size(); ++i)
         {
-            if (pipeline->valid())
+            view.levels[i].target = create_target(size);
+            view.levels[i].texture = gpu.render_target_color_texture(view.levels[i].target);
+            if (i > 0)
             {
-                gpu.destroy(*pipeline);
-                *pipeline = {};
+                view.levels[i].source_bind_group = create_texture_bind_group(view.levels[i - 1].texture);
             }
+            size /= 4;
         }
-        for (gpu::bind_group_layout* layout : {&m_adapt_layout, &m_texture_layout})
-        {
-            if (layout->valid())
-            {
-                gpu.destroy(*layout);
-                *layout = {};
-            }
-        }
-        for (gpu::buffer* buffer : {&m_params_ubo, &m_vertex_buffer})
-        {
-            if (buffer->valid())
-            {
-                gpu.destroy(*buffer);
-                *buffer = {};
-            }
-        }
-        for (gpu::shader_module* shader :
-             {&m_store_shader, &m_adapt_shader, &m_downsample_shader, &m_luminance_shader, &m_vertex_shader})
-        {
-            if (shader->valid())
-            {
-                gpu.destroy(*shader);
-                *shader = {};
-            }
-        }
+
+        view.adapted_target = create_target(1);
+        view.adapted_texture = gpu.render_target_color_texture(view.adapted_target);
+        view.history_target = create_target(1);
+        view.history_texture = gpu.render_target_color_texture(view.history_target);
+
+        gpu::bind_group_descriptor adapt_group{};
+        adapt_group.layout = m_adapt_layout;
+        gpu::binding_value luminance_slot{};
+        luminance_slot.binding = 0;
+        luminance_slot.kind = gpu::binding_kind::texture;
+        luminance_slot.texture_value = view.levels.back().texture;
+        adapt_group.entries.push_back(luminance_slot);
+        gpu::binding_value history_slot{};
+        history_slot.binding = 1;
+        history_slot.kind = gpu::binding_kind::texture;
+        history_slot.texture_value = view.history_texture;
+        adapt_group.entries.push_back(history_slot);
+        gpu::binding_value params_slot{};
+        params_slot.binding = 2;
+        params_slot.kind = gpu::binding_kind::uniform_buffer;
+        params_slot.buffer_value = view.params_ubo;
+        adapt_group.entries.push_back(params_slot);
+        view.adapt_bind_group = gpu.create_bind_group(adapt_group);
+
+        view.store_bind_group = create_texture_bind_group(view.adapted_texture);
     }
 
     gpu::render_target auto_exposure_pass::create_target(uint32_t size) const
@@ -260,9 +273,9 @@ namespace rendering_engine
         return gpu.create_bind_group(descriptor);
     }
 
-    void auto_exposure_pass::upload_params(const frame_context& ctx, bool reset)
+    void auto_exposure_pass::upload_params(const frame_context& ctx, const view_data& view, bool reset)
     {
-        auto& gpu = *m_device;
+        auto& gpu = *view.device;
         const auto_exposure_settings& settings = ctx.post.auto_exposure;
 
         // A reversed range is read as the range it spans rather than
@@ -277,7 +290,7 @@ namespace rendering_engine
             std::max(ctx.delta_seconds, 0.0f),
             0.0f,
         };
-        gpu.write_buffer(m_params_ubo, params.data(), params_ubo_size, 0);
+        gpu.write_buffer(view.params_ubo, params.data(), params_ubo_size, 0);
     }
 
     void auto_exposure_pass::prepare(const frame_context& ctx)
@@ -289,8 +302,17 @@ namespace rendering_engine
         // then rather than easing in from whatever it last saw.
         if (!ctx.post.auto_exposure.enabled)
         {
-            m_has_history = false;
+            if (view_data* view = ctx.view->find_state<view_data>(*this))
+            {
+                view->has_history = false;
+            }
             return;
+        }
+
+        view_data& view = ctx.view->state<view_data>(*this, *m_device);
+        if (!view.adapted_target.valid())
+        {
+            build_view(view);
         }
 
         // No camera: the scene pass cleared the HDR image to black, which
@@ -298,24 +320,24 @@ namespace rendering_engine
         // value, which tonemap keeps sampling once there is one.
         if (ctx.active_camera == nullptr)
         {
-            if (m_has_history)
+            if (view.has_history)
             {
-                ctx.resources->publish(frame_resources::exposure, m_adapted_texture);
+                ctx.resources->publish(frame_resources::exposure, view.adapted_texture);
             }
             return;
         }
 
         // Written here, after begin_frame waited for the frame that last
         // read this frame slot's copy of the buffer.
-        upload_params(ctx, !m_has_history);
+        upload_params(ctx, view, !view.has_history);
 
         // Meter the HDR image tonemap will map this frame. Its handle only
         // changes when motion blur is toggled or a resize recreates the
         // target, so compare against the one level 0's group was built
         // with and rebuild on change — the first metered frame included.
         const gpu::texture hdr = ctx.resources->get(frame_resources::scene_color).texture;
-        reduction_level& first = m_levels.front();
-        if (hdr != m_bound_input || !first.source_bind_group.valid())
+        reduction_level& first = view.levels.front();
+        if (hdr != view.bound_input || !first.source_bind_group.valid())
         {
             // Safe mid-frame: the device defers the destroy until the
             // command buffer that may still reference the group retired.
@@ -324,23 +346,24 @@ namespace rendering_engine
                 m_device->destroy(first.source_bind_group);
             }
             first.source_bind_group = create_texture_bind_group(hdr);
-            m_bound_input = hdr;
+            view.bound_input = hdr;
         }
 
         // record() meters this frame, so the history it leaves is real and
         // tonemap takes its exposure from it.
         m_meters = true;
-        m_has_history = true;
-        ctx.resources->publish(frame_resources::exposure, m_adapted_texture);
+        view.has_history = true;
+        ctx.resources->publish(frame_resources::exposure, view.adapted_texture);
     }
 
-    void auto_exposure_pass::record(gpu::command_encoder& encoder, const frame_context& /*ctx*/)
+    void auto_exposure_pass::record(gpu::command_encoder& encoder, const frame_context& ctx)
     {
-        if (!m_meters)
+        const view_data* view = m_meters ? ctx.view->find_state<view_data>(*this) : nullptr;
+        if (view == nullptr)
         {
             return;
         }
-        const reduction_level& first = m_levels.front();
+        const reduction_level& first = view->levels.front();
 
         // Draws a fullscreen triangle into @p target; begin_render_pass
         // defaults the viewport to the target's own extent.
@@ -362,15 +385,15 @@ namespace rendering_engine
 
         // 1-2. Log2 luminance, then the reduction down to 4 x 4.
         draw_stage(first.target, m_luminance_pipeline, first.source_bind_group);
-        for (size_t i = 1; i < m_levels.size(); ++i)
+        for (size_t i = 1; i < view->levels.size(); ++i)
         {
-            draw_stage(m_levels[i].target, m_downsample_pipeline, m_levels[i].source_bind_group);
+            draw_stage(view->levels[i].target, m_downsample_pipeline, view->levels[i].source_bind_group);
         }
 
         // 3. Adapt toward this frame's metered brightness (or snap to it).
-        draw_stage(m_adapted_target, m_adapt_pipeline, m_adapt_bind_group);
+        draw_stage(view->adapted_target, m_adapt_pipeline, view->adapt_bind_group);
 
         // 4. Keep the result as next frame's history.
-        draw_stage(m_history_target, m_store_pipeline, m_store_bind_group);
+        draw_stage(view->history_target, m_store_pipeline, view->store_bind_group);
     }
 } // namespace rendering_engine

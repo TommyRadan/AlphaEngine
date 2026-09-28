@@ -18,6 +18,7 @@
 #include <rendering_engine/gpu/handle.hpp>
 #include <rendering_engine/mesh_draws.hpp>
 #include <rendering_engine/passes/resource_store.hpp>
+#include <rendering_engine/passes/view_resources.hpp>
 #include <rendering_engine/post_settings.hpp>
 #include <rendering_engine/render_proxies.hpp>
 
@@ -57,29 +58,41 @@ namespace rendering_engine
     } // namespace builtin_passes
 
     /**
-     * @brief The per-frame state every pass is handed.
+     * @brief The per-view state every pass is handed.
      *
-     * Captured once at the top of @ref renderer::render, so passes cannot
-     * disagree about which camera is active mid-frame and do not re-run
-     * the camera arbitration on every entry. It carries what describes the
-     * frame and its view — the camera, the lights, the draw lists built
-     * from the world's proxies, the clock and frame index, the jitter, a
-     * snapshot of the settings — and nothing any pass produces: what passes
-     * hand each other, and the render targets they draw into, travel
-     * through @ref resources.
+     * A frame renders a list of views (@ref view, built once per frame by
+     * @ref render_world::collect_views), and @ref renderer::render captures
+     * one context per view, so passes cannot disagree about the view
+     * mid-way through it and do not re-run the camera arbitration on every
+     * entry. It carries what describes the frame — the lights, the draw
+     * lists built from the world's proxies, the clock and frame index, a
+     * snapshot of the settings — and the view — its camera, size, jitter
+     * and history, and its resource set — and nothing any pass produces:
+     * what passes hand each other, and the render targets they draw into,
+     * travel through @ref resources. The scene, post and UI stages get a
+     * view's context; the shadow stage, which runs once per frame before
+     * the views, and the overlay stage, once after them, get the primary
+     * view's (the last of the list: the highest-ranked view on the
+     * swapchain), the shadow stage with the frame-global store and no
+     * @ref view.
      */
     struct frame_context
     {
-        // The proxy of the camera this frame renders with — the winner of
-        // @ref world's arbitration (render_world::active_camera: the
-        // highest-priority enabled camera) evaluated once per frame — or
-        // nullptr when no camera is enabled. Passes that need a camera
-        // read its view, projection, frustum and culling mask from here,
-        // never from @ref world directly, and early-return when it is
-        // null. @ref active_camera_handle names it, for passes that keep
-        // state per camera across frames.
+        // The proxy of the camera the view renders — or nullptr for the
+        // camera-less view the world puts on the swapchain on a frame no
+        // enabled camera renders there. Passes that need a camera read its
+        // view, projection, frustum and culling mask from here, never from
+        // @ref world directly, and early-return when it is null.
+        // @ref active_camera_handle names it, and so names the view.
         const camera_proxy* active_camera{nullptr};
         camera_proxy_handle active_camera_handle{};
+
+        // The view's resource set: its targets, its history and the state
+        // every pass keeps for it (@ref view_resources::state), which a
+        // pass fetches in @ref pass::prepare and finds again in
+        // @ref pass::record. Null in the shadow stage, whose maps every
+        // view shares.
+        view_resources* view{nullptr};
 
         // The enabled light proxies, in the order the lights UBO packs
         // them (render_world::enabled_lights), gathered once per frame.
@@ -112,22 +125,23 @@ namespace rendering_engine
         // a process. Never null once the renderer is up.
         const render_world* world{nullptr};
 
-        // The frame's resource store: the renderer's targets (the
-        // swapchain, the HDR scene colour and its depth, the LDR target,
-        // the grading table) and whatever the passes before this one
-        // published — every connection between passes (see
-        // resource_store.hpp; the keys are in frame_resources.hpp). Never
-        // null once the renderer is up. A pass looks up what it reads in
+        // The view's resource store: the view's targets (the HDR scene
+        // colour and its depth, the LDR target) and whatever the passes
+        // before this one published for the view, falling back to the
+        // frame-global store (the swapchain, the grading table, the shadow
+        // maps) — every connection between passes (see resource_store.hpp;
+        // the keys are in frame_resources.hpp). Never null once the
+        // renderer is up. A pass looks up what it reads in
         // @ref pass::prepare and publishes what it produces there.
         resource_store* resources{nullptr};
 
-        // Pixel size of the off-screen scene / LDR targets (and so of
-        // the swapchain they resolve into) this frame.
+        // Pixel size of the view: of its off-screen scene / LDR targets and
+        // of its rectangle in the output they resolve into. A pass that
+        // keeps size-dependent state for the view compares against it.
         uint32_t viewport_width{0};
         uint32_t viewport_height{0};
 
         // Frames rendered before this one since the renderer came up.
-        // Drives the temporal-AA jitter sequence.
         uint64_t frame_index{0};
 
         // The engine clock (core::time) in seconds: the time since it
@@ -136,9 +150,10 @@ namespace rendering_engine
         float time_seconds{0.0f};
         float delta_seconds{0.0f};
 
-        // Temporal-AA sub-pixel jitter for this frame, in NDC units
-        // (see @ref taa_jitter_ndc), and the previous frame's. Zero
-        // while temporal AA is off. The scene pass rasterises with the
+        // Temporal-AA sub-pixel jitter for the view's frame, in NDC units
+        // (see @ref taa_jitter_ndc; the sequence follows the view's own
+        // frame count), and the view's previous frame's. Zero while
+        // temporal AA is off. The scene pass rasterises with the
         // projection offset by @c jitter (@ref jitter_projection) and the
         // skybox unprojects with the same offset so the two agree; the
         // velocity pass subtracts it to recover each pixel's unjittered
@@ -147,13 +162,13 @@ namespace rendering_engine
         core::math::vec2 jitter{0.0f, 0.0f};
         core::math::vec2 prev_jitter{0.0f, 0.0f};
 
-        // The previous frame's unjittered view-projection of
+        // The view's previous frame's unjittered view-projection of
         // @ref active_camera, valid when @ref has_prev_view_projection
-        // is set: false on the first camera frame, after a no-camera
-        // frame and when a different camera won the arbitration, since a
-        // matrix from a different camera (or none) is meaningless to
-        // reproject against. The velocity pass builds its reprojection
-        // from it.
+        // is set: false on the view's first frame and after a camera-less
+        // frame, since there is nothing to reproject against. The history
+        // belongs to the view, whose identity is its camera, so a matrix
+        // is never another camera's. The velocity pass builds its
+        // reprojection from it.
         core::math::mat4 prev_view_projection{};
         bool has_prev_view_projection{false};
 
@@ -195,9 +210,16 @@ namespace rendering_engine
      * disabled and enabled again (@ref renderer::set_pass_enabled), or
      * removed (@ref renderer::remove_pass), without touching the others.
      *
-     * A frame walks the enabled passes twice in @ref renderer::render:
-     * first every pass's @ref prepare, in order, then every pass's
-     * @ref record, in the same order. @ref prepare is where a pass computes
+     * @ref renderer::render walks the enabled passes of a scope twice —
+     * the shadow stage once per frame, the scene, post and UI stages once
+     * per view, the overlay stage once per frame: first every pass's
+     * @ref prepare, in order, then every pass's @ref record, in the same
+     * order. So a pass of a per-view stage prepares and records once for
+     * each view, and records a view before it prepares the next; whatever
+     * it keeps across frames or at the view's size, and every buffer whose
+     * contents differ between views, it keeps per view, in a
+     * @ref pass_view_state of the view's resource set
+     * (@ref frame_context::view). @ref prepare is where a pass computes
      * and stores whatever the frame needs — its per-frame matrices, culled
      * and sorted draw lists, uniform-buffer rewrites, bind-group rebuilds,
      * the pipelines it will bind — where it looks up in the frame's
@@ -215,8 +237,11 @@ namespace rendering_engine
      * A pass that owns GPU resources takes the @ref gpu::device they live
      * on as its first constructor argument; the device outlives the pass
      * (the renderer destroys every pass in @ref renderer::quit, before the
-     * device goes). Everything that changes from frame to frame reaches it
-     * through @ref frame_context.
+     * device goes). Everything that changes from frame to frame, or from
+     * view to view, reaches it through @ref frame_context; a pass whose
+     * state depends on the view's size compares
+     * @ref frame_context::viewport_width and @c viewport_height against
+     * the size it built that state for, in @ref prepare.
      *
      * Names follow the industry-standard "pass" terminology even
      * though @ref gpu::render_pass_encoder shares the word; the two
@@ -230,9 +255,11 @@ namespace rendering_engine
         /**
          * @brief Builds this pass's state for the frame.
          *
-         * Called once per frame in list order, on the main thread, inside
-         * the device's frame bracket (host writes land in this frame's
-         * slot) and before any pass records; not called while the pass is
+         * Called once per frame, or once per view for a pass of a
+         * per-view stage, in list order, on the main thread, inside the
+         * device's frame bracket (host writes land in this frame's slot)
+         * and before any pass of the scope records; not called while the
+         * pass is
          * disabled. Everything @ref record needs is decided and stored
          * here: the resources the pass reads are looked up here, as the
          * passes before it left them (a later pass may republish a name,
@@ -248,8 +275,9 @@ namespace rendering_engine
         /**
          * @brief Records this pass's draws on @p encoder.
          *
-         * Called once per frame in list order, after every pass's
-         * @ref prepare; not called while the pass is disabled.
+         * Called in list order after every pass of the scope prepared —
+         * once per frame, or once per view — and before the next view
+         * prepares; not called while the pass is disabled.
          * Implementations open their own @ref gpu::render_pass_encoder via
          * @c encoder.begin_render_pass and close it before returning,
          * encoding only from the state @ref prepare left: no uploads, no
@@ -281,33 +309,6 @@ namespace rendering_engine
         virtual void declare_io(pass_io_builder& io) const
         {
             (void)io;
-        }
-
-        /**
-         * @brief Notifies the pass that the drawable changed size.
-         *
-         * Called by @ref renderer::on_resize with the new pixel size on
-         * every pass in the list, enabled or not, outside any frame (no
-         * command encoder is recording), after the renderer has recreated
-         * its scene-colour and LDR targets at that size and before the next
-         * @ref record. Never called with a zero dimension. Passes that own
-         * full-resolution targets recreate them here (creating the new
-         * target before destroying the old one, so consumers see a
-         * different handle); passes that bake a size-dependent UBO note
-         * the new size and rewrite the buffer at their next @ref prepare,
-         * inside the frame bracket, since the previous frame may still be
-         * reading it on a deferred-execution backend until @c begin_frame
-         * waits. Passes that sample a texture another pass or the renderer
-         * owns do not re-plumb here: they compare the handle they look up
-         * in the store against the one their bind group was built with on
-         * every @ref prepare and rebuild on change, so any recreation
-         * reaches them on the next frame. Defaults to a no-op for passes
-         * whose resources do not follow the drawable (shadow maps, debug).
-         */
-        virtual void resize(uint32_t width, uint32_t height)
-        {
-            (void)width;
-            (void)height;
         }
     };
 } // namespace rendering_engine

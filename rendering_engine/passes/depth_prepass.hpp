@@ -70,9 +70,9 @@ namespace rendering_engine
         depth_prepass(const depth_prepass&) = delete;
         depth_prepass& operator=(const depth_prepass&) = delete;
 
-        // Decides whether the pass runs this frame, rebuilds the
-        // depth-only target over the frame's scene depth when that
-        // changed, and publishes it for the scene pass.
+        // Decides whether the pass runs this frame, rebuilds the view's
+        // depth-only target over the view's scene depth when that changed,
+        // and publishes it for the scene pass.
         void prepare(const frame_context& ctx) override;
 
         // Records the depth-only pass through the scene pass's list on a
@@ -94,28 +94,34 @@ namespace rendering_engine
             io.read_unordered(frame_resources::scene_view);
         }
 
-        // Drops the depth-only target: it imports the scene target's
-        // depth attachment, which the renderer has just recreated at the
-        // new size, so the next @ref prepare rebuilds it over the new one.
-        void resize(uint32_t width, uint32_t height) override;
-
     private:
         // The device this pass creates its resources on and releases them
         // through; handed in by the renderer and outlives the pass.
         gpu::device* m_device{nullptr};
 
-        void release_target();
+        // What the pass keeps per view: the depth-only target over
+        // @ref target_depth, the view's scene depth attachment it was built
+        // against. Rebuilt whenever @ref frame_resources::scene_depth holds
+        // another handle (the view was resized); the attachment itself
+        // stays owned by the view's scene-colour target.
+        struct view_data final : pass_view_state
+        {
+            explicit view_data(gpu::device& device) : device{&device} {}
+            ~view_data() override;
 
-        // Depth-only target over @ref m_target_depth, the scene depth
-        // attachment it was built against. Rebuilt whenever
-        // @ref frame_resources::scene_depth holds another handle; the
-        // attachment itself stays owned by the renderer's scene-colour
-        // target.
+            view_data(const view_data&) = delete;
+            view_data& operator=(const view_data&) = delete;
+
+            void release_target();
+
+            gpu::device* device{nullptr};
+            gpu::render_target target{};
+            gpu::texture target_depth{};
+        };
+
+        // The target this frame's @ref prepare published for the scene
+        // pass, which @ref record draws into; invalid when the pass does
+        // not run.
         gpu::render_target m_target{};
-        gpu::texture m_target_depth{};
-
-        // Whether this frame's @ref prepare decided the pass runs (and
-        // published its target for the scene pass), so @ref record draws.
-        bool m_active{false};
     };
 } // namespace rendering_engine

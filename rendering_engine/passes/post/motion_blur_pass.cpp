@@ -36,17 +36,9 @@ namespace
 
 namespace rendering_engine
 {
-    motion_blur_pass::motion_blur_pass(gpu::device& device, uint32_t width, uint32_t height) : m_device(&device)
+    motion_blur_pass::motion_blur_pass(gpu::device& device) : m_device(&device)
     {
         auto& gpu = *m_device;
-
-        // Degenerate backbuffer (no settings, zero-sized window): leave the
-        // pass disabled so it never draws and the chain reads the scene
-        // colour directly.
-        if (width == 0 || height == 0)
-        {
-            return;
-        }
 
         m_vertex_shader =
             gpu::create_library_shader_module(gpu, "passes/fullscreen.vert.glsl", gpu::shader_stage::vertex);
@@ -60,26 +52,11 @@ namespace rendering_engine
         vb_descriptor.initial_data = fullscreen_triangle_vertices.data();
         m_vertex_buffer = gpu.create_buffer(vb_descriptor);
 
-        // Rewritten every drawn frame (the noise offset moves while
-        // temporal AA runs), so host-visible: the device keeps one copy
-        // per frame in flight.
-        gpu::buffer_descriptor ubo_descriptor{};
-        ubo_descriptor.size = params_ubo_size;
-        ubo_descriptor.usage = gpu::buffer_usage_uniform | gpu::buffer_usage_copy_dst;
-        ubo_descriptor.hint = gpu::buffer_usage_hint::dynamic_data;
-        m_params_ubo = gpu.create_buffer(ubo_descriptor);
-
         gpu::bind_group_layout_descriptor layout{};
         layout.entries.push_back({0, gpu::binding_kind::texture});
         layout.entries.push_back({1, gpu::binding_kind::texture});
         layout.entries.push_back({2, gpu::binding_kind::uniform_buffer});
         m_layout = gpu.create_bind_group_layout(layout);
-
-        // The output target waits for prepare(): motion blur is off by
-        // default, and a full-resolution target it never draws into is not
-        // worth holding.
-        m_width = width;
-        m_height = height;
 
         gpu::vertex_buffer_layout vertex_layout{};
         vertex_layout.stride = sizeof(float) * 2;
@@ -108,29 +85,18 @@ namespace rendering_engine
         pipeline_descriptor.bind_group_layouts.push_back(m_layout);
         m_pipeline = gpu.create_pipeline(pipeline_descriptor);
 
-        // The bind group samples the scene colour and the motion vectors,
-        // which are looked up in the frame's store; prepare() builds it on
-        // the first drawn frame and rebuilds it whenever either changes.
-        m_enabled = true;
+        // A view's output target, params UBO and bind group wait for
+        // prepare(): motion blur is off by default, and a full-resolution
+        // target it never draws into is not worth holding. The bind group
+        // samples the scene colour and the motion vectors, which are looked
+        // up in the view's store; prepare() builds it on the view's first
+        // drawn frame and rebuilds it whenever either changes.
     }
 
     motion_blur_pass::~motion_blur_pass()
     {
         auto& gpu = *m_device;
 
-        if (m_bind_group.valid())
-        {
-            gpu.destroy(m_bind_group);
-            m_bind_group = {};
-        }
-        // The target owns its colour attachment, so destroying it releases
-        // the texture too.
-        if (m_target.valid())
-        {
-            gpu.destroy(m_target);
-            m_target = {};
-            m_texture = {};
-        }
         if (m_pipeline.valid())
         {
             gpu.destroy(m_pipeline);
@@ -140,11 +106,6 @@ namespace rendering_engine
         {
             gpu.destroy(m_layout);
             m_layout = {};
-        }
-        if (m_params_ubo.valid())
-        {
-            gpu.destroy(m_params_ubo);
-            m_params_ubo = {};
         }
         if (m_vertex_buffer.valid())
         {
@@ -163,60 +124,71 @@ namespace rendering_engine
         }
     }
 
-    void motion_blur_pass::create_target()
+    motion_blur_pass::view_data::view_data(gpu::device& device) : device{&device}
     {
-        auto& gpu = *m_device;
+        // Rewritten every drawn frame (the noise offset moves while
+        // temporal AA runs), so host-visible: the device keeps one copy
+        // per frame in flight.
+        gpu::buffer_descriptor ubo_descriptor{};
+        ubo_descriptor.size = params_ubo_size;
+        ubo_descriptor.usage = gpu::buffer_usage_uniform | gpu::buffer_usage_copy_dst;
+        ubo_descriptor.hint = gpu::buffer_usage_hint::dynamic_data;
+        params_ubo = device.create_buffer(ubo_descriptor);
+    }
 
+    motion_blur_pass::view_data::~view_data()
+    {
+        if (bind_group.valid())
+        {
+            device->destroy(bind_group);
+        }
+        // The target owns its colour attachment, so destroying it releases
+        // the texture too.
+        if (target.valid())
+        {
+            device->destroy(target);
+        }
+        if (params_ubo.valid())
+        {
+            device->destroy(params_ubo);
+        }
+    }
+
+    void motion_blur_pass::view_data::resize(uint32_t new_width, uint32_t new_height)
+    {
         // Same format as the scene colour it stands in for; no depth, the
         // post chain runs depth-disabled.
         gpu::render_target_descriptor descriptor{};
         descriptor.color = {{gpu::texture_format::rgba16_float}};
-        descriptor.width = m_width;
-        descriptor.height = m_height;
+        descriptor.width = new_width;
+        descriptor.height = new_height;
         descriptor.with_depth = false;
-        m_target = gpu.create_render_target(descriptor);
-        m_texture = gpu.render_target_color_texture(m_target);
-    }
 
-    void motion_blur_pass::resize(uint32_t width, uint32_t height)
-    {
-        if (!m_enabled || width == 0 || height == 0)
-        {
-            return;
-        }
-        m_width = width;
-        m_height = height;
-        if (!m_target.valid())
-        {
-            // Not allocated yet: prepare() creates it at this size.
-            return;
-        }
-        auto& gpu = *m_device;
-
-        // Create the replacement before releasing the old target so the
-        // scene colour handle it publishes changes and its consumers
-        // rebind. The release is safe here: resize runs
-        // between frames, and a deferred-execution backend retires the
-        // attachment only once the last command buffer that used it has
-        // finished.
-        const gpu::render_target old_target = m_target;
-        create_target();
+        // The replacement first, so the scene colour handle the pass
+        // publishes changes and its consumers rebind; the device defers
+        // freeing the old target until the last command buffer that used
+        // it has retired.
+        const gpu::render_target old_target = target;
+        target = device->create_render_target(descriptor);
+        texture = device->render_target_color_texture(target);
         if (old_target.valid())
         {
-            gpu.destroy(old_target);
+            device->destroy(old_target);
         }
+        width = new_width;
+        height = new_height;
     }
 
-    void motion_blur_pass::rebuild_bind_group(gpu::texture scene_color, gpu::texture velocity)
+    void motion_blur_pass::rebuild_bind_group(view_data& view, gpu::texture scene_color, gpu::texture velocity)
     {
         auto& gpu = *m_device;
 
         // Safe mid-frame: the device defers the destroy until the command
         // buffer that may still reference the old group has retired.
-        if (m_bind_group.valid())
+        if (view.bind_group.valid())
         {
-            gpu.destroy(m_bind_group);
-            m_bind_group = {};
+            gpu.destroy(view.bind_group);
+            view.bind_group = {};
         }
 
         gpu::bind_group_descriptor descriptor{};
@@ -237,15 +209,15 @@ namespace rendering_engine
         gpu::binding_value params_slot{};
         params_slot.binding = 2;
         params_slot.kind = gpu::binding_kind::uniform_buffer;
-        params_slot.buffer_value = m_params_ubo;
+        params_slot.buffer_value = view.params_ubo;
         descriptor.entries.push_back(params_slot);
 
-        m_bind_group = gpu.create_bind_group(descriptor);
-        m_bound_color = scene_color;
-        m_bound_velocity = velocity;
+        view.bind_group = gpu.create_bind_group(descriptor);
+        view.bound_color = scene_color;
+        view.bound_velocity = velocity;
     }
 
-    void motion_blur_pass::upload_params(const frame_context& ctx)
+    void motion_blur_pass::upload_params(const frame_context& ctx, const view_data& view)
     {
         auto& gpu = *m_device;
         const motion_blur_settings& settings = ctx.post.motion_blur;
@@ -254,8 +226,8 @@ namespace rendering_engine
         // without it a moving pattern would crawl.
         const float noise_frame =
             ctx.post.taa.enabled ? static_cast<float>(ctx.frame_index % noise_frame_period) : 0.0f;
-        const auto width = static_cast<float>(m_width);
-        const auto height = static_cast<float>(m_height);
+        const auto width = static_cast<float>(view.width);
+        const auto height = static_cast<float>(view.height);
         const std::array<float, 8> params = {
             settings.intensity,
             settings.max_radius,
@@ -266,44 +238,47 @@ namespace rendering_engine
             1.0f / width,
             1.0f / height,
         };
-        gpu.write_buffer(m_params_ubo, params.data(), params_ubo_size, 0);
+        gpu.write_buffer(view.params_ubo, params.data(), params_ubo_size, 0);
     }
 
     void motion_blur_pass::prepare(const frame_context& ctx)
     {
-        // The output target is allocated the first time motion blur is
-        // switched on, so the default configuration never pays for it.
-        const bool active = motion_blur_active(ctx.post.motion_blur);
-        if (m_enabled && !m_target.valid() && active)
-        {
-            create_target();
-        }
-
         // Without motion vectors there is nothing to blur along: publish
         // nothing, so the chain after this pass reads the scene colour.
         const color_target scene_color = ctx.resources->get(frame_resources::scene_color);
         const gpu::texture velocity = ctx.resources->get(frame_resources::velocity);
-        m_draws = m_enabled && m_target.valid() && active && velocity.valid();
+        m_draws = motion_blur_active(ctx.post.motion_blur) && velocity.valid();
         if (!m_draws)
         {
             return;
         }
 
+        // The view's output target is allocated the first time motion blur
+        // is switched on for it, so the default configuration never pays
+        // for it, and follows the view's size.
+        view_data& view = ctx.view->state<view_data>(*this, *m_device);
+        if (view.width != ctx.viewport_width || view.height != ctx.viewport_height)
+        {
+            view.resize(ctx.viewport_width, ctx.viewport_height);
+        }
+
         // Written here, after begin_frame waited for the frame that last
         // read this frame slot's copy of the buffer.
-        upload_params(ctx);
+        upload_params(ctx, view);
 
         // Bind this frame's scene colour and motion vectors. Both handles
         // are stable until a resize recreates their targets, so compare
         // against what the group was built with and rebuild on change —
         // the first drawn frame included.
-        if (scene_color.texture != m_bound_color || velocity != m_bound_velocity || !m_bind_group.valid())
+        if (scene_color.texture != view.bound_color || velocity != view.bound_velocity || !view.bind_group.valid())
         {
-            rebuild_bind_group(scene_color.texture, velocity);
+            rebuild_bind_group(view, scene_color.texture, velocity);
         }
+        m_target = view.target;
+        m_bind_group = view.bind_group;
 
         // The passes after this one work on the blurred copy.
-        ctx.resources->publish(frame_resources::scene_color, color_target{m_target, m_texture});
+        ctx.resources->publish(frame_resources::scene_color, color_target{view.target, view.texture});
     }
 
     void motion_blur_pass::record(gpu::command_encoder& encoder, const frame_context& /*ctx*/)

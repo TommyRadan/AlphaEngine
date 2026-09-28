@@ -19,13 +19,24 @@ namespace
 {
     // The filter itself is shaders/passes/fxaa.frag.glsl, drawn over the
     // shared fullscreen triangle. u_fxaa.rcp_frame.xy is (1/width,
-    // 1/height), the per-texel step the edge search walks by, baked once
-    // at construction.
+    // 1/height), the per-texel step the edge search walks by, baked per
+    // view from the view's size.
+
+    // std140 rounds the vec2 up to a 16-byte vec4 allocation.
+    constexpr size_t rcp_frame_ubo_size = 16;
+
+    // {1/width, 1/height, 0, 0}; a zero dimension gives a zero step.
+    std::array<float, 4> rcp_frame(uint32_t width, uint32_t height)
+    {
+        const float rcp_x = (width != 0) ? 1.0f / static_cast<float>(width) : 0.0f;
+        const float rcp_y = (height != 0) ? 1.0f / static_cast<float>(height) : 0.0f;
+        return {rcp_x, rcp_y, 0.0f, 0.0f};
+    }
 } // namespace
 
 namespace rendering_engine
 {
-    fxaa_pass::fxaa_pass(gpu::device& device, uint32_t width, uint32_t height) : m_device(&device)
+    fxaa_pass::fxaa_pass(gpu::device& device) : m_device(&device)
     {
         auto& gpu = *m_device;
 
@@ -42,35 +53,15 @@ namespace rendering_engine
         vb_descriptor.initial_data = fullscreen_triangle_vertices.data();
         m_vertex_buffer = gpu.create_buffer(vb_descriptor);
 
-        // Per-texel edge step baked once from the backbuffer size. A
-        // degenerate target bakes a zero step, collapsing every off-centre
-        // tap onto the centre texel so the pass copies straight through.
-        // std140 rounds the vec2 up to a 16-byte vec4 allocation.
-        const float rcp_x = (width != 0) ? 1.0f / static_cast<float>(width) : 0.0f;
-        const float rcp_y = (height != 0) ? 1.0f / static_cast<float>(height) : 0.0f;
-        const std::array<float, 4> rcp_frame = {rcp_x, rcp_y, 0.0f, 0.0f};
-        gpu::buffer_descriptor ubo_descriptor{};
-        ubo_descriptor.size = 16;
-        ubo_descriptor.usage = gpu::buffer_usage_uniform | gpu::buffer_usage_copy_dst;
-        ubo_descriptor.hint = gpu::buffer_usage_hint::static_data;
-        ubo_descriptor.initial_data = rcp_frame.data();
-        m_rcp_frame_ubo = gpu.create_buffer(ubo_descriptor);
-
-        // Remember the size the real step above was baked from so a later
-        // frame_context::post.fxaa.enabled toggle back on (see record()) can
-        // rebake it without waiting for a resize.
-        m_pending_width = width;
-        m_pending_height = height;
-
         gpu::bind_group_layout_descriptor input_layout{};
         input_layout.entries.push_back({0, gpu::binding_kind::texture});
         input_layout.entries.push_back({1, gpu::binding_kind::uniform_buffer});
         m_input_layout = gpu.create_bind_group_layout(input_layout);
 
-        // The input bind groups are built lazily by prepare(): the image it
-        // samples (the TAA resolve or the LDR target) is looked up in the
-        // frame's store and a group is built the first time a handle is
-        // seen.
+        // Each view's rcp_frame UBO and input bind groups are built lazily
+        // by prepare(): the image it samples (the TAA resolve or the LDR
+        // target) is looked up in the view's store and a group is built the
+        // first time a handle is seen.
 
         // Fullscreen triangle: depth disabled, blend disabled, no culling
         // so the triangle's winding is irrelevant. The vertex shader reads
@@ -112,23 +103,10 @@ namespace rendering_engine
             gpu.destroy(m_pipeline);
             m_pipeline = {};
         }
-        for (auto& input : m_inputs)
-        {
-            if (input.bind_group.valid())
-            {
-                gpu.destroy(input.bind_group);
-                input = {};
-            }
-        }
         if (m_input_layout.valid())
         {
             gpu.destroy(m_input_layout);
             m_input_layout = {};
-        }
-        if (m_rcp_frame_ubo.valid())
-        {
-            gpu.destroy(m_rcp_frame_ubo);
-            m_rcp_frame_ubo = {};
         }
         if (m_vertex_buffer.valid())
         {
@@ -147,9 +125,36 @@ namespace rendering_engine
         }
     }
 
-    gpu::bind_group fxaa_pass::bind_group_for(gpu::texture input_color)
+    fxaa_pass::view_data::view_data(gpu::device& device, uint32_t width, uint32_t height)
+        : device{&device}, baked_width{width}, baked_height{height}
     {
-        for (const auto& input : m_inputs)
+        const std::array<float, 4> initial = rcp_frame(width, height);
+        gpu::buffer_descriptor ubo_descriptor{};
+        ubo_descriptor.size = rcp_frame_ubo_size;
+        ubo_descriptor.usage = gpu::buffer_usage_uniform | gpu::buffer_usage_copy_dst;
+        ubo_descriptor.hint = gpu::buffer_usage_hint::static_data;
+        ubo_descriptor.initial_data = initial.data();
+        rcp_frame_ubo = device.create_buffer(ubo_descriptor);
+    }
+
+    fxaa_pass::view_data::~view_data()
+    {
+        for (auto& input : inputs)
+        {
+            if (input.bind_group.valid())
+            {
+                device->destroy(input.bind_group);
+            }
+        }
+        if (rcp_frame_ubo.valid())
+        {
+            device->destroy(rcp_frame_ubo);
+        }
+    }
+
+    gpu::bind_group fxaa_pass::bind_group_for(view_data& view, gpu::texture input_color)
+    {
+        for (const auto& input : view.inputs)
         {
             if (input.bind_group.valid() && input.texture == input_color)
             {
@@ -164,8 +169,8 @@ namespace rendering_engine
         // buffer that may still reference the old group has retired — and
         // with two slots the TAA ping-pong pair stays resident while a
         // resize's stale handles rotate out over two frames.
-        bound_input& slot = m_inputs[m_next_input_slot];
-        m_next_input_slot = (m_next_input_slot + 1) % m_inputs.size();
+        bound_input& slot = view.inputs[view.next_input_slot];
+        view.next_input_slot = (view.next_input_slot + 1) % view.inputs.size();
         if (slot.bind_group.valid())
         {
             gpu.destroy(slot.bind_group);
@@ -184,7 +189,7 @@ namespace rendering_engine
         gpu::binding_value rcp_frame_slot{};
         rcp_frame_slot.binding = 1;
         rcp_frame_slot.kind = gpu::binding_kind::uniform_buffer;
-        rcp_frame_slot.buffer_value = m_rcp_frame_ubo;
+        rcp_frame_slot.buffer_value = view.rcp_frame_ubo;
         input_bind_group_descriptor.entries.push_back(rcp_frame_slot);
 
         slot.bind_group = gpu.create_bind_group(input_bind_group_descriptor);
@@ -192,31 +197,28 @@ namespace rendering_engine
         return slot.bind_group;
     }
 
-    void fxaa_pass::write_rcp_frame(uint32_t width, uint32_t height)
-    {
-        auto& gpu = *m_device;
-        // Same encoding as the construction-time bake: a zero dimension
-        // writes a zero step so the pass degrades to a straight copy.
-        const float rcp_x = (width != 0) ? 1.0f / static_cast<float>(width) : 0.0f;
-        const float rcp_y = (height != 0) ? 1.0f / static_cast<float>(height) : 0.0f;
-        const std::array<float, 4> rcp_frame = {rcp_x, rcp_y, 0.0f, 0.0f};
-        gpu.write_buffer(m_rcp_frame_ubo, rcp_frame.data(), rcp_frame.size() * sizeof(float), 0);
-    }
-
-    void fxaa_pass::resize(uint32_t width, uint32_t height)
-    {
-        // Runs between frames, when the previous frame's command buffer
-        // may still be sampling the UBO on a deferred-execution backend,
-        // so only note the size; record() rewrites the buffer once
-        // begin_frame has waited for that frame. The bind group keeps
-        // referencing the same buffer; only its contents change.
-        m_pending_width = width;
-        m_pending_height = height;
-        m_rcp_frame_dirty = true;
-    }
-
     void fxaa_pass::prepare(const frame_context& ctx)
     {
+        // The edge step the view needs: its size, or a zero step while FXAA
+        // is disabled, collapsing every tap onto the centre texel so this
+        // pass — which always stays in the chain because it is what writes
+        // the output — degrades to a straight copy instead of skipping the
+        // draw. A new view bakes it into its UBO; a resize or an
+        // fxaa.enabled flip rewrites it, now that begin_frame has waited for
+        // the frame that may still have been reading the UBO. The bind
+        // groups keep referencing the same buffer; only its contents
+        // change.
+        const uint32_t step_width = ctx.post.fxaa.enabled ? ctx.viewport_width : 0;
+        const uint32_t step_height = ctx.post.fxaa.enabled ? ctx.viewport_height : 0;
+        view_data& view = ctx.view->state<view_data>(*this, *m_device, step_width, step_height);
+        if (view.baked_width != step_width || view.baked_height != step_height)
+        {
+            const std::array<float, 4> step = rcp_frame(step_width, step_height);
+            m_device->write_buffer(view.rcp_frame_ubo, step.data(), rcp_frame_ubo_size, 0);
+            view.baked_width = step_width;
+            view.baked_height = step_height;
+        }
+
         // Sample the TAA resolve when temporal AA produced one this frame,
         // otherwise the raw tonemap output. The resolve alternates between
         // the TAA pass's two ping-pong targets and either handle changes
@@ -224,42 +226,28 @@ namespace rendering_engine
         // handle and build one on a miss — the first frame included.
         const gpu::texture resolve = ctx.resources->get(frame_resources::taa_resolve);
         const gpu::texture input = resolve.valid() ? resolve : ctx.resources->get(frame_resources::ldr_color).texture;
-        m_input_bind_group = bind_group_for(input);
-        m_target = ctx.resources->get(frame_resources::swapchain);
-
-        // Apply a resize's edge step and/or a fxaa.enabled flip, now that
-        // begin_frame has waited for the frame that may still have been
-        // reading the UBO. Disabled bakes a zero step (see write_rcp_frame),
-        // collapsing every tap onto the centre texel so this pass — which
-        // always stays in the chain because it is what writes the
-        // swapchain — degrades to a straight copy instead of skipping the
-        // draw.
-        if (m_rcp_frame_dirty || ctx.post.fxaa.enabled != m_applied_enabled)
-        {
-            if (ctx.post.fxaa.enabled)
-            {
-                write_rcp_frame(m_pending_width, m_pending_height);
-            }
-            else
-            {
-                write_rcp_frame(0, 0);
-            }
-            m_rcp_frame_dirty = false;
-            m_applied_enabled = ctx.post.fxaa.enabled;
-        }
+        m_input_bind_group = bind_group_for(view, input);
+        m_output = ctx.resources->get(frame_resources::output);
     }
 
     void fxaa_pass::record(gpu::command_encoder& encoder, const frame_context& /*ctx*/)
     {
         gpu::render_pass_descriptor descriptor{};
-        descriptor.target = m_target;
-        // The fullscreen triangle covers every pixel; clearing is strictly
-        // redundant but cheap and keeps the swapchain in a known state.
-        descriptor.color[0].load = gpu::load_op::clear;
+        descriptor.target = m_output.target;
+        // The first view to draw into the output clears all of it: the
+        // fullscreen triangle covers every pixel of the view's rectangle,
+        // and the clear leaves whatever no view covers in a known state. A
+        // later view keeps what the views before it drew.
+        descriptor.color[0].load = m_output.first ? gpu::load_op::clear : gpu::load_op::load;
         descriptor.color[0].clear_color = {0.0f, 0.0f, 0.0f, 1.0f};
         descriptor.use_depth = false;
 
         auto pass_encoder = encoder.begin_render_pass(descriptor);
+        if (!m_output.covers_target())
+        {
+            pass_encoder->set_viewport(
+                m_output.x, m_output.y, static_cast<int>(m_output.width), static_cast<int>(m_output.height));
+        }
         pass_encoder->set_pipeline(m_pipeline);
         pass_encoder->set_bind_group(0, m_input_bind_group);
         pass_encoder->set_vertex_buffer(0, m_vertex_buffer, 0, 0);

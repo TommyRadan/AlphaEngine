@@ -57,13 +57,14 @@ namespace rendering_engine
      * Always in the pass list, but @ref record draws nothing unless
      * @ref frame_context::post enables it, a camera is active and the
      * height fog has a density, so with the default settings the frame
-     * is unchanged. A degenerate backbuffer leaves the pass disabled.
+     * is unchanged. Each view gets its targets (sized to the view), its
+     * params block and its bind groups (see @ref view_data), built the
+     * first frame the fog marches for it.
      */
     struct volumetric_fog_pass : pass
     {
         // @p frame_layout is the scene pass's per-frame layout, which the
-        // march pipeline reserves slot 0 for. @p width / @p height are the
-        // drawable size the targets follow. The group bound there is not a
+        // march pipeline reserves slot 0 for. The group bound there is not a
         // constructor input: the march binds the scene pass's jittered
         // per-frame group (the view the scene depth was rasterised with),
         // looked up in @ref frame_resources::scene_view each frame after
@@ -72,7 +73,7 @@ namespace rendering_engine
         // it is looked up every frame (@ref frame_resources::scene_depth),
         // and the bind groups sampling it are rebuilt whenever that handle
         // changes.
-        volumetric_fog_pass(gpu::device& device, gpu::bind_group_layout frame_layout, uint32_t width, uint32_t height);
+        volumetric_fog_pass(gpu::device& device, gpu::bind_group_layout frame_layout);
         ~volumetric_fog_pass() override;
 
         volumetric_fog_pass(const volumetric_fog_pass&) = delete;
@@ -103,47 +104,67 @@ namespace rendering_engine
             io.write(frame_resources::scene_color);
         }
 
-        // Recreates the half-resolution march target and the
-        // full-resolution upsample target at the new drawable size (new
-        // before old) and drops the bind groups that referenced them;
-        // the next enabled record() rebuilds them. No-op while the pass
-        // is disabled.
-        void resize(uint32_t width, uint32_t height) override;
-
     private:
         // The device this pass creates its resources on and releases them
         // through; handed in by the renderer and outlives the pass.
         gpu::device* m_device{nullptr};
 
-        // Allocates the march target at ceil(size / 2) and the upsample
-        // target at @p width x @p height, both rgba16f without depth.
-        void create_targets(uint32_t width, uint32_t height);
+        // What the pass keeps per view: the params block the march and
+        // the upsample share (rewritten every drawn frame by
+        // @ref upload_params), the half-resolution march target and the
+        // full-resolution upsample target at the view's size (@ref width x
+        // @ref height), the three bind groups over them and the scene
+        // depth they were built against (invalid until the view's first
+        // drawn frame builds them).
+        struct view_data final : pass_view_state
+        {
+            explicit view_data(gpu::device& device);
+            ~view_data() override;
 
-        // Releases the three bind groups and forgets the depth they were
-        // built against, so the next enabled record() rebuilds them.
-        void release_bind_groups();
+            view_data(const view_data&) = delete;
+            view_data& operator=(const view_data&) = delete;
+
+            // (Re)allocates the march target at ceil(size / 2) and the
+            // upsample target at @p width x @p height, both rgba16f without
+            // depth, new before old, and drops the bind groups that
+            // referenced the old ones.
+            void resize(uint32_t width, uint32_t height);
+
+            // Releases the three bind groups and forgets the depth they
+            // were built against, so the next drawn frame rebuilds them.
+            void release_bind_groups();
+
+            gpu::device* device{nullptr};
+            gpu::buffer params_ubo{};
+            gpu::render_target march_target{};
+            gpu::texture march_texture{};
+            gpu::render_target upsample_target{};
+            gpu::texture upsample_texture{};
+            gpu::bind_group march_bind_group{};
+            gpu::bind_group upsample_bind_group{};
+            gpu::bind_group composite_bind_group{};
+            gpu::texture bound_depth{};
+            uint32_t width{0};
+            uint32_t height{0};
+        };
 
         // Packs this frame's params block (the volumetric settings, the
         // noise frame and the camera's inverse projection) and writes it
-        // to @ref m_params_ubo. The only place that buffer is written;
+        // to @p view's params UBO. The only place that buffer is written;
         // prepare() calls it once per drawn frame, before the stages that
         // read it are recorded.
-        void upload_params(const frame_context& ctx);
+        static void upload_params(const frame_context& ctx, const view_data& view);
 
-        // Builds the march, upsample and composite bind groups against
-        // @p scene_depth and the current targets, remembering the depth
-        // handle in @ref m_bound_depth.
-        void rebuild_bind_groups(gpu::texture scene_depth);
+        // Builds @p view's march, upsample and composite bind groups
+        // against @p scene_depth and its current targets, remembering the
+        // depth handle.
+        void rebuild_bind_groups(view_data& view, gpu::texture scene_depth);
 
         gpu::shader_module m_vertex_shader{};
         gpu::shader_module m_march_shader{};
         gpu::shader_module m_upsample_shader{};
         gpu::shader_module m_composite_shader{};
         gpu::buffer m_vertex_buffer{};
-
-        // The params block the march and the upsample share, rewritten
-        // every drawn frame by @ref upload_params.
-        gpu::buffer m_params_ubo{};
 
         // March slot 1: {params @ volumetric_fog_params, scene depth @
         // volumetric_fog_depth}, numbered from the shader binding table
@@ -158,28 +179,11 @@ namespace rendering_engine
         gpu::pipeline m_upsample_pipeline{};
         gpu::pipeline m_composite_pipeline{};
 
-        gpu::render_target m_march_target{};
-        gpu::texture m_march_texture{};
-        gpu::render_target m_upsample_target{};
-        gpu::texture m_upsample_texture{};
-
-        gpu::bind_group m_march_bind_group{};
-        gpu::bind_group m_upsample_bind_group{};
-        gpu::bind_group m_composite_bind_group{};
-
-        // The scene depth texture the bind groups were built against;
-        // invalid until the first drawn frame builds them.
-        gpu::texture m_bound_depth{};
-
         // The scene pass's jittered per-frame group the march binds at
         // slot 0 and the scene colour target the composite blends into,
         // looked up by prepare() on a drawn frame.
         gpu::bind_group m_frame_group{};
         gpu::render_target m_target{};
-
-        // False when the backbuffer dimensions are degenerate (no
-        // settings, zero-sized window); record() then no-ops.
-        bool m_enabled{false};
 
         // Whether this frame's record() draws, decided by prepare().
         bool m_draws{false};

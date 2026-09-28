@@ -26,9 +26,9 @@ namespace
     constexpr uint32_t bloom_mip_count = 5;
 
     // The compiled-in threshold, knee and strength defaults live on
-    // bloom_settings (rendering_engine/post_settings.hpp), which
-    // bloom_pass::m_settings is seeded from; see that struct's doc comment
-    // for what each one does.
+    // bloom_settings (rendering_engine/post_settings.hpp), which each
+    // view's bloom_pass::view_data::settings is seeded from; see that
+    // struct's doc comment for what each one does.
 
     // Tiny epsilon guarding the divisions in the bright-pass knee and the
     // luminance normalise.
@@ -45,17 +45,9 @@ namespace
 
 namespace rendering_engine
 {
-    bloom_pass::bloom_pass(gpu::device& device, uint32_t width, uint32_t height) : m_device(&device)
+    bloom_pass::bloom_pass(gpu::device& device) : m_device(&device)
     {
         auto& gpu = *m_device;
-
-        // Degenerate backbuffer (no settings, zero-sized window): leave
-        // the pass disabled so the scene target flows straight through to
-        // tonemap untouched.
-        if (width == 0 || height == 0)
-        {
-            return;
-        }
 
         // -- Shaders --------------------------------------------------
         m_vertex_shader =
@@ -125,19 +117,8 @@ namespace rendering_engine
         m_blur_pipeline = make_pipeline(m_blur_shader, opaque_blend);
         m_composite_pipeline = make_pipeline(m_composite_shader, additive_blend);
 
-        // -- Threshold params -----------------------------------------
-        // Size-independent, so baked once here from m_settings' compiled-in
-        // defaults (prepare() rewrites it in place on a runtime change); the
-        // bright-pass bind group that pairs it with the scene colour is
-        // built by prepare() once it looks the handle up.
-        const float knee = m_settings.threshold * m_settings.knee;
-        m_threshold_ubo =
-            create_params_ubo({m_settings.threshold, knee, 2.0f * knee, 1.0f / (4.0f * knee + bloom_epsilon)});
-
-        // -- Bright pass target + blur pyramid ------------------------
-        create_pyramid(width, height);
-
-        m_enabled = true;
+        // Each view's bright-pass target, threshold params and blur
+        // pyramid are built by prepare() the first time the view blooms.
     }
 
     gpu::render_target bloom_pass::create_target(uint32_t width, uint32_t height) const
@@ -183,29 +164,41 @@ namespace rendering_engine
         return gpu.create_bind_group(descriptor);
     }
 
-    void bloom_pass::create_pyramid(uint32_t width, uint32_t height)
+    void bloom_pass::create_pyramid(view_data& view, uint32_t width, uint32_t height)
     {
         auto& gpu = *m_device;
+
+        // -- Threshold params -----------------------------------------
+        // Size-independent, so baked from the view's settings (prepare()
+        // rewrites it in place on a runtime change); the bright-pass bind
+        // group that pairs it with the scene colour is built by prepare()
+        // once it looks the handle up.
+        if (!view.threshold_ubo.valid())
+        {
+            const float knee = view.settings.threshold * view.settings.knee;
+            view.threshold_ubo =
+                create_params_ubo({view.settings.threshold, knee, 2.0f * knee, 1.0f / (4.0f * knee + bloom_epsilon)});
+        }
 
         // -- Bright pass: half-resolution threshold output ------------
         const uint32_t base_width = std::max(1u, width / 2);
         const uint32_t base_height = std::max(1u, height / 2);
-        m_bright_target = create_target(base_width, base_height);
-        m_bright_texture = gpu.render_target_color_texture(m_bright_target);
+        view.bright_target = create_target(base_width, base_height);
+        view.bright_texture = gpu.render_target_color_texture(view.bright_target);
 
         // -- Blur pyramid ---------------------------------------------
         // Per-level weights fall off linearly toward the coarser mips and
-        // are normalised so they sum to m_settings.strength (whatever was
-        // last applied, or its compiled-in default the first time this
-        // runs): the wide, blurry low-frequency levels contribute less
-        // than the tight bright core.
+        // are normalised so they sum to the view's settings.strength
+        // (whatever was last applied, or its compiled-in default the first
+        // time this runs): the wide, blurry low-frequency levels contribute
+        // less than the tight bright core.
         float weight_total = 0.0f;
         for (uint32_t i = 0; i < bloom_mip_count; ++i)
         {
             weight_total += static_cast<float>(bloom_mip_count - i);
         }
 
-        m_levels.reserve(bloom_mip_count);
+        view.levels.reserve(bloom_mip_count);
         for (uint32_t i = 0; i < bloom_mip_count; ++i)
         {
             bloom_level level{};
@@ -221,8 +214,8 @@ namespace rendering_engine
             // mip (or the bright pass for level 0); the per-tap step is
             // that source's texel width, so a smaller target downsamples
             // as it blurs.
-            const gpu::texture horizontal_input = (i == 0) ? m_bright_texture : m_levels[i - 1].vertical_texture;
-            const uint32_t source_width = (i == 0) ? base_width : m_levels[i - 1].width;
+            const gpu::texture horizontal_input = (i == 0) ? view.bright_texture : view.levels[i - 1].vertical_texture;
+            const uint32_t source_width = (i == 0) ? base_width : view.levels[i - 1].width;
             level.blur_horizontal_ubo = create_params_ubo({1.0f / static_cast<float>(source_width), 0.0f, 0.0f, 0.0f});
             level.blur_horizontal_bind_group = create_bind_group(horizontal_input, level.blur_horizontal_ubo);
 
@@ -231,20 +224,35 @@ namespace rendering_engine
             level.blur_vertical_ubo = create_params_ubo({0.0f, 1.0f / static_cast<float>(level.height), 0.0f, 0.0f});
             level.blur_vertical_bind_group = create_bind_group(level.horizontal_texture, level.blur_vertical_ubo);
 
-            const float weight = m_settings.strength * static_cast<float>(bloom_mip_count - i) / weight_total;
+            const float weight = view.settings.strength * static_cast<float>(bloom_mip_count - i) / weight_total;
             level.weight_ubo = create_params_ubo({weight, 0.0f, 0.0f, 0.0f});
             level.composite_bind_group = create_bind_group(level.vertical_texture, level.weight_ubo);
 
-            m_levels.push_back(level);
+            view.levels.push_back(level);
+        }
+        view.width = width;
+        view.height = height;
+    }
+
+    bloom_pass::view_data::~view_data()
+    {
+        release_pyramid();
+        if (threshold_bind_group.valid())
+        {
+            device->destroy(threshold_bind_group);
+        }
+        if (threshold_ubo.valid())
+        {
+            device->destroy(threshold_ubo);
         }
     }
 
-    void bloom_pass::release_pyramid()
+    void bloom_pass::view_data::release_pyramid()
     {
-        auto& gpu = *m_device;
+        auto& gpu = *device;
 
         // Bind groups first, then the buffers / targets they reference.
-        for (auto& level : m_levels)
+        for (auto& level : levels)
         {
             if (level.composite_bind_group.valid())
             {
@@ -281,43 +289,44 @@ namespace rendering_engine
                 gpu.destroy(level.horizontal_target);
             }
         }
-        m_levels.clear();
+        levels.clear();
 
-        if (m_bright_target.valid())
+        if (bright_target.valid())
         {
-            gpu.destroy(m_bright_target);
-            m_bright_target = {};
-            m_bright_texture = {};
+            gpu.destroy(bright_target);
+            bright_target = {};
+            bright_texture = {};
         }
+        width = 0;
+        height = 0;
     }
 
-    void bloom_pass::rebuild_threshold_bind_group(gpu::texture scene_color)
+    void bloom_pass::rebuild_threshold_bind_group(view_data& view, gpu::texture scene_color)
     {
         auto& gpu = *m_device;
 
         // Safe mid-frame: the device defers the destroy until the command
         // buffer that may still reference the old group has retired.
-        if (m_threshold_bind_group.valid())
+        if (view.threshold_bind_group.valid())
         {
-            gpu.destroy(m_threshold_bind_group);
-            m_threshold_bind_group = {};
+            gpu.destroy(view.threshold_bind_group);
+            view.threshold_bind_group = {};
         }
-        m_threshold_bind_group = create_bind_group(scene_color, m_threshold_ubo);
-        m_bound_scene_color = scene_color;
+        view.threshold_bind_group = create_bind_group(scene_color, view.threshold_ubo);
+        view.bound_scene_color = scene_color;
     }
 
-    void bloom_pass::write_threshold_ubo(float threshold, float knee)
+    void bloom_pass::write_threshold_ubo(view_data& view, float threshold, float knee)
     {
-        auto& gpu = *m_device;
         const float knee_width = threshold * knee;
         const std::array<float, 4> bytes = {
             threshold, knee_width, 2.0f * knee_width, 1.0f / (4.0f * knee_width + bloom_epsilon)};
-        gpu.write_buffer(m_threshold_ubo, bytes.data(), params_ubo_size, 0);
+        view.device->write_buffer(view.threshold_ubo, bytes.data(), params_ubo_size, 0);
     }
 
-    void bloom_pass::write_weights(float strength)
+    void bloom_pass::write_weights(view_data& view, float strength)
     {
-        auto& gpu = *m_device;
+        auto& gpu = *view.device;
         float weight_total = 0.0f;
         for (uint32_t i = 0; i < bloom_mip_count; ++i)
         {
@@ -327,45 +336,14 @@ namespace rendering_engine
         {
             const float weight = strength * static_cast<float>(bloom_mip_count - i) / weight_total;
             const std::array<float, 4> bytes = {weight, 0.0f, 0.0f, 0.0f};
-            gpu.write_buffer(m_levels[i].weight_ubo, bytes.data(), params_ubo_size, 0);
+            gpu.write_buffer(view.levels[i].weight_ubo, bytes.data(), params_ubo_size, 0);
         }
-    }
-
-    void bloom_pass::resize(uint32_t width, uint32_t height)
-    {
-        if (!m_enabled || width == 0 || height == 0)
-        {
-            return;
-        }
-
-        // Nothing outside this pass samples the pyramid, and every bind
-        // group that does is rebuilt by create_pyramid, so the old
-        // pyramid can go before the new one is built. The releases are
-        // safe here: resize runs between frames, and a deferred-execution
-        // backend retires the attachments only once the last command
-        // buffer that sampled them has finished.
-        release_pyramid();
-        create_pyramid(width, height);
     }
 
     bloom_pass::~bloom_pass()
     {
         auto& gpu = *m_device;
 
-        // The pyramid (bind groups first, then the buffers / targets they
-        // reference), then the threshold resources, then the pipelines.
-        release_pyramid();
-
-        if (m_threshold_bind_group.valid())
-        {
-            gpu.destroy(m_threshold_bind_group);
-            m_threshold_bind_group = {};
-        }
-        if (m_threshold_ubo.valid())
-        {
-            gpu.destroy(m_threshold_ubo);
-            m_threshold_ubo = {};
-        }
         if (m_composite_pipeline.valid())
         {
             gpu.destroy(m_composite_pipeline);
@@ -417,27 +395,38 @@ namespace rendering_engine
     {
         // bloom_settings::enabled early-outs entirely rather than removing
         // this pass from the pass list: the HDR scene colour it would
-        // have brightened just flows through untouched to tonemap, exactly
-        // like the degenerate-backbuffer case.
-        m_draws = m_enabled && ctx.post.bloom.enabled;
+        // have brightened just flows through untouched to tonemap.
+        m_draws = ctx.post.bloom.enabled;
         if (!m_draws)
         {
             return;
         }
 
+        // The view's pyramid follows the view's size. Nothing outside this
+        // pass samples it, and every bind group that does is rebuilt with
+        // it, so the old pyramid can go before the new one is built; the
+        // device retires the attachments only once the last command buffer
+        // that sampled them has finished.
+        view_data& view = ctx.view->state<view_data>(*this, *m_device);
+        if (view.width != ctx.viewport_width || view.height != ctx.viewport_height)
+        {
+            view.release_pyramid();
+            create_pyramid(view, ctx.viewport_width, ctx.viewport_height);
+        }
+
         // Rewrite only the UBO(s) a changed field affects; a caller that
         // never touches frame_context::post leaves every comparison here
         // false forever.
-        if (ctx.post.bloom.threshold != m_settings.threshold || ctx.post.bloom.knee != m_settings.knee)
+        if (ctx.post.bloom.threshold != view.settings.threshold || ctx.post.bloom.knee != view.settings.knee)
         {
-            write_threshold_ubo(ctx.post.bloom.threshold, ctx.post.bloom.knee);
-            m_settings.threshold = ctx.post.bloom.threshold;
-            m_settings.knee = ctx.post.bloom.knee;
+            write_threshold_ubo(view, ctx.post.bloom.threshold, ctx.post.bloom.knee);
+            view.settings.threshold = ctx.post.bloom.threshold;
+            view.settings.knee = ctx.post.bloom.knee;
         }
-        if (ctx.post.bloom.strength != m_settings.strength)
+        if (ctx.post.bloom.strength != view.settings.strength)
         {
-            write_weights(ctx.post.bloom.strength);
-            m_settings.strength = ctx.post.bloom.strength;
+            write_weights(view, ctx.post.bloom.strength);
+            view.settings.strength = ctx.post.bloom.strength;
         }
 
         // Bind this frame's HDR image for the bright pass: the scene
@@ -448,15 +437,16 @@ namespace rendering_engine
         // rebuild on change — the first frame included.
         const color_target hdr = ctx.resources->get(frame_resources::scene_color);
         m_target = hdr.target;
-        if (hdr.texture != m_bound_scene_color || !m_threshold_bind_group.valid())
+        if (hdr.texture != view.bound_scene_color || !view.threshold_bind_group.valid())
         {
-            rebuild_threshold_bind_group(hdr.texture);
+            rebuild_threshold_bind_group(view, hdr.texture);
         }
     }
 
-    void bloom_pass::record(gpu::command_encoder& encoder, const frame_context& /*ctx*/)
+    void bloom_pass::record(gpu::command_encoder& encoder, const frame_context& ctx)
     {
-        if (!m_draws)
+        const view_data* view = m_draws ? ctx.view->find_state<view_data>(*this) : nullptr;
+        if (view == nullptr)
         {
             return;
         }
@@ -474,20 +464,20 @@ namespace rendering_engine
         // 1. Bright pass: scene colour → half-res threshold target.
         {
             gpu::render_pass_descriptor descriptor{};
-            descriptor.target = m_bright_target;
+            descriptor.target = view->bright_target;
             descriptor.color[0].load = gpu::load_op::clear;
             descriptor.color[0].clear_color = {0.0f, 0.0f, 0.0f, 1.0f};
             descriptor.use_depth = false;
 
             auto pass_encoder = encoder.begin_render_pass(descriptor);
-            draw_fullscreen(pass_encoder.get(), m_threshold_pipeline, m_threshold_bind_group);
+            draw_fullscreen(pass_encoder.get(), m_threshold_pipeline, view->threshold_bind_group);
             pass_encoder->end();
         }
 
         // 2. Separable Gaussian down the pyramid: horizontal then vertical
         //    per level. begin_render_pass defaults the viewport to each
         //    target's own extent, so the smaller mips downsample for free.
-        for (const auto& level : m_levels)
+        for (const auto& level : view->levels)
         {
             {
                 gpu::render_pass_descriptor descriptor{};
@@ -525,7 +515,7 @@ namespace rendering_engine
 
             auto pass_encoder = encoder.begin_render_pass(descriptor);
             pass_encoder->set_pipeline(m_composite_pipeline);
-            for (const auto& level : m_levels)
+            for (const auto& level : view->levels)
             {
                 pass_encoder->set_bind_group(0, level.composite_bind_group);
                 pass_encoder->set_vertex_buffer(0, m_vertex_buffer, 0, 0);

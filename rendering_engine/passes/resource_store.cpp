@@ -59,7 +59,7 @@ namespace rendering_engine
         const auto it = m_slots.find(name);
         if (it == m_slots.end() || it->second.generation != m_generation)
         {
-            return nullptr;
+            return m_fallback != nullptr ? m_fallback->find_slot(name, type) : nullptr;
         }
         if (it->second.type != std::type_index{type})
         {

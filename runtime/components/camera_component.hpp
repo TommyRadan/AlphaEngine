@@ -33,8 +33,9 @@ namespace runtime
      * local @ref offset from the node, and the
      * @ref rendering_engine::camera_proxy the renderer views the frame
      * through, which lives in @c owner.scene()->world() and is named by a
-     * handle. @ref on_attach creates the proxy, a candidate for the active
-     * camera, and hands the camera the world's drawable aspect.
+     * handle. @ref on_attach creates the proxy, a candidate for a view, and
+     * hands the camera the aspect of the rectangle it renders into (its
+     * viewport's share of the world's drawable, or of its render texture).
      *
      * The proxy follows the node through @ref extract, which the world's
      * render extraction (@ref runtime::extract_render_proxies) calls once per
@@ -43,9 +44,12 @@ namespace runtime
      * under an animated node (a turntable rig, a chase cam) follows it. The
      * view is re-derived only when the node or the offset moved, and the
      * projection and frustum only when the pose or the lens (including a
-     * new drawable aspect) changed; the rank and culling mask are copied
-     * every frame. Orient it with @c node::look_at and rank it against other
-     * cameras with @c camera::set_priority / @c set_main.
+     * new aspect of its rectangle) changed; the rank, culling mask, target,
+     * viewport and UI flag are copied every frame. Orient it with
+     * @c node::look_at, rank it against other cameras with
+     * @c camera::set_priority / @c set_main, and point it at a render
+     * texture or a part of the screen with @c camera::set_target /
+     * @c set_viewport.
      *
      * @ref on_active_changed enables / disables the camera with its node, so
      * a disabled subtree's camera drops out of the arbitration and the next
@@ -63,7 +67,8 @@ namespace runtime
 
         /**
          * @brief Creates the camera's proxy in @c owner.scene()->world() and
-         *        hands the camera the world's drawable aspect.
+         *        hands the camera the aspect of the rectangle it renders
+         *        into.
          */
         void on_attach(node& owner);
 
@@ -88,8 +93,8 @@ namespace runtime
 
         /**
          * @brief A new component owning a camera of the same kind and
-         *        settings — projection, offset, priority and main flag — for
-         *        @c scene::clone.
+         *        settings — projection, offset, priority, main flag, target,
+         *        viewport and UI flag — for @c scene::clone.
          *
          * The copy gets its proxy like any new camera (so, as the most
          * recently created of equal rank, it wins a tie) and starts enabled;
@@ -139,10 +144,11 @@ namespace runtime
         rendering_engine::camera_proxy_handle m_proxy{};
 
         // The world-matrix stamps of the node and the offset the proxy's
-        // view was last derived from, and the drawable-aspect report the
-        // camera last took.
+        // view was last derived from, the drawable-aspect report the camera
+        // last took, and the aspect of its rectangle last handed to it.
         uint64_t m_node_version{0};
         uint64_t m_offset_version{0};
         uint64_t m_aspect_revision{0};
+        float m_applied_aspect{0.0f};
     };
 } // namespace runtime

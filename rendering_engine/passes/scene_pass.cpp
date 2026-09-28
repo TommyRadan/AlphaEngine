@@ -114,19 +114,6 @@ namespace rendering_engine
         frame_layout_descriptor.entries.push_back({spot_shadow_map_binding, gpu::binding_kind::texture});
         m_frame_layout = gpu.create_bind_group_layout(frame_layout_descriptor);
 
-        gpu::buffer_descriptor ubo_descriptor{};
-        ubo_descriptor.size = sizeof(view_globals);
-        ubo_descriptor.usage = gpu::buffer_usage_uniform | gpu::buffer_usage_copy_dst;
-        ubo_descriptor.hint = gpu::buffer_usage_hint::dynamic_data;
-        m_frame_ubo = gpu.create_buffer(ubo_descriptor);
-
-        // The unjittered view_globals twin only exists when jitter is
-        // active; it backs the overlay bind group built below.
-        if (m_taa_jitter)
-        {
-            m_overlay_frame_ubo = gpu.create_buffer(ubo_descriptor);
-        }
-
         gpu::buffer_descriptor lights_descriptor{};
         lights_descriptor.size = sizeof(gpu_lights);
         lights_descriptor.usage = gpu::buffer_usage_uniform | gpu::buffer_usage_copy_dst;
@@ -155,21 +142,6 @@ namespace rendering_engine
     scene_pass::~scene_pass()
     {
         auto& gpu = *m_device;
-        if (m_overlay_frame_bind_group.valid())
-        {
-            gpu.destroy(m_overlay_frame_bind_group);
-            m_overlay_frame_bind_group = {};
-        }
-        if (m_overlay_frame_ubo.valid())
-        {
-            gpu.destroy(m_overlay_frame_ubo);
-            m_overlay_frame_ubo = {};
-        }
-        if (m_frame_bind_group.valid())
-        {
-            gpu.destroy(m_frame_bind_group);
-            m_frame_bind_group = {};
-        }
         if (m_spot_shadow_ubo.valid())
         {
             gpu.destroy(m_spot_shadow_ubo);
@@ -190,15 +162,47 @@ namespace rendering_engine
             gpu.destroy(m_lights_ubo);
             m_lights_ubo = {};
         }
-        if (m_frame_ubo.valid())
-        {
-            gpu.destroy(m_frame_ubo);
-            m_frame_ubo = {};
-        }
         if (m_frame_layout.valid())
         {
             gpu.destroy(m_frame_layout);
             m_frame_layout = {};
+        }
+    }
+
+    scene_pass::view_data::view_data(gpu::device& device, bool taa_jitter) : device{&device}
+    {
+        gpu::buffer_descriptor ubo_descriptor{};
+        ubo_descriptor.size = sizeof(view_globals);
+        ubo_descriptor.usage = gpu::buffer_usage_uniform | gpu::buffer_usage_copy_dst;
+        ubo_descriptor.hint = gpu::buffer_usage_hint::dynamic_data;
+        frame_ubo = device.create_buffer(ubo_descriptor);
+
+        // The unjittered view_globals twin only exists when jitter is
+        // active; it backs the overlay bind group.
+        if (taa_jitter)
+        {
+            overlay_frame_ubo = device.create_buffer(ubo_descriptor);
+        }
+    }
+
+    scene_pass::view_data::~view_data()
+    {
+        auto& gpu = *device;
+        if (overlay_frame_bind_group.valid())
+        {
+            gpu.destroy(overlay_frame_bind_group);
+        }
+        if (overlay_frame_ubo.valid())
+        {
+            gpu.destroy(overlay_frame_ubo);
+        }
+        if (frame_bind_group.valid())
+        {
+            gpu.destroy(frame_bind_group);
+        }
+        if (frame_ubo.valid())
+        {
+            gpu.destroy(frame_ubo);
         }
     }
 
@@ -207,37 +211,39 @@ namespace rendering_engine
         return m_frame_layout;
     }
 
-    void scene_pass::update_frame_bind_groups(const directional_shadow_data* shadow,
+    void scene_pass::update_frame_bind_groups(view_data& view,
+                                              const directional_shadow_data* shadow,
                                               const point_shadow_data* point_shadow,
                                               const spot_shadow_data* spot_shadow)
     {
         // The shadow maps (and the directional comparison sampler) this
         // pass binds are owned by the shadow passes and reach it through
-        // the frame's store, like every other texture a pass samples but
-        // does not own. The groups are built on the first frame and
-        // rebuilt only if one of those handles changes; the uniform
-        // buffers behind them are this pass's own and never change.
+        // the frame-global store, like every other texture a pass samples
+        // but does not own. A view's groups are built on its first frame
+        // and rebuilt only if one of those handles changes; the uniform
+        // buffers behind them are this pass's and the view's own and never
+        // change.
         const gpu::texture shadow_map = shadow != nullptr ? shadow->map : gpu::texture{};
         const gpu::sampler shadow_sampler = shadow != nullptr ? shadow->sampler : gpu::sampler{};
         const gpu::texture point_shadow_map = point_shadow != nullptr ? point_shadow->map : gpu::texture{};
         const gpu::texture spot_shadow_map = spot_shadow != nullptr ? spot_shadow->map : gpu::texture{};
-        if (m_frame_bind_group.valid() && shadow_map == m_bound_shadow_map &&
-            shadow_sampler == m_bound_shadow_sampler && point_shadow_map == m_bound_point_shadow_map &&
-            spot_shadow_map == m_bound_spot_shadow_map)
+        if (view.frame_bind_group.valid() && shadow_map == view.bound_shadow_map &&
+            shadow_sampler == view.bound_shadow_sampler && point_shadow_map == view.bound_point_shadow_map &&
+            spot_shadow_map == view.bound_spot_shadow_map)
         {
             return;
         }
 
         auto& gpu = *m_device;
-        if (m_overlay_frame_bind_group.valid())
+        if (view.overlay_frame_bind_group.valid())
         {
-            gpu.destroy(m_overlay_frame_bind_group);
-            m_overlay_frame_bind_group = {};
+            gpu.destroy(view.overlay_frame_bind_group);
+            view.overlay_frame_bind_group = {};
         }
-        if (m_frame_bind_group.valid())
+        if (view.frame_bind_group.valid())
         {
-            gpu.destroy(m_frame_bind_group);
-            m_frame_bind_group = {};
+            gpu.destroy(view.frame_bind_group);
+            view.frame_bind_group = {};
         }
 
         gpu::bind_group_descriptor frame_bind_group_descriptor{};
@@ -246,7 +252,7 @@ namespace rendering_engine
         gpu::binding_value view_globals_slot{};
         view_globals_slot.binding = view_globals_binding;
         view_globals_slot.kind = gpu::binding_kind::uniform_buffer;
-        view_globals_slot.buffer_value = m_frame_ubo;
+        view_globals_slot.buffer_value = view.frame_ubo;
         frame_bind_group_descriptor.entries.push_back(view_globals_slot);
 
         gpu::binding_value lights_slot{};
@@ -307,22 +313,22 @@ namespace rendering_engine
         spot_map_slot.texture_value = spot_shadow_map;
         frame_bind_group_descriptor.entries.push_back(spot_map_slot);
 
-        m_frame_bind_group = gpu.create_bind_group(frame_bind_group_descriptor);
+        view.frame_bind_group = gpu.create_bind_group(frame_bind_group_descriptor);
 
         // The overlay twin shares every binding with the main group except
         // the view_globals block (entries[0], pushed first above), which it
         // points at the unjittered buffer so the debug pass projects without
         // the sub-pixel jitter.
-        if (m_taa_jitter)
+        if (view.overlay_frame_ubo.valid())
         {
-            frame_bind_group_descriptor.entries[0].buffer_value = m_overlay_frame_ubo;
-            m_overlay_frame_bind_group = gpu.create_bind_group(frame_bind_group_descriptor);
+            frame_bind_group_descriptor.entries[0].buffer_value = view.overlay_frame_ubo;
+            view.overlay_frame_bind_group = gpu.create_bind_group(frame_bind_group_descriptor);
         }
 
-        m_bound_shadow_map = shadow_map;
-        m_bound_shadow_sampler = shadow_sampler;
-        m_bound_point_shadow_map = point_shadow_map;
-        m_bound_spot_shadow_map = spot_shadow_map;
+        view.bound_shadow_map = shadow_map;
+        view.bound_shadow_sampler = shadow_sampler;
+        view.bound_point_shadow_map = point_shadow_map;
+        view.bound_spot_shadow_map = spot_shadow_map;
     }
 
     void scene_pass::prepare(const frame_context& ctx)
@@ -345,18 +351,21 @@ namespace rendering_engine
         const point_shadow_data* point_shadow = resources.find(frame_resources::point_shadow);
         const spot_shadow_data* spot_shadow = resources.find(frame_resources::spot_shadow);
 
-        // The per-frame groups exist from the first prepare on, camera or
-        // not: the depth pre-pass, this pass and the passes that bind them
-        // later in the frame all read them. The overlay twin falls back to
-        // the (already unjittered) main group when jitter is off, so its
+        // A view's per-frame groups exist from its first prepare on, camera
+        // or not: the depth pre-pass, this pass and the passes that bind
+        // them later in the view all read them. The overlay twin falls back
+        // to the (already unjittered) main group when jitter is off, so its
         // consumers need no special-casing.
-        update_frame_bind_groups(shadow, point_shadow, spot_shadow);
-        scene_view_data view{};
-        view.frame_layout = m_frame_layout;
-        view.frame_group = m_frame_bind_group;
-        view.overlay_frame_group = m_overlay_frame_bind_group.valid() ? m_overlay_frame_bind_group : m_frame_bind_group;
-        view.depth_prepass = this;
-        ctx.resources->publish(frame_resources::scene_view, view);
+        view_data& view = ctx.view->state<view_data>(*this, *m_device, m_taa_jitter);
+        update_frame_bind_groups(view, shadow, point_shadow, spot_shadow);
+        m_frame_bind_group = view.frame_bind_group;
+        scene_view_data published{};
+        published.frame_layout = m_frame_layout;
+        published.frame_group = view.frame_bind_group;
+        published.overlay_frame_group =
+            view.overlay_frame_bind_group.valid() ? view.overlay_frame_bind_group : view.frame_bind_group;
+        published.depth_prepass = this;
+        ctx.resources->publish(frame_resources::scene_view, published);
 
         auto& gpu = *m_device;
 
@@ -395,18 +404,21 @@ namespace rendering_engine
         // it again. The overlay group carries the same view unjittered so
         // the debug pass — which paints after the TAA resolve and so cannot
         // average the jitter away — draws steady gizmos.
-        if (m_overlay_frame_ubo.valid())
+        if (view.overlay_frame_ubo.valid())
         {
             const view_globals overlay_globals = make_view_globals(ctx, false);
-            gpu.write_buffer(m_overlay_frame_ubo, &overlay_globals, sizeof(view_globals), 0);
+            gpu.write_buffer(view.overlay_frame_ubo, &overlay_globals, sizeof(view_globals), 0);
         }
         const view_globals globals = make_view_globals(ctx, m_taa_jitter);
-        gpu.write_buffer(m_frame_ubo, &globals, sizeof(view_globals), 0);
+        gpu.write_buffer(view.frame_ubo, &globals, sizeof(view_globals), 0);
 
         // Pack every live light into the std140 lights block and upload
         // it alongside the view_globals block. Lit materials read this
         // from the per-frame group; the scene pass owns it so light objects
-        // never touch the GPU directly.
+        // never touch the GPU directly. This block and the shadow blocks
+        // below hold the same bytes for every view of a frame (the lights
+        // and the shared shadow maps), so every view's group binds the
+        // same buffers.
         gpu_lights lights_payload{};
         pack_lights(ctx.lights, lights_payload);
         gpu.write_buffer(m_lights_ubo, &lights_payload, sizeof(gpu_lights), 0);

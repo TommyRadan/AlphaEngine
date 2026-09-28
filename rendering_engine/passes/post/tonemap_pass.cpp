@@ -151,11 +151,6 @@ namespace rendering_engine
                 pipeline = {};
             }
         }
-        if (m_input_bind_group.valid())
-        {
-            gpu.destroy(m_input_bind_group);
-            m_input_bind_group = {};
-        }
         if (m_input_layout.valid())
         {
             gpu.destroy(m_input_layout);
@@ -186,16 +181,27 @@ namespace rendering_engine
         }
     }
 
-    void tonemap_pass::rebuild_bind_group(gpu::texture input_color, gpu::texture grading_lut, gpu::texture exposure)
+    tonemap_pass::view_data::~view_data()
+    {
+        if (input_bind_group.valid())
+        {
+            device->destroy(input_bind_group);
+        }
+    }
+
+    void tonemap_pass::rebuild_bind_group(view_data& view,
+                                          gpu::texture input_color,
+                                          gpu::texture grading_lut,
+                                          gpu::texture exposure)
     {
         auto& gpu = *m_device;
 
         // Safe mid-frame: the device defers the destroy until the command
         // buffer that may still reference the old group has retired.
-        if (m_input_bind_group.valid())
+        if (view.input_bind_group.valid())
         {
-            gpu.destroy(m_input_bind_group);
-            m_input_bind_group = {};
+            gpu.destroy(view.input_bind_group);
+            view.input_bind_group = {};
         }
 
         gpu::bind_group_descriptor input_bind_group_descriptor{};
@@ -228,10 +234,10 @@ namespace rendering_engine
         exposure_slot.texture_value = exposure;
         input_bind_group_descriptor.entries.push_back(exposure_slot);
 
-        m_input_bind_group = gpu.create_bind_group(input_bind_group_descriptor);
-        m_bound_input = input_color;
-        m_bound_grading_lut = grading_lut;
-        m_bound_exposure = exposure;
+        view.input_bind_group = gpu.create_bind_group(input_bind_group_descriptor);
+        view.bound_input = input_color;
+        view.bound_grading_lut = grading_lut;
+        view.bound_exposure = exposure;
     }
 
     void tonemap_pass::prepare(const frame_context& ctx)
@@ -281,11 +287,13 @@ namespace rendering_engine
         // rebuild on change — the first frame included.
         const gpu::texture hdr = resources.get(frame_resources::scene_color).texture;
         m_target = resources.get(frame_resources::ldr_color).target;
-        if (hdr != m_bound_input || grading_lut != m_bound_grading_lut || exposure != m_bound_exposure ||
-            !m_input_bind_group.valid())
+        view_data& view = ctx.view->state<view_data>(*this, *m_device);
+        if (hdr != view.bound_input || grading_lut != view.bound_grading_lut || exposure != view.bound_exposure ||
+            !view.input_bind_group.valid())
         {
-            rebuild_bind_group(hdr, grading_lut, exposure);
+            rebuild_bind_group(view, hdr, grading_lut, exposure);
         }
+        m_input_bind_group = view.input_bind_group;
     }
 
     void tonemap_pass::record(gpu::command_encoder& encoder, const frame_context& /*ctx*/)

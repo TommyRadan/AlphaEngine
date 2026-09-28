@@ -7,7 +7,10 @@
  *
  * The profiler brackets every pass (and the whole frame)
  * with @c command_encoder::write_timestamp through the pass list's
- * @ref pass_hooks. One query set more than the device
+ * @ref pass_hooks, once per frame: the renderer hands it to the
+ * once-per-frame stages and to the primary view's per-view stages, so
+ * each pass has one slot and the per-view passes report the primary
+ * view's time. One query set more than the device
  * keeps frames in flight rotate: a frame writes one set and reads back,
  * with @c device::resolve_queries at its top, the set written
  * @c frames_in_flight frames earlier — the frame fence wait in

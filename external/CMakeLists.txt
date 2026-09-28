@@ -43,10 +43,13 @@ target_sources(AlphaEngine PRIVATE
 #   scene_graph  a parent / child node hierarchy of orbiting spheres
 #                around a point light
 #   skybox       a procedural sky and an IBL-lit sphere grid
+#   views        a security camera rendering into a texture a monitor in
+#                the scene shows, switching every few seconds between one
+#                view and split screen
 #
 # They are left out of the default build, which builds AlphaEngine alone;
 # the alpha_demos target builds them, and CI builds it on every build job.
-set(ALPHAENGINE_DEMOS fog gltf instanced line phong points post_tint scene_graph skybox)
+set(ALPHAENGINE_DEMOS fog gltf instanced line phong points post_tint scene_graph skybox views)
 
 add_custom_target(alpha_demos)
 foreach(demo IN LISTS ALPHAENGINE_DEMOS)

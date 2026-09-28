@@ -18,6 +18,7 @@
 #include <core/math/mat4.hpp>
 #include <core/math/vec3.hpp>
 #include <core/pool.hpp>
+#include <rendering_engine/gpu/handle.hpp>
 
 namespace rendering_engine
 {
@@ -114,9 +115,24 @@ namespace rendering_engine
     };
 
     /**
+     * @brief A rectangle within a view's target, in fractions of the
+     *        target's size, measured from its bottom-left corner: the whole
+     *        target by default, @c {0, 0, 0.5, 1} its left half.
+     */
+    struct viewport_rect
+    {
+        float x{0.0f};
+        float y{0.0f};
+        float width{1.0f};
+        float height{1.0f};
+
+        bool operator==(const viewport_rect&) const = default;
+    };
+
+    /**
      * @brief Everything the renderer reads about one camera: where it looks
-     *        from, how it projects, which layers it renders and how it
-     *        ranks against the other cameras.
+     *        from, how it projects, which layers it renders, where its view
+     *        lands and how it ranks against the other cameras.
      *
      * A plain copy owned by the @ref render_world, written by whoever created
      * it (a @c runtime::camera_component, through the world's extraction
@@ -142,9 +158,25 @@ namespace rendering_engine
         // Layer bits the camera renders; see @ref layer_all.
         uint32_t culling_mask{layer_all};
 
-        // Arbitration: among the enabled cameras the highest priority
-        // renders, a tie goes to the one tagged main, then to the one created
-        // last (see @ref render_world::active_camera).
+        // Where the camera's view lands: the target of the render texture
+        // it renders into and that texture's size, or an invalid target for
+        // the window's swapchain; and the rectangle of that target the view
+        // covers.
+        gpu::render_target target{};
+        uint32_t target_width{0};
+        uint32_t target_height{0};
+        viewport_rect viewport{};
+
+        // Whether the view composites the game UI; honoured on the
+        // swapchain only.
+        bool ui{true};
+
+        // Arbitration: among the enabled cameras that draw into the same
+        // rectangle of the same target the highest priority renders, a tie
+        // goes to the one tagged main, then to the one created last (see
+        // @ref render_world::collect_views). The views render in the order
+        // of the same rank, lowest first, so the highest-ranked one is drawn
+        // on top where rectangles overlap.
         int priority{0};
         bool main{false};
         bool enabled{true};

@@ -46,6 +46,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cstddef>
 #include <cstdint>
 #include <exception>
 
@@ -170,21 +171,20 @@ void rendering_engine::renderer::init(const render_services& services)
     // stands in while the drawable is empty.
     m_world.set_drawable_aspect(drawable_aspect_ratio(width, height, services.fallback_aspect));
 
-    // Keep the swapchain extent, the off-screen targets and the passes in
+    // Keep the swapchain extent and the size the swapchain views follow in
     // step with the drawable as the window is resized, maximised, restored
     // or moved across displays. The listener runs from the window's event
     // pump in engine::tick, before the frame is built, so on_resize never
-    // recreates a target a command buffer is being recorded against.
+    // changes the size of a frame being recorded. Each view builds its
+    // targets the first frame it renders.
+    m_drawable_width = width;
+    m_drawable_height = height;
     m_window_resized_subscription = services.events->subscribe<core::window_resized>(
         [this](const core::window_resized& e)
         {
             m_services.device->resize_swapchain(e.m_pixel_width, e.m_pixel_height);
             on_resize(e.m_pixel_width, e.m_pixel_height);
         });
-
-    // Allocate the off-screen HDR scene-colour target and the LDR target
-    // at the current backbuffer size (on_resize recreates them later).
-    create_color_targets(width, height);
 
     // Temporal AA is decided once, up front: it decides whether the TAA
     // pass is registered, which gates the projection jitter the scene pass
@@ -200,9 +200,11 @@ void rendering_engine::renderer::init(const render_services& services)
     // pipeline-create time. No pass is handed another: everything one
     // hands the next (the shadow maps and fits, the scene pass's view and
     // draw list, the motion vectors, the TAA resolve, the eye adaptation,
-    // the HDR image motion blur replaces) travels through the frame's
-    // resource store (see passes/frame_resources.hpp), and the targets
-    // they draw into are the renderer's, published there every frame.
+    // the HDR image motion blur replaces) travels through the view's
+    // resource store (see passes/frame_resources.hpp), the targets they
+    // draw into are the view's, published there every frame, and what a
+    // pass keeps at a view's size or across a view's frames it keeps in
+    // the view's resource set (passes/view_resources.hpp).
     //
     // The shadow passes cull the frame's mesh draws, like the scene pass,
     // and size their maps and biases from the shadow settings, fixed at
@@ -236,19 +238,19 @@ void rendering_engine::renderer::init(const render_services& services)
     // target, ahead of bloom and tonemap so they treat it like the rest of
     // the scene; it draws nothing until post_settings::volumetric enables
     // it.
-    auto volumetric_fog = std::make_unique<volumetric_fog_pass>(device, scene_frame_layout, width, height);
+    auto volumetric_fog = std::make_unique<volumetric_fog_pass>(device, scene_frame_layout);
     // Per-pixel motion vectors, reconstructed from the scene depth, drive
     // the TAA history reprojection and motion blur; the pass is always
     // built, since motion blur can be switched on at runtime, and draws
     // only while one of the two consumes it.
-    auto velocity = std::make_unique<velocity_pass>(device, width, height);
+    auto velocity = std::make_unique<velocity_pass>(device);
     // Motion blur smears the HDR image along those vectors into a target
     // of its own, which it hands the passes after it in place of the scene
     // colour; bloom blurs the bright pixels of that image back into it,
     // auto exposure meters it and tonemap maps it (exposed, graded) to the
     // LDR target.
-    auto motion_blur = std::make_unique<motion_blur_pass>(device, width, height);
-    auto bloom = std::make_unique<bloom_pass>(device, width, height);
+    auto motion_blur = std::make_unique<motion_blur_pass>(device);
+    auto bloom = std::make_unique<bloom_pass>(device);
     auto auto_exposure = std::make_unique<auto_exposure_pass>(device);
     auto tonemap = std::make_unique<tonemap_pass>(device);
     // Temporal AA optionally slots in between tonemap and FXAA: it
@@ -259,15 +261,15 @@ void rendering_engine::renderer::init(const render_services& services)
     std::unique_ptr<taa_pass> taa;
     if (taa_enabled)
     {
-        taa = std::make_unique<taa_pass>(device, width, height);
+        taa = std::make_unique<taa_pass>(device);
     }
     // FXAA closes the post chain: it samples the TAA resolve while one is
     // published (else the LDR target) and writes the anti-aliased image to
     // the swapchain.
-    auto fxaa = std::make_unique<fxaa_pass>(device, width, height);
-    // The UI pass owns the pixel-space projection the ui template reads at
-    // slot 0; it follows the drawable through pass::resize.
-    auto ui = std::make_unique<ui_pass>(device, width, height);
+    auto fxaa = std::make_unique<fxaa_pass>(device);
+    // The UI pass owns the layout of the pixel-space projection the ui
+    // template reads at slot 0; each view gets the projection at its size.
+    auto ui = std::make_unique<ui_pass>(device);
     const gpu::bind_group_layout ui_frame_layout = ui->frame_bind_group_layout();
 #if _DEBUG
     // The debug pass draws the overlay mesh proxies and the editor's ImGui
@@ -328,12 +330,14 @@ void rendering_engine::renderer::init(const render_services& services)
     // the TAA pass runs.
     set_post_settings(startup_post_settings(services.post != nullptr ? *services.post : post_process_settings{}));
 
-    // The swapchain image and the colour-grading table are valid at frame
-    // start without an in-frame producer, so they are imported; every
-    // other resource a pass reads is produced by a pass before it. The
-    // list is validated, and the GPU profiler sized to it, now and again
-    // before the first frame after any later change.
+    // The swapchain image, the view's output and the colour-grading table
+    // are valid at frame or view start without an in-frame producer, so
+    // they are imported; every other resource a pass reads is produced by
+    // a pass before it. The list is validated, and the GPU profiler sized
+    // to it, here and again before the first frame after any later
+    // change.
     m_passes.import_external(frame_resources::swapchain.name);
+    m_passes.import_external(frame_resources::output.name);
     m_passes.import_external(frame_resources::grading_lut.name);
     rebuild_pass_list();
 
@@ -381,15 +385,20 @@ void rendering_engine::renderer::quit()
         m_gpu_profiler.shutdown(*m_services.device);
     }
 
-    // Drop the passes first — the built-in ones and any other code
-    // registered — and what they published; the passes own per-frame
-    // bind-group layouts referenced by the materials' pipelines.
+    // Drop the views' resource sets first — their off-screen targets and
+    // the state every pass kept for them, the histories included — then
+    // the passes — the built-in ones and any other code registered — and
+    // what they published; the passes own per-frame bind-group layouts
+    // referenced by the materials' pipelines.
+    m_primary_view = nullptr;
+    m_frame_views.clear();
+    m_drawn_targets.clear();
+    m_views.clear();
+    m_view_sets.clear();
     m_passes.clear();
-    m_resources.clear();
+    m_frame_resources.clear();
     m_pass_list_changed = false;
     m_overlay = nullptr;
-    m_prev_camera = {};
-    m_has_prev_view_projection = false;
     m_frame_lights.clear();
 
     // The per-proxy buffers and bind groups the mesh and UI draws bind;
@@ -410,11 +419,6 @@ void rendering_engine::renderer::quit()
     // reference the device. Release them before the device tears its
     // pools down.
     m_materials.quit();
-
-    // Release the off-screen HDR and LDR targets before the device tears
-    // its pools down. The colour and depth attachments are owned by the
-    // targets so destroy() releases them too.
-    release_color_targets();
 
     // Last, the world: withdraw the drawable aspect it hands to attaching
     // cameras, since there is no drawable left to match. Every pass and
@@ -489,101 +493,128 @@ void rendering_engine::renderer::render()
     m_mesh_draws.build(m_world, gpu);
     m_ui_draws.build(m_world, gpu);
 
-    // Capture per-frame state once so passes cannot disagree about
-    // which camera or backbuffer is active mid-frame, and so they
-    // do not have to re-run the camera arbitration on every entry.
-    // The world's active_camera() is the arbitration's pick for this
-    // frame: the highest-priority enabled camera proxy. The enabled
-    // lights are gathered once, in the order the scene pass packs them.
-    frame_context ctx{};
-    ctx.active_camera_handle = m_world.active_camera();
-    ctx.active_camera = m_world.camera(ctx.active_camera_handle);
+    // The views this frame renders, in order, each with its resource set:
+    // the world picks the cameras once, here, so a camera destroyed or
+    // disabled since the last frame is replaced by the runner-up without
+    // any owner bookkeeping, and a view that drops out of the list takes
+    // its targets and history with it.
+    m_world.collect_views(m_views, m_drawable_width, m_drawable_height);
+    sync_views();
+
+    // What every view of the frame shares, captured once so no pass can
+    // disagree about it mid-frame: the enabled lights, in the order the
+    // scene pass packs them, the draw lists, the clock and the settings.
+    frame_context frame{};
     m_world.collect_enabled_lights(m_frame_lights);
-    ctx.lights = m_frame_lights;
-    ctx.scene_draws = m_mesh_draws.scene_draws();
-    ctx.overlay_draws = m_mesh_draws.overlay_draws();
-    ctx.ui_draws = m_ui_draws.draws();
-    ctx.overlay = m_overlay;
-    ctx.world = &m_world;
-    ctx.resources = &m_resources;
-    ctx.viewport_width = m_target_width;
-    ctx.viewport_height = m_target_height;
-    ctx.frame_index = m_frame_index;
+    frame.lights = m_frame_lights;
+    frame.scene_draws = m_mesh_draws.scene_draws();
+    frame.overlay_draws = m_mesh_draws.overlay_draws();
+    frame.ui_draws = m_ui_draws.draws();
+    frame.overlay = m_overlay;
+    frame.world = &m_world;
+    frame.frame_index = m_frame_index;
     // The engine clock ticked at the top of this frame; core::time reports
     // milliseconds, the shaders see seconds.
     if (m_services.time != nullptr)
     {
-        ctx.time_seconds = m_services.time->total_time() / 1000.0f;
-        ctx.delta_seconds = static_cast<float>(m_services.time->delta_time() / 1000.0);
+        frame.time_seconds = m_services.time->total_time() / 1000.0f;
+        frame.delta_seconds = static_cast<float>(m_services.time->delta_time() / 1000.0);
     }
-    // The temporal-AA jitter is computed here from the live target size
-    // (so a resize rescales it without any pass being told) and published
-    // to every pass: the scene and skybox passes offset their projection
-    // by it, the velocity pass subtracts it. Zero while the TAA pass is
-    // not in the list or disabled.
-    const bool temporal_aa = temporal_aa_active();
-    ctx.jitter =
-        temporal_aa ? taa_jitter_ndc(m_frame_index, m_target_width, m_target_height) : core::math::vec2{0.0f, 0.0f};
-    ctx.prev_jitter = m_prev_jitter;
-    // The previous frame's unjittered view-projection is only meaningful
-    // if that frame was drawn by this same camera.
-    ctx.has_prev_view_projection =
-        m_has_prev_view_projection && ctx.active_camera != nullptr && ctx.active_camera_handle == m_prev_camera;
-    ctx.prev_view_projection = ctx.has_prev_view_projection ? m_prev_view_projection : core::math::mat4{};
-    ctx.fog = m_world.fog();
-    ctx.depth_prepass = m_depth_prepass_enabled;
-    m_post_settings.taa.enabled = temporal_aa;
-    ctx.post = m_post_settings;
+    frame.fog = m_world.fog();
+    frame.depth_prepass = m_depth_prepass_enabled;
+    m_post_settings.taa.enabled = temporal_aa_active();
+    frame.post = m_post_settings;
 
-    // The frame's resources start with the renderer's own: the swapchain
-    // image, the HDR scene target with its depth, the LDR target and the
-    // grading table. The depth attachment is looked up from the target
-    // every frame rather than cached at init, so a resize that recreates
-    // the target hands the new attachment to every depth consumer on the
-    // next frame. The passes publish what they produce on top, as they
-    // prepare.
-    m_resources.clear();
-    m_resources.publish(frame_resources::swapchain, gpu.swapchain_target());
-    m_resources.publish(frame_resources::scene_color, color_target{m_scene_color_target, m_scene_color_texture});
-    m_resources.publish(frame_resources::scene_depth, gpu.render_target_depth_texture(m_scene_color_target));
-    m_resources.publish(frame_resources::ldr_color, color_target{m_ldr_color_target, m_ldr_color_texture});
+    // The frame-global resources: the swapchain image and the grading
+    // table. Every view's store falls back to this one, and the shadow
+    // stage publishes its maps here.
+    m_frame_resources.clear();
+    m_frame_resources.publish(frame_resources::swapchain, gpu.swapchain_target());
     if (m_grading_lut != nullptr)
     {
-        m_resources.publish(frame_resources::grading_lut, m_grading_lut->texture);
+        m_frame_resources.publish(frame_resources::grading_lut, m_grading_lut->texture);
     }
 
-    // Every pass prepares first, in list order: the per-frame uploads,
-    // the culling and sorting, the bind-group rebuilds and every
-    // cross-pass publish and lookup (the shadow fits the scene pass
-    // uploads, the pre-pass's target the scene pass loads) happen here,
-    // on this thread, before anything is recorded — so the record walk
-    // below only encodes from finished state and the scene pass may hand
-    // its chunks to the job pool's workers.
-    m_passes.prepare(ctx);
-
-    // One encoder records the pass list in order — each pass in a debug
-    // group and between the profiler's timestamps — then submits.
+    // One encoder records the whole frame — each pass in a debug group
+    // and, for the passes of the primary view and the once-per-frame
+    // stages, between the profiler's timestamps — then submits. Within
+    // each scope every pass prepares first, in list order: the per-frame
+    // uploads, the culling and sorting, the bind-group rebuilds and every
+    // cross-pass publish and lookup happen there, on this thread, before
+    // anything of the scope is recorded — so the record walk only encodes
+    // from finished state and the scene pass may hand its chunks to the
+    // job pool's workers.
     auto encoder = gpu.create_command_encoder();
     m_gpu_profiler.begin_frame(*encoder);
-    m_passes.record(*encoder, ctx, &m_gpu_profiler);
+
+    // The primary view — the last, the highest-ranked view on the
+    // swapchain — lends its camera to the once-per-frame stages.
+    const frame_context primary = view_context(frame, m_views.back(), *m_primary_view);
+
+    // The shadow maps are rendered once and shared by every view, their
+    // cascades fitted to the primary view's camera.
+    frame_context shadow = primary;
+    shadow.resources = &m_frame_resources;
+    shadow.view = nullptr;
+    m_passes.prepare(shadow, render_stage::shadow, render_stage::shadow);
+    m_passes.record(*encoder, shadow, render_stage::shadow, render_stage::shadow, &m_gpu_profiler);
+
+    // Every view renders its scene, post chain and UI in turn. Its store
+    // starts with its own targets — the HDR scene target with its depth,
+    // looked up from the target every frame so a resize that recreated it
+    // reaches every depth consumer, and the LDR target — and its output:
+    // the swapchain or its render texture, and its rectangle there, which
+    // the first view to draw into a target clears whole. The passes publish
+    // what they produce on top, as they prepare.
+    m_drawn_targets.clear();
+    for (std::size_t i = 0; i < m_views.size(); ++i)
+    {
+        const view& v = m_views[i];
+        view_resources& resources = *m_frame_views[i];
+        const frame_context ctx = view_context(frame, v, resources);
+        resource_store& store = resources.resources();
+        store.clear();
+        store.set_fallback(&m_frame_resources);
+        store.publish(frame_resources::scene_color, resources.scene_color());
+        store.publish(frame_resources::scene_depth, resources.scene_depth());
+        store.publish(frame_resources::ldr_color, resources.ldr_color());
+
+        view_output output{};
+        output.target = v.on_swapchain() ? gpu.swapchain_target() : v.target;
+        output.x = v.x;
+        output.y = v.y;
+        output.width = v.width;
+        output.height = v.height;
+        output.target_width = v.target_width;
+        output.target_height = v.target_height;
+        output.first =
+            std::find(m_drawn_targets.begin(), m_drawn_targets.end(), output.target) == m_drawn_targets.end();
+        if (output.first)
+        {
+            m_drawn_targets.push_back(output.target);
+        }
+        store.publish(frame_resources::output, output);
+
+        // The primary view's passes are the ones the profiler times; a UI
+        // stage it skips is still bracketed, so every pass keeps its slot.
+        const render_stage last = v.ui ? render_stage::ui : render_stage::post;
+        pass_hooks* hooks = &resources == m_primary_view ? &m_gpu_profiler : nullptr;
+        m_passes.prepare(ctx, render_stage::scene, last);
+        m_passes.record(*encoder, ctx, render_stage::scene, last, hooks);
+        if (hooks != nullptr && !v.ui)
+        {
+            m_passes.skip(*encoder, render_stage::ui, render_stage::ui, *hooks);
+        }
+        advance_history(ctx, resources);
+    }
+
+    // The tool overlay goes on top of everything, once, with the primary
+    // view's camera and store.
+    m_passes.prepare(primary, render_stage::overlay, render_stage::overlay);
+    m_passes.record(*encoder, primary, render_stage::overlay, render_stage::overlay, &m_gpu_profiler);
+
     m_gpu_profiler.end_frame(*encoder);
     gpu.submit(std::move(encoder));
-
-    // Carry this frame's camera state over for the next frame's
-    // reprojection: the unjittered view-projection (the scene pass applies
-    // the jitter on top of the camera's own matrices) and the camera it
-    // came from. A no-camera frame leaves nothing to reproject against.
-    if (ctx.active_camera != nullptr)
-    {
-        m_prev_view_projection = ctx.active_camera->projection * ctx.active_camera->view;
-        m_has_prev_view_projection = true;
-    }
-    else
-    {
-        m_has_prev_view_projection = false;
-    }
-    m_prev_camera = ctx.active_camera != nullptr ? ctx.active_camera_handle : camera_proxy_handle{};
-    m_prev_jitter = ctx.jitter;
     ++m_frame_index;
 
     // Close the frame: the device presents the swapchain image it
@@ -592,55 +623,116 @@ void rendering_engine::renderer::render()
     m_in_frame = false;
 }
 
+void rendering_engine::renderer::sync_views()
+{
+    auto& gpu = *m_services.device;
+
+    // Each view's set, found by the view's camera or created; the targets
+    // follow the view's size. A view is never empty: the world keeps the
+    // swapchain view at least one pixel across.
+    m_frame_views.clear();
+    for (const view& v : m_views)
+    {
+        const auto found =
+            std::find_if(m_view_sets.begin(),
+                         m_view_sets.end(),
+                         [&v](const std::unique_ptr<view_resources>& set) { return set->camera() == v.camera; });
+        view_resources* set = found != m_view_sets.end() ? found->get() : nullptr;
+        if (set == nullptr)
+        {
+            m_view_sets.push_back(std::make_unique<view_resources>(gpu, v.camera));
+            set = m_view_sets.back().get();
+        }
+        set->resize(v.width, v.height);
+        m_frame_views.push_back(set);
+    }
+
+    // A view that dropped out of the list takes its targets, its history and
+    // every pass's state for it along; the device defers the frees until
+    // the frames that used them have retired.
+    m_view_sets.erase(std::remove_if(m_view_sets.begin(),
+                                     m_view_sets.end(),
+                                     [this](const std::unique_ptr<view_resources>& set) {
+                                         return std::find(m_frame_views.begin(), m_frame_views.end(), set.get()) ==
+                                                m_frame_views.end();
+                                     }),
+                      m_view_sets.end());
+    m_primary_view = m_frame_views.back();
+}
+
+rendering_engine::frame_context
+rendering_engine::renderer::view_context(const frame_context& frame, const view& v, view_resources& resources) const
+{
+    frame_context ctx = frame;
+    ctx.active_camera = v.proxy;
+    ctx.active_camera_handle = v.camera;
+    ctx.view = &resources;
+    ctx.resources = &resources.resources();
+    ctx.viewport_width = v.width;
+    ctx.viewport_height = v.height;
+
+    // The temporal-AA jitter follows the view's own frame count and size,
+    // so a view's sequence starts with the view and a resize rescales it
+    // without any pass being told: the scene and skybox passes offset
+    // their projection by it, the velocity pass subtracts it. Zero while
+    // the TAA pass is not in the list or disabled.
+    const view_history& history = resources.history();
+    ctx.jitter =
+        frame.post.taa.enabled ? taa_jitter_ndc(history.frames, v.width, v.height) : core::math::vec2{0.0f, 0.0f};
+    ctx.prev_jitter = history.prev_jitter;
+    // The view's history belongs to its camera, so its last
+    // view-projection is only missing on its first camera frame and after
+    // a camera-less one.
+    ctx.has_prev_view_projection = history.has_prev_view_projection && v.proxy != nullptr;
+    ctx.prev_view_projection = ctx.has_prev_view_projection ? history.prev_view_projection : core::math::mat4{};
+    return ctx;
+}
+
+void rendering_engine::renderer::advance_history(const frame_context& ctx, view_resources& resources)
+{
+    // The unjittered view-projection (the scene pass applies the jitter on
+    // top of the camera's own matrices), for the next frame's
+    // reprojection. A camera-less frame leaves nothing to reproject
+    // against.
+    view_history& history = resources.history();
+    if (ctx.active_camera != nullptr)
+    {
+        history.prev_view_projection = ctx.active_camera->projection * ctx.active_camera->view;
+        history.has_prev_view_projection = true;
+    }
+    else
+    {
+        history.has_prev_view_projection = false;
+    }
+    history.prev_jitter = ctx.jitter;
+    ++history.frames;
+}
+
 void rendering_engine::renderer::on_resize(uint32_t pixel_width, uint32_t pixel_height)
 {
     // The listener that calls this runs from the window's event pump,
-    // never from inside render(): the targets released below may still be
-    // bound to the frame being recorded otherwise.
+    // never from inside render(): the views of the frame being recorded
+    // are sized already.
     assert(!m_in_frame && "renderer::on_resize must not run while a frame is being recorded");
 
     // A zero dimension is a minimised window; the main loop skips whole
     // frames until it is restored (and the restore reports the real size),
-    // so the targets keep their last usable size. A repeat of the live
-    // size (the initial event, a DPI-only notification) changes nothing.
+    // so the views keep their last usable size. A repeat of the live size
+    // (the initial event, a DPI-only notification) changes nothing.
     if (pixel_width == 0 || pixel_height == 0)
     {
         return;
     }
-    if (pixel_width == m_target_width && pixel_height == m_target_height)
+    if (pixel_width == m_drawable_width && pixel_height == m_drawable_height)
     {
         return;
     }
 
-    auto& gpu = *m_services.device;
-
-    // Recreate the renderer-owned targets: new ones first, so every
-    // consumer that compares the handle it bound against the one
-    // frame_context publishes (tonemap, bloom, the velocity pass's depth,
-    // the TAA resolve's LDR input) sees a different handle next frame;
-    // then release the old ones. The device defers the free until the
-    // last command buffer that referenced them has retired.
-    const gpu::render_target old_scene_color = m_scene_color_target;
-    const gpu::render_target old_ldr_color = m_ldr_color_target;
-    create_color_targets(pixel_width, pixel_height);
-    if (old_ldr_color.valid())
-    {
-        gpu.destroy(old_ldr_color);
-    }
-    if (old_scene_color.valid())
-    {
-        gpu.destroy(old_scene_color);
-    }
-
-    // Let every pass follow: the bloom pyramid, the velocity target, the
-    // TAA history / resolve (+ texel step, history reset), the FXAA edge
-    // step and the UI's pixel-space projection. Fixed-size passes (shadow
-    // maps, debug) keep the default no-op, and the scene pass needs
-    // nothing: the jitter it applies is computed by render() from the
-    // size recorded above. What the last frame published names released
-    // targets now, so it is dropped until the next frame publishes again.
-    m_passes.resize(pixel_width, pixel_height);
-    m_resources.clear();
+    // The views on the swapchain are sized from the drawable at the next
+    // render(), which rebuilds their targets (and every pass the state it
+    // keeps at the view's size) then.
+    m_drawable_width = pixel_width;
+    m_drawable_height = pixel_height;
 
     // The projection follows the drawable so the image is not stretched:
     // the world's camera owners hand the new aspect to their cameras before
@@ -648,60 +740,7 @@ void rendering_engine::renderer::on_resize(uint32_t pixel_width, uint32_t pixel_
     // never used.
     m_world.set_drawable_aspect(drawable_aspect_ratio(pixel_width, pixel_height, 1.0f));
 
-    LOG_INF("Rendering Engine: render targets resized to %ux%u", pixel_width, pixel_height);
-}
-
-void rendering_engine::renderer::create_color_targets(uint32_t width, uint32_t height)
-{
-    auto& gpu = *m_services.device;
-
-    // The HDR scene-colour target the scene pass renders into: rgba16f
-    // instead of straight to the swapchain so tonemap, bloom and any
-    // other post effect can sample real HDR luminance.
-    gpu::render_target_descriptor scene_color_descriptor{};
-    scene_color_descriptor.color = {{gpu::texture_format::rgba16_float}};
-    scene_color_descriptor.width = width;
-    scene_color_descriptor.height = height;
-    scene_color_descriptor.with_depth = true;
-    scene_color_descriptor.depth.format = gpu::texture_format::depth24;
-    m_scene_color_target = gpu.create_render_target(scene_color_descriptor);
-    m_scene_color_texture = gpu.render_target_color_texture(m_scene_color_target);
-
-    // The LDR target the tonemap pass resolves into and the FXAA pass
-    // samples. The swapchain cannot be bound as a shader input, so the
-    // final anti-aliasing pass reads its tonemapped source from this
-    // rgba8 intermediate and writes to the swapchain. No depth: the post
-    // chain runs depth-disabled.
-    gpu::render_target_descriptor ldr_color_descriptor{};
-    ldr_color_descriptor.color = {{gpu::texture_format::rgba8_unorm}};
-    ldr_color_descriptor.width = width;
-    ldr_color_descriptor.height = height;
-    ldr_color_descriptor.with_depth = false;
-    m_ldr_color_target = gpu.create_render_target(ldr_color_descriptor);
-    m_ldr_color_texture = gpu.render_target_color_texture(m_ldr_color_target);
-
-    m_target_width = width;
-    m_target_height = height;
-}
-
-void rendering_engine::renderer::release_color_targets()
-{
-    // A valid target was created on the device init was handed, so the
-    // device is only reached when there is one to release.
-    if (m_ldr_color_target.valid())
-    {
-        m_services.device->destroy(m_ldr_color_target);
-        m_ldr_color_target = {};
-        m_ldr_color_texture = {};
-    }
-    if (m_scene_color_target.valid())
-    {
-        m_services.device->destroy(m_scene_color_target);
-        m_scene_color_target = {};
-        m_scene_color_texture = {};
-    }
-    m_target_width = 0;
-    m_target_height = 0;
+    LOG_INF("Rendering Engine: drawable resized to %ux%u", pixel_width, pixel_height);
 }
 
 rendering_engine::gpu::device& rendering_engine::renderer::device() const
@@ -729,12 +768,20 @@ rendering_engine::pass* rendering_engine::renderer::add_pass(std::unique_ptr<pas
 bool rendering_engine::renderer::remove_pass(std::string_view name)
 {
     assert(!m_in_frame && "renderer::remove_pass must not run while a frame is being recorded");
-    if (!m_passes.remove(name))
+    const pass* removed = m_passes.find(name);
+    if (removed == nullptr)
     {
         return false;
     }
-    // What the pass published names resources it released.
-    m_resources.clear();
+    // The state the pass kept for each view goes with it; what it published
+    // names resources it released.
+    m_frame_resources.clear();
+    for (const std::unique_ptr<view_resources>& set : m_view_sets)
+    {
+        set->drop_state(*removed);
+        set->resources().clear();
+    }
+    m_passes.remove(name);
     m_pass_list_changed = true;
     return true;
 }
@@ -943,38 +990,37 @@ const rendering_engine::gpu_profiler& rendering_engine::renderer::get_gpu_profil
 
 rendering_engine::gpu::texture rendering_engine::renderer::scene_color_texture() const
 {
-    return m_scene_color_texture;
+    return m_primary_view != nullptr ? m_primary_view->scene_color().texture : gpu::texture{};
 }
 
 rendering_engine::gpu::texture rendering_engine::renderer::scene_depth_texture() const
 {
-    return m_services.device != nullptr ? m_services.device->render_target_depth_texture(m_scene_color_target)
-                                        : gpu::texture{};
+    return m_primary_view != nullptr ? m_primary_view->scene_depth() : gpu::texture{};
 }
 
 rendering_engine::gpu::texture rendering_engine::renderer::ldr_color_texture() const
 {
-    return m_ldr_color_texture;
+    return m_primary_view != nullptr ? m_primary_view->ldr_color().texture : gpu::texture{};
 }
 
 rendering_engine::gpu::texture rendering_engine::renderer::velocity_texture() const
 {
-    return m_resources.get(frame_resources::velocity);
+    return m_primary_view != nullptr ? m_primary_view->resources().get(frame_resources::velocity) : gpu::texture{};
 }
 
 rendering_engine::gpu::texture rendering_engine::renderer::taa_resolve_texture() const
 {
-    return m_resources.get(frame_resources::taa_resolve);
+    return m_primary_view != nullptr ? m_primary_view->resources().get(frame_resources::taa_resolve) : gpu::texture{};
 }
 
 rendering_engine::gpu::texture rendering_engine::renderer::directional_shadow_map() const
 {
-    return m_resources.get(frame_resources::directional_shadow).map;
+    return m_frame_resources.get(frame_resources::directional_shadow).map;
 }
 
 rendering_engine::gpu::texture rendering_engine::renderer::spot_shadow_map() const
 {
-    return m_resources.get(frame_resources::spot_shadow).map;
+    return m_frame_resources.get(frame_resources::spot_shadow).map;
 }
 
 rendering_engine::gpu::texture rendering_engine::renderer::environment_brdf_lut() const

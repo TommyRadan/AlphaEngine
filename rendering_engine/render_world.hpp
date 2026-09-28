@@ -21,6 +21,7 @@
 #include <rendering_engine/mesh_proxy.hpp>
 #include <rendering_engine/render_proxies.hpp>
 #include <rendering_engine/ui_proxy.hpp>
+#include <rendering_engine/view.hpp>
 
 namespace rendering_engine
 {
@@ -44,8 +45,9 @@ namespace rendering_engine
      *   order they paint in (@ref ui_elements);
      * - the light proxies (@ref light_proxy), and the order the enabled ones
      *   are packed into the lights UBO in (@ref enabled_lights);
-     * - the camera proxies (@ref camera_proxy) and the arbitration that picks
-     *   the camera a frame renders with (@ref active_camera);
+     * - the camera proxies (@ref camera_proxy), the arbitration that picks
+     *   the camera the swapchain renders with (@ref active_camera) and the
+     *   list of views a frame renders (@ref collect_views);
      * - the debug-draw helper list the debug UI walks to toggle visibility
      *   and @ref debug_draw::update_helpers to rebuild the gizmos
      *   (@ref helpers), which no pass reads;
@@ -263,15 +265,16 @@ namespace rendering_engine
         }
 
         /**
-         * @brief The camera this frame renders with: the highest-priority
-         *        enabled camera proxy (a priority tie goes to the camera
-         *        tagged main, then to the most recently created), or an
-         *        invalid handle when none is enabled.
+         * @brief The camera the swapchain's primary view renders with: the
+         *        highest-ranked enabled camera proxy on the swapchain —
+         *        highest priority, a tie going to the camera tagged main,
+         *        then to the most recently created — or an invalid handle
+         *        when none is enabled. Cameras on a render texture never
+         *        take the screen.
          *
-         * @ref renderer::render evaluates this once per frame into
-         * @c frame_context::active_camera, so destroying or disabling the
-         * winner promotes the runner-up on the next frame with no
-         * bookkeeping by the owner.
+         * The last view @ref collect_views lists is this camera's, so
+         * destroying or disabling it promotes the runner-up on the next
+         * frame with no bookkeeping by the owner.
          */
         camera_proxy_handle active_camera() const;
 
@@ -284,6 +287,31 @@ namespace rendering_engine
          * rendering.
          */
         camera_proxy_handle main_camera() const;
+
+        /**
+         * @brief Fills @p out with the views a frame renders, in the order
+         *        the renderer renders them.
+         *
+         * Every enabled camera renders a view into its target (the
+         * swapchain, @p drawable_width x @p drawable_height, or its render
+         * texture) over its viewport rectangle, except that the cameras
+         * drawing into the same rectangle of the same target compete: the
+         * highest priority renders, a tie going to the camera tagged main,
+         * then to the most recently created. So the cameras of an existing
+         * scene, all on the whole swapchain, render one view between them,
+         * while two cameras with a half of the swapchain each split the
+         * screen. The views on render textures come first, so the views that
+         * sample them see this frame's image; within each group the lower
+         * ranked render first, so the highest-ranked view is drawn on top
+         * where rectangles overlap and a texture view that samples another
+         * renders after it when it ranks higher. When no camera renders to
+         * the swapchain, a camera-less view covers it, so the swapchain is
+         * always drawn (and cleared). A view is at least one pixel across;
+         * its rectangle is clamped to its target. The last view of the list
+         * is the primary one — @ref active_camera's, or the camera-less one —
+         * whose camera the once-per-frame stages use.
+         */
+        void collect_views(std::vector<view>& out, uint32_t drawable_width, uint32_t drawable_height) const;
 
         /**
          * @brief Records the drawable's width / height, the aspect cameras

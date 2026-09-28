@@ -48,41 +48,42 @@ namespace rendering_engine
      * frame is published as @ref frame_resources::taa_resolve so the next
      * pass (FXAA) samples it instead of the raw tonemap output; the handle
      * therefore alternates between two values from frame to frame (and
-     * changes altogether on @ref resize), which FXAA absorbs with a small
-     * per-handle bind-group cache.
+     * changes altogether when the view is resized), which FXAA absorbs with
+     * a small per-handle bind-group cache.
      *
-     * The history is only meaningful for frames of the same camera, so the
-     * resolve restarts from the current image alone (history weight 0)
-     * on the first frame, whenever the frame's camera differs from the one
-     * the history was accumulated from, on a no-camera frame, and after a
-     * resize — a camera switch or teleport-by-reattach never blends against
-     * a stale image. The reciprocal frame size the neighbourhood taps step
-     * by is baked from the backbuffer dimensions at construction, mirroring
-     * @ref fxaa_pass, and rewritten by @ref resize, which also recreates
-     * both targets. Pipeline state mirrors every other fullscreen-triangle
-     * post pass (depth off, blend off, no culling, single vec2 vertex
-     * attribute). A degenerate backbuffer leaves the pass disabled so the
-     * LDR target flows straight through to FXAA.
+     * Every view accumulates a history of its own (see @ref view_data): the
+     * pair, sized to the view, the params UBO and the bookkeeping live in
+     * the view's resource set and go with the view. The history is only
+     * meaningful for frames of the same camera, so the resolve restarts
+     * from the current image alone (history weight 0) on the view's first
+     * frame, on a no-camera frame, and after the view is resized — a camera
+     * switch or teleport-by-reattach starts a new view and never blends
+     * against a stale image. The reciprocal frame size the neighbourhood
+     * taps step by is baked from the view's size, mirroring
+     * @ref fxaa_pass, and rewritten when the view is resized, which also
+     * recreates both targets. Pipeline state mirrors every other
+     * fullscreen-triangle post pass (depth off, blend off, no culling,
+     * single vec2 vertex attribute).
      */
     struct taa_pass : pass
     {
-        // @p width / @p height are the backbuffer dimensions the two
-        // accumulation targets are sized against. The two textures the
-        // resolve samples are not constructor inputs: the tonemapped LDR
-        // image and the motion vectors are looked up every frame
-        // (@ref frame_resources::ldr_color, @ref frame_resources::velocity),
-        // and the resolve bind groups are (re)built whenever either handle
-        // differs from the one they were last built against.
-        taa_pass(gpu::device& device, uint32_t width, uint32_t height);
+        // The two textures the resolve samples are not constructor inputs:
+        // the tonemapped LDR image and the motion vectors are looked up
+        // every frame (@ref frame_resources::ldr_color,
+        // @ref frame_resources::velocity), and a view's resolve bind groups
+        // are (re)built whenever either handle differs from the one they
+        // were last built against.
+        explicit taa_pass(gpu::device& device);
         ~taa_pass() override;
 
         taa_pass(const taa_pass&) = delete;
         taa_pass& operator=(const taa_pass&) = delete;
 
-        // Restarts the history on a camera change, rebinds the inputs when
-        // their handles changed, writes the feedback weight the frame
-        // needs, picks and publishes the half this frame resolves into and
-        // swaps the pair's roles for the next frame.
+        // Sizes the view's pair to the view, restarts its history on a
+        // camera-less frame, rebinds the inputs when their handles changed,
+        // writes the feedback weight the frame needs, picks and publishes
+        // the half this frame resolves into and swaps the pair's roles for
+        // the view's next frame.
         void prepare(const frame_context& ctx) override;
 
         // Draws the resolve into the half @ref prepare picked.
@@ -104,16 +105,6 @@ namespace rendering_engine
             io.write("taa_history");
         }
 
-        // Recreates both accumulation targets at the new drawable size,
-        // notes the new texel step for the resolve params UBO (the next
-        // record() rewrites it, inside the frame bracket) and drops the
-        // history (the next frame resolves from the current image alone,
-        // exactly like the first frame after construction). The new
-        // targets are created before the old ones are released so the
-        // published resolve handle changes and FXAA rebinds. No-op while
-        // the pass is disabled.
-        void resize(uint32_t width, uint32_t height) override;
-
     private:
         // The device this pass creates its resources on and releases them
         // through; handed in by the renderer and outlives the pass.
@@ -130,75 +121,92 @@ namespace rendering_engine
             gpu::bind_group resolve_bind_group{};
         };
 
+        // What the pass keeps per view.
+        struct view_data final : pass_view_state
+        {
+            explicit view_data(gpu::device& device);
+            ~view_data() override;
+
+            view_data(const view_data&) = delete;
+            view_data& operator=(const view_data&) = delete;
+
+            // (Re)allocates both rgba8 accumulation targets at @p width x
+            // @p height — the new ones before the old ones are released, so
+            // the published resolve handle changes and FXAA rebinds — drops
+            // the resolve bind groups and the inputs they were built with,
+            // notes the new texel step for the params UBO (the next
+            // prepare() rewrites it, inside the frame bracket) and drops the
+            // history: the next frame resolves from the current image alone.
+            void resize(uint32_t width, uint32_t height);
+
+            // Releases both resolve bind groups (no-op for invalid handles).
+            void destroy_resolve_bind_groups();
+
+            gpu::device* device{nullptr};
+
+            // The resolve params UBO: {1/width, 1/height, feedback, 0}.
+            gpu::buffer resolve_ubo{};
+
+            // The pair and which half the next frame's resolve writes into
+            // (the other half then holds the history); prepare() swaps the
+            // roles after every frame. Both own their colour attachment, so
+            // destroying the target releases the texture.
+            std::array<accumulation_target, 2> targets{};
+            uint32_t write_index{0};
+
+            // The LDR and velocity textures the resolve bind groups were
+            // built against; invalid until the first prepare() builds them,
+            // and reset by resize() so they are rebuilt against the new
+            // targets.
+            gpu::texture bound_current{};
+            gpu::texture bound_velocity{};
+
+            // The view's size, and the per-texel step (1/width, 1/height)
+            // baked from it, kept so prepare() can rewrite the params UBO —
+            // bumping only the feedback weight — without losing the step in
+            // xy.
+            uint32_t width{0};
+            uint32_t height{0};
+            float inv_width{0.0f};
+            float inv_height{0.0f};
+
+            // The feedback weight the params UBO currently holds, or
+            // negative when the UBO must be rewritten whatever the weight
+            // (the texel step changed: a new or resized view). prepare()
+            // compares the weight the frame needs against it and rewrites on
+            // mismatch.
+            float uploaded_feedback{-1.0f};
+
+            // True while the history is unusable: before the view's first
+            // frame, after a resize, and on a camera-less frame. While set,
+            // the resolve uses the current frame only; the frame after
+            // switches the params UBO to the steady-state feedback.
+            bool first_frame{true};
+        };
+
         gpu::shader_module m_vertex_shader{};
         gpu::shader_module m_resolve_shader{};
 
         gpu::buffer m_vertex_buffer{};
-        gpu::buffer m_resolve_ubo{};
 
         gpu::bind_group_layout m_resolve_layout{};
         gpu::pipeline m_resolve_pipeline{};
 
-        // The pair, which half the next frame's resolve writes into (the
-        // other half then holds the history) and which half this frame's
-        // record() draws into, taken from the former by prepare(), which
-        // swaps the roles afterwards. Both own their colour attachment, so
-        // destroying the target releases the texture.
-        std::array<accumulation_target, 2> m_targets{};
-        uint32_t m_write_index{0};
-        uint32_t m_draw_index{0};
+        // Rebuilds both of @p view's resolve bind groups against
+        // @p current_color and @p velocity plus each half's opposite texture
+        // as history and the params UBO, remembering the two input handles.
+        void rebuild_resolve_bind_groups(view_data& view, gpu::texture current_color, gpu::texture velocity);
 
-        // The LDR and velocity textures the resolve bind groups were built
-        // against; invalid until the first record() builds them, and reset
-        // by resize() so they are rebuilt against the new targets.
-        gpu::texture m_bound_current{};
-        gpu::texture m_bound_velocity{};
+        // Writes {1/width, 1/height, feedback, 0} to @p view's params UBO
+        // and remembers the feedback. Only called from prepare(), inside
+        // the frame bracket: the buffer is host-mapped on a
+        // deferred-execution backend and the previous frame may still be
+        // reading it until begin_frame waits.
+        static void write_params(view_data& view, float feedback);
 
-        // The camera the history was accumulated from (invalid before the
-        // first frame and across no-camera frames); a frame whose camera
-        // differs restarts the accumulation.
-        camera_proxy_handle m_history_camera{};
-
-        // Allocates both rgba8 accumulation targets at @p width x @p height.
-        void create_targets(uint32_t width, uint32_t height);
-
-        // Rebuilds both resolve bind groups against @p current_color and
-        // @p velocity plus each half's opposite texture as history and the
-        // params UBO, remembering the two input handles.
-        void rebuild_resolve_bind_groups(gpu::texture current_color, gpu::texture velocity);
-
-        // Releases both resolve bind groups (no-op for invalid handles).
-        void destroy_resolve_bind_groups();
-
-        // Writes {1/width, 1/height, feedback, 0} to the resolve params UBO
-        // and remembers the feedback in @ref m_uploaded_feedback. Only
-        // called from prepare(), inside the frame bracket: the buffer is
-        // host-mapped on a deferred-execution backend and the previous
-        // frame may still be reading it until begin_frame waits.
-        void write_params(float feedback);
-
-        // Per-texel step (1/width, 1/height) baked at construction and
-        // rewritten by resize(). Kept so prepare() can rewrite the resolve
-        // params UBO — bumping only the feedback weight — without losing
-        // the step in xy.
-        float m_inv_width{0.0f};
-        float m_inv_height{0.0f};
-
-        // The feedback weight the params UBO currently holds, or negative
-        // when the UBO must be rewritten whatever the weight (the texel
-        // step changed: construction, resize). prepare() compares the
-        // weight the frame needs against it and rewrites on mismatch.
-        float m_uploaded_feedback{-1.0f};
-
-        // True while the history is unusable: before the first frame,
-        // after a resize, and whenever the camera changed or went away.
-        // While set, the resolve uses the current frame only; the frame
-        // after switches the params UBO to the steady-state feedback.
-        bool m_first_frame{true};
-
-        // False when the backbuffer dimensions are degenerate (no settings,
-        // zero-sized window); record() then no-ops and nothing is
-        // published, so FXAA keeps sampling the tonemap output.
-        bool m_enabled{false};
+        // The half this frame's record() draws into and its resolve bind
+        // group, picked by prepare().
+        gpu::render_target m_draw_target{};
+        gpu::bind_group m_draw_bind_group{};
     };
 } // namespace rendering_engine

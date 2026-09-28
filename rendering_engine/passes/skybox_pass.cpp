@@ -45,18 +45,10 @@ namespace rendering_engine
         vb_descriptor.initial_data = fullscreen_triangle_vertices.data();
         m_vertex_buffer = gpu.create_buffer(vb_descriptor);
 
-        gpu::buffer_descriptor ubo_descriptor{};
-        ubo_descriptor.size = sky_ubo_size;
-        ubo_descriptor.usage = gpu::buffer_usage_uniform | gpu::buffer_usage_copy_dst;
-        ubo_descriptor.hint = gpu::buffer_usage_hint::dynamic_data;
-        m_sky_ubo = gpu.create_buffer(ubo_descriptor);
-
         gpu::bind_group_layout_descriptor input_layout{};
         input_layout.entries.push_back({0, gpu::binding_kind::uniform_buffer});
         input_layout.entries.push_back({1, gpu::binding_kind::texture});
         m_input_layout = gpu.create_bind_group_layout(input_layout);
-
-        rebuild_bind_group();
 
         // Sky behind everything: depth tested against the loaded scene
         // depth with less-or-equal so the far-plane fragments pass where
@@ -99,20 +91,10 @@ namespace rendering_engine
             gpu.destroy(m_pipeline);
             m_pipeline = {};
         }
-        if (m_input_bind_group.valid())
-        {
-            gpu.destroy(m_input_bind_group);
-            m_input_bind_group = {};
-        }
         if (m_input_layout.valid())
         {
             gpu.destroy(m_input_layout);
             m_input_layout = {};
-        }
-        if (m_sky_ubo.valid())
-        {
-            gpu.destroy(m_sky_ubo);
-            m_sky_ubo = {};
         }
         if (m_vertex_buffer.valid())
         {
@@ -131,13 +113,34 @@ namespace rendering_engine
         }
     }
 
-    void skybox_pass::rebuild_bind_group()
+    skybox_pass::view_data::view_data(gpu::device& device) : device{&device}
+    {
+        gpu::buffer_descriptor ubo_descriptor{};
+        ubo_descriptor.size = sky_ubo_size;
+        ubo_descriptor.usage = gpu::buffer_usage_uniform | gpu::buffer_usage_copy_dst;
+        ubo_descriptor.hint = gpu::buffer_usage_hint::dynamic_data;
+        sky_ubo = device.create_buffer(ubo_descriptor);
+    }
+
+    skybox_pass::view_data::~view_data()
+    {
+        if (input_bind_group.valid())
+        {
+            device->destroy(input_bind_group);
+        }
+        if (sky_ubo.valid())
+        {
+            device->destroy(sky_ubo);
+        }
+    }
+
+    void skybox_pass::rebuild_bind_group(view_data& view, gpu::texture cubemap)
     {
         auto& gpu = *m_device;
-        if (m_input_bind_group.valid())
+        if (view.input_bind_group.valid())
         {
-            gpu.destroy(m_input_bind_group);
-            m_input_bind_group = {};
+            gpu.destroy(view.input_bind_group);
+            view.input_bind_group = {};
         }
 
         gpu::bind_group_descriptor descriptor{};
@@ -146,41 +149,43 @@ namespace rendering_engine
         gpu::binding_value sky_slot{};
         sky_slot.binding = 0;
         sky_slot.kind = gpu::binding_kind::uniform_buffer;
-        sky_slot.buffer_value = m_sky_ubo;
+        sky_slot.buffer_value = view.sky_ubo;
         descriptor.entries.push_back(sky_slot);
 
         gpu::binding_value cube_slot{};
         cube_slot.binding = 1;
         cube_slot.kind = gpu::binding_kind::texture;
-        cube_slot.texture_value = m_cubemap;
+        cube_slot.texture_value = cubemap;
         descriptor.entries.push_back(cube_slot);
 
-        m_input_bind_group = gpu.create_bind_group(descriptor);
+        view.input_bind_group = gpu.create_bind_group(descriptor);
+        view.bound_cubemap = cubemap;
     }
 
     void skybox_pass::prepare(const frame_context& ctx)
     {
-        // Follow the world's environment: a new probe, or none, swaps the
-        // cube map the input bind group samples.
-        const environment_probe* environment = ctx.world != nullptr ? ctx.world->environment() : nullptr;
-        const gpu::texture cubemap = environment != nullptr ? environment->skybox() : gpu::texture{};
-        if (cubemap != m_cubemap)
-        {
-            m_cubemap = cubemap;
-            rebuild_bind_group();
-        }
         m_target = ctx.resources->get(frame_resources::scene_color).target;
 
         // Dormant without a cube map, and a no-camera frame has no view ray
         // to reconstruct — leave the scene colour untouched.
-        m_draws = m_cubemap.valid() && ctx.active_camera != nullptr;
+        const environment_probe* environment = ctx.world != nullptr ? ctx.world->environment() : nullptr;
+        const gpu::texture cubemap = environment != nullptr ? environment->skybox() : gpu::texture{};
+        m_draws = cubemap.valid() && ctx.active_camera != nullptr;
         if (!m_draws)
         {
             return;
         }
 
-        auto& gpu = *m_device;
+        // Follow the world's environment: a new probe swaps the cube map
+        // the view's input bind group samples.
+        view_data& state = ctx.view->state<view_data>(*this, *m_device);
+        if (cubemap != state.bound_cubemap || !state.input_bind_group.valid())
+        {
+            rebuild_bind_group(state, cubemap);
+        }
+        m_input_bind_group = state.input_bind_group;
 
+        auto& gpu = *m_device;
         // Strip the translation from the view matrix so the sky rotates
         // with the camera but never translates, then invert
         // projection * view so the vertex shader can unproject screen
@@ -196,7 +201,7 @@ namespace rendering_engine
         view.data()[14] = 0.0f;
         const core::math::mat4 projection = jitter_projection(ctx.active_camera->projection, ctx.jitter);
         const core::math::mat4 inv_view_proj = core::math::inverse(projection * view);
-        gpu.write_buffer(m_sky_ubo, inv_view_proj.data(), sky_ubo_size, 0);
+        gpu.write_buffer(state.sky_ubo, inv_view_proj.data(), sky_ubo_size, 0);
     }
 
     void skybox_pass::record(gpu::command_encoder& encoder, const frame_context& /*ctx*/)

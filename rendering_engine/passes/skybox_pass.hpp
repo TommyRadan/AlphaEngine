@@ -67,18 +67,32 @@ namespace rendering_engine
         // through; handed in by the renderer and outlives the pass.
         gpu::device* m_device{nullptr};
 
-        // Rebuild the input bind group against @ref m_cubemap and the
-        // sky UBO. Called at construction and by @ref prepare when the
-        // cube map changed.
-        void rebuild_bind_group();
+        // What the pass keeps per view: the sky UBO holding the view's
+        // inverse view-projection, the input bind group over it and the
+        // cube map, and the cube map that group samples.
+        struct view_data final : pass_view_state
+        {
+            explicit view_data(gpu::device& device);
+            ~view_data() override;
 
-        // The cube map the input bind group samples; invalid leaves the
-        // pass dormant.
-        gpu::texture m_cubemap{};
+            view_data(const view_data&) = delete;
+            view_data& operator=(const view_data&) = delete;
 
-        // The scene colour target this frame composites into, looked up by
-        // @ref prepare.
+            gpu::device* device{nullptr};
+            gpu::buffer sky_ubo{};
+            gpu::bind_group input_bind_group{};
+            gpu::texture bound_cubemap{};
+        };
+
+        // Rebuilds @p view's input bind group against @p cubemap and the
+        // view's sky UBO. Called by @ref prepare when the cube map the
+        // group samples changed.
+        void rebuild_bind_group(view_data& view, gpu::texture cubemap);
+
+        // The scene colour target and input bind group this frame's
+        // record() draws with, looked up by @ref prepare.
         gpu::render_target m_target{};
+        gpu::bind_group m_input_bind_group{};
 
         // Whether this frame's record() draws (a cube map and a camera),
         // decided by prepare().
@@ -87,9 +101,7 @@ namespace rendering_engine
         gpu::shader_module m_vertex_shader{};
         gpu::shader_module m_fragment_shader{};
         gpu::buffer m_vertex_buffer{};
-        gpu::buffer m_sky_ubo{};
         gpu::bind_group_layout m_input_layout{};
-        gpu::bind_group m_input_bind_group{};
         gpu::pipeline m_pipeline{};
     };
 } // namespace rendering_engine

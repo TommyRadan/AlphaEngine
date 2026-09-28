@@ -30,42 +30,16 @@ namespace rendering_engine
         static_assert(sizeof(ui_frame_block) == 80, "UiFrame block must be a std140 mat4 and a vec4");
     } // namespace
 
-    ui_pass::ui_pass(gpu::device& device, uint32_t width, uint32_t height)
-        : m_device(&device), m_width(width), m_height(height)
+    ui_pass::ui_pass(gpu::device& device) : m_device(&device)
     {
-        auto& gpu = *m_device;
-        m_frame_layout = gpu.create_bind_group_layout(ui_material::frame_layout_descriptor());
-
-        gpu::buffer_descriptor ubo_descriptor{};
-        ubo_descriptor.size = sizeof(ui_frame_block);
-        ubo_descriptor.usage = gpu::buffer_usage_uniform | gpu::buffer_usage_copy_dst;
-        ubo_descriptor.hint = gpu::buffer_usage_hint::dynamic_data;
-        m_frame_ubo = gpu.create_buffer(ubo_descriptor);
-
-        gpu::bind_group_descriptor bind_group_descriptor{};
-        bind_group_descriptor.layout = m_frame_layout;
-        gpu::binding_value frame_slot{};
-        frame_slot.binding = ui_material::frame_binding;
-        frame_slot.kind = gpu::binding_kind::uniform_buffer;
-        frame_slot.buffer_value = m_frame_ubo;
-        bind_group_descriptor.entries.push_back(frame_slot);
-        m_frame_bind_group = gpu.create_bind_group(bind_group_descriptor);
+        m_frame_layout = m_device->create_bind_group_layout(ui_material::frame_layout_descriptor());
     }
 
     ui_pass::~ui_pass()
     {
-        auto& gpu = *m_device;
-        if (m_frame_bind_group.valid())
-        {
-            gpu.destroy(m_frame_bind_group);
-        }
-        if (m_frame_ubo.valid())
-        {
-            gpu.destroy(m_frame_ubo);
-        }
         if (m_frame_layout.valid())
         {
-            gpu.destroy(m_frame_layout);
+            m_device->destroy(m_frame_layout);
         }
     }
 
@@ -74,46 +48,69 @@ namespace rendering_engine
         return m_frame_layout;
     }
 
-    void ui_pass::resize(uint32_t width, uint32_t height)
+    ui_pass::view_data::view_data(gpu::device& device, gpu::bind_group_layout frame_layout) : device{&device}
     {
-        // Runs between frames, while the previous frame may still be
-        // reading the block on a deferred-execution backend, so only note
-        // the size; record() rewrites the buffer after begin_frame waited.
-        m_width = width;
-        m_height = height;
-        m_frame_dirty = true;
+        gpu::buffer_descriptor ubo_descriptor{};
+        ubo_descriptor.size = sizeof(ui_frame_block);
+        ubo_descriptor.usage = gpu::buffer_usage_uniform | gpu::buffer_usage_copy_dst;
+        ubo_descriptor.hint = gpu::buffer_usage_hint::dynamic_data;
+        frame_ubo = device.create_buffer(ubo_descriptor);
+
+        gpu::bind_group_descriptor bind_group_descriptor{};
+        bind_group_descriptor.layout = frame_layout;
+        gpu::binding_value frame_slot{};
+        frame_slot.binding = ui_material::frame_binding;
+        frame_slot.kind = gpu::binding_kind::uniform_buffer;
+        frame_slot.buffer_value = frame_ubo;
+        bind_group_descriptor.entries.push_back(frame_slot);
+        frame_bind_group = device.create_bind_group(bind_group_descriptor);
     }
 
-    void ui_pass::write_frame_block()
+    ui_pass::view_data::~view_data()
     {
-        // A degenerate drawable never reaches here through resize; the
-        // construction-time size is clamped so the reciprocal stays finite.
-        const float width = static_cast<float>(std::max<uint32_t>(m_width, 1));
-        const float height = static_cast<float>(std::max<uint32_t>(m_height, 1));
+        if (frame_bind_group.valid())
+        {
+            device->destroy(frame_bind_group);
+        }
+        if (frame_ubo.valid())
+        {
+            device->destroy(frame_ubo);
+        }
+    }
+
+    void ui_pass::view_data::write_frame_block(uint32_t new_width, uint32_t new_height)
+    {
+        // A view is at least one pixel across; the clamp keeps the
+        // reciprocal finite regardless.
+        const float block_width = static_cast<float>(std::max<uint32_t>(new_width, 1));
+        const float block_height = static_cast<float>(std::max<uint32_t>(new_height, 1));
 
         // Left 0, right width; bottom height, top 0: pixel rows grow
         // downwards and land on the engine's y-up clip space (the Vulkan
         // backend flips its swapchain viewport to keep NDC +Y up).
         ui_frame_block block{};
-        block.projection = core::math::ortho(0.0f, width, height, 0.0f, -1.0f, 1.0f);
-        block.viewport[0] = width;
-        block.viewport[1] = height;
-        block.viewport[2] = 1.0f / width;
-        block.viewport[3] = 1.0f / height;
-        m_device->write_buffer(m_frame_ubo, &block, sizeof(block), 0);
+        block.projection = core::math::ortho(0.0f, block_width, block_height, 0.0f, -1.0f, 1.0f);
+        block.viewport[0] = block_width;
+        block.viewport[1] = block_height;
+        block.viewport[2] = 1.0f / block_width;
+        block.viewport[3] = 1.0f / block_height;
+        device->write_buffer(frame_ubo, &block, sizeof(block), 0);
+        width = new_width;
+        height = new_height;
     }
 
     void ui_pass::prepare(const frame_context& ctx)
     {
-        // Inside the frame bracket: the frame that last read the block has
-        // retired, so a resize's new projection can be written now.
-        if (m_frame_dirty)
+        // Inside the frame bracket: the frame that last read the view's
+        // block has retired, so a new projection can be written here.
+        view_data& view = ctx.view->state<view_data>(*this, *m_device, m_frame_layout);
+        if (view.width != ctx.viewport_width || view.height != ctx.viewport_height)
         {
-            write_frame_block();
-            m_frame_dirty = false;
+            view.write_frame_block(ctx.viewport_width, ctx.viewport_height);
         }
+        m_frame_bind_group = view.frame_bind_group;
 
-        m_target = ctx.resources->get(frame_resources::swapchain);
+        m_output = ctx.resources->get(frame_resources::output);
         m_items.assign(ctx.ui_draws.begin(), ctx.ui_draws.end());
         // Sorted by (pipeline, material instance) so instances sharing
         // a pipeline sit together; the per-material group is rebound
@@ -138,16 +135,20 @@ namespace rendering_engine
     void ui_pass::record(gpu::command_encoder& encoder, const frame_context& /*ctx*/)
     {
         gpu::render_pass_descriptor descriptor{};
-        descriptor.target = m_target;
-        // The scene pass already cleared the framebuffer (or there
-        // was no camera and we're drawing UI on a fresh black
-        // backbuffer); either way the UI overlay is drawn on top
-        // without re-clearing the colour, and depth is disabled so
-        // the overlay always wins.
+        descriptor.target = m_output.target;
+        // The view's post chain already drew its rectangle (over a cleared
+        // black image when there was no camera); either way the UI overlay
+        // is drawn on top without re-clearing the colour, and depth is
+        // disabled so the overlay always wins.
         descriptor.color[0].load = gpu::load_op::load;
         descriptor.use_depth = false;
 
         auto pass_encoder = encoder.begin_render_pass(descriptor);
+        if (!m_output.covers_target())
+        {
+            pass_encoder->set_viewport(
+                m_output.x, m_output.y, static_cast<int>(m_output.width), static_cast<int>(m_output.height));
+        }
 
         uint64_t last_pipeline_id = 0;
         const material* last_material = nullptr;

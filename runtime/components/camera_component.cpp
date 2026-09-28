@@ -6,9 +6,35 @@
 #include <core/log.hpp>
 #include <rendering_engine/camera/orthographic_camera.hpp>
 #include <rendering_engine/camera/perspective_camera.hpp>
+#include <rendering_engine/render_texture.hpp>
 #include <rendering_engine/render_world.hpp>
 #include <runtime/node.hpp>
 #include <runtime/scene.hpp>
+
+namespace
+{
+    // The width / height of the rectangle @p camera renders into: its
+    // viewport's share of its render texture, or of the drawable @p world
+    // reports for a camera on the swapchain; 0 when there is nothing to
+    // measure (no drawable yet, an empty rectangle).
+    float view_aspect(const rendering_engine::render_world& world, const rendering_engine::camera& camera)
+    {
+        const rendering_engine::viewport_rect& viewport = camera.viewport();
+        if (viewport.width <= 0.0f || viewport.height <= 0.0f)
+        {
+            return 0.0f;
+        }
+        const rendering_engine::render_texture* target = camera.target();
+        float target_aspect = world.drawable_aspect();
+        if (target != nullptr)
+        {
+            target_aspect = target->height() != 0
+                                ? static_cast<float>(target->width()) / static_cast<float>(target->height())
+                                : 0.0f;
+        }
+        return target_aspect * viewport.width / viewport.height;
+    }
+} // namespace
 
 runtime::camera_component::camera_component(std::unique_ptr<rendering_engine::camera> camera)
     : m_camera{std::move(camera)}
@@ -47,6 +73,9 @@ runtime::camera_component runtime::camera_component::clone() const
 
     copy->set_priority(m_camera->get_priority());
     copy->set_main(m_camera->is_main());
+    copy->set_target(m_camera->target());
+    copy->set_viewport(m_camera->viewport());
+    copy->set_draws_ui(m_camera->draws_ui());
     camera_component cloned{std::move(copy)};
     cloned.m_offset.set_position(m_offset.get_position());
     cloned.m_offset.set_quaternion(m_offset.get_quaternion());
@@ -74,11 +103,12 @@ void runtime::camera_component::on_attach(node& owner)
         return;
     }
 
-    // Match the drawable the world reports, as every later report will be
-    // matched by extract().
-    if (world->drawable_aspect() > 0.0f)
+    // Match the rectangle the camera renders into, as every later change
+    // will be matched by extract().
+    m_applied_aspect = view_aspect(*world, *m_camera);
+    if (m_applied_aspect > 0.0f)
     {
-        m_camera->set_aspect_ratio(world->drawable_aspect());
+        m_camera->set_aspect_ratio(m_applied_aspect);
     }
     m_aspect_revision = world->aspect_revision();
 
@@ -127,17 +157,26 @@ void runtime::camera_component::extract(const node& owner)
         return;
     }
 
-    // A drawable size reported since the camera last took one.
-    if (m_world->aspect_revision() != m_aspect_revision)
+    // A drawable size reported since the camera last took one, or another
+    // rectangle to render into (a new target or viewport).
+    const float aspect = view_aspect(*m_world, *m_camera);
+    if (m_world->aspect_revision() != m_aspect_revision || aspect != m_applied_aspect)
     {
         m_aspect_revision = m_world->aspect_revision();
-        if (m_world->drawable_aspect() > 0.0f)
+        m_applied_aspect = aspect;
+        if (aspect > 0.0f)
         {
-            m_camera->set_aspect_ratio(m_world->drawable_aspect());
+            m_camera->set_aspect_ratio(aspect);
         }
     }
 
     proxy->culling_mask = m_camera->culling_mask();
+    const rendering_engine::render_texture* target = m_camera->target();
+    proxy->target = target != nullptr ? target->target() : rendering_engine::gpu::render_target{};
+    proxy->target_width = target != nullptr ? target->width() : 0;
+    proxy->target_height = target != nullptr ? target->height() : 0;
+    proxy->viewport = m_camera->viewport();
+    proxy->ui = m_camera->draws_ui();
     proxy->priority = m_camera->get_priority();
     proxy->main = m_camera->is_main();
     proxy->enabled = m_camera->is_enabled();

@@ -5,6 +5,8 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cmath>
+#include <functional>
 #include <utility>
 
 #include <core/log.hpp>
@@ -29,6 +31,34 @@ namespace
             return candidate.priority > incumbent->priority;
         }
         return candidate.main || !incumbent->main;
+    }
+
+    // Converts a fraction of a @p size-pixel target to pixels, the fraction
+    // clamped into the target.
+    uint32_t to_pixels(float fraction, uint32_t size)
+    {
+        return static_cast<uint32_t>(std::lround(std::clamp(fraction, 0.0f, 1.0f) * static_cast<float>(size)));
+    }
+
+    // Places @p v's rectangle on its target of @p target_width x
+    // @p target_height pixels: @p viewport clamped into the target and
+    // rounded to pixels, at least one pixel across.
+    void place_view(rendering_engine::view& v,
+                    const rendering_engine::viewport_rect& viewport,
+                    uint32_t target_width,
+                    uint32_t target_height)
+    {
+        const uint32_t left = std::min(to_pixels(viewport.x, target_width), target_width - 1);
+        const uint32_t right = std::clamp(to_pixels(viewport.x + viewport.width, target_width), left + 1, target_width);
+        const uint32_t bottom = std::min(to_pixels(viewport.y, target_height), target_height - 1);
+        const uint32_t top =
+            std::clamp(to_pixels(viewport.y + viewport.height, target_height), bottom + 1, target_height);
+        v.x = static_cast<int32_t>(left);
+        v.y = static_cast<int32_t>(bottom);
+        v.width = right - left;
+        v.height = top - bottom;
+        v.target_width = target_width;
+        v.target_height = target_height;
     }
 } // namespace
 
@@ -307,7 +337,7 @@ rendering_engine::camera_proxy_handle rendering_engine::render_world::active_cam
     camera_proxy_handle winner{};
     for (std::size_t i = 0; i < cameras.size(); ++i)
     {
-        if (cameras[i].enabled && outranks(cameras[i], best))
+        if (cameras[i].enabled && !cameras[i].target.valid() && outranks(cameras[i], best))
         {
             best = &cameras[i];
             winner = m_cameras.handle_at(i);
@@ -330,6 +360,93 @@ rendering_engine::camera_proxy_handle rendering_engine::render_world::main_camer
         }
     }
     return winner;
+}
+
+void rendering_engine::render_world::collect_views(std::vector<view>& out,
+                                                   uint32_t drawable_width,
+                                                   uint32_t drawable_height) const
+{
+    out.clear();
+
+    // One view per target and rectangle, rendered by the enabled camera
+    // that outranks the others drawing there. The cameras are walked in
+    // creation order, so a later camera wins a full tie.
+    const std::span<const camera_proxy> cameras = m_cameras.values();
+    for (std::size_t i = 0; i < cameras.size(); ++i)
+    {
+        const camera_proxy& candidate = cameras[i];
+        if (!candidate.enabled)
+        {
+            continue;
+        }
+        const auto same_place =
+            std::find_if(out.begin(),
+                         out.end(),
+                         [&candidate](const view& v)
+                         { return v.target == candidate.target && v.proxy->viewport == candidate.viewport; });
+        if (same_place == out.end())
+        {
+            view placed{};
+            placed.camera = m_cameras.handle_at(i);
+            placed.proxy = &candidate;
+            placed.target = candidate.target;
+            out.push_back(placed);
+        }
+        else if (outranks(candidate, same_place->proxy))
+        {
+            same_place->camera = m_cameras.handle_at(i);
+            same_place->proxy = &candidate;
+        }
+    }
+
+    // The views on render textures first, then the lower ranked before the
+    // higher, so the highest-ranked view on the swapchain — the primary one —
+    // comes last. The proxies sit in creation order in the pool, so their
+    // addresses order a full tie the way the arbitration does.
+    std::stable_sort(out.begin(),
+                     out.end(),
+                     [](const view& a, const view& b)
+                     {
+                         if (a.on_swapchain() != b.on_swapchain())
+                         {
+                             return !a.on_swapchain();
+                         }
+                         if (a.proxy->priority != b.proxy->priority)
+                         {
+                             return a.proxy->priority < b.proxy->priority;
+                         }
+                         if (a.proxy->main != b.proxy->main)
+                         {
+                             return !a.proxy->main;
+                         }
+                         return std::less<const camera_proxy*>{}(a.proxy, b.proxy);
+                     });
+
+    const uint32_t swapchain_width = std::max(drawable_width, 1u);
+    const uint32_t swapchain_height = std::max(drawable_height, 1u);
+    for (view& v : out)
+    {
+        const camera_proxy& camera = *v.proxy;
+        if (v.on_swapchain())
+        {
+            place_view(v, camera.viewport, swapchain_width, swapchain_height);
+            v.ui = camera.ui;
+        }
+        else
+        {
+            place_view(v, camera.viewport, std::max(camera.target_width, 1u), std::max(camera.target_height, 1u));
+            v.ui = false;
+        }
+    }
+
+    // Nothing on the swapchain: a camera-less view clears it, so it is
+    // still drawn, and the UI still composites.
+    if (out.empty() || !out.back().on_swapchain())
+    {
+        view swapchain{};
+        place_view(swapchain, viewport_rect{}, swapchain_width, swapchain_height);
+        out.push_back(swapchain);
+    }
 }
 
 void rendering_engine::render_world::set_drawable_aspect(float aspect_ratio)

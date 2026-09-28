@@ -115,11 +115,31 @@ namespace rendering_engine
         // The pipeline variant this frame draws with, picked by prepare().
         size_t m_variant{0};
 
-        // Rebuild the input bind group against @p input_color, the Tonemap
-        // UBO, @p grading_lut and @p exposure (either may be invalid when
-        // the variant drawn does not sample it), remembering the three
+        // What the pass keeps per view: the input bind group over the
+        // view's inputs and the textures it was built against (invalid
+        // until the view's first prepare() builds it). The Tonemap UBO
+        // holds settings every view shares, so it is the pass's.
+        struct view_data final : pass_view_state
+        {
+            explicit view_data(gpu::device& device) : device{&device} {}
+            ~view_data() override;
+
+            view_data(const view_data&) = delete;
+            view_data& operator=(const view_data&) = delete;
+
+            gpu::device* device{nullptr};
+            gpu::bind_group input_bind_group{};
+            gpu::texture bound_input{};
+            gpu::texture bound_grading_lut{};
+            gpu::texture bound_exposure{};
+        };
+
+        // Rebuild @p view's input bind group against @p input_color, the
+        // Tonemap UBO, @p grading_lut and @p exposure (either may be invalid
+        // when the variant drawn does not sample it), remembering the three
         // handles.
-        void rebuild_bind_group(gpu::texture input_color, gpu::texture grading_lut, gpu::texture exposure);
+        void
+        rebuild_bind_group(view_data& view, gpu::texture input_color, gpu::texture grading_lut, gpu::texture exposure);
 
         // CPU-side mirror of the std140 @c Tonemap UBO: the float
         // exposure scale, the int operator selector and the float grading
@@ -135,16 +155,11 @@ namespace rendering_engine
         // {HDR colour @0, Tonemap UBO @1, grading LUT @2, exposure @3},
         // shared by every variant.
         gpu::bind_group_layout m_input_layout{};
-        gpu::bind_group m_input_bind_group{};
         std::array<gpu::pipeline, variant_count> m_pipelines{};
 
-        // The textures @ref m_input_bind_group was built against; invalid
-        // until the first prepare() builds the group.
-        gpu::texture m_bound_input{};
-        gpu::texture m_bound_grading_lut{};
-        gpu::texture m_bound_exposure{};
-
-        // The LDR target this frame resolves into, looked up by prepare().
+        // The LDR target this frame resolves into and the view's input bind
+        // group it samples through, looked up by prepare().
         gpu::render_target m_target{};
+        gpu::bind_group m_input_bind_group{};
     };
 } // namespace rendering_engine

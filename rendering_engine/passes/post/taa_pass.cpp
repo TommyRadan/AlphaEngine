@@ -31,17 +31,9 @@ namespace
 
 namespace rendering_engine
 {
-    taa_pass::taa_pass(gpu::device& device, uint32_t width, uint32_t height) : m_device(&device)
+    taa_pass::taa_pass(gpu::device& device) : m_device(&device)
     {
         auto& gpu = *m_device;
-
-        // Degenerate backbuffer (no settings, zero-sized window): leave the
-        // pass disabled so it publishes no resolve and FXAA keeps sampling
-        // the raw tonemap output.
-        if (width == 0 || height == 0)
-        {
-            return;
-        }
 
         // -- Shaders --------------------------------------------------
         m_vertex_shader =
@@ -57,20 +49,6 @@ namespace rendering_engine
         vb_descriptor.initial_data = fullscreen_triangle_vertices.data();
         m_vertex_buffer = gpu.create_buffer(vb_descriptor);
 
-        // -- Resolve params UBO: texel step + history feedback --------
-        // The feedback starts at 0 so the first frame ignores the still
-        // undefined history; record() bumps it to frame_context::post's
-        // taa.feedback once a frame of the same camera has been resolved.
-        m_inv_width = 1.0f / static_cast<float>(width);
-        m_inv_height = 1.0f / static_cast<float>(height);
-        const std::array<float, 4> initial_params = {m_inv_width, m_inv_height, 0.0f, 0.0f};
-        gpu::buffer_descriptor ubo_descriptor{};
-        ubo_descriptor.size = taa_ubo_size;
-        ubo_descriptor.usage = gpu::buffer_usage_uniform | gpu::buffer_usage_copy_dst;
-        ubo_descriptor.hint = gpu::buffer_usage_hint::dynamic_data;
-        ubo_descriptor.initial_data = initial_params.data();
-        m_resolve_ubo = gpu.create_buffer(ubo_descriptor);
-
         // -- Bind-group layout ----------------------------------------
         gpu::bind_group_layout_descriptor resolve_layout{};
         resolve_layout.entries.push_back({0, gpu::binding_kind::texture});
@@ -78,9 +56,6 @@ namespace rendering_engine
         resolve_layout.entries.push_back({2, gpu::binding_kind::texture});
         resolve_layout.entries.push_back({3, gpu::binding_kind::uniform_buffer});
         m_resolve_layout = gpu.create_bind_group_layout(resolve_layout);
-
-        // -- Targets --------------------------------------------------
-        create_targets(width, height);
 
         // -- Pipeline -------------------------------------------------
         gpu::vertex_buffer_layout vertex_layout{};
@@ -110,53 +85,114 @@ namespace rendering_engine
         pipeline_descriptor.bind_group_layouts.push_back(m_resolve_layout);
         m_resolve_pipeline = gpu.create_pipeline(pipeline_descriptor);
 
-        // The resolve bind groups sample the LDR image and the motion
-        // vectors, which are looked up in the frame's store; prepare()
-        // builds them on the first frame and rebuilds them whenever either
-        // handle changes.
-        m_enabled = true;
+        // Each view's pair, params UBO and resolve bind groups are built by
+        // prepare(): the groups sample the LDR image and the motion vectors,
+        // which are looked up in the view's store, and are rebuilt whenever
+        // either handle changes.
     }
 
-    void taa_pass::create_targets(uint32_t width, uint32_t height)
+    taa_pass::view_data::view_data(gpu::device& device) : device{&device}
     {
-        auto& gpu = *m_device;
+        // The feedback starts at 0 so the view's first frame ignores the
+        // still undefined history; prepare() writes the texel step with it
+        // and bumps it to frame_context::post's taa.feedback once a frame
+        // of the view has been resolved.
+        gpu::buffer_descriptor ubo_descriptor{};
+        ubo_descriptor.size = taa_ubo_size;
+        ubo_descriptor.usage = gpu::buffer_usage_uniform | gpu::buffer_usage_copy_dst;
+        ubo_descriptor.hint = gpu::buffer_usage_hint::dynamic_data;
+        resolve_ubo = device.create_buffer(ubo_descriptor);
+    }
 
-        // Both rgba8, no depth: the post chain runs depth-disabled and the
-        // image is already tonemapped LDR at this point.
-        for (auto& half : m_targets)
+    taa_pass::view_data::~view_data()
+    {
+        destroy_resolve_bind_groups();
+        // Each render target owns its colour attachment, so destroying the
+        // target releases the texture too.
+        for (auto& half : targets)
         {
-            gpu::render_target_descriptor descriptor{};
-            descriptor.color = {{gpu::texture_format::rgba8_unorm}};
-            descriptor.width = width;
-            descriptor.height = height;
-            descriptor.with_depth = false;
-            half.target = gpu.create_render_target(descriptor);
-            half.texture = gpu.render_target_color_texture(half.target);
+            if (half.target.valid())
+            {
+                device->destroy(half.target);
+            }
+        }
+        if (resolve_ubo.valid())
+        {
+            device->destroy(resolve_ubo);
         }
     }
 
-    void taa_pass::destroy_resolve_bind_groups()
+    void taa_pass::view_data::resize(uint32_t new_width, uint32_t new_height)
     {
-        auto& gpu = *m_device;
-        for (auto& half : m_targets)
+        // Both rgba8, no depth: the post chain runs depth-disabled and the
+        // image is already tonemapped LDR at this point. The replacements
+        // are created before the old targets are released so the published
+        // resolve handle changes and FXAA rebinds; the device retires the
+        // attachments only once the last command buffer that sampled them
+        // has finished.
+        const std::array<gpu::render_target, 2> old_targets = {targets[0].target, targets[1].target};
+        for (auto& half : targets)
+        {
+            gpu::render_target_descriptor descriptor{};
+            descriptor.color = {{gpu::texture_format::rgba8_unorm}};
+            descriptor.width = new_width;
+            descriptor.height = new_height;
+            descriptor.with_depth = false;
+            half.target = device->create_render_target(descriptor);
+            half.texture = device->render_target_color_texture(half.target);
+        }
+        for (const auto& old : old_targets)
+        {
+            if (old.valid())
+            {
+                device->destroy(old);
+            }
+        }
+
+        // The resolve bind groups sample the replaced targets as history:
+        // drop them and forget the inputs they were built with so the next
+        // prepare() rebuilds them against the new pair (and whatever LDR /
+        // velocity handles that frame publishes).
+        destroy_resolve_bind_groups();
+        bound_current = {};
+        bound_velocity = {};
+
+        // The history is a differently sized image of a differently
+        // projected frame, if any: drop it. Pin the feedback to 0 again so
+        // the first frame at the new size resolves from the current image
+        // alone. The params UBO is not touched here: it is host-mapped on
+        // a deferred-execution backend and the previous frame may still be
+        // reading it, so prepare() rewrites it (with the new texel step)
+        // once begin_frame has waited for that frame.
+        width = new_width;
+        height = new_height;
+        inv_width = 1.0f / static_cast<float>(new_width);
+        inv_height = 1.0f / static_cast<float>(new_height);
+        first_frame = true;
+        uploaded_feedback = -1.0f;
+    }
+
+    void taa_pass::view_data::destroy_resolve_bind_groups()
+    {
+        for (auto& half : targets)
         {
             if (half.resolve_bind_group.valid())
             {
-                gpu.destroy(half.resolve_bind_group);
+                device->destroy(half.resolve_bind_group);
                 half.resolve_bind_group = {};
             }
         }
     }
 
-    void taa_pass::rebuild_resolve_bind_groups(gpu::texture current_color, gpu::texture velocity)
+    void taa_pass::rebuild_resolve_bind_groups(view_data& view, gpu::texture current_color, gpu::texture velocity)
     {
         auto& gpu = *m_device;
 
         // Safe mid-frame: the device defers the destroy until the command
         // buffer that may still reference the old groups has retired.
-        destroy_resolve_bind_groups();
+        view.destroy_resolve_bind_groups();
 
-        for (size_t index = 0; index < m_targets.size(); ++index)
+        for (size_t index = 0; index < view.targets.size(); ++index)
         {
             gpu::bind_group_descriptor resolve_bind_group_descriptor{};
             resolve_bind_group_descriptor.layout = m_resolve_layout;
@@ -171,7 +207,7 @@ namespace rendering_engine
             gpu::binding_value history_slot{};
             history_slot.binding = 1;
             history_slot.kind = gpu::binding_kind::texture;
-            history_slot.texture_value = m_targets[1 - index].texture;
+            history_slot.texture_value = view.targets[1 - index].texture;
             resolve_bind_group_descriptor.entries.push_back(history_slot);
 
             gpu::binding_value velocity_slot{};
@@ -183,86 +219,28 @@ namespace rendering_engine
             gpu::binding_value params_slot{};
             params_slot.binding = 3;
             params_slot.kind = gpu::binding_kind::uniform_buffer;
-            params_slot.buffer_value = m_resolve_ubo;
+            params_slot.buffer_value = view.resolve_ubo;
             resolve_bind_group_descriptor.entries.push_back(params_slot);
 
-            m_targets[index].resolve_bind_group = gpu.create_bind_group(resolve_bind_group_descriptor);
+            view.targets[index].resolve_bind_group = gpu.create_bind_group(resolve_bind_group_descriptor);
         }
-        m_bound_current = current_color;
-        m_bound_velocity = velocity;
+        view.bound_current = current_color;
+        view.bound_velocity = velocity;
     }
 
-    void taa_pass::write_params(float feedback)
+    void taa_pass::write_params(view_data& view, float feedback)
     {
-        auto& gpu = *m_device;
         // Rewrite the whole vec4 so the texel step (xy) travels with the
         // feedback weight (z).
-        const std::array<float, 4> params = {m_inv_width, m_inv_height, feedback, 0.0f};
-        gpu.write_buffer(m_resolve_ubo, params.data(), taa_ubo_size, 0);
-        m_uploaded_feedback = feedback;
-    }
-
-    void taa_pass::resize(uint32_t width, uint32_t height)
-    {
-        if (!m_enabled || width == 0 || height == 0)
-        {
-            return;
-        }
-        auto& gpu = *m_device;
-
-        // Create the replacements before releasing the old targets so the
-        // published resolve handle changes and FXAA rebinds. The releases are safe here: resize
-        // runs between frames, and a deferred-execution backend retires
-        // the attachments only once the last command buffer that sampled
-        // them has finished.
-        const std::array<gpu::render_target, 2> old_targets = {m_targets[0].target, m_targets[1].target};
-        create_targets(width, height);
-        for (const auto& old : old_targets)
-        {
-            if (old.valid())
-            {
-                gpu.destroy(old);
-            }
-        }
-
-        // The resolve bind groups sample the replaced targets as history:
-        // drop them and forget the inputs they were built with so the next
-        // record() rebuilds them against the new pair (and whatever LDR /
-        // velocity handles that frame publishes).
-        destroy_resolve_bind_groups();
-        m_bound_current = {};
-        m_bound_velocity = {};
-
-        // The history is a differently sized image of a differently
-        // projected frame: drop it. Pin the feedback to 0 again so the
-        // first frame at the new size resolves from the current image
-        // alone, exactly like the first frame after construction. The
-        // params UBO is not touched here: it is host-mapped on a
-        // deferred-execution backend and the previous frame may still be
-        // reading it, so the next record() rewrites it (with the new
-        // texel step) once begin_frame has waited for that frame.
-        m_inv_width = 1.0f / static_cast<float>(width);
-        m_inv_height = 1.0f / static_cast<float>(height);
-        m_first_frame = true;
-        m_uploaded_feedback = -1.0f;
+        const std::array<float, 4> params = {view.inv_width, view.inv_height, feedback, 0.0f};
+        view.device->write_buffer(view.resolve_ubo, params.data(), taa_ubo_size, 0);
+        view.uploaded_feedback = feedback;
     }
 
     taa_pass::~taa_pass()
     {
         auto& gpu = *m_device;
 
-        destroy_resolve_bind_groups();
-        // Each render target owns its colour attachment, so destroying the
-        // target releases the texture too.
-        for (auto& half : m_targets)
-        {
-            if (half.target.valid())
-            {
-                gpu.destroy(half.target);
-                half.target = {};
-                half.texture = {};
-            }
-        }
         if (m_resolve_pipeline.valid())
         {
             gpu.destroy(m_resolve_pipeline);
@@ -272,11 +250,6 @@ namespace rendering_engine
         {
             gpu.destroy(m_resolve_layout);
             m_resolve_layout = {};
-        }
-        if (m_resolve_ubo.valid())
-        {
-            gpu.destroy(m_resolve_ubo);
-            m_resolve_ubo = {};
         }
         if (m_vertex_buffer.valid())
         {
@@ -297,34 +270,37 @@ namespace rendering_engine
 
     void taa_pass::prepare(const frame_context& ctx)
     {
-        if (!m_enabled)
+        // The view's pair follows the view's size; a new or resized pair
+        // holds no history yet.
+        view_data& view = ctx.view->state<view_data>(*this, *m_device);
+        if (view.width != ctx.viewport_width || view.height != ctx.viewport_height)
         {
-            return;
+            view.resize(ctx.viewport_width, ctx.viewport_height);
         }
 
-        // The history belongs to the camera it was accumulated from. A
-        // frame with no camera, or with a different one (attach / detach,
-        // a switch, a teleport by reattaching), restarts the accumulation
-        // so nothing ghosts against a stale image.
-        if (ctx.active_camera == nullptr || ctx.active_camera_handle != m_history_camera)
+        // The history belongs to the view's camera: the view is keyed by
+        // it, so a camera switch or a teleport by reattaching starts a new
+        // view and a new history. A camera-less frame restarts the
+        // accumulation too, so nothing ghosts against a stale image.
+        if (ctx.active_camera == nullptr)
         {
-            m_first_frame = true;
+            view.first_frame = true;
         }
-        m_history_camera = ctx.active_camera != nullptr ? ctx.active_camera_handle : camera_proxy_handle{};
 
         // Bind this frame's LDR image and motion vectors. Both handles are
         // stable from frame to frame, but a resize recreates the targets
         // behind them (and resize() forgets the bound pair so the new
         // history is picked up), so compare against what the groups were
         // built with and rebuild on change — the first frame included.
-        m_draw_index = m_write_index;
-        accumulation_target& write = m_targets[m_draw_index];
+        const accumulation_target& write = view.targets[view.write_index];
         const gpu::texture current = ctx.resources->get(frame_resources::ldr_color).texture;
         const gpu::texture velocity = ctx.resources->get(frame_resources::velocity);
-        if (current != m_bound_current || velocity != m_bound_velocity || !write.resolve_bind_group.valid())
+        if (current != view.bound_current || velocity != view.bound_velocity || !write.resolve_bind_group.valid())
         {
-            rebuild_resolve_bind_groups(current, velocity);
+            rebuild_resolve_bind_groups(view, current, velocity);
         }
+        m_draw_target = write.target;
+        m_draw_bind_group = write.resolve_bind_group;
         ctx.resources->publish(frame_resources::taa_resolve, write.texture);
 
         // While the history is unusable the feedback is pinned to 0
@@ -334,40 +310,35 @@ namespace rendering_engine
         // the previous frame, so the value the GPU reads for this frame is
         // the one this frame needs — a mismatch also covers the texel step
         // a resize changed and a live change to the feedback weight.
-        const float feedback = m_first_frame ? 0.0f : ctx.post.taa.feedback;
-        if (feedback != m_uploaded_feedback)
+        const float feedback = view.first_frame ? 0.0f : ctx.post.taa.feedback;
+        if (feedback != view.uploaded_feedback)
         {
-            write_params(feedback);
+            write_params(view, feedback);
         }
 
-        // This frame's half will hold a real frame of this camera once
-        // record() draws it: swap the roles so the next frame reads it as
-        // history, and switch to the steady-state feedback so subsequent
-        // frames accumulate.
-        m_write_index = 1u - m_write_index;
-        m_first_frame = false;
+        // This frame's half will hold a real frame of this view once
+        // record() draws it: swap the roles so the view's next frame reads
+        // it as history, and switch to the steady-state feedback so
+        // subsequent frames accumulate.
+        view.write_index = 1u - view.write_index;
+        view.first_frame = false;
     }
 
     void taa_pass::record(gpu::command_encoder& encoder, const frame_context& /*ctx*/)
     {
-        if (!m_enabled)
-        {
-            return;
-        }
-
         // Resolve: blend the current LDR frame with the clamped history
         // (the other half of the pair) into this frame's half, which the
-        // next pass (FXAA) samples and the next frame reads as history.
-        const accumulation_target& write = m_targets[m_draw_index];
+        // next pass (FXAA) samples and the view's next frame reads as
+        // history.
         gpu::render_pass_descriptor descriptor{};
-        descriptor.target = write.target;
+        descriptor.target = m_draw_target;
         descriptor.color[0].load = gpu::load_op::clear;
         descriptor.color[0].clear_color = {0.0f, 0.0f, 0.0f, 1.0f};
         descriptor.use_depth = false;
 
         auto pass_encoder = encoder.begin_render_pass(descriptor);
         pass_encoder->set_pipeline(m_resolve_pipeline);
-        pass_encoder->set_bind_group(0, write.resolve_bind_group);
+        pass_encoder->set_bind_group(0, m_draw_bind_group);
         pass_encoder->set_vertex_buffer(0, m_vertex_buffer, 0, 0);
         pass_encoder->draw(3);
         pass_encoder->end();

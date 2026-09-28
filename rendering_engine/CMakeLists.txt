@@ -18,6 +18,8 @@ target_sources(alpha_render PRIVATE
     render_proxies.hpp
     render_services.hpp
     render_stats.hpp
+    render_texture.cpp
+    render_texture.hpp
     render_world.cpp
     render_world.hpp
     renderer.cpp
@@ -27,6 +29,7 @@ target_sources(alpha_render PRIVATE
     ui_draws.cpp
     ui_draws.hpp
     ui_proxy.hpp
+    view.hpp
 )
 
 add_subdirectory(camera)

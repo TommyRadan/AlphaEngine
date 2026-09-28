@@ -84,3 +84,33 @@ uint32_t rendering_engine::camera::culling_mask() const noexcept
 {
     return m_culling_mask;
 }
+
+void rendering_engine::camera::set_target(const render_texture* target) noexcept
+{
+    m_target = target;
+}
+
+const rendering_engine::render_texture* rendering_engine::camera::target() const noexcept
+{
+    return m_target;
+}
+
+void rendering_engine::camera::set_viewport(const viewport_rect& viewport) noexcept
+{
+    m_viewport = viewport;
+}
+
+const rendering_engine::viewport_rect& rendering_engine::camera::viewport() const noexcept
+{
+    return m_viewport;
+}
+
+void rendering_engine::camera::set_draws_ui(bool draws_ui) noexcept
+{
+    m_draws_ui = draws_ui;
+}
+
+bool rendering_engine::camera::draws_ui() const noexcept
+{
+    return m_draws_ui;
+}

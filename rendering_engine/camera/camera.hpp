@@ -10,6 +10,8 @@
 
 namespace rendering_engine
 {
+    class render_texture;
+
     /**
      * @brief A camera's lens and its rank among cameras: the projection, the
      *        layers it renders, and its enabled flag, priority and main tag.
@@ -23,12 +25,19 @@ namespace rendering_engine
      * each frame. The projection is cached until one of the subclass setters
      * invalidates it.
      *
-     * Arbitration: among the enabled cameras of a world the highest priority
-     * renders; a priority tie goes to the camera tagged main, then to the one
-     * whose proxy was created last (@ref render_world::active_camera). The
-     * renderer picks the winner once per frame, so disabling it (or dropping
-     * its proxy) promotes the next. Non-copyable, so its projection cache and
-     * settings have one owner.
+     * A camera renders a view (see @ref view) into its target — the
+     * window's swapchain by default, or a @ref render_texture
+     * (@ref set_target) — over a rectangle of it (@ref set_viewport, the
+     * whole target by default), so two cameras with a rectangle each split
+     * the screen and a camera on a render texture feeds a material.
+     *
+     * Arbitration: among the enabled cameras of a world that draw into the
+     * same rectangle of the same target the highest priority renders; a
+     * priority tie goes to the camera tagged main, then to the one whose
+     * proxy was created last (@ref render_world::collect_views). The
+     * renderer picks the winners once per frame, so disabling one (or
+     * dropping its proxy) promotes the next. Non-copyable, so its projection
+     * cache and settings have one owner.
      */
     struct camera
     {
@@ -42,12 +51,14 @@ namespace rendering_engine
         void invalidate_projection_matrix();
         virtual const core::math::mat4 get_projection_matrix() const = 0;
 
-        // Follows the drawable's width / height. The camera's owner hands it
-        // the aspect its render_world reports (@ref render_world::drawable_aspect)
-        // when the camera joins the world and again whenever the renderer
-        // reports a new drawable size (init, resize), so a resize does not
-        // stretch the image. Cameras whose projection has no aspect
-        // (orthographic magnifications) ignore it.
+        // Follows the width / height of the camera's rectangle. The camera's
+        // owner hands it the aspect of that rectangle — of the drawable its
+        // render_world reports (@ref render_world::drawable_aspect) for a
+        // camera on the swapchain, of its render texture otherwise — when the
+        // camera joins the world and again whenever it changes (a resize, a
+        // new target or viewport), so the image is never stretched. Cameras
+        // whose projection has no aspect (orthographic magnifications)
+        // ignore it.
         virtual void set_aspect_ratio(float aspect_ratio)
         {
             (void)aspect_ratio;
@@ -61,7 +72,10 @@ namespace rendering_engine
         void set_enabled(bool enabled) noexcept;
         bool is_enabled() const noexcept;
 
-        /** @brief Higher renders first; the default is 0. */
+        /**
+         * @brief Higher wins the arbitration, and is drawn after (on top of)
+         *        the views of lower rank; the default is 0.
+         */
         void set_priority(int priority) noexcept;
         int get_priority() const noexcept;
 
@@ -84,6 +98,36 @@ namespace rendering_engine
         void set_culling_mask(uint32_t mask) noexcept;
         uint32_t culling_mask() const noexcept;
 
+        /**
+         * @brief Renders the camera's view into @p target, or into the
+         *        window's swapchain for null (the default).
+         *
+         * The renderer renders every view on a render texture before the
+         * views on the swapchain, so a material sampling the texture sees
+         * this frame's image; see @ref render_texture for what the texture
+         * holds. Non-owning: the texture outlives the camera's use of it.
+         */
+        void set_target(const render_texture* target) noexcept;
+        const render_texture* target() const noexcept;
+
+        /**
+         * @brief The rectangle of the target the camera renders into, in
+         *        fractions of the target from its bottom-left corner; the
+         *        whole target by default. A camera whose rectangle differs
+         *        from another's renders alongside it rather than competing
+         *        with it: two cameras with a half each split the screen.
+         */
+        void set_viewport(const viewport_rect& viewport) noexcept;
+        const viewport_rect& viewport() const noexcept;
+
+        /**
+         * @brief Whether the camera's view composites the game UI; on by
+         *        default. Only a view on the swapchain does, drawn in the
+         *        view's rectangle.
+         */
+        void set_draws_ui(bool draws_ui) noexcept;
+        bool draws_ui() const noexcept;
+
     protected:
         mutable core::math::mat4 m_projection;
         mutable bool m_is_projection_matrix_dirty;
@@ -93,6 +137,9 @@ namespace rendering_engine
         bool m_main{false};
         int m_priority{0};
         uint32_t m_culling_mask{layer_all};
+        const render_texture* m_target{nullptr};
+        viewport_rect m_viewport{};
+        bool m_draws_ui{true};
     };
 
     /**

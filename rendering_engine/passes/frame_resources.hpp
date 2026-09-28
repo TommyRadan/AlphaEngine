@@ -6,11 +6,14 @@
  * @brief The resources the renderer and the built-in passes publish in the
  *        frame's @ref resource_store, and the values they hold.
  *
- * Every key below is published once per frame by the renderer (before any
- * pass prepares) or by the pass that produces it (from its prepare), and
- * is absent on a frame nothing published it: a pass that is not in the
- * list, is disabled, or has nothing to hand on this frame. Its consumers
- * then fall back as their declarations say (@ref pass_io_builder).
+ * Every key below is published once per frame, or once per view, by the
+ * renderer (before any pass of the scope prepares) or by the pass that
+ * produces it (from its prepare), and is absent on a frame nothing
+ * published it: a pass that is not in the list, is disabled, or has
+ * nothing to hand on this frame. Its consumers then fall back as their
+ * declarations say (@ref pass_io_builder). The swapchain, the grading
+ * table and the shadow maps live in the frame-global store; the rest in
+ * each view's.
  */
 
 #pragma once
@@ -46,6 +49,39 @@ namespace rendering_engine
     {
         gpu::render_target target{};
         gpu::texture texture{};
+    };
+
+    /**
+     * @brief Where a view's final image lands: its output target and the
+     *        view's rectangle in it.
+     */
+    struct view_output
+    {
+        // The swapchain, or the target of the render texture the view's
+        // camera renders into.
+        gpu::render_target target{};
+
+        // The view's rectangle, in pixels from the target's bottom-left
+        // corner (the convention of @c render_pass_encoder::set_viewport),
+        // and the target's size.
+        int32_t x{0};
+        int32_t y{0};
+        uint32_t width{0};
+        uint32_t height{0};
+        uint32_t target_width{0};
+        uint32_t target_height{0};
+
+        // Whether the view is the first of the frame to draw into the
+        // target: its last pass then clears the whole target before drawing
+        // the view's rectangle, while a later view loads what the views
+        // before it left.
+        bool first{true};
+
+        /** @brief Whether the rectangle is the whole target. */
+        bool covers_target() const noexcept
+        {
+            return x == 0 && y == 0 && width == target_width && height == target_height;
+        }
     };
 
     /**
@@ -205,11 +241,18 @@ namespace rendering_engine
     namespace frame_resources
     {
         // The swapchain image this frame presents; the renderer publishes
-        // it and imports it as valid at frame start. FXAA writes the final
-        // image into it, the UI and debug passes composite on top.
+        // it and imports it as valid at frame start. The views on it draw
+        // their final image into it (see @ref output), and the debug pass
+        // composites on top.
         inline constexpr resource_key<gpu::render_target> swapchain{"swapchain"};
 
-        // The HDR scene colour: the renderer's off-screen rgba16f target
+        // The view's output: the swapchain or a render texture, and the
+        // view's rectangle in it; the renderer publishes it at the start of
+        // every view and imports it as valid then. FXAA writes the view's
+        // final image into it, the UI pass composites on top.
+        inline constexpr resource_key<view_output> output{"view_output"};
+
+        // The HDR scene colour: the view's off-screen rgba16f target
         // (with the depth below), which the scene pass clears and draws
         // into and the skybox, volumetric fog and bloom add to. A post pass
         // that cannot work in place republishes it with its own output
@@ -239,8 +282,8 @@ namespace rendering_engine
         // it, the skybox, resumes from and returns to that layout).
         inline constexpr resource_key<gpu::texture> scene_depth{"scene_depth"};
 
-        // The off-screen rgba8 LDR target tonemap resolves into; TAA and
-        // FXAA sample it, since the swapchain cannot be sampled.
+        // The view's off-screen rgba8 LDR target tonemap resolves into; TAA
+        // and FXAA sample it, since the swapchain cannot be sampled.
         inline constexpr resource_key<color_target> ldr_color{"ldr_color"};
 
         // The colour-grading strip LUT (see @c color_grading_settings),
