@@ -18,6 +18,11 @@
 
 namespace rendering_engine
 {
+    namespace gpu
+    {
+        struct device;
+    }
+
     // The pre-integrated image-based-lighting set derived from a single
     // cube-map background — the payload of the scene's environment
     // (reflection) probe — fed into a standard material as its
@@ -38,9 +43,10 @@ namespace rendering_engine
     // otherwise they are built on the CPU and the prefiltered specular
     // falls back to the source cube's box-filtered mip chain.
     //
-    // All three are owned by the object and released in the destructor, so
-    // an @ref environment_probe must outlive every pass and material that binds
-    // its textures. Build it once (the convolutions are not cheap) and keep
+    // All three are owned by the object, built on the device it is
+    // constructed with (which must outlive it) and released in the
+    // destructor, so an @ref environment_probe must outlive every pass and
+    // material that binds its textures. Build it once (the convolutions are not cheap) and keep
     // it alive for the scene's lifetime.
     struct environment_probe
     {
@@ -49,12 +55,12 @@ namespace rendering_engine
         // @p face_size RGBA texels laid out row-major, four floats per
         // texel; the alpha channel is ignored. Linear (scene-referred)
         // radiance is expected — no sRGB decode is applied.
-        environment_probe(uint32_t face_size, const std::array<std::vector<float>, 6>& faces);
+        environment_probe(gpu::device& device, uint32_t face_size, const std::array<std::vector<float>, 6>& faces);
 
         // Build from six LDR face images in the same order. Each image's
         // sRGB texels are decoded to linear radiance before convolution,
         // so ordinary 8-bit skybox PNGs drop straight in.
-        explicit environment_probe(const std::array<assets::image, 6>& faces);
+        environment_probe(gpu::device& device, const std::array<assets::image, 6>& faces);
 
         ~environment_probe();
 
@@ -110,6 +116,9 @@ namespace rendering_engine
         // the BRDF LUT on the host; prefiltered specular reuses the source
         // mip chain (see @ref prefiltered).
         void build_derived_cpu(uint32_t face_size, const std::array<std::vector<float>, 6>& faces);
+
+        // The device the four textures are created on and released through.
+        gpu::device* m_device{nullptr};
 
         gpu::texture m_skybox{};
         gpu::texture m_prefiltered{};
