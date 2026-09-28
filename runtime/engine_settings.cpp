@@ -6,6 +6,7 @@
 #include <core/log.hpp>
 #include <core/settings.hpp>
 #include <core/settings_registry.hpp>
+#include <core/time.hpp>
 #include <rendering_engine/settings_registration.hpp>
 
 namespace runtime
@@ -50,6 +51,21 @@ namespace runtime
                 });
         }
 
+        void register_time(core::settings_registry& registry, time_settings& time)
+        {
+            core::typed_section<time_settings> section = core::add_typed_section(registry, "time", time);
+            section.add_number("scale", &time_settings::scale, 0.0f, static_cast<float>(core::time::max_time_scale))
+                .with_env("ALPHAENGINE_TIME_SCALE")
+                .with_cli("--time-scale")
+                .with_help("  --time-scale <s>         game time scale: 1 real time (the default), 0 paused\n");
+            section.set_log_resolved(
+                [](const time_settings& s) {
+                    LOG_INF("Time settings resolved: scale=%.3f%s",
+                            static_cast<double>(s.scale),
+                            s.scale <= 0.0f ? " (paused)" : "");
+                });
+        }
+
         constexpr const char k_post_processing_header[] =
             "Post-processing options (settings.json \"post\" section; each key is also the\n"
             "ALPHAENGINE_<KEY> variable, e.g. --bloom-threshold, post.bloom_threshold and\n"
@@ -62,6 +78,7 @@ namespace runtime
         rendering_engine::register_settings(registry, out.graphics, out.camera, out.shadows);
         core::register_settings(registry, out.input);
         register_content_and_diagnostics(registry, out.content, out.diagnostics);
+        register_time(registry, out.time);
         // Registered last: post-processing's many options print as their own trailing --help block, after
         // every other section, matching the historical command-line layout (see register_post_settings).
         rendering_engine::register_post_settings(registry, out.post);
@@ -76,6 +93,7 @@ namespace runtime
         text += registry.help_lines_for("input");
         text += registry.help_lines_for("content");
         text += registry.help_lines_for("diagnostics");
+        text += registry.help_lines_for("time");
         text += core::settings_meta_options_help();
         text += "\n";
         text += k_post_processing_header;

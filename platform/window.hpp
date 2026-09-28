@@ -128,9 +128,8 @@ namespace platform
          * the engine has no name for are dropped rather than emitted with
          * a guessed code.
          *
-         * Variable-rate: call once per rendered frame. The fixed-step
-         * @ref core::frame update is driven separately by
-         * @ref runtime::engine::tick.
+         * Variable-rate: call once per rendered frame. The fixed steps
+         * are driven separately, by the engine's scheduler.
          */
         void tick(core::event_bus& events);
 

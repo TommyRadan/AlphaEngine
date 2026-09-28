@@ -28,9 +28,9 @@ namespace
     // Turns its node about the world up axis (+Z) at a constant rate.
     struct turntable final : runtime::behavior
     {
-        void on_update(float delta_time) override
+        void on_update(double delta_time) override
         {
-            m_angle += rotation_speed * (delta_time / 1000.0f);
+            m_angle += rotation_speed * static_cast<float>(delta_time);
             owner().transform.set_rotation(math::vec3{0.0f, 0.0f, m_angle});
         }
 

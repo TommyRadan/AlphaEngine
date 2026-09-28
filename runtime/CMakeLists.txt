@@ -27,6 +27,8 @@ target_sources(alpha_world PRIVATE
     scene_manager.hpp
     scene_serializer.cpp
     scene_serializer.hpp
+    scheduler.cpp
+    scheduler.hpp
 )
 
 # The entry point, shared by every game executable (see external/).

@@ -1716,18 +1716,20 @@ namespace runtime::physics
         return m_impl->initialized;
     }
 
-    void world::step(float delta_seconds)
+    void world::step(double delta_seconds)
     {
         impl& self = *m_impl;
-        if (!self.initialized || !(delta_seconds > 0.0f))
+        // The library simulates in single precision.
+        const auto step_seconds = static_cast<float>(delta_seconds);
+        if (!self.initialized || !(step_seconds > 0.0f))
         {
             return;
         }
-        self.sync_in(delta_seconds);
+        self.sync_in(step_seconds);
         if (self.system->GetNumBodies() > 0)
         {
             self.report_update_errors(
-                self.system->Update(delta_seconds, 1, self.temp_allocator.get(), self.job_system.get()));
+                self.system->Update(step_seconds, 1, self.temp_allocator.get(), self.job_system.get()));
         }
         self.sync_out();
         self.process_contacts();

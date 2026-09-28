@@ -15,8 +15,10 @@
 #pragma once
 
 #include <memory>
+#include <vector>
 
 #include <core/subscription.hpp>
+#include <runtime/scheduler.hpp>
 
 // Forward declarations keep this header lightweight. Subsystem headers
 // are included only in engine.cpp where the unique_ptrs are constructed
@@ -115,8 +117,15 @@ namespace runtime
         void quit();
 
         /**
-         * @brief Runs one iteration of the main loop: pumps input,
-         *        renders one frame, advances the clock.
+         * @brief Runs one iteration of the main loop: advances the clock,
+         *        runs the frame's schedule (@ref systems), then, unless the
+         *        window is minimized, its render extraction and the renderer.
+         *
+         * The engine's own systems, which @ref init adds to @ref systems,
+         * are listed stage by stage, with their orders, in
+         * @c runtime::engine_order (runtime/scheduler.hpp). While the game
+         * is paused the fixed steps, @c physics_interpolation,
+         * @c scene_update and @c animation do not run; everything else does.
          */
         void tick();
 
@@ -142,6 +151,9 @@ namespace runtime
         // engine's own lifetime, in the order they are declared here.
         std::unique_ptr<engine_settings> settings;
         std::unique_ptr<core::time> time;
+        // The frame's schedule: every engine and game system, stage by
+        // stage. Paced by the clock above, so it goes before it.
+        std::unique_ptr<runtime::scheduler> systems;
         std::unique_ptr<core::job_pool> jobs;
         std::unique_ptr<core::event_bus> events;
         // No rendering dependency (the platform's playback device, opened
@@ -164,6 +176,9 @@ namespace runtime
         std::unique_ptr<runtime::scene_manager> scenes;
 
     private:
+        // Adds the engine's own systems (see tick) to the scheduler.
+        void add_engine_systems();
+
         bool m_quit_requested{false};
         // Owns the bus listener that sets m_quit_requested; dropped before the
         // bus is torn down so the [this] capture never outlives the engine.
@@ -176,6 +191,9 @@ namespace runtime
         // The tool layer drawn over every rendered frame, when the
         // executable installed one (see set_overlay).
         std::unique_ptr<runtime::overlay> m_overlay;
+        // The engine's own systems; dropped in quit, before the subsystems
+        // they run go down.
+        std::vector<system_registration> m_engine_systems;
     };
 
     /**

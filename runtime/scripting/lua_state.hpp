@@ -168,7 +168,7 @@ namespace runtime
             core::os::directory_watcher watcher;
         };
         std::vector<watch> watches;
-        float since_poll{0.0f};
+        double since_poll{0.0};
 
         /** @brief The script at @p path, loaded now if it is new (a failed load still returns it). */
         scripting::script_class& acquire(const std::string& path);
@@ -190,13 +190,16 @@ namespace runtime
          *        a function; false, with @p error set to the message and a
          *        traceback, when it raised an error.
          */
-        bool call(const sol::table& self, const char* hook, const float* delta_time, std::string& error);
+        bool call(const sol::table& self, const char* hook, const double* delta_time, std::string& error);
 
         /** @brief Starts watching the directory of @p script's file, if it is a real file. */
         void watch_file(scripting::script_class& script);
 
-        /** @brief Adds @p delta_time and, every half second, reloads the scripts whose files changed. */
-        void poll_changes(float delta_time);
+        /**
+         * @brief Adds @p delta_seconds (real time) and, every half second,
+         *        reloads the scripts whose files changed.
+         */
+        void poll_changes(double delta_seconds);
 
         /** @brief Re-binds @p behavior to its reloaded script; @p previous is the properties it was bound to. */
         void rebind(lua_behavior& behavior, const std::vector<scripting::script_property>& previous);

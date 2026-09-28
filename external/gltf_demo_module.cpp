@@ -35,6 +35,7 @@
 #include <runtime/gltf_instantiate.hpp>
 #include <runtime/scene.hpp>
 #include <runtime/scene_manager.hpp>
+#include <runtime/scheduler.hpp>
 
 #include <algorithm>
 #include <cstddef>
@@ -42,8 +43,6 @@
 #include <memory>
 #include <utility>
 #include <vector>
-
-#include <core/subscription.hpp>
 
 namespace
 {
@@ -145,7 +144,7 @@ namespace
                                                            });
         }
 
-        void on_update(float delta_time) override
+        void on_update(double delta_time) override
         {
             (void)delta_time;
             if (m_camera_placed || !m_has_bounds)
@@ -188,7 +187,7 @@ namespace
 
     private:
         std::shared_ptr<rendering_engine::gltf_asset> m_asset;
-        core::subscription m_spawn;
+        runtime::system_registration m_spawn;
         math::aabb m_bounds{};
         bool m_has_bounds{false};
         bool m_camera_placed{false};

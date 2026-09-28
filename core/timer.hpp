@@ -17,10 +17,10 @@ namespace core
      * @brief Counts simulated time towards a duration.
      *
      * Plain data with no clock of its own: the owner advances it with
-     * @ref tick from its fixed-step handler (the @c core::frame event, whose
-     * @c m_delta_time is the fixed step in milliseconds), so a timer runs at
-     * the simulation rate and pauses with it. Durations are milliseconds,
-     * the unit of @c core::time.
+     * @ref tick once per fixed step (by @c core::time::fixed_delta_time, from
+     * a behaviour's @c on_fixed_update, say), so a timer runs at the
+     * simulation rate and pauses with it. Durations are seconds, the unit of
+     * @c core::time.
      *
      * A one-shot timer fires once, on the tick that reaches its duration,
      * and then reports @ref finished until @ref reset. A repeating timer
@@ -32,21 +32,21 @@ namespace core
         timer() = default;
 
         /**
-         * @param duration_ms Time until the timer fires (the period, when
-         *                    repeating). A non-positive duration fires on
-         *                    every tick (a repeating timer) or on the first
-         *                    one (a one-shot).
-         * @param repeating   Whether to rearm after firing.
+         * @param duration_seconds Time until the timer fires (the period,
+         *                         when repeating). A non-positive duration
+         *                         fires on every tick (a repeating timer) or
+         *                         on the first one (a one-shot).
+         * @param repeating        Whether to rearm after firing.
          */
-        explicit timer(double duration_ms, bool repeating = false);
+        explicit timer(double duration_seconds, bool repeating = false);
 
         /**
-         * @brief Advances the timer by one step of @p delta_ms.
+         * @brief Advances the timer by one step of @p delta_seconds.
          * @return How many times it fired during the step: 0 or 1 for a
          *         one-shot, and possibly more than 1 for a repeating timer
          *         whose period is shorter than the step.
          */
-        uint32_t tick(double delta_ms);
+        uint32_t tick(double delta_seconds);
 
         /** @brief Rewinds to zero elapsed time and rearms a finished one-shot. */
         void reset();
@@ -57,7 +57,7 @@ namespace core
         bool repeating() const;
         double duration() const;
 
-        /** @brief Time into the current period, in milliseconds. */
+        /** @brief Time into the current period, in seconds. */
         double elapsed() const;
 
         /** @brief @ref elapsed over @ref duration, in [0, 1]. */

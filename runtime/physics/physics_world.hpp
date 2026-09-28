@@ -61,15 +61,20 @@ namespace runtime::physics
      * the simulation at once and enabling it puts it back.
      *
      * **Stepping.** @ref step runs once per fixed update, after that step's
-     * game logic (@c runtime::engine::tick calls it right after emitting
-     * @c core::frame). Before simulating it pushes the scene into the world:
-     * kinematic bodies are driven towards their node's pose, a static or
-     * dynamic body whose node was moved by game code is teleported, and
-     * shape, material, velocity and force changes are applied. After
-     * simulating it records every awake dynamic body's new pose.
+     * game logic (the engine runs it in the scheduler's @c physics stage,
+     * right after @c scripts_fixed; runtime/scheduler.hpp), so it stops
+     * while the game is paused. Before simulating it pushes the scene into
+     * the world: kinematic bodies are driven towards their node's pose, a
+     * static or dynamic body whose node was moved by game code is
+     * teleported, and shape, material, velocity and force changes are
+     * applied. After simulating it records every awake dynamic body's new
+     * pose. A node destroyed during a step's game logic takes its body out
+     * when the step's deferred commands are applied, before the next step.
      *
-     * **Interpolation.** Once per rendered frame, after the fixed steps,
-     * @ref interpolate writes each moving dynamic body's pose to its node,
+     * **Interpolation.** Once per rendered frame, after the fixed steps (at
+     * the start of the scheduler's @c update stage, skipped while the game is
+     * paused so tools can move a body's node meanwhile), @ref interpolate
+     * writes each moving dynamic body's pose to its node,
      * @c core::time::interpolation_alpha of the way from the previous step's
      * pose to the latest one, so motion stays smooth when the render rate
      * runs ahead of the fixed rate (the pose shown trails the simulation by
@@ -129,7 +134,7 @@ namespace runtime::physics
          *        in, simulates, writes the dynamic bodies back and dispatches
          *        the contact events. A no-op before @ref init.
          */
-        void step(float delta_seconds);
+        void step(double delta_seconds);
 
         /**
          * @brief Moves every dynamic body's node to its pose @p alpha (0..1) of

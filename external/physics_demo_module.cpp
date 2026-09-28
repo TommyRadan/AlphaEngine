@@ -91,9 +91,9 @@ namespace
             }
         }
 
-        void on_fixed_update(float delta_time) override
+        void on_fixed_update(double delta_time) override
         {
-            m_elapsed += delta_time / 1000.0f;
+            m_elapsed += static_cast<float>(delta_time);
             if (m_elapsed >= drop_period)
             {
                 m_elapsed = 0.0f;

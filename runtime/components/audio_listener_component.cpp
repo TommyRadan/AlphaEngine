@@ -40,7 +40,7 @@ void runtime::audio_listener_component::on_attach(node& owner)
     audio->set_listener_transform(m_token, owner.world_position(), world_right_axis(owner.world_matrix()));
 }
 
-void runtime::audio_listener_component::on_update(node& owner)
+void runtime::audio_listener_component::sync(node& owner)
 {
     if (m_token == 0)
     {

@@ -40,12 +40,18 @@ namespace core
      * different native format is handled by the output's own conversion,
      * invisibly to every voice.
      *
-     * Playback is a pull model: @ref update, called once per tick from
-     * @c engine::tick after the scene graph has updated every source and
-     * listener's transform, tops the device's queue up to a small target
-     * buffer by mixing the @ref k_max_voices active voices into one
-     * interleaved buffer and queueing it — no audio callback, no
-     * cross-thread mixer state. Only WAV is decoded.
+     * Playback is a pull model: @ref update, called once per frame by the
+     * engine's audio stage after every source and listener's transform has
+     * been handed over, tops the device's queue up to a small target buffer
+     * by mixing the @ref k_max_voices active voices into one interleaved
+     * buffer and queueing it — no audio callback, no cross-thread mixer
+     * state. Only WAV is decoded.
+     *
+     * **Time scale.** Voices play at the game's time scale
+     * (@ref set_time_scale): every voice's playback rate — its pitch — is
+     * multiplied by it, so slowed-down game time sounds slowed down, and at
+     * 0 (paused) every voice holds its place and is silent while the device
+     * keeps being fed.
      *
      * **Graceful degradation.** A container or CI runner with no usable
      * playback device is expected, not exceptional: @ref init logs one
@@ -137,6 +143,16 @@ namespace core
         void set_position(audio_voice_id id, const core::math::vec3& position);
         void set_attenuation(audio_voice_id id, float min_distance, float max_distance, float rolloff);
 
+        /**
+         * @brief Sets the game time scale every voice plays at (see the class
+         *        notes): 1 plays voices as they are, 0 pauses every one of
+         *        them. A negative scale is taken as 0.
+         */
+        void set_time_scale(float scale);
+
+        /** @brief The time scale set through @ref set_time_scale. */
+        float time_scale() const noexcept;
+
         // --- Listener arbitration --------------------------------------
         //
         // Mirrors camera arbitration in spirit (rendering_engine/camera/
@@ -160,16 +176,18 @@ namespace core
 
         /**
          * @brief Mixes and hands the device's bound stream enough audio to
-         *        keep it topped up, advancing every active voice by @p
-         *        delta_time worth of playback either way.
+         *        keep it topped up, advancing every active voice by
+         *        @p delta_seconds worth of playback (times its pitch and the
+         *        time scale) either way.
          *
-         * Called once per tick by @c engine::tick, after the scene graph's
-         * update so every source/listener transform pushed this frame is
-         * already applied. With no device open this only advances voices
-         * (so looping/finishing bookkeeping and @ref is_playing stay correct
-         * without one) and mixes nothing to a device.
+         * Called once per frame by the engine's audio stage, with the real
+         * (unscaled) frame delta, after every source/listener transform of
+         * the frame has been handed over. With no device open this only
+         * advances voices (so looping/finishing bookkeeping and
+         * @ref is_playing stay correct without one) and mixes nothing to a
+         * device.
          */
-        void update(float delta_time);
+        void update(double delta_seconds);
 
         /** @brief Fixed sample rate every clip is converted to and the mixer runs at. */
         static constexpr std::uint32_t k_mixer_sample_rate = 48000;
@@ -235,5 +253,7 @@ namespace core
         listener_token m_next_listener_token{1};
 
         std::vector<float> m_scratch; // reused mix buffer, sized by update()
+
+        float m_time_scale{1.0f};
     };
 } // namespace core

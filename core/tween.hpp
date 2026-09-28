@@ -33,9 +33,10 @@ namespace core
      * @brief Moves a value from @c from to @c to over a duration, shaped by
      *        an @ref core::math::easing curve.
      *
-     * Advanced from the owner's fixed-step handler with @ref tick (the
-     * @c core::frame event carries the fixed step in milliseconds), so it is
-     * deterministic and frame-rate independent. It keeps the elapsed time of
+     * Advanced once per fixed step with @ref tick (by the fixed step length
+     * in seconds, @c core::time::fixed_delta_time — from a behaviour's
+     * @c on_fixed_update, say), so it is deterministic and frame-rate
+     * independent, and it stops while the game is paused. It keeps the elapsed time of
      * the previous step as well as the current one, which is what
      * @ref value(double) needs to hand the renderer a value between the two
      * — pass @c core::time::interpolation_alpha() and motion stays smooth
@@ -50,18 +51,18 @@ namespace core
 
         tween(T from,
               T to,
-              double duration_ms,
+              double duration_seconds,
               math::easing ease = math::easing::linear,
               tween_loop loop = tween_loop::once)
-            : m_from{from}, m_to{to}, m_duration{duration_ms}, m_ease{ease}, m_loop{loop}
+            : m_from{from}, m_to{to}, m_duration{duration_seconds}, m_ease{ease}, m_loop{loop}
         {
         }
 
-        /** @brief Advances by one fixed step of @p delta_ms (negative steps are ignored). */
-        void tick(double delta_ms)
+        /** @brief Advances by one fixed step of @p delta_seconds (negative steps are ignored). */
+        void tick(double delta_seconds)
         {
             m_previous_elapsed = m_elapsed;
-            m_elapsed += std::max(delta_ms, 0.0);
+            m_elapsed += std::max(delta_seconds, 0.0);
             if (m_loop == tween_loop::once)
             {
                 m_elapsed = std::min(m_elapsed, std::max(m_duration, 0.0));
@@ -108,7 +109,7 @@ namespace core
             m_previous_elapsed = 0.0;
         }
 
-        /** @brief Milliseconds since the start (within the current cycle for a looping tween). */
+        /** @brief Seconds since the start (within the current cycle for a looping tween). */
         double elapsed() const
         {
             return m_elapsed;

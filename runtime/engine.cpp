@@ -26,6 +26,9 @@
 #include <rendering_engine/gpu/surface.hpp>
 #include <rendering_engine/renderer.hpp>
 #include <rendering_engine/resources/asset_cache.hpp>
+#include <runtime/components/animator_component.hpp>
+#include <runtime/components/audio_listener_component.hpp>
+#include <runtime/components/audio_source_component.hpp>
 #include <runtime/engine_settings.hpp>
 #include <runtime/game_module.hpp>
 #include <runtime/overlay.hpp>
@@ -33,6 +36,7 @@
 #include <runtime/physics/physics_world.hpp>
 #include <runtime/reflection.hpp>
 #include <runtime/render_extraction.hpp>
+#include <runtime/scene.hpp>
 #include <runtime/scene_manager.hpp>
 #include <runtime/scripting/script_host.hpp>
 
@@ -101,6 +105,17 @@ namespace runtime
             LOG_INF("Published VK_LAYER_PATH=%s for bundled validation layer", layer_path.c_str());
         }
 
+        // Runs @p fn(node&, C&) on every C the latest walk of each loaded
+        // scene reached, scene by scene, in walk order.
+        template<typename C, typename Fn>
+        void each_visited(scene_manager& scenes, Fn fn)
+        {
+            for (std::size_t index = 0; index < scenes.scene_count(); ++index)
+            {
+                scenes.scene_at(index).each_visited<C>(fn);
+            }
+        }
+
         // Logs what the type registry holds once every registration has run:
         // the engine's built-in types and those of the game modules linked
         // into this executable.
@@ -160,6 +175,10 @@ namespace runtime
         // final value.
         settings = std::make_unique<engine_settings>(std::move(values));
         time = std::make_unique<core::time>();
+        time->set_time_scale(static_cast<double>(settings->time.scale));
+        // The frame's schedule; the engine adds its own systems in init(),
+        // once every subsystem they run is up.
+        systems = std::make_unique<runtime::scheduler>(*time);
         // The worker pool has no dependencies and is brought up early so any
         // subsystem can hand it work during init or per frame. Its threads
         // idle until the first job is dispatched.
@@ -221,6 +240,7 @@ namespace runtime
         // Joins the worker threads. Every per-frame job is forked and joined
         // within tick(), so nothing is in flight by the time we get here.
         jobs.reset();
+        systems.reset();
         time.reset();
         settings.reset();
         g_current_engine = nullptr;
@@ -309,8 +329,11 @@ namespace runtime
         // Before the scenes, so the game modules' bootstraps and scene files
         // can attach scripted behaviours; scripts read through the VFS
         // mounted above.
-        scripts->init(*events);
+        scripts->init(*systems);
         scenes->init();
+
+        // Every subsystem the frame runs is up: schedule it.
+        add_engine_systems();
 
         // Register our own quit_requested listener now that the event
         // bus is initialised.
@@ -327,6 +350,9 @@ namespace runtime
 
     void engine::quit()
     {
+        // Nothing runs a frame from here on; the systems go before the
+        // subsystems they call into.
+        m_engine_systems.clear();
         // Scenes first: freeing their nodes unwinds every component's
         // renderer, light and camera registration and releases its GPU
         // buffers, which needs the renderer and the asset cache still up.
@@ -364,98 +390,177 @@ namespace runtime
         events->quit();
     }
 
+    void engine::add_engine_systems()
+    {
+        namespace order = engine_order;
+        // Whether a system runs while the game is paused.
+        constexpr bool always = true;
+        constexpr bool game = false;
+        const auto add = [this](stage where, const char* name, int at, bool while_paused, auto run)
+        {
+            m_engine_systems.push_back(systems->add(
+                where, name, scheduler::system_function{std::move(run)}, {.order = at, .while_paused = while_paused}));
+        };
+
+        // Input: pump OS input once per rendered frame (variable rate),
+        // latch this frame's cursor motion now that every pumped event has
+        // updated the live action / axis state, deliver the events buffered
+        // through event_bus::enqueue since the last frame, then upload the
+        // asynchronous asset loads whose decodes have landed, so a texture
+        // that finished decoding is drawn this frame.
+        add(stage::input,
+            "window_events",
+            order::window_events,
+            always,
+            [this](const frame_time&) { window->tick(*events); });
+        add(stage::input, "input_frame", order::input_frame, always, [this](const frame_time&) { input->end_frame(); });
+        add(stage::input, "event_queue", order::event_queue, always, [this](const frame_time&) { events->flush(); });
+        add(stage::input, "asset_uploads", order::asset_uploads, always, [this](const frame_time&) { assets->pump(); });
+
+        // The fixed step: latch the step's pressed / released edges before
+        // any game logic sees them, run every scene's on_fixed_update in
+        // hierarchy order, then simulate — so forces and moves made in the
+        // step's game logic apply to it; contact events are dispatched
+        // before the next step — then advance the animators, and apply what
+        // the step's hooks queued, so a node destroyed in on_fixed_update
+        // loses its body before the next step.
+        add(stage::scripts_fixed,
+            "input_step",
+            order::input_step,
+            game,
+            [this](const frame_time&) { input->begin_step(); });
+        add(stage::scripts_fixed,
+            "fixed_update",
+            order::fixed_update,
+            game,
+            [this](const frame_time&) { scenes->fixed_update(); });
+        add(stage::physics,
+            "physics_step",
+            order::physics_step,
+            game,
+            [this](const frame_time& frame) { physics->step(frame.delta); });
+        add(stage::post_physics,
+            "animation_step",
+            order::animation_step,
+            game,
+            [this](const frame_time& frame)
+            {
+                each_visited<animator_component>(
+                    *scenes, [&frame](node&, animator_component& animator) { animator.advance(frame.delta); });
+            });
+        add(stage::post_physics,
+            "deferred_commands",
+            order::deferred_commands,
+            always,
+            [this](const frame_time&) { scenes->apply_deferred(); });
+
+        // The frame update: place the simulated nodes between the last two
+        // physics steps, so they move smoothly at the render rate (not while
+        // paused, so the tools can move them); run every scene's on_update;
+        // apply what it queued.
+        add(stage::update,
+            "physics_interpolation",
+            order::physics_interpolation,
+            game,
+            [this](const frame_time& frame) { physics->interpolate(static_cast<float>(frame.alpha)); });
+        add(stage::update, "scene_update", order::scene_update, game, [this](const frame_time&) { scenes->update(); });
+        add(stage::update,
+            "deferred_commands",
+            order::deferred_commands,
+            always,
+            [this](const frame_time&) { scenes->apply_deferred(); });
+
+        // The animators write their poses, between the last two fixed steps;
+        // then every pose moved by the update and the animation settles.
+        add(stage::animation,
+            "animation",
+            order::animation,
+            game,
+            [this](const frame_time& frame)
+            {
+                each_visited<animator_component>(
+                    *scenes, [&frame](node&, animator_component& animator) { animator.apply(frame.alpha); });
+            });
+        add(stage::transform_propagation,
+            "transform_propagation",
+            order::transform_propagation,
+            always,
+            [this](const frame_time&) { scenes->propagate_transforms(); });
+
+        // Audio, from the settled poses; independent of the drawable, so it
+        // keeps playing while the window is minimized. The mixer runs on
+        // real time and plays its voices at the time scale.
+        add(stage::audio,
+            "audio_poses",
+            order::audio_poses,
+            always,
+            [this](const frame_time&)
+            {
+                each_visited<audio_listener_component>(
+                    *scenes, [](node& owner, audio_listener_component& listener) { listener.sync(owner); });
+                each_visited<audio_source_component>(
+                    *scenes, [](node& owner, audio_source_component& source) { source.sync(owner); });
+            });
+        add(stage::audio,
+            "audio_mix",
+            order::audio_mix,
+            always,
+            [this](const frame_time& frame)
+            {
+                audio->set_time_scale(static_cast<float>(frame.time_scale));
+                audio->update(frame.unscaled_delta);
+            });
+
+        // Render extraction, for a frame that is drawn: build the overlay
+        // (which may edit nodes too), then write the meshes, UI elements,
+        // lights and cameras the renderer reads into its world, once, from
+        // that final state, then have the debug helpers rebuild what they
+        // follow from it — the proxies just written, the physics world's
+        // lines — so the renderer reads neither the scene nor the physics
+        // world.
+        add(stage::render_extract,
+            "overlay",
+            order::overlay,
+            always,
+            [this](const frame_time&)
+            {
+                if (m_overlay != nullptr)
+                {
+                    m_overlay->begin_frame();
+                }
+            });
+        add(stage::render_extract,
+            "render_proxies",
+            order::render_proxies,
+            always,
+            [this](const frame_time&) { extract_render_proxies(*scenes); });
+        add(stage::render_extract,
+            "debug_helpers",
+            order::debug_helpers,
+            always,
+            [this](const frame_time&) { rendering_engine::debug_draw::update_helpers(renderer->world()); });
+    }
+
     void engine::tick()
     {
-        // Advance the clock first so delta_time() describes the frame about
-        // to be processed — the time since the previous tick — rather than
-        // the one before it. The first tick reports a zero delta (see
+        // Advance the clock first so its deltas describe the frame about to
+        // be processed — the time since the previous tick — rather than the
+        // one before it. The first tick reports a zero delta (see
         // core::time), so frame one runs no fixed step and carries a zero
         // render delta; frame two carries frame one's real duration.
         time->perform_tick();
 
-        // Pump OS input once per rendered frame (variable rate). Input
-        // state set here is read by the fixed-step updates below.
-        window->tick(*events);
-        // Latches this frame's cursor motion (see core::input::mouse_delta) now that every event window->tick()
-        // pumped has updated the live action / axis state; nothing changes it again before the next window->tick().
-        input->end_frame();
-
-        // Deliver the events buffered through event_bus::enqueue since the
-        // last tick, now that this frame's input has been pumped and before
-        // the fixed-step updates consume it.
-        events->flush();
-
-        // Resolve the asynchronous asset loads whose decodes have landed —
-        // the device upload happens here, on the main thread — so a texture
-        // that finished decoding is drawn this frame.
-        assets->pump();
-
-        // Fixed-step update, decoupled from the render rate. Feed the time
-        // elapsed since the previous frame into the accumulator, then drain
-        // it one fixed step at a time — running game logic zero, one, or
-        // several times this frame so simulation behaviour is independent of
-        // frame rate. The accumulator's clamp bounds the step count, so this
-        // loop always terminates (the spiral-of-death guard lives in time).
-        // Behaviours receive their on_fixed_update from this core::frame.
-        time->accumulate(time->delta_time());
-        core::frame frame;
-        frame.m_delta_time = static_cast<float>(time->fixed_delta_time());
-        while (time->next_fixed_step())
-        {
-            // Latches was_action_pressed / was_action_released for this step before behaviours see it, so they
-            // stay stable for every on_fixed_update the step runs (core::input::begin_step).
-            input->begin_step();
-            events->emit<core::frame>(frame);
-            // The simulation advances after the step's game logic, so forces
-            // and moves made in it apply to this step; contact events are
-            // dispatched before the next one.
-            physics->step(static_cast<float>(time->fixed_delta_time() / 1000.0));
-        }
-        // Place the simulated nodes between the last two physics steps, so
-        // they move smoothly at the render rate.
-        physics->interpolate(static_cast<float>(time->interpolation_alpha()));
-
-        // Per-render-frame update for visual / input-driven game logic, carrying
-        // the variable render delta so it stays smooth at the render rate rather
-        // than stepping at the fixed rate above. Emitted before the scene-graph
-        // update so any node poses it moves are picked up this frame.
-        core::render_update render_tick;
-        render_tick.m_delta_time = static_cast<float>(time->delta_time());
-        events->emit<core::render_update>(render_tick);
-
-        // Propagate scene-graph component updates (behaviours' on_update,
-        // animation) in every loaded scene after the fixed updates moved
-        // nodes and before the draw walk. Runs once per rendered frame;
-        // render_* events fire per render inside renderer->render(). The
-        // interpolation alpha for smoothing between fixed states is
-        // available via time->interpolation_alpha().
-        scenes->update();
-
-        // Mixed after the scene graph so every source/listener transform
-        // pushed by this frame's component updates is already applied.
-        // Independent of the drawable, so it keeps playing while minimized.
-        audio->update(static_cast<float>(time->delta_time()));
+        // Input, every fixed step the clock drains, update, animation,
+        // transform propagation and audio (see the list in engine.hpp).
+        systems->run_frame();
 
         // A minimized window has no drawable (the Vulkan surface reports a
-        // zero extent), so the frame is neither built nor presented until
-        // the window is restored; the updates above keep running.
+        // zero extent), so the frame is neither extracted nor presented
+        // until the window is restored; the stages above keep running.
         if (!window->is_minimized())
         {
-            // Build the overlay before the passes run; the debug pass
-            // records it on top of the frame. The device presents the
-            // frame at the end of renderer->render().
-            if (m_overlay != nullptr)
-            {
-                m_overlay->begin_frame();
-            }
-            // Every node has its final pose for the frame (the overlay edits
-            // them too): write the meshes, UI elements, lights and cameras
-            // the renderer reads into its world, once, from that final
-            // state. The debug helpers then rebuild what they follow from
-            // it — the proxies just written, the physics world's lines —
-            // so the renderer reads neither the scene nor the physics world.
-            extract_render_proxies(*scenes);
-            rendering_engine::debug_draw::update_helpers(renderer->world());
+            systems->run_render_extract();
+            // The device presents the frame at the end of renderer->render().
             renderer->render();
 
             // Counts rendered frames only, so a run stuck minimized never reaches its limit.

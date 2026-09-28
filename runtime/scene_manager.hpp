@@ -37,7 +37,9 @@ namespace runtime
      *        loaded on top of it.
      *
      * Owned by @ref runtime::engine as @c engine::scenes, with the usual
-     * @ref init / @ref quit shape; @ref update runs from @c engine::tick.
+     * @ref init / @ref quit shape; the engine's scheduler runs
+     * @ref fixed_update, @ref update, @ref apply_deferred and
+     * @ref propagate_transforms from its stages (runtime/scheduler.hpp).
      *
      * - The **persistent scene** exists from construction to destruction and
      *   is never unloaded, so a @ref load_mode::single load leaves it alone:
@@ -49,7 +51,7 @@ namespace runtime
      * - @ref unload quits and destroys a scene: its nodes are freed and their
      *   components unwind their renderer, light and camera registrations.
      *   Requested while a scene is updating (from a component hook, say), the
-     *   unload waits until every scene has finished its update.
+     *   unload waits for the next @ref apply_deferred.
      * - @ref active_scene is where new content goes by default: the scene the
      *   last single load made, the one @ref set_active_scene named, or the
      *   persistent scene when nothing else is loaded.
@@ -63,7 +65,12 @@ namespace runtime
      * (to apply queued commands) but updates no component. Unloading removes
      * its components for good.
      *
-     * Scenes update in load order, the persistent scene first. Main-thread-only.
+     * The scenes update in load order, the persistent scene first: every
+     * walk (@ref fixed_update, @ref update, @ref propagate_transforms) and
+     * every drain (@ref apply_deferred) goes through them in that order, so
+     * the order hooks run in across scenes is fixed too.
+     *
+     * Main-thread-only.
      */
     struct scene_manager
     {
@@ -97,8 +104,21 @@ namespace runtime
          */
         void quit();
 
-        /** @brief Updates every loaded scene, then applies the unloads requested meanwhile. */
+        /** @brief Runs every loaded scene's fixed step (@c scene::fixed_update); what they queue waits. */
+        void fixed_update();
+
+        /** @brief Runs every loaded scene's frame update (@c scene::update); what they queue waits. */
         void update();
+
+        /** @brief Settles every loaded scene's world matrices (@c scene::propagate_transforms). */
+        void propagate_transforms();
+
+        /**
+         * @brief Applies every loaded scene's deferred commands
+         *        (@c scene::apply_deferred), then the unloads requested
+         *        meanwhile.
+         */
+        void apply_deferred();
 
         /**
          * @brief Loads (creates) the scene named @p name and returns it.
@@ -141,7 +161,8 @@ namespace runtime
          * @brief Adds @p scene to, or takes it out of, the active set by
          *        enabling or disabling its root (see the class notes).
          *
-         * Applied at the end of the scene's update when it is mid-traversal.
+         * Applied at the scene's next @c scene::apply_deferred when it is
+         * mid-traversal.
          */
         void set_enabled(scene& scene, bool enabled);
 
@@ -176,6 +197,10 @@ namespace runtime
 
         // True while an unload now would pull a scene out from under a walk.
         bool busy() const noexcept;
+
+        // Runs @p walk on every loaded scene not on its way out, in order,
+        // holding back unloads until it returns.
+        void walk_scenes(void (*walk)(runtime::scene&));
 
         // Unloads every entry marked unload_pending, newest first.
         void apply_pending_unloads();

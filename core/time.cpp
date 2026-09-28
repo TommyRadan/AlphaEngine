@@ -3,6 +3,8 @@
 
 #include <core/time.hpp>
 
+#include <algorithm>
+#include <cmath>
 #include <stdexcept>
 
 namespace
@@ -11,11 +13,15 @@ namespace
     // settles in roughly ten frames: quick enough to follow a real frame-rate
     // change, slow enough to hide single-frame jitter.
     constexpr double k_average_weight = 0.1;
+
+    // Below one microsecond a delta carries no usable frame rate.
+    constexpr double k_min_fps_delta = 1e-6;
 } // namespace
 
 core::time::time(double fixed_delta_time, int max_steps_per_frame)
-    : m_start{clock::now()}, m_previous_tick{m_start}, m_frame_count{0}, m_delta_time{0}, m_average_delta_time{0},
-      m_fixed_delta_time{fixed_delta_time}, m_accumulator{0}, m_max_steps_per_frame{max_steps_per_frame}
+    : m_start{clock::now()}, m_previous_tick{m_start}, m_frame_count{0}, m_delta_time{0}, m_unscaled_delta_time{0},
+      m_total_time{0}, m_average_delta_time{0}, m_fixed_delta_time{fixed_delta_time}, m_accumulator{0},
+      m_time_scale{1.0}, m_resume_time_scale{1.0}, m_max_steps_per_frame{max_steps_per_frame}
 {
     // Written as !(x > 0) so a NaN step is rejected along with zero and negatives.
     if (!(fixed_delta_time > 0.0))
@@ -36,17 +42,20 @@ void core::time::perform_tick()
     {
         // First frame: nothing precedes it, and measuring from construction
         // would report the whole engine bring-up as one enormous frame.
-        m_delta_time = 0.0;
+        m_unscaled_delta_time = 0.0;
     }
     else
     {
-        m_delta_time = std::chrono::duration<double, std::milli>(now - m_previous_tick).count();
+        m_unscaled_delta_time = std::chrono::duration<double>(now - m_previous_tick).count();
         // Seed the average with the first real frame time rather than ramping
         // up from zero, then blend each new sample in.
-        m_average_delta_time = m_average_delta_time > 0.0
-                                   ? m_average_delta_time + k_average_weight * (m_delta_time - m_average_delta_time)
-                                   : m_delta_time;
+        m_average_delta_time =
+            m_average_delta_time > 0.0
+                ? m_average_delta_time + k_average_weight * (m_unscaled_delta_time - m_average_delta_time)
+                : m_unscaled_delta_time;
     }
+    m_delta_time = m_unscaled_delta_time * m_time_scale;
+    m_total_time = std::chrono::duration<double>(now - m_start).count();
 
     m_previous_tick = now;
     ++m_frame_count;
@@ -57,9 +66,14 @@ double core::time::delta_time() const
     return m_delta_time;
 }
 
-float core::time::total_time() const
+double core::time::unscaled_delta_time() const
 {
-    return std::chrono::duration<float, std::milli>(clock::now() - m_start).count();
+    return m_unscaled_delta_time;
+}
+
+double core::time::total_time() const
+{
+    return m_total_time;
 }
 
 uint32_t core::time::frame_count() const
@@ -69,21 +83,60 @@ uint32_t core::time::frame_count() const
 
 float core::time::current_fps() const
 {
-    if (m_delta_time < 0.001)
-        return 0;
-    return (float)(1000.0 / m_delta_time);
+    if (m_unscaled_delta_time < k_min_fps_delta)
+    {
+        return 0.0f;
+    }
+    return static_cast<float>(1.0 / m_unscaled_delta_time);
 }
 
 float core::time::average_fps() const
 {
-    if (m_average_delta_time < 0.001)
-        return 0;
-    return (float)(1000.0 / m_average_delta_time);
+    if (m_average_delta_time < k_min_fps_delta)
+    {
+        return 0.0f;
+    }
+    return static_cast<float>(1.0 / m_average_delta_time);
 }
 
 double core::time::fixed_delta_time() const
 {
     return m_fixed_delta_time;
+}
+
+double core::time::time_scale() const
+{
+    return m_time_scale;
+}
+
+void core::time::set_time_scale(double scale)
+{
+    if (std::isnan(scale))
+    {
+        return;
+    }
+    m_time_scale = std::clamp(scale, 0.0, max_time_scale);
+    if (m_time_scale > 0.0)
+    {
+        m_resume_time_scale = m_time_scale;
+    }
+}
+
+bool core::time::is_paused() const
+{
+    return m_time_scale <= 0.0;
+}
+
+void core::time::set_paused(bool paused)
+{
+    if (paused)
+    {
+        m_time_scale = 0.0;
+    }
+    else if (m_time_scale <= 0.0)
+    {
+        m_time_scale = m_resume_time_scale;
+    }
 }
 
 void core::time::accumulate(double frame_delta_time)

@@ -15,7 +15,7 @@ function bob:on_start()
 end
 
 function bob:on_update(dt)
-    self.time = self.time + dt / 1000
+    self.time = self.time + dt
     local lift = 0.5 - 0.5 * math.cos(self.time * 2 * math.pi / self.period)
     self.node.position = self.base + vec3(0, 0, self.height * lift)
     self.node.rotation = quat.from_euler(vec3(0, 0, self.time * self.spin))

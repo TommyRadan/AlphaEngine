@@ -10,8 +10,6 @@
 #include <vector>
 
 #include <assets/vertex.hpp>
-#include <core/event.hpp>
-#include <core/event_engine.hpp>
 #include <core/log.hpp>
 #include <core/math/math.hpp>
 #include <rendering_engine/materials/standard_material.hpp>
@@ -290,9 +288,9 @@ namespace runtime
         return roots;
     }
 
-    core::subscription instantiate_gltf_when_ready(std::shared_ptr<const rendering_engine::gltf_asset> asset,
-                                                   node& parent,
-                                                   std::function<void(const std::vector<node*>& roots)> on_spawned)
+    system_registration instantiate_gltf_when_ready(std::shared_ptr<const rendering_engine::gltf_asset> asset,
+                                                    node& parent,
+                                                    std::function<void(const std::vector<node*>& roots)> on_spawned)
     {
         if (asset == nullptr)
         {
@@ -300,9 +298,10 @@ namespace runtime
         }
         node* target = &parent;
         bool handled = false;
-        return current_engine().events->subscribe<core::render_update>(
-            [asset = std::move(asset), target, on_spawned = std::move(on_spawned), handled](
-                const core::render_update&) mutable
+        return current_engine().systems->add(
+            stage::update,
+            "gltf_spawn",
+            [asset = std::move(asset), target, on_spawned = std::move(on_spawned), handled](const frame_time&) mutable
             {
                 if (handled || asset->state == rendering_engine::gltf_asset::load_state::loading)
                 {
@@ -319,6 +318,7 @@ namespace runtime
                 {
                     on_spawned(roots);
                 }
-            });
+            },
+            system_options{.order = engine_order::gltf_spawn, .while_paused = true});
     }
 } // namespace runtime

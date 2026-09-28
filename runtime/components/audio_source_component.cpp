@@ -26,7 +26,7 @@ void runtime::audio_source_component::on_attach(node& owner)
     }
 }
 
-void runtime::audio_source_component::on_update(node& owner)
+void runtime::audio_source_component::sync(node& owner)
 {
     m_position = owner.world_position();
     if (m_config.spatial && m_voice.valid())

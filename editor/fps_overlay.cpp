@@ -40,7 +40,11 @@ namespace editor
         if (ImGui::Begin("fps_overlay", nullptr, flags))
         {
             ImGui::Text("FPS: %.0f", static_cast<double>(time.current_fps()));
-            ImGui::Text("Frame: %.2f ms", time.delta_time());
+            ImGui::Text("Frame: %.2f ms", time.unscaled_delta_time() * 1000.0);
+            if (time.is_paused())
+            {
+                ImGui::TextDisabled("paused");
+            }
             ImGui::Separator();
             ImGui::TextDisabled("right-click for tools");
             if (ImGui::BeginPopupContextWindow())

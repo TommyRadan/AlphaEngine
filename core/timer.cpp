@@ -8,9 +8,9 @@
 
 namespace core
 {
-    timer::timer(double duration_ms, bool repeating) : m_duration{duration_ms}, m_repeating{repeating} {}
+    timer::timer(double duration_seconds, bool repeating) : m_duration{duration_seconds}, m_repeating{repeating} {}
 
-    uint32_t timer::tick(double delta_ms)
+    uint32_t timer::tick(double delta_seconds)
     {
         if (m_finished)
         {
@@ -23,7 +23,7 @@ namespace core
             return 1;
         }
 
-        m_elapsed += std::max(delta_ms, 0.0);
+        m_elapsed += std::max(delta_seconds, 0.0);
         if (m_elapsed < m_duration)
         {
             return 0;

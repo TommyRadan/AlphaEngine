@@ -42,29 +42,32 @@ namespace runtime
      * **Nodes.** @ref create_node allocates a node in the scene's node pool —
      * fixed-size pages, so its address is stable for its whole life — names
      * it, and links it under a parent (the root by default). @ref destroy_node
-     * retires a node and everything below it at the end of the update. What
+     * retires a node and everything below it at the next deferred-command
+     * drain (see Deferred commands below). What
      * is still alive when the scene quits is freed then, while the renderer
      * the components unwind against is still up, so no node outlives the
      * engine. A node constructed directly (a stack node, a test fixture) can
      * still be linked in; it stays owned by its caller.
      *
-     * **Update.** @ref update walks the tree once, depth-first, to settle every
-     * world matrix and stamp each effectively active node with its place in
-     * the walk, then runs @c on_update one component type at a time over that
+     * **Walks.** @ref fixed_update, @ref update and @ref propagate_transforms
+     * each walk the tree once, depth-first, to settle every world matrix and
+     * stamp each effectively active node linked under the root with its place
+     * in the walk. @ref fixed_update then runs @c on_fixed_update and
+     * @ref update runs @c on_update, one component type at a time over that
      * type's pool (see @ref component_store::update_visited): parents before
      * children within a type, types in the order they first appeared in the
-     * scene. @ref each and @ref view expose the same per-type pools to
-     * systems.
+     * scene. @ref each_visited visits one type in the same order, from the
+     * latest walk; @ref each and @ref view expose the per-type pools to
+     * systems in pool order.
      *
-     * **Deferred commands.** While @ref update (or @ref each, or a
-     * @ref view) is iterating, the node, child and component lists must not
-     * change. Any structural change a hook wants — destroy the node it runs
-     * on, drop a component, move a node, disable a subtree — is queued with
+     * **Deferred commands.** While a walk (or @ref each, or a @ref view) is
+     * iterating, the node, child and component lists must not change. Any
+     * structural change a hook wants — destroy the node it runs on, drop a
+     * component, move a node, disable a subtree — is queued with
      * @ref destroy_node, @ref defer_remove_component, @ref defer_reparent or
      * @ref defer_set_active (or the raw @ref defer) and applied, in the order
-     * queued, once the walk has finished. Commands queued outside a traversal
-     * are applied at the end of the next @ref update as well, or immediately
-     * by @ref apply_deferred.
+     * queued, by @ref apply_deferred, which the engine's scheduler calls after
+     * every fixed step and after the update (see runtime/scheduler.hpp).
      */
     struct scene
     {
@@ -129,17 +132,54 @@ namespace runtime
         void quit();
 
         /**
-         * @brief Advances the scene one frame: settles the world transforms,
-         *        dispatches @c on_update per component type, then applies
-         *        every deferred command.
+         * @brief Advances the scene one fixed step: walks the tree (settling
+         *        the world transforms) and dispatches @c on_fixed_update per
+         *        component type.
          *
-         * Called once per rendered frame (through the scene manager) from
-         * @ref runtime::engine::tick after the fixed steps and the
-         * @c core::render_update listeners, and before the renderer draws.
-         * Only nodes linked under @ref root and effectively active are
-         * updated.
+         * Run once per fixed step, through the scene manager, by the engine's
+         * @c scripts_fixed stage. Only nodes linked under @ref root and
+         * effectively active are updated. The commands the hooks queue wait
+         * for @ref apply_deferred.
+         */
+        void fixed_update();
+
+        /**
+         * @brief Advances the scene one frame: walks the tree (settling the
+         *        world transforms) and dispatches @c on_update per component
+         *        type.
+         *
+         * Run once per rendered frame, through the scene manager, by the
+         * engine's @c update stage, after the fixed steps and before the
+         * renderer draws. Only nodes linked under @ref root and effectively
+         * active are updated. The commands the hooks queue wait for
+         * @ref apply_deferred.
          */
         void update();
+
+        /**
+         * @brief Walks the tree to settle every world matrix, stamping the
+         *        nodes it reaches for @ref each_visited, and dispatches no
+         *        hook.
+         *
+         * Run once per frame by the engine's @c transform_propagation stage,
+         * so every pose moved by the update and the animation is final
+         * before the audio and the render extraction read it.
+         */
+        void propagate_transforms();
+
+        /**
+         * @brief Invokes @p fn(node&, C&) on every @c C whose owner the
+         *        latest walk (@ref fixed_update, @ref update or
+         *        @ref propagate_transforms) reached, in walk order: parents
+         *        before children, siblings in the order they were added.
+         *
+         * So an engine system handles one component type the way the
+         * per-type hook dispatches do, active nodes under the root only.
+         * Marks a traversal while it runs, so structural changes from
+         * @p fn defer.
+         */
+        template<typename C, typename Fn>
+        void each_visited(Fn&& fn);
 
         /**
          * @brief Creates a node owned by this scene, named @p name, under
@@ -148,15 +188,15 @@ namespace runtime
          * The node lives at a stable address until @ref destroy_node (or the
          * scene quits). It is scoped to this scene immediately, so it can
          * reach the deferred queue and @ref find sees it; if @p parent's scene
-         * is mid-traversal the link itself is deferred to the end of that
-         * update (components still cannot be added until then either — see
-         * the class notes).
+         * is mid-traversal the link itself is deferred to the next
+         * @ref apply_deferred (components still cannot be added until then
+         * either — see the class notes).
          */
         node& create_node(core::string_id name = {}, node* parent = nullptr);
 
         /**
-         * @brief Destroys @p target and its subtree at the end of the current
-         *        (or next) update.
+         * @brief Destroys @p target and its subtree at the next
+         *        @ref apply_deferred.
          *
          * When the command runs the node is unlinked from its parent, every
          * component in the subtree is freed (dispatching @c on_destroy), and
@@ -184,7 +224,7 @@ namespace runtime
          * planned before anything is created, so cloning a node under its
          * own descendant copies the original subtree once. Called while the
          * target scene is mid-traversal, the returned node exists (named and
-         * posed) immediately and is populated at the end of that update.
+         * posed) immediately and is populated at the next @ref apply_deferred.
          */
         node& clone(node& source, node* parent = nullptr);
 
@@ -231,8 +271,8 @@ namespace runtime
         component_view<C, Rest...> view();
 
         /**
-         * @brief Queues an arbitrary command for the end of the current (or
-         *        next) @ref update.
+         * @brief Queues an arbitrary command for the next
+         *        @ref apply_deferred.
          *
          * The typed helpers below are built on this. A command may queue
          * further commands; they run in the same drain.
@@ -256,7 +296,7 @@ namespace runtime
          */
         void defer_destroy(node& target, std::function<void()> release = {});
 
-        /** @brief Queues @c target.remove_component<C>() for the end of the update. */
+        /** @brief Queues @c target.remove_component<C>() for the next @ref apply_deferred. */
         template<typename C>
         void defer_remove_component(node& target)
         {
@@ -272,7 +312,7 @@ namespace runtime
          */
         void defer_reparent(node& target, node* new_parent);
 
-        /** @brief Queues @c target.set_active(active) for the end of the update. */
+        /** @brief Queues @c target.set_active(active) for the next @ref apply_deferred. */
         void defer_set_active(node& target, bool active);
 
         /**
@@ -280,10 +320,11 @@ namespace runtime
          *        any a command queues while running, then frees the nodes the
          *        destroy commands retired.
          *
-         * Called by @ref update once the traversal has finished; callable
-         * directly from outside a traversal (e.g. after a batch of explicit
-         * deferrals). Logs an error and leaves the queue untouched if a
-         * traversal is in progress.
+         * Run through the scene manager by the engine's scheduler after
+         * every fixed step and after the update; callable directly from
+         * outside a traversal (e.g. after a batch of explicit deferrals).
+         * Logs an error and leaves the queue untouched if a traversal is in
+         * progress.
          */
         void apply_deferred();
 
@@ -393,7 +434,11 @@ namespace runtime
         void index_name(node& target);
         void unindex_name(node& target);
 
-        // The update walk: settles world matrices and stamps visit marks.
+        // Walks the tree from the root: settles world matrices and stamps
+        // visit marks with a fresh stamp, which becomes m_walk_stamp.
+        void walk();
+
+        // One node of the walk and its subtree.
         void propagate(node& target, uint64_t stamp, uint32_t& order);
 
         // Unlinks @p target and frees the components of its subtree.
@@ -422,6 +467,9 @@ namespace runtime
 
         // The render_world this scene's components attach to; see @ref world.
         rendering_engine::render_world* m_world{nullptr};
+
+        // The stamp of the latest walk, which each_visited visits.
+        uint64_t m_walk_stamp{0};
     };
 
     /**
@@ -544,6 +592,13 @@ namespace runtime
     {
         traversal_scope traversal{this};
         components.each<C>(std::forward<Fn>(fn));
+    }
+
+    template<typename C, typename Fn>
+    void scene::each_visited(Fn&& fn)
+    {
+        traversal_scope traversal{this};
+        components.each_visited<C>(m_walk_stamp, std::forward<Fn>(fn));
     }
 
     template<typename C, typename... Rest>

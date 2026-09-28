@@ -227,10 +227,11 @@ namespace editor
 
     void editor_layer::build_panels()
     {
-        // Push this frame's time into the rolling history first so the
-        // profiler reflects the live cadence.
+        // Push this frame's real time, in milliseconds, into the rolling
+        // history first so the profiler reflects the live cadence, paused
+        // or not.
         const auto& time = *m_engine->time;
-        m_profiler.frame_times[m_profiler.frame_cursor] = static_cast<float>(time.delta_time());
+        m_profiler.frame_times[m_profiler.frame_cursor] = static_cast<float>(time.unscaled_delta_time() * 1000.0);
         m_profiler.frame_cursor = (m_profiler.frame_cursor + 1) % profiler_state::frame_history;
 
         const ImGuiID dockspace_id = setup_dockspace();

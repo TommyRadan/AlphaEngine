@@ -87,7 +87,7 @@ namespace
         {
         }
 
-        void on_update(float delta_time) override
+        void on_update(double delta_time) override
         {
             const runtime::renderable_component* drawn = owner().get_component<runtime::renderable_component>();
             rendering_engine::instanced_mesh* cubes =
@@ -97,7 +97,7 @@ namespace
                 return;
             }
 
-            m_time += delta_time / 1000.0f;
+            m_time += static_cast<float>(delta_time);
 
             const core::math::vec3 spin_axis{0.0f, 1.0f, 0.0f};
             const core::math::vec3 unit_scale{cube_scale, cube_scale, cube_scale};

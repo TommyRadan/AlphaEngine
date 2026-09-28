@@ -9,6 +9,10 @@
  * The @ref core::event_bus is keyed on @c std::type_index, so game
  * modules can define their own event structs and dispatch them through
  * the same bus without modifying this header.
+ *
+ * Events carry what happens — input, window changes, collisions, a quit
+ * request — never the frame's ticking: what runs every frame or every fixed
+ * step, and in which order, is the @c runtime::scheduler's schedule.
  */
 
 #pragma once
@@ -230,34 +234,6 @@ namespace core
     /** @brief Signals the user requested application termination. */
     struct quit_requested
     {
-    };
-
-    /**
-     * @brief Per-frame tick event.
-     *
-     * Broadcast once per iteration of the main loop and carries the
-     * time elapsed since the previous frame.
-     */
-    struct frame
-    {
-        /** @brief Time since the previous frame, in milliseconds. */
-        float m_delta_time;
-    };
-
-    /**
-     * @brief Per-rendered-frame update event (variable rate).
-     *
-     * Broadcast once per render frame, carrying the real time since the
-     * previous render frame. Use this for visual / input-driven animation that
-     * must stay smooth at the render rate — a camera that moves with the player,
-     * spinning props — so motion does not judder when the render rate runs far
-     * ahead of the fixed-step rate. Use @ref frame instead for deterministic,
-     * frame-rate-independent simulation.
-     */
-    struct render_update
-    {
-        /** @brief Time since the previous render frame, in milliseconds. */
-        float m_delta_time;
     };
 
     /**

@@ -509,12 +509,13 @@ void rendering_engine::renderer::render()
     ctx.viewport_width = m_target_width;
     ctx.viewport_height = m_target_height;
     ctx.frame_index = m_frame_index;
-    // The engine clock ticked at the top of this frame; core::time reports
-    // milliseconds, the shaders see seconds.
+    // The engine clock ticked at the top of this frame. The frame is drawn
+    // on real time, whatever the game's time scale, so the effects that
+    // adapt over time (auto-exposure) keep running while the game is paused.
     if (m_services.time != nullptr)
     {
-        ctx.time_seconds = m_services.time->total_time() / 1000.0f;
-        ctx.delta_seconds = static_cast<float>(m_services.time->delta_time() / 1000.0);
+        ctx.time_seconds = static_cast<float>(m_services.time->total_time());
+        ctx.delta_seconds = static_cast<float>(m_services.time->unscaled_delta_time());
     }
     // The temporal-AA jitter is computed here from the live target size
     // (so a resize rescales it without any pass being told) and published

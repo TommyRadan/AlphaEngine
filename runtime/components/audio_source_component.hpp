@@ -28,8 +28,9 @@ namespace runtime
      * Wraps one @c core::audio voice (@ref core::audio_voice_id), started by
      * @ref play (directly, or automatically on attach when
      * @ref config::play_on_attach is set) and stopped by @ref stop or
-     * @ref on_destroy. @ref on_update tracks the node's world position, which
-     * a @ref config::spatial source's voice is mixed against every tick
+     * @ref on_destroy. @ref sync, which the engine's audio stage runs once
+     * per frame after the transforms have settled, tracks the node's world
+     * position, which a @ref config::spatial source's voice is mixed against
      * (distance attenuation and stereo panning from the active listener, see
      * @c audio_listener_component); a non-spatial source ignores the node's
      * position and plays at a fixed 2D @ref config::pan instead.
@@ -66,8 +67,8 @@ namespace runtime
         /** @brief Records the node's starting position and, if @ref config::play_on_attach, starts playback. */
         void on_attach(node& owner);
 
-        /** @brief Tracks the node's world position for a spatial source's next mix. */
-        void on_update(node& owner);
+        /** @brief Tracks @p owner's world position for a spatial source's next mix. Run by the engine's audio stage. */
+        void sync(node& owner);
 
         /** @brief Stops playback. */
         void on_destroy();
