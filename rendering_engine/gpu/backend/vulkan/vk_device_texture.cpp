@@ -395,7 +395,7 @@ namespace rendering_engine::gpu::backend::vulkan
         // a pass that loads it, a copy and a readback all find the
         // layout the record says.
         record.layout = VK_IMAGE_LAYOUT_UNDEFINED;
-        VkCommandBuffer cmd = transfer_command_buffer();
+        VkCommandBuffer cmd = m_transfer.transfer_command_buffer();
         if (cmd == VK_NULL_HANDLE)
         {
             LOG_ERR("vk_device::create_texture: no command buffer for the initial layout transition");
@@ -471,7 +471,7 @@ namespace rendering_engine::gpu::backend::vulkan
         // Stage @p size bytes of @p data and record their copy into
         // level @p mip_level, layer @p base_layer of @p record at
         // @p offset, of @p extent texels, into the open transfer batch.
-        void upload_region(vk_device& device,
+        void upload_region(vk_transfer& transfer,
                            vk_texture& record,
                            uint32_t mip_level,
                            uint32_t base_layer,
@@ -528,8 +528,8 @@ namespace rendering_engine::gpu::backend::vulkan
             // once the batch has run. Nothing waits: the batch is
             // submitted ahead of the first frame that samples the
             // texture and its ring bytes are released by its fence.
-            vk_device::staged_upload staged{};
-            if (!device.stage_upload(source, source_size, staged))
+            vk_transfer::staged_upload staged{};
+            if (!transfer.stage_upload(source, source_size, staged))
             {
                 LOG_ERR("vk_device: texture upload of %zu bytes skipped (staging failed)", source_size);
                 return;
@@ -572,7 +572,7 @@ namespace rendering_engine::gpu::backend::vulkan
         {
             return;
         }
-        upload_region(*this, *record, 0, 0, {0, 0, 0}, {record->width, record->height, 1}, data, size);
+        upload_region(m_transfer, *record, 0, 0, {0, 0, 0}, {record->width, record->height, 1}, data, size);
     }
 
     bool
@@ -621,7 +621,7 @@ namespace rendering_engine::gpu::backend::vulkan
             LOG_WRN("write_texture_region: %zu bytes supplied, %zu needed", size, required);
             return false;
         }
-        upload_region(*this,
+        upload_region(m_transfer,
                       *record,
                       region.mip_level,
                       region.layer,
@@ -639,7 +639,7 @@ namespace rendering_engine::gpu::backend::vulkan
         {
             return;
         }
-        upload_region(*this, *record, 0, 0, {0, 0, 0}, {record->width, record->height, record->depth}, data, size);
+        upload_region(m_transfer, *record, 0, 0, {0, 0, 0}, {record->width, record->height, record->depth}, data, size);
     }
 
     void vk_device::write_cube_face(texture handle, cube_face face, const void* data, size_t size)
@@ -649,8 +649,14 @@ namespace rendering_engine::gpu::backend::vulkan
         {
             return;
         }
-        upload_region(
-            *this, *record, 0, static_cast<uint32_t>(face), {0, 0, 0}, {record->width, record->height, 1}, data, size);
+        upload_region(m_transfer,
+                      *record,
+                      0,
+                      static_cast<uint32_t>(face),
+                      {0, 0, 0},
+                      {record->width, record->height, 1},
+                      data,
+                      size);
     }
 
     bool vk_device::read_texture(texture handle, const texture_copy_region& region, void* out, size_t size)
@@ -692,7 +698,7 @@ namespace rendering_engine::gpu::backend::vulkan
         // into a host-visible buffer, and the copy is waited on its own
         // fence before the bytes are read. The uploads queued so far go
         // first so a texture written this frame reads back complete.
-        flush_transfer_batch();
+        m_transfer.flush_transfer_batch();
 
         VkBufferCreateInfo bi{};
         bi.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -721,7 +727,7 @@ namespace rendering_engine::gpu::backend::vulkan
             }
             VkCommandBufferAllocateInfo cai{};
             cai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-            cai.commandPool = m_transfer_command_pool;
+            cai.commandPool = m_transfer.command_pool();
             cai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
             cai.commandBufferCount = 1;
             if (!vk_check(vkAllocateCommandBuffers(m_device.handle(), &cai, &cmd),
@@ -802,7 +808,7 @@ namespace rendering_engine::gpu::backend::vulkan
         }
         if (cmd != VK_NULL_HANDLE)
         {
-            vkFreeCommandBuffers(m_device.handle(), m_transfer_command_pool, 1, &cmd);
+            vkFreeCommandBuffers(m_device.handle(), m_transfer.command_pool(), 1, &cmd);
         }
         vmaDestroyBuffer(m_device.allocator(), readback, readback_allocation);
         return ok;
@@ -827,7 +833,7 @@ namespace rendering_engine::gpu::backend::vulkan
         // level 0 that preceded them, and run ahead of the first frame
         // that samples the chain.
         const uint32_t layers = record->array_layers;
-        VkCommandBuffer cmd = transfer_command_buffer();
+        VkCommandBuffer cmd = m_transfer.transfer_command_buffer();
         if (cmd == VK_NULL_HANDLE)
         {
             LOG_ERR("vk_device::generate_mipmaps: no command buffer; the chain keeps level 0 only");
