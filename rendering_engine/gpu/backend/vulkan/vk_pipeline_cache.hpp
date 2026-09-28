@@ -5,11 +5,12 @@
  * @file vk_pipeline_cache.hpp
  * @brief The on-disk form of the Vulkan backend's @c VkPipelineCache.
  *
- * @c vk_device creates one pipeline cache at init, seeded from the file
- * these helpers read, passes it to every @c vkCreateGraphicsPipelines /
- * @c vkCreateComputePipelines call (and to the Dear ImGui backend), and
- * writes @c vkGetPipelineCacheData back at quit, so a relaunch skips the
- * driver's shader compiles for every pipeline an earlier run built.
+ * @c vk_pipeline_cache creates one pipeline cache at init, seeded from
+ * the file these helpers read, which @c vk_device passes to every
+ * @c vkCreateGraphicsPipelines / @c vkCreateComputePipelines call (and
+ * to the Dear ImGui backend), and writes @c vkGetPipelineCacheData back
+ * at quit, so a relaunch skips the driver's shader compiles for every
+ * pipeline an earlier run built.
  *
  * The file lives in the shader cache directory
  * (@ref gpu::shader_cache_directory, so @c ALPHAENGINE_SHADER_CACHE turns it
@@ -74,4 +75,33 @@ namespace rendering_engine::gpu::backend::vulkan
     // The digest the envelope records for @p data, so a caller can tell
     // whether the cache changed since it was read.
     uint64_t pipeline_cache_digest(const std::vector<uint8_t>& data);
+
+    // The pipeline cache every graphics and compute pipeline is created
+    // through, owned by vk_device from init to quit.
+    class vk_pipeline_cache
+    {
+    public:
+        // Create the cache, seeded from the pipeline-cache file of this
+        // GPU in the shader cache directory when that file is intact and
+        // was written by this GPU and driver (logged either way). With
+        // the shader cache disabled no cache is created.
+        void create(VkPhysicalDevice physical_device, VkDevice device);
+        // Write the cache's data back to its file (skipped when it did
+        // not change since it was read, and after a device loss), then
+        // destroy it. Runs in quit, with the device idle.
+        void save_and_destroy(VkDevice device, bool device_lost);
+        // VK_NULL_HANDLE when the shader cache is disabled or the cache
+        // could not be created, which every vkCreate*Pipelines call
+        // accepts.
+        VkPipelineCache handle() const noexcept;
+
+    private:
+        // m_pipeline_cache_file is empty when the shader cache directory
+        // is disabled; m_pipeline_cache_digest is the digest of the data
+        // read from it (0 when nothing was), so quit skips rewriting an
+        // unchanged cache.
+        VkPipelineCache m_pipeline_cache{VK_NULL_HANDLE};
+        std::filesystem::path m_pipeline_cache_file;
+        uint64_t m_pipeline_cache_digest{0};
+    };
 } // namespace rendering_engine::gpu::backend::vulkan

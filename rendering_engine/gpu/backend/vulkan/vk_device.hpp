@@ -65,6 +65,7 @@
 #include <rendering_engine/gpu/backend/vulkan/vk_instance.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_logical_device.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_physical_device.hpp>
+#include <rendering_engine/gpu/backend/vulkan/vk_pipeline_cache.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_resources.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_staging_ring.hpp>
 #include <rendering_engine/gpu/device.hpp>
@@ -552,15 +553,6 @@ namespace rendering_engine::gpu::backend::vulkan
         // descriptor_pool_budget_for(chain length). Returns false with
         // an error logged when the driver refuses.
         bool create_descriptor_pool();
-        // Create m_pipeline_cache, seeded from the pipeline-cache file
-        // of this GPU in the shader cache directory when that file is
-        // intact and was written by this GPU and driver (logged either
-        // way). With the shader cache disabled no cache is created.
-        void create_pipeline_cache();
-        // Write the cache's data back to its file (skipped when it did
-        // not change since it was read, and after a device loss), then
-        // destroy it. Runs in quit, with the device idle.
-        void save_and_destroy_pipeline_cache();
         // A compute VkPipeline over @p module and @p layout, through the
         // pipeline cache; VK_NULL_HANDLE (logged) on failure.
         VkPipeline build_compute_pipeline(VkShaderModule module, VkPipelineLayout layout);
@@ -701,17 +693,11 @@ namespace rendering_engine::gpu::backend::vulkan
         vk_instance m_instance;
         vk_physical_device m_physical_device;
         vk_logical_device m_device{m_instance, m_physical_device};
+        vk_pipeline_cache m_pipeline_cache;
 
         // Whether presentation waits for vertical sync
         // (surface_desc::vsync), read at every swapchain build.
         bool m_vsync{false};
-        // See pipeline_cache(). m_pipeline_cache_file is empty when the
-        // shader cache directory is disabled; m_pipeline_cache_digest is
-        // the digest of the data read from it (0 when nothing was), so
-        // quit skips rewriting an unchanged cache.
-        VkPipelineCache m_pipeline_cache{VK_NULL_HANDLE};
-        std::filesystem::path m_pipeline_cache_file;
-        uint64_t m_pipeline_cache_digest{0};
 
         // Frame command buffers. Each slot is a command pool plus the
         // primary buffers allocated from it so far, handed out in order
