@@ -21,7 +21,6 @@
 #include <rendering_engine/gpu/shader_compiler.hpp>
 #include <rendering_engine/gpu/texture.hpp>
 #include <rendering_engine/gpu/types.hpp>
-#include <runtime/engine.hpp>
 
 namespace
 {
@@ -246,12 +245,16 @@ namespace
 
 namespace rendering_engine
 {
-    environment_probe::environment_probe(uint32_t face_size, const std::array<std::vector<float>, 6>& faces)
+    environment_probe::environment_probe(gpu::device& device,
+                                         uint32_t face_size,
+                                         const std::array<std::vector<float>, 6>& faces)
+        : m_device(&device)
     {
         build(face_size, faces);
     }
 
-    environment_probe::environment_probe(const std::array<assets::image, 6>& faces)
+    environment_probe::environment_probe(gpu::device& device, const std::array<assets::image, 6>& faces)
+        : m_device(&device)
     {
         const uint32_t size = faces[0].get_width();
         std::array<std::vector<float>, 6> linear_faces{};
@@ -278,7 +281,7 @@ namespace rendering_engine
 
     environment_probe::~environment_probe()
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
         if (m_brdf_lut.valid())
         {
             gpu.destroy(m_brdf_lut);
@@ -305,7 +308,7 @@ namespace rendering_engine
     {
         upload_source(face_size, faces);
 
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
         if (gpu.features().compute_prefilter)
         {
             build_derived_gpu(face_size);
@@ -318,7 +321,7 @@ namespace rendering_engine
 
     void environment_probe::upload_source(uint32_t face_size, const std::array<std::vector<float>, 6>& faces)
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
 
         // Source skybox cube: HDR with a full mip chain. Mip 0 is the
         // sharp background sampled by the skybox pass; the GPU prefilter
@@ -348,7 +351,7 @@ namespace rendering_engine
 
     void environment_probe::build_derived_cpu(uint32_t face_size, const std::array<std::vector<float>, 6>& faces)
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
 
         // Diffuse irradiance cube: each output texel integrates the source
         // over a cosine-weighted hemisphere about its direction.
@@ -461,7 +464,7 @@ namespace rendering_engine
 
     void environment_probe::build_derived_gpu(uint32_t face_size)
     {
-        auto& gpu = *runtime::current_engine().gpu;
+        auto& gpu = *m_device;
 
         // Temporaries are tracked so the whole convolution scaffold is
         // released once the tables are written; only the three textures

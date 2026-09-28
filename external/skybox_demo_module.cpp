@@ -13,6 +13,7 @@
 #include <assets/color.hpp>
 #include <core/log.hpp>
 #include <core/math/math.hpp>
+#include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/lighting/directional_light.hpp>
 #include <rendering_engine/lighting/environment_probe.hpp>
 #include <rendering_engine/materials/standard_material.hpp>
@@ -134,7 +135,8 @@ namespace
     struct sky_showcase final : runtime::behavior
     {
         sky_showcase()
-            : m_environment{std::make_unique<rendering_engine::environment_probe>(face_size, generate_sky_faces())}
+            : m_environment{std::make_unique<rendering_engine::environment_probe>(
+                  *runtime::current_engine().gpu, face_size, generate_sky_faces())}
         {
         }
 
