@@ -12,6 +12,7 @@ target_sources(alpha_rhi PRIVATE
     vk_descriptor_allocator.hpp
     vk_device.cpp
     vk_device.hpp
+    vk_device_bind_group.cpp
     vk_device_buffer.cpp
     vk_device_pipeline.cpp
     vk_device_render_target.cpp
