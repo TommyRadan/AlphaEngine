@@ -68,6 +68,11 @@
  * @brief Opens the definition of this translation unit's bootstrap — a
  *        function of @c runtime::scene& @c scene — and registers it through
  *        @ref runtime::register_game_module. Use it once per module.
+ *
+ * The registration is a static initialiser, so the module must be a source
+ * of the executable (see external/CMakeLists.txt): the linker leaves out an
+ * object of a static library that nothing references, and the initialiser
+ * with it.
  */
 #define GAME_MODULE()                                                                                                  \
     static void game_module_bootstrap(runtime::scene& scene);                                                          \

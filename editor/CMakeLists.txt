@@ -4,7 +4,7 @@
 # The debug editor. Every translation unit compiles to nothing unless
 # ALPHAENGINE_HAS_IMGUI is defined (Debug configurations; see the root
 # CMakeLists.txt, which links ImGui and ImGuizmo for Debug only).
-target_sources(AlphaEngine PRIVATE
+target_sources(alpha_editor PRIVATE
     console_panel.cpp
     editor.cpp
     editor.hpp

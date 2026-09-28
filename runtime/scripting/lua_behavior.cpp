@@ -375,7 +375,7 @@ sol::object runtime::script_host::state::self_of(const lua_behavior& behavior)
     return behavior.m_instance->self;
 }
 
-REFLECT_TYPES()
+void runtime::register_lua_behavior(type_registry& registry)
 {
     registry.register_behavior<runtime::lua_behavior>("lua_behavior")
         .field("script", &runtime::lua_behavior::script, &runtime::lua_behavior::set_script)

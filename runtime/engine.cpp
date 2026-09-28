@@ -30,6 +30,7 @@
 #include <runtime/overlay.hpp>
 #include <runtime/physics/physics_debug_draw.hpp>
 #include <runtime/physics/physics_world.hpp>
+#include <runtime/reflection.hpp>
 #include <runtime/scene_manager.hpp>
 #include <runtime/scripting/script_host.hpp>
 
@@ -96,6 +97,33 @@ namespace runtime
             const std::string layer_path = core::os::path_to_utf8(base_path);
             platform::set_environment_variable("VK_LAYER_PATH", layer_path.c_str());
             LOG_INF("Published VK_LAYER_PATH=%s for bundled validation layer", layer_path.c_str());
+        }
+
+        // Logs what the type registry holds once every registration has run:
+        // the engine's built-in types and those of the game modules linked
+        // into this executable.
+        void log_registered_types()
+        {
+            const char* const category_names[] = {"components", "behaviours", "objects"};
+            std::size_t counts[3] = {};
+            std::string names[3];
+            for (const type_info* type : default_type_registry().types())
+            {
+                const auto category = static_cast<std::size_t>(type->category);
+                ++counts[category];
+                names[category] += names[category].empty() ? type->name : ", " + type->name;
+            }
+            LOG_INF("Type registry: %zu %s, %zu %s, %zu %s",
+                    counts[0],
+                    category_names[0],
+                    counts[1],
+                    category_names[1],
+                    counts[2],
+                    category_names[2]);
+            for (std::size_t category = 0; category < 3; ++category)
+            {
+                LOG_DBG("Type registry %s: %s", category_names[category], names[category].c_str());
+            }
         }
     } // namespace
 
@@ -283,6 +311,7 @@ namespace runtime
         // registered its bootstrap at static-init time (before the engine
         // existed); run them now so they spawn their nodes and behaviours
         // into the active scene, where the scenes own and tear them down.
+        log_registered_types();
         install_game_modules(scenes->active_scene());
     }
 

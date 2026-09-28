@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2015-2026 Tomislav Radanovic
 
-target_sources(AlphaEngine PRIVATE
+target_sources(alpha_world PRIVATE
     animator_component.cpp
     animator_component.hpp
     audio_listener_component.cpp
@@ -15,6 +15,7 @@ target_sources(AlphaEngine PRIVATE
     collider_component.cpp
     collider_component.hpp
     component_types.cpp
+    component_types.hpp
     drawn_bounds.cpp
     drawn_bounds.hpp
     light_component.cpp

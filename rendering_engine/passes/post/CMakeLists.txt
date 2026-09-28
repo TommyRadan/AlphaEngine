@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2015-2026 Tomislav Radanovic
 
-target_sources(AlphaEngine PRIVATE
+target_sources(alpha_render PRIVATE
     auto_exposure_pass.cpp
     auto_exposure_pass.hpp
     bloom_pass.cpp

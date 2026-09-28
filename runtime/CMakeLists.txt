@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2015-2026 Tomislav Radanovic
 
-target_sources(AlphaEngine PRIVATE
+target_sources(alpha_world PRIVATE
     behavior.hpp
     component.hpp
     engine.cpp
@@ -12,7 +12,6 @@ target_sources(AlphaEngine PRIVATE
     game_module.hpp
     gltf_instantiate.cpp
     gltf_instantiate.hpp
-    main_loop.cpp
     node.cpp
     node.hpp
     overlay.hpp
@@ -26,6 +25,11 @@ target_sources(AlphaEngine PRIVATE
     scene_manager.hpp
     scene_serializer.cpp
     scene_serializer.hpp
+)
+
+# The entry point, shared by every game executable (see external/).
+target_sources(alpha_game PRIVATE
+    main_loop.cpp
 )
 
 add_subdirectory(animation)

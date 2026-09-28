@@ -1,9 +1,14 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2015-2026 Tomislav Radanovic
 
-target_sources(AlphaEngine PRIVATE
+# The game modules every game executable shares, compiled into the
+# alpha_game object library with the entry point and the game-module API.
+target_sources(alpha_game PRIVATE
     camera_module.cpp
     exit_module.cpp
+)
+
+target_sources(AlphaEngine PRIVATE
     physics_demo_module.cpp
     shadow_demo_module.cpp
     ui_demo_module.cpp

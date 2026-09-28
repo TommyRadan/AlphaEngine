@@ -29,6 +29,8 @@
  *   @c "audio_listener" has no settings.
  */
 
+#include <runtime/components/component_types.hpp>
+
 #include <cmath>
 #include <cstdint>
 #include <memory>
@@ -945,7 +947,7 @@ namespace
     }
 } // namespace
 
-REFLECT_TYPES()
+void runtime::register_component_types(type_registry& registry)
 {
     register_material_types(registry);
     register_camera(registry);

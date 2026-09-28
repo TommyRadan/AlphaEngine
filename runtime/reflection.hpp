@@ -43,8 +43,11 @@
  * - **objects** — plain data that a field of another type holds by value
  *   (@ref field_kind::object), such as a material description.
  *
- * Registration runs at static-initialisation time and everything else on
- * the main thread; the registry is not synchronised.
+ * The engine's own types (the built-in components and @c lua_behavior)
+ * are registered when @ref default_type_registry is first used; a
+ * @ref REFLECT_TYPES block registers at static-initialisation time.
+ * Everything else runs on the main thread; the registry is not
+ * synchronised.
  */
 
 #pragma once
@@ -758,6 +761,11 @@ namespace runtime
  *        follows runs once, at static-initialisation time, with
  *        @c registry naming the @ref runtime::default_type_registry. One per
  *        translation unit.
+ *
+ * For a translation unit compiled into the executable itself, such as a
+ * game module: the linker leaves out an object of a static library that
+ * nothing references, and the block with it. An engine library registers
+ * its types through @ref runtime::default_type_registry instead.
  */
 #define REFLECT_TYPES()                                                                                                \
     static void reflect_types(runtime::type_registry& registry);                                                       \

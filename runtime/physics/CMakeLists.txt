@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2015-2026 Tomislav Radanovic
 
-target_sources(AlphaEngine PRIVATE
+target_sources(alpha_world PRIVATE
     physics_body.cpp
     physics_body.hpp
     physics_debug_draw.cpp

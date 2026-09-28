@@ -105,7 +105,7 @@ add_custom_command(
     VERBATIM
 )
 
-# A tiny static library rather than a source of the AlphaEngine target:
+# A tiny static library rather than a source of the alpha_rhi module:
 # a generated source can only be consumed by targets in the directory
 # that declares its custom command. Its only API is the plain-C-shaped
 # embedded_shaders(), so it carries no standard-library types across
