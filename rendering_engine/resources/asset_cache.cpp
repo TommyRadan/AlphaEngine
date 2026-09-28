@@ -12,6 +12,7 @@
 #include <system_error>
 #include <utility>
 
+#include <assets/cache_key.hpp>
 #include <assets/color.hpp>
 #include <assets/gltf_importer.hpp>
 #include <assets/image.hpp>
@@ -21,7 +22,6 @@
 #include <core/os/os.hpp>
 #include <core/vfs/vfs.hpp>
 #include <rendering_engine/gpu/device.hpp>
-#include <rendering_engine/resources/cache_key.hpp>
 #include <rendering_engine/resources/gltf_model.hpp>
 #include <rendering_engine/resources/texture_formats.hpp>
 
@@ -778,7 +778,7 @@ namespace rendering_engine
     std::shared_ptr<font_asset> asset_cache::load_font(const std::filesystem::path& path, float size)
     {
         // Glyph rasterization is size-specific, so the size is part of the key.
-        const std::string key = path_key(path) + '|' + cache_key_number(size);
+        const std::string key = path_key(path) + '|' + assets::cache_key_number(size);
         {
             std::shared_lock lock{m_mutex};
             if (auto existing = find_live(m_fonts, key))

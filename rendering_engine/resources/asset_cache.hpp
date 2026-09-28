@@ -26,6 +26,7 @@
 #include <assets/gltf_importer.hpp>
 #include <assets/image.hpp>
 #include <assets/mesh_data.hpp>
+#include <assets/mesh_generators.hpp>
 #include <assets/texture_decode.hpp>
 #include <rendering_engine/resources/font_asset.hpp>
 #include <rendering_engine/resources/mesh_asset.hpp>
@@ -75,14 +76,15 @@ namespace rendering_engine
      * VFS's canonical identity (@c vfs::canonical_key — resolved, made
      * canonical, case-folded where the filesystem ignores case), so two
      * spellings of one file share one entry. Numeric parameters in a
-     * structural key go through @c cache_key_number so the text is
+     * structural key go through @c assets::cache_key_number so the text is
      * locale-independent and distinguishes every distinct value.
      *
      * Meshes are cached by structural key via @ref get_or_create_mesh rather
-     * than by path: procedural builders key on their parameters, and a glTF
-     * model (@ref load_gltf) keys each primitive on the file's canonical
-     * identity plus its mesh / primitive index, so a model loaded twice shares
-     * its uploads through the same @c shared_ptr / @c weak_ptr machinery.
+     * than by path: procedural builders — the @c assets::mesh_generators
+     * shapes among them — key on their parameters, and a glTF model
+     * (@ref load_gltf) keys each primitive on the file's canonical identity
+     * plus its mesh / primitive index, so a model loaded twice shares its
+     * uploads through the same @c shared_ptr / @c weak_ptr machinery.
      *
      * Textures can also be loaded asynchronously (@ref load_texture_async):
      * the file is read and decoded on the @c core::job_pool worker pool and the
@@ -338,6 +340,22 @@ namespace rendering_engine
          */
         std::shared_ptr<mesh_asset> get_or_create_mesh(const std::string& key,
                                                        const std::function<assets::mesh_data()>& builder);
+
+        /**
+         * @brief Returns the mesh a procedural @p shape describes (an
+         *        @c assets::mesh_generators description such as
+         *        @c mesh_generators::sphere{}), generating it on a miss.
+         *
+         * Keyed by @c mesh_generators::cache_key, so every request for the
+         * same shape shares one upload, which @c mesh_generators::generate
+         * builds only when no live mesh has that key.
+         */
+        template<assets::mesh_shape Shape>
+        std::shared_ptr<mesh_asset> get_or_create_mesh(const Shape& shape)
+        {
+            return get_or_create_mesh(assets::mesh_generators::cache_key(shape),
+                                      [&shape] { return assets::mesh_generators::generate(shape); });
+        }
 
         /**
          * @brief The live mesh cached under @p key, or @c nullptr; never

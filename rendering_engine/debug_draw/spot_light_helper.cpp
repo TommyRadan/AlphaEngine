@@ -74,7 +74,7 @@ namespace rendering_engine::debug_draw
         std::vector<math::vec3> ring(ring_segments);
         for (int i = 0; i < ring_segments; ++i)
         {
-            const float angle = 2.0f * 3.14159265359f * static_cast<float>(i) / static_cast<float>(ring_segments);
+            const float angle = math::two_pi * static_cast<float>(i) / static_cast<float>(ring_segments);
             ring[static_cast<size_t>(i)] =
                 base_center + right * (std::cos(angle) * radius) + up * (std::sin(angle) * radius);
         }

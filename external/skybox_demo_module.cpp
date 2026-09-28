@@ -11,17 +11,17 @@
 #include <vector>
 
 #include <assets/color.hpp>
+#include <assets/mesh_generators.hpp>
 #include <core/log.hpp>
 #include <core/math/math.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/lighting/directional_light.hpp>
 #include <rendering_engine/lighting/environment_probe.hpp>
 #include <rendering_engine/materials/standard_material.hpp>
-#include <rendering_engine/renderables/premade_3d/plane.hpp>
-#include <rendering_engine/renderables/premade_3d/sphere.hpp>
 #include <rendering_engine/renderer.hpp>
+#include <rendering_engine/resources/asset_cache.hpp>
 #include <runtime/components/light_component.hpp>
-#include <runtime/components/renderable_component.hpp>
+#include <runtime/components/mesh_component.hpp>
 #include <runtime/engine.hpp>
 
 namespace
@@ -167,14 +167,17 @@ namespace
         std::vector<std::unique_ptr<rendering_engine::standard_material>> m_materials;
     };
 
-    // Hangs @p shape on a new child of @p parent at @p position.
-    template<typename Shape>
-    runtime::node&
-    spawn_prop(runtime::scene& scene, runtime::node& parent, const math::vec3& position, std::unique_ptr<Shape> shape)
+    // Hangs @p mesh, drawn with @p material, on a new child of @p parent at
+    // @p position.
+    runtime::node& spawn_prop(runtime::scene& scene,
+                              runtime::node& parent,
+                              const math::vec3& position,
+                              rendering_engine::material* material,
+                              std::shared_ptr<rendering_engine::mesh_asset> mesh)
     {
         runtime::node& prop = scene.create_node({}, &parent);
         prop.transform.set_position(position);
-        prop.add_component(runtime::renderable_component{std::move(shape)});
+        prop.add_component(runtime::mesh_component{material, std::move(mesh)});
         return prop;
     }
 } // namespace
@@ -208,8 +211,11 @@ GAME_MODULE()
 
             const float y = (static_cast<float>(col) - static_cast<float>(grid_columns - 1) * 0.5f) * grid_spacing;
             const float z = (static_cast<float>(grid_rows - 1) * 0.5f - static_cast<float>(row)) * grid_row_height;
-            runtime::node& ball = spawn_prop(
-                scene, demo, math::vec3{0.0f, y, z}, std::make_unique<rendering_engine::sphere>(cache, material));
+            runtime::node& ball = spawn_prop(scene,
+                                             demo,
+                                             math::vec3{0.0f, y, z},
+                                             material,
+                                             cache.get_or_create_mesh(assets::mesh_generators::sphere{}));
             ball.transform.set_scale(math::vec3{sphere_scale, sphere_scale, sphere_scale});
         }
     }
@@ -225,7 +231,8 @@ GAME_MODULE()
     spawn_prop(scene,
                demo,
                math::vec3{0.0f, 0.0f, ground_z},
-               std::make_unique<rendering_engine::plane>(cache, ground_material, 40.0f, 40.0f));
+               ground_material,
+               cache.get_or_create_mesh(assets::mesh_generators::plane{.width = 40.0f, .height = 40.0f}));
 
     // A warm key light aligned with the sun in the sky so the direct
     // and image-based lighting agree. It casts the scene's shadow map

@@ -14,6 +14,7 @@
 #include <unordered_map>
 #include <utility>
 
+#include <assets/cache_key.hpp>
 #include <assets/color.hpp>
 #include <assets/image.hpp>
 #include <core/log.hpp>
@@ -22,7 +23,6 @@
 #include <rendering_engine/materials/standard_material.hpp>
 #include <rendering_engine/renderer.hpp>
 #include <rendering_engine/resources/asset_cache.hpp>
-#include <rendering_engine/resources/cache_key.hpp>
 #include <rendering_engine/resources/gltf_model.hpp>
 #include <runtime/engine.hpp>
 #include <runtime/scene_serializer.hpp>
@@ -123,7 +123,7 @@ namespace runtime
         // same material.
         std::string description_key(const standard_material_description& description)
         {
-            using rendering_engine::cache_key_number;
+            using assets::cache_key_number;
             std::string key = "standard";
             auto number = [&key](auto value)
             {

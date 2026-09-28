@@ -4,6 +4,7 @@
 target_sources(alpha_core PRIVATE
     aabb.cpp
     aabb.hpp
+    constants.hpp
     curve.hpp
     easing.cpp
     easing.hpp

@@ -3,7 +3,7 @@
 
 /**
  * @file renderable_component.hpp
- * @brief Component that draws a ready-made mesh source at its node.
+ * @brief Component that draws a mesh source at its node.
  */
 
 #pragma once
@@ -26,8 +26,8 @@ namespace runtime
     struct node;
 
     /**
-     * @brief Gives a node a ready-made mesh — a @c premade_3d primitive, a
-     *        @c line, a @c points cloud, an @c instanced_mesh.
+     * @brief Gives a node a mesh source — a @c line, a @c points cloud, an
+     *        @c instanced_mesh.
      *
      * The @ref mesh_component counterpart for sources that build their own
      * geometry: it owns the @ref rendering_engine::mesh_source on the heap

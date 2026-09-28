@@ -4,17 +4,16 @@
 #include "api/game_module.hpp"
 
 #include <assets/color.hpp>
+#include <assets/mesh_generators.hpp>
 #include <core/math/math.hpp>
 #include <core/math/transform.hpp>
 #include <rendering_engine/lighting/ambient_light.hpp>
 #include <rendering_engine/lighting/directional_light.hpp>
 #include <rendering_engine/materials/standard_material.hpp>
-#include <rendering_engine/renderables/premade_3d/box.hpp>
-#include <rendering_engine/renderables/premade_3d/plane.hpp>
-#include <rendering_engine/renderables/premade_3d/sphere.hpp>
 #include <rendering_engine/renderer.hpp>
+#include <rendering_engine/resources/asset_cache.hpp>
 #include <runtime/components/light_component.hpp>
-#include <runtime/components/renderable_component.hpp>
+#include <runtime/components/mesh_component.hpp>
 #include <runtime/engine.hpp>
 #include <runtime/scripting/lua_behavior.hpp>
 
@@ -111,14 +110,17 @@ namespace
         float m_angle{0.0f};
     };
 
-    // Hangs @p shape on a new child of @p parent at @p position.
-    template<typename Shape>
-    runtime::node&
-    spawn_prop(runtime::scene& scene, runtime::node& parent, const math::vec3& position, std::unique_ptr<Shape> shape)
+    // Hangs @p mesh, drawn with @p material, on a new child of @p parent at
+    // @p position.
+    runtime::node& spawn_prop(runtime::scene& scene,
+                              runtime::node& parent,
+                              const math::vec3& position,
+                              rendering_engine::material* material,
+                              std::shared_ptr<rendering_engine::mesh_asset> mesh)
     {
         runtime::node& prop = scene.create_node({}, &parent);
         prop.transform.set_position(position);
-        prop.add_component(runtime::renderable_component{std::move(shape)});
+        prop.add_component(runtime::mesh_component{material, std::move(mesh)});
         return prop;
     }
 } // namespace
@@ -152,7 +154,8 @@ GAME_MODULE()
     spawn_prop(scene,
                demo,
                math::vec3{6.0f, 0.0f, ground_z},
-               std::make_unique<rendering_engine::plane>(cache, ground_material, 60.0f, 60.0f));
+               ground_material,
+               cache.get_or_create_mesh(assets::mesh_generators::plane{.width = 60.0f, .height = 60.0f}));
 
     // A few coloured surfaces shared across the field.
     rendering_engine::standard_material* warm = field->make_material(assets::color{230, 126, 34, 255}, 0.55f);
@@ -179,7 +182,8 @@ GAME_MODULE()
             spawn_prop(scene,
                        demo,
                        math::vec3{x, y, ground_z + 1.0f},
-                       std::make_unique<rendering_engine::sphere>(cache, tint));
+                       tint,
+                       cache.get_or_create_mesh(assets::mesh_generators::sphere{}));
         }
     }
 
@@ -195,11 +199,12 @@ GAME_MODULE()
     runtime::node* scripted_pillar = nullptr;
     for (const math::vec3& spot : pillar_spots)
     {
-        runtime::node& pillar =
-            spawn_prop(scene,
-                       demo,
-                       math::vec3{spot.x, spot.y, ground_z + pillar_height * 0.5f},
-                       std::make_unique<rendering_engine::box>(cache, pillar_material, 0.8f, 0.8f, pillar_height));
+        runtime::node& pillar = spawn_prop(scene,
+                                           demo,
+                                           math::vec3{spot.x, spot.y, ground_z + pillar_height * 0.5f},
+                                           pillar_material,
+                                           cache.get_or_create_mesh(assets::mesh_generators::box{
+                                               .width = 0.8f, .height = 0.8f, .depth = pillar_height}));
         if (scripted_pillar == nullptr)
         {
             scripted_pillar = &pillar;

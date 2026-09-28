@@ -6,12 +6,12 @@
 #include <algorithm>
 #include <cmath>
 
+#include <core/math/constants.hpp>
+
 namespace core::math
 {
     namespace
     {
-        constexpr float pi = 3.14159265358979323846f;
-
         // The overshoot of the back family: about 10% past the target, the
         // amount Robert Penner's reference equations use.
         constexpr float back_overshoot = 1.70158f;

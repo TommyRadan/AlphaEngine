@@ -27,8 +27,6 @@ namespace
     namespace math = core::math;
     namespace gpu = rendering_engine::gpu;
 
-    constexpr float pi = 3.14159265358979323846f;
-
     // Resolution of the cosine-convolved diffuse cube. Irradiance varies
     // slowly across direction, so a small cube captures it without visible
     // banding once bilinearly filtered.
@@ -183,7 +181,7 @@ namespace
     math::vec3 importance_sample_ggx(const math::vec2& xi, float roughness)
     {
         const float a = roughness * roughness;
-        const float phi = 2.0f * pi * xi.x;
+        const float phi = math::two_pi * xi.x;
         const float cos_theta = std::sqrt((1.0f - xi.y) / (1.0f + (a * a - 1.0f) * xi.y));
         const float sin_theta = std::sqrt(std::max(0.0f, 1.0f - cos_theta * cos_theta));
         return math::vec3{std::cos(phi) * sin_theta, std::sin(phi) * sin_theta, cos_theta};
@@ -369,8 +367,8 @@ namespace rendering_engine
         irradiance_descriptor.address_w = gpu::address_mode::clamp_edge;
         m_irradiance = gpu.create_texture(irradiance_descriptor);
 
-        const float d_phi = (2.0f * pi) / static_cast<float>(irradiance_phi_steps);
-        const float d_theta = (0.5f * pi) / static_cast<float>(irradiance_theta_steps);
+        const float d_phi = math::two_pi / static_cast<float>(irradiance_phi_steps);
+        const float d_theta = math::half_pi / static_cast<float>(irradiance_theta_steps);
         std::vector<float> irradiance_face(static_cast<size_t>(irradiance_size) * irradiance_size * 4);
         for (int face = 0; face < 6; ++face)
         {
@@ -405,7 +403,7 @@ namespace rendering_engine
                             weight += 1.0f;
                         }
                     }
-                    const math::vec3 irradiance = sum * (pi / std::max(weight, 1.0f));
+                    const math::vec3 irradiance = sum * (math::pi / std::max(weight, 1.0f));
 
                     float* out = &irradiance_face[(static_cast<size_t>(y) * irradiance_size + x) * 4];
                     out[0] = irradiance.x;

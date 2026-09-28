@@ -56,7 +56,7 @@ GAME_MODULE()
     for (int i = 0; i < sample_count; ++i)
     {
         const float t = static_cast<float>(i) / static_cast<float>(sample_count - 1);
-        const float angle = turns * 2.0f * 3.14159265f * t;
+        const float angle = turns * 2.0f * math::pi * t;
         const math::vec3 position{std::cos(angle), 2.0f * t - 1.0f, std::sin(angle)};
         positions.push_back(position);
         colors.push_back(math::vec3{0.5f + 0.5f * std::cos(angle), t, 0.5f + 0.5f * std::sin(angle)});

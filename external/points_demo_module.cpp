@@ -55,7 +55,7 @@ GAME_MODULE()
     positions.reserve(point_count);
     colors.reserve(point_count);
 
-    const float golden_angle = 3.14159265f * (3.0f - std::sqrt(5.0f));
+    const float golden_angle = math::pi * (3.0f - std::sqrt(5.0f));
     for (int i = 0; i < point_count; ++i)
     {
         const float t = static_cast<float>(i) / static_cast<float>(point_count - 1);

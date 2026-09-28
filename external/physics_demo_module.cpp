@@ -4,12 +4,13 @@
 #include "api/game_module.hpp"
 
 #include <assets/color.hpp>
+#include <assets/mesh_generators.hpp>
 #include <core/math/math.hpp>
 #include <rendering_engine/materials/standard_material.hpp>
-#include <rendering_engine/renderables/premade_3d/box.hpp>
 #include <rendering_engine/renderer.hpp>
+#include <rendering_engine/resources/asset_cache.hpp>
 #include <runtime/components/collider_component.hpp>
-#include <runtime/components/renderable_component.hpp>
+#include <runtime/components/mesh_component.hpp>
 #include <runtime/components/rigidbody_component.hpp>
 #include <runtime/engine.hpp>
 
@@ -23,9 +24,9 @@
 // few boxes dropped onto a pedestal that stands on the shadow demo's
 // ground plane, just left of the camera's starting line of sight. Nothing
 // here says what shape anything is — every collider is fitted to the
-// premade box its node draws, the pedestal (a collider alone) is a static
-// body and each crate (a rigidbody alone) a dynamic one. The crates are
-// dropped again every few seconds. Debug builds draw the colliders and
+// generated box mesh its node draws, the pedestal (a collider alone) is a
+// static body and each crate (a rigidbody alone) a dynamic one. The crates
+// are dropped again every few seconds. Debug builds draw the colliders and
 // contacts on top (the overlay's Helpers panel toggles "Physics").
 //
 //   physics_demo    (box_drop: the materials; re-drops the crates)
@@ -119,20 +120,21 @@ GAME_MODULE()
     }
     auto& cache = *runtime::current_engine().assets;
 
-    auto pedestal_box = std::make_unique<rendering_engine::box>(
-        cache, dropper->make_material(assets::color{150, 150, 160, 255}), 3.0f, 3.0f, pedestal_height);
+    rendering_engine::standard_material* pedestal_material = dropper->make_material(assets::color{150, 150, 160, 255});
+    auto pedestal_box =
+        cache.get_or_create_mesh(assets::mesh_generators::box{.width = 3.0f, .height = 3.0f, .depth = pedestal_height});
     runtime::node& pedestal = scene.create_node("pedestal", &demo);
     pedestal.transform.set_position(pedestal_center);
-    pedestal.add_component(runtime::renderable_component{std::move(pedestal_box)});
+    pedestal.add_component(runtime::mesh_component{pedestal_material, std::move(pedestal_box)});
     pedestal.add_component(runtime::collider_component{});
 
     rendering_engine::standard_material* crate_material = dropper->make_material(assets::color{230, 126, 34, 255});
     for (std::size_t i = 0; i < drop_offsets.size(); ++i)
     {
-        auto crate_box =
-            std::make_unique<rendering_engine::box>(cache, crate_material, crate_size, crate_size, crate_size);
+        auto crate_box = cache.get_or_create_mesh(
+            assets::mesh_generators::box{.width = crate_size, .height = crate_size, .depth = crate_size});
         runtime::node& crate = scene.create_node("crate", &demo);
-        crate.add_component(runtime::renderable_component{std::move(crate_box)});
+        crate.add_component(runtime::mesh_component{crate_material, std::move(crate_box)});
         crate.add_component(runtime::rigidbody_component{runtime::physics::body_type::dynamic_body, 2.0f});
         dropper->add_crate(crate);
     }
