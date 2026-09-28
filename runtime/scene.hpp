@@ -24,6 +24,11 @@
 #include <runtime/component.hpp>
 #include <runtime/node.hpp>
 
+namespace rendering_engine
+{
+    struct render_world;
+}
+
 namespace runtime
 {
     /**
@@ -289,6 +294,32 @@ namespace runtime
         bool is_traversing() const noexcept;
 
         /**
+         * @brief The @ref rendering_engine::render_world this scene's
+         *        components attach lights, cameras and helpers into, or
+         *        @c nullptr for a scene the scene manager has not wired up
+         *        yet.
+         *
+         * A component's @c on_attach reaches it through
+         * @c owner.scene()->world() rather than a global, so a game module
+         * that creates a light or camera directly does the same.
+         */
+        rendering_engine::render_world* world() const noexcept
+        {
+            return m_world;
+        }
+
+        /**
+         * @brief Sets the render_world this scene feeds.
+         *
+         * Called once by @ref runtime::scene_manager as it creates the
+         * scene, before anything attaches a component to it.
+         */
+        void set_world(rendering_engine::render_world* world) noexcept
+        {
+            m_world = world;
+        }
+
+        /**
          * @brief Pools backing every node's components.
          *
          * One @ref core::pool per component type; nodes hold handles
@@ -388,6 +419,9 @@ namespace runtime
         // Declared after root so it is destroyed first; empty by then, as
         // release_all has already freed every node in it.
         node_pool m_nodes;
+
+        // The render_world this scene's components attach to; see @ref world.
+        rendering_engine::render_world* m_world{nullptr};
     };
 
     /**

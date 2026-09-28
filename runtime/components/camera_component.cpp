@@ -6,7 +6,9 @@
 #include <core/log.hpp>
 #include <rendering_engine/camera/orthographic_camera.hpp>
 #include <rendering_engine/camera/perspective_camera.hpp>
+#include <rendering_engine/render_world.hpp>
 #include <runtime/node.hpp>
+#include <runtime/scene.hpp>
 
 runtime::camera_component::camera_component(std::unique_ptr<rendering_engine::camera> camera)
     : m_camera{std::move(camera)}
@@ -64,7 +66,15 @@ void runtime::camera_component::on_attach(node& owner)
     // and the view matrix is derived from the composed world matrix on every
     // query, so nothing has to be copied per frame.
     m_camera->transform.set_parent(&owner.transform);
-    m_camera->attach();
+
+    runtime::scene* scene = owner.scene();
+    rendering_engine::render_world* world = scene != nullptr ? scene->world() : nullptr;
+    if (world == nullptr)
+    {
+        LOG_WRN("runtime::camera_component::on_attach: node has no scene render_world; the camera stays unattached");
+        return;
+    }
+    m_camera->attach(*world);
 }
 
 void runtime::camera_component::on_destroy()

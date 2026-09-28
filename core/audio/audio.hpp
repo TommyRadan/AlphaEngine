@@ -139,8 +139,8 @@ namespace core
 
         // --- Listener arbitration --------------------------------------
         //
-        // Mirrors the camera registry in spirit (rendering_engine/camera/
-        // camera_registry.hpp) but simpler: there is no priority, just "the
+        // Mirrors camera arbitration in spirit (rendering_engine/camera/
+        // camera.hpp) but simpler: there is no priority, just "the
         // most recently attached, enabled listener wins". A default (0)
         // token names no listener.
         using listener_token = std::uint32_t;

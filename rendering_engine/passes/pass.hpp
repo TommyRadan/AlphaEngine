@@ -27,6 +27,7 @@ namespace rendering_engine
     }
 
     struct camera;
+    struct render_world;
     struct scene_pass;
     struct shadow_pass;
     struct point_shadow_pass;
@@ -83,13 +84,21 @@ namespace rendering_engine
         // here; the UI pass composites on top of it.
         gpu::render_target swapchain_target{};
 
-        // The camera this frame renders with — the winner of the camera
-        // registry's arbitration (rendering_engine::active_camera: the
-        // highest-priority attached, enabled camera) evaluated once per
-        // frame — or nullptr when no attached camera is enabled. Passes that
-        // need a camera read it from here, never from the registry, and
+        // The camera this frame renders with — the winner of @ref world's
+        // arbitration (render_world::active_camera: the highest-priority
+        // attached, enabled camera) evaluated once per frame — or nullptr
+        // when no attached camera is enabled. Passes that need a camera
+        // read it from here, never from @ref world directly, and
         // early-return when it is null.
         camera* active_camera{nullptr};
+
+        // What this frame draws: the lights and cameras (@ref
+        // render_world::lights, @ref render_world::cameras), the renderable
+        // registries and the environment probe / fog. Passes read lights
+        // and cameras only through this, never through a global, so more
+        // than one render_world can exist in a process. Never null once
+        // the renderer is up.
+        const render_world* world{nullptr};
 
         // Pixel size of the off-screen scene / LDR targets (and so of
         // the swapchain they resolve into) this frame.

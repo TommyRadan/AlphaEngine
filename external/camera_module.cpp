@@ -19,8 +19,8 @@
 
 #include <core/input.hpp>
 #include <core/math/math.hpp>
-#include <rendering_engine/camera/camera_registry.hpp>
 #include <rendering_engine/camera/perspective_camera.hpp>
+#include <rendering_engine/renderer.hpp>
 #include <runtime/components/camera_component.hpp>
 #include <runtime/engine.hpp>
 #include <runtime/engine_settings.hpp>
@@ -96,13 +96,13 @@ namespace
 
     // A perspective camera built from the engine's configuration: the
     // settings' field of view and the drawable's aspect as the renderer last
-    // reported it to the camera registry (the settings' logical size stands
-    // in before the renderer is up). The registry keeps the aspect current
-    // once the camera attaches.
+    // reported it to its render_world (the settings' logical size stands in
+    // before the renderer is up). The world keeps the aspect current once
+    // the camera attaches.
     std::unique_ptr<rendering_engine::camera> make_perspective_camera()
     {
         const runtime::engine_settings& s = *runtime::current_engine().settings;
-        const float reported = rendering_engine::drawable_aspect();
+        const float reported = runtime::current_engine().renderer->world().drawable_aspect();
         const float aspect_ratio = reported > 0.0f ? reported : s.window.aspect_ratio();
         return std::make_unique<rendering_engine::perspective_camera>(s.camera.field_of_view, aspect_ratio);
     }

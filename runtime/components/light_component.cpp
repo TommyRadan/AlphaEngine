@@ -9,7 +9,9 @@
 #include <rendering_engine/lighting/directional_light.hpp>
 #include <rendering_engine/lighting/point_light.hpp>
 #include <rendering_engine/lighting/spot_light.hpp>
+#include <rendering_engine/render_world.hpp>
 #include <runtime/node.hpp>
+#include <runtime/scene.hpp>
 
 namespace
 {
@@ -81,6 +83,30 @@ runtime::light_component runtime::light_component::clone() const
     copy->color = m_light->color;
     copy->intensity = m_light->intensity;
     return light_component{std::move(copy)};
+}
+
+void runtime::light_component::on_attach(node& owner)
+{
+    if (!m_light)
+    {
+        return;
+    }
+    runtime::scene* scene = owner.scene();
+    rendering_engine::render_world* world = scene != nullptr ? scene->world() : nullptr;
+    if (world == nullptr)
+    {
+        LOG_WRN("runtime::light_component::on_attach: node has no scene render_world; the light stays unattached");
+        return;
+    }
+    m_light->attach(*world);
+}
+
+void runtime::light_component::on_destroy()
+{
+    if (m_light)
+    {
+        m_light->detach();
+    }
 }
 
 void runtime::light_component::on_active_changed(node& owner, bool active)

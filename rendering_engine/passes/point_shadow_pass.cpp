@@ -16,6 +16,7 @@
 #include <rendering_engine/lighting/light.hpp>
 #include <rendering_engine/lighting/lights_ubo.hpp>
 #include <rendering_engine/lighting/point_light.hpp>
+#include <rendering_engine/render_world.hpp>
 #include <rendering_engine/renderables/per_draw_ubo.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
 
@@ -298,11 +299,11 @@ namespace rendering_engine
         return m_caster_mask;
     }
 
-    void point_shadow_pass::prepare(const frame_context& /*ctx*/)
+    void point_shadow_pass::prepare(const frame_context& ctx)
     {
-        // Nothing in the frame context shapes an omni map: the six faces
+        // Nothing but the light list shapes an omni map: the six faces
         // are fixed 90-degree views from the light, independent of the
-        // camera, so the pass reads only the light registry and the
+        // camera, so the pass reads only the world's lights and the
         // renderable registry.
         auto& gpu = *m_device;
         m_culled = 0;
@@ -312,7 +313,7 @@ namespace rendering_engine
         const point_light* caster = nullptr;
         m_shadow_point_index = -1;
         int point_index = 0;
-        for (const light* l : registered_lights())
+        for (const light* l : ctx.world->lights())
         {
             if (l->type() != light_type::point)
             {

@@ -17,9 +17,10 @@ namespace
     }
 } // namespace
 
-runtime::scene_manager::scene_manager()
+runtime::scene_manager::scene_manager(rendering_engine::render_world& world) : m_world{&world}
 {
     m_scenes.push_back(entry{persistent_name(), std::make_unique<runtime::scene>()});
+    m_scenes.front().scene->set_world(m_world);
     m_active = m_scenes.front().scene.get();
 }
 
@@ -71,6 +72,7 @@ runtime::scene& runtime::scene_manager::load(core::string_id name, load_mode mod
     {
         m_scenes.push_back(entry{name, std::make_unique<runtime::scene>()});
         scene = m_scenes.back().scene.get();
+        scene->set_world(m_world);
         scene->init();
         LOG_INF("Loaded scene '%s'%s", name.c_str(), mode == load_mode::additive ? " (additive)" : "");
     }

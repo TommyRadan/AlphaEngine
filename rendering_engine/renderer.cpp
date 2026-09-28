@@ -9,7 +9,6 @@
 #include <core/time.hpp>
 #include <platform/window.hpp>
 #include <platform/window_settings.hpp>
-#include <rendering_engine/camera/camera_registry.hpp>
 #include <rendering_engine/camera/perspective_camera.hpp>
 #include <rendering_engine/debug_draw/axes_helper.hpp>
 #include <rendering_engine/debug_draw/debug_pass.hpp>
@@ -538,6 +537,7 @@ void rendering_engine::renderer::render()
     frame_context ctx{};
     ctx.swapchain_target = gpu.swapchain_target();
     ctx.active_camera = m_world.active_camera();
+    ctx.world = &m_world;
     ctx.viewport_width = m_target_width;
     ctx.viewport_height = m_target_height;
     ctx.frame_index = m_frame_index;

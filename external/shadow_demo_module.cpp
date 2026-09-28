@@ -4,10 +4,12 @@
 #include "api/game_module.hpp"
 
 #include <assets/color.hpp>
+#include <core/log.hpp>
 #include <core/math/math.hpp>
 #include <rendering_engine/lighting/ambient_light.hpp>
 #include <rendering_engine/lighting/directional_light.hpp>
 #include <rendering_engine/materials/standard_material.hpp>
+#include <rendering_engine/render_world.hpp>
 #include <rendering_engine/renderables/premade_3d/box.hpp>
 #include <rendering_engine/renderables/premade_3d/plane.hpp>
 #include <rendering_engine/renderables/premade_3d/sphere.hpp>
@@ -100,8 +102,23 @@ namespace
             aim();
         }
 
+        // Attaches the light to the node's world the first time the
+        // behaviour becomes active — there is no earlier hook with access
+        // to @ref owner — and enables it every time, mirroring
+        // light_component's on_attach / set_enabled split.
         void on_enable() override
         {
+            if (!m_light->is_attached())
+            {
+                runtime::scene* scene = owner().scene();
+                rendering_engine::render_world* world = scene != nullptr ? scene->world() : nullptr;
+                if (world == nullptr)
+                {
+                    LOG_WRN("orbiting_sun: node has no scene render_world; the sun stays unattached");
+                    return;
+                }
+                m_light->attach(*world);
+            }
             m_light->set_enabled(true);
         }
 

@@ -130,7 +130,12 @@ namespace runtime
         renderer = std::make_unique<rendering_engine::renderer>();
         physics = std::make_unique<runtime::physics::world>();
         scripts = std::make_unique<runtime::script_host>();
-        scenes = std::make_unique<runtime::scene_manager>();
+        // Every scene the manager creates feeds this renderer's world: its
+        // render_world member exists from construction (renderer::init has
+        // not built the passes yet, but the world holds no GPU resource),
+        // so components can attach to it before the engine finishes
+        // starting up.
+        scenes = std::make_unique<runtime::scene_manager>(renderer->world());
     }
 
     engine::~engine()

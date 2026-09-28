@@ -20,6 +20,7 @@
 #include <rendering_engine/lighting/directional_light.hpp>
 #include <rendering_engine/lighting/light.hpp>
 #include <rendering_engine/lighting/lights_ubo.hpp>
+#include <rendering_engine/render_world.hpp>
 #include <rendering_engine/renderables/per_draw_ubo.hpp>
 #include <rendering_engine/renderables/renderable.hpp>
 
@@ -541,7 +542,7 @@ namespace rendering_engine
         const directional_light* caster = nullptr;
         m_shadow_light_index = -1;
         int directional_index = 0;
-        for (const light* l : registered_lights())
+        for (const light* l : ctx.world->lights())
         {
             if (l->type() != light_type::directional)
             {
