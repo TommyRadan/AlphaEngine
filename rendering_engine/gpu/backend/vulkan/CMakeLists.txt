@@ -29,6 +29,7 @@ target_sources(alpha_rhi PRIVATE
     vk_negotiate.cpp
     vk_negotiate.hpp
     vk_overlay_renderer.cpp
+    vk_pass_encoder.cpp
     vk_physical_device.cpp
     vk_physical_device.hpp
     vk_pipeline_cache.cpp
