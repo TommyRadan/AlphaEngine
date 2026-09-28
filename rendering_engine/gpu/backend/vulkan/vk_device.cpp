@@ -374,15 +374,7 @@ namespace rendering_engine::gpu::backend::vulkan
                 }
                 rt.variants.clear();
             });
-        m_query_sets.for_each(
-            [&](vk_query_set& q)
-            {
-                if (q.pool != VK_NULL_HANDLE)
-                {
-                    vkDestroyQueryPool(m_device.handle(), q.pool, nullptr);
-                    q.pool = VK_NULL_HANDLE;
-                }
-            });
+        m_queries.destroy_all();
 
         m_pipelines.clear();
         m_shader_modules.clear();
@@ -392,7 +384,6 @@ namespace rendering_engine::gpu::backend::vulkan
         m_textures.clear();
         m_buffers.clear();
         m_render_targets.clear();
-        m_query_sets.clear();
 
         m_frame.destroy_sync_objects();
         destroy_swapchain();
@@ -1182,82 +1173,17 @@ namespace rendering_engine::gpu::backend::vulkan
 
     query_set vk_device::create_query_set(const query_set_descriptor& descriptor)
     {
-        if (!m_features.timestamp_queries)
-        {
-            LOG_WRN("create_query_set: the graphics queue writes no timestamps; no query set created");
-            return {};
-        }
-        if (descriptor.count == 0)
-        {
-            LOG_ERR("create_query_set: a query set needs at least one query");
-            return {};
-        }
-        VkQueryPoolCreateInfo info{};
-        info.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
-        info.queryType = VK_QUERY_TYPE_TIMESTAMP;
-        info.queryCount = descriptor.count;
-        vk_query_set record{};
-        record.count = descriptor.count;
-        if (!vk_check(vkCreateQueryPool(m_device.handle(), &info, nullptr, &record.pool), "vkCreateQueryPool"))
-        {
-            return {};
-        }
-        query_set h{};
-        h.id = m_query_sets.insert(record);
-        return h;
+        return m_queries.create_query_set(descriptor, m_features.timestamp_queries);
     }
 
     void vk_device::destroy(query_set handle)
     {
-        auto* record = m_query_sets.lookup(handle.id);
-        if (record == nullptr)
-        {
-            return;
-        }
-        // The frame's command buffer may still write or reset the
-        // pool; it goes with the rest at the next fence wait.
-        const VkDevice dev = m_device.handle();
-        const VkQueryPool pool = record->pool;
-        if (pool != VK_NULL_HANDLE)
-        {
-            enqueue_destroy([dev, pool] { vkDestroyQueryPool(dev, pool, nullptr); });
-        }
-        record->pool = VK_NULL_HANDLE;
-        m_query_sets.remove(handle.id);
+        m_queries.destroy(handle);
     }
 
     bool vk_device::resolve_queries(query_set set, uint32_t first, uint32_t count, uint64_t* out_ticks)
     {
-        auto* record = m_query_sets.lookup(set.id);
-        if (record == nullptr || record->pool == VK_NULL_HANDLE || out_ticks == nullptr || count == 0)
-        {
-            return false;
-        }
-        if (first > record->count || count > record->count - first)
-        {
-            LOG_WRN("resolve_queries: %u queries from %u exceed the %u-query set", count, first, record->count);
-            return false;
-        }
-        if (m_device.device_lost())
-        {
-            return false;
-        }
-        // No wait: VK_NOT_READY means a query has not completed (or was
-        // reset and never written) and the caller keeps its previous
-        // values.
-        const VkResult r = vkGetQueryPoolResults(m_device.handle(),
-                                                 record->pool,
-                                                 first,
-                                                 count,
-                                                 static_cast<size_t>(count) * sizeof(uint64_t),
-                                                 out_ticks,
-                                                 sizeof(uint64_t),
-                                                 VK_QUERY_RESULT_64_BIT);
-        if (r == VK_NOT_READY)
-        {
-            return false;
-        }
-        return m_device.check_queue_result(r, "vkGetQueryPoolResults");
+        return m_queries.resolve_queries(set, first, count, out_ticks);
     }
 
     // -- Debug names ---------------------------------------------------
@@ -1928,7 +1854,7 @@ namespace rendering_engine::gpu::backend::vulkan
     }
     vk_query_set* vk_device::lookup_query_set(query_set h)
     {
-        return m_query_sets.lookup(h.id);
+        return m_queries.lookup_query_set(h);
     }
     PFN_vkCmdBeginDebugUtilsLabelEXT vk_device::cmd_begin_debug_label() const noexcept
     {

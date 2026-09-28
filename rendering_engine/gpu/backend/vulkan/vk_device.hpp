@@ -68,6 +68,7 @@
 #include <rendering_engine/gpu/backend/vulkan/vk_logical_device.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_physical_device.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_pipeline_cache.hpp>
+#include <rendering_engine/gpu/backend/vulkan/vk_query_pool.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_resources.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_transfer.hpp>
 #include <rendering_engine/gpu/device.hpp>
@@ -484,7 +485,6 @@ namespace rendering_engine::gpu::backend::vulkan
         handle_pool<vk_pipeline> m_pipelines;
         handle_pool<vk_bind_group> m_bind_groups;
         handle_pool<vk_render_target> m_render_targets;
-        handle_pool<vk_query_set> m_query_sets;
 
         // The components, in bring-up order; quit shuts them down in
         // reverse (see quit), and their destructors release nothing.
@@ -495,6 +495,7 @@ namespace rendering_engine::gpu::backend::vulkan
         vk_transfer m_transfer{m_physical_device, m_device};
         vk_frame m_frame{m_physical_device, m_device, m_transfer};
         vk_descriptor_allocator m_descriptors{m_device};
+        vk_query_pool m_queries{m_device, m_frame};
 
         // Whether presentation waits for vertical sync
         // (surface_desc::vsync), read at every swapchain build.
