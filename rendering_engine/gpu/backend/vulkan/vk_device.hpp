@@ -69,6 +69,7 @@
 #include <rendering_engine/gpu/backend/vulkan/vk_physical_device.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_pipeline_cache.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_query_pool.hpp>
+#include <rendering_engine/gpu/backend/vulkan/vk_render_pass_cache.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_resources.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_swapchain.hpp>
 #include <rendering_engine/gpu/backend/vulkan/vk_transfer.hpp>
@@ -271,16 +272,10 @@ namespace rendering_engine::gpu::backend::vulkan
         PFN_vkCmdBeginDebugUtilsLabelEXT cmd_begin_debug_label() const noexcept;
         PFN_vkCmdEndDebugUtilsLabelEXT cmd_end_debug_label() const noexcept;
 
-        // Acquire (or lazily build) the render pass + framebuffers of
-        // @p target for @p key: the per-attachment load / store ops
-        // and whether depth takes part. Entries of the key past the
-        // target's colour attachment count are ignored.
+        // The render pass + framebuffers of @p target for @p key, or
+        // for a single load op per attachment kind (see
+        // vk_render_pass_cache).
         VkRenderPass acquire_render_pass(vk_render_target& target, const vk_render_pass_key& key);
-
-        // The single-colour convenience: every colour attachment loads
-        // with @p color_load and stores, depth loads with @p depth_load
-        // and stores. What the debug overlay asks for to match the
-        // debug pass.
         VkRenderPass acquire_render_pass(vk_render_target& target,
                                          VkAttachmentLoadOp color_load,
                                          VkAttachmentLoadOp depth_load,
@@ -295,7 +290,8 @@ namespace rendering_engine::gpu::backend::vulkan
         // render pass it draws against. The cache is owned by the
         // pipeline record and torn down with it; the entries built
         // against a render pass are purged when that pass is retired
-        // (see retire_render_pass_variants), which is why the key
+        // (see vk_render_pass_cache::retire_render_pass_variants),
+        // which is why the key
         // carries @p render_pass_generation and not the handle alone.
         // @p y_flipped selects the front-face mapping: swapchain
         // passes render through a negative-height viewport (CCW
@@ -309,13 +305,6 @@ namespace rendering_engine::gpu::backend::vulkan
                                          bool y_flipped,
                                          uint32_t color_count,
                                          VkSampleCountFlagBits samples);
-
-        // Lazily create (and cache on the texture) the single-level,
-        // single-layer 2D view a framebuffer attaches @p tex through
-        // at @p mip / @p layer, carrying every aspect of the format.
-        // Returns VK_NULL_HANDLE when the subresource is out of range
-        // or the view cannot be created.
-        VkImageView attachment_image_view(vk_texture& tex, uint32_t mip, uint32_t layer);
 
         // Record a whole-image layout transition of @p tex into
         // @p cmd and update the tracked layout. No-op when the image
@@ -433,19 +422,6 @@ namespace rendering_engine::gpu::backend::vulkan
         // suspended instead of throwing; a later call resumes it.
         // Returns true when a new swapchain is live.
         bool recreate_swapchain();
-        // Retire every render-pass variant of @p target: its
-        // VkRenderPass objects, the framebuffers built on them and —
-        // by generation, walking the pipeline pool — every graphics
-        // pipeline variant built against them, so no pipeline can be
-        // matched to a recycled render-pass handle. Render passes and
-        // pipelines go through the deferred-destroy queue (they may be
-        // bound by the previous frame's command buffer when a target
-        // is destroyed mid-run). With @p device_idle the caller has
-        // waited the device idle and is about to destroy the image
-        // views the framebuffers reference, so those are freed right
-        // here, ahead of their attachments; otherwise they are
-        // deferred with the rest.
-        void retire_render_pass_variants(vk_render_target& target, bool device_idle);
         // Bring @p slot's region of @p record up to date except for
         // [@p skip_begin, @p skip_end), which the caller is about to
         // overwrite: copies the rest of the region's gap from the latest
@@ -473,6 +449,8 @@ namespace rendering_engine::gpu::backend::vulkan
         vk_query_pool m_queries{m_device, m_frame};
         vk_swapchain m_swapchain{
             m_instance, m_physical_device, m_device, m_frame, [this] { return recreate_swapchain(); }};
+        vk_render_pass_cache m_render_passes{
+            m_physical_device, m_device, m_frame, m_swapchain, m_textures, m_pipelines};
 
         // Serialise the two device paths the secondary encoders of a
         // parallel render pass reach from several threads at once (see
@@ -490,10 +468,6 @@ namespace rendering_engine::gpu::backend::vulkan
         bool m_device_lost_thrown{false};
 
         render_target m_swapchain_target{};
-
-        // Source of vk_render_target::variant::render_pass_generation;
-        // starts at 1 so 0 can mean "no render pass".
-        uint64_t m_next_render_pass_generation{1};
 
         bool m_initialised{false};
 

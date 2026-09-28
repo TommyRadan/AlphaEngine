@@ -520,7 +520,8 @@ namespace rendering_engine::gpu::backend::vulkan
         // any fork.
         const std::lock_guard<std::mutex> lock(m_pipeline_variant_mutex);
         // The generation is part of the key: a retired render pass's
-        // variants are purged with it (retire_render_pass_variants),
+        // variants are purged with it (see
+        // vk_render_pass_cache::retire_render_pass_variants),
         // and a new pass that happens to reuse the handle value carries
         // a new generation, so it can never match a stale entry.
         for (const auto& v : record->graphics_variants)
