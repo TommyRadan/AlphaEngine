@@ -203,6 +203,17 @@ namespace editor
         ImGuizmo::BeginFrame();
 
         build_panels();
+    }
+
+    void editor_layer::end_frame()
+    {
+        if (!m_live)
+        {
+            return;
+        }
+
+        draw_debug_visuals();
+        draw_debug_text();
 
         ImGui::Render();
     }

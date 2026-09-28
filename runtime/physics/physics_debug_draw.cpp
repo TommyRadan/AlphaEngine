@@ -3,27 +3,26 @@
 
 #include <runtime/physics/physics_debug_draw.hpp>
 
+#include <cstddef>
+#include <vector>
+
+#include <core/math/vec3.hpp>
+#include <rendering_engine/debug_draw/debug_draw.hpp>
 #include <runtime/physics/physics_world.hpp>
 
 namespace runtime::physics
 {
-    debug_draw::debug_draw(rendering_engine::renderer& renderer, const world& source)
-        : line_helper(renderer, "Physics"), m_world{source}
+    void draw_debug(const world& physics, rendering_engine::render_world& target)
     {
-    }
-
-    void debug_draw::refresh()
-    {
-        const std::uint64_t revision = m_world.revision();
-        if (m_built && revision == m_revision)
+        if constexpr (rendering_engine::debug_draw::enabled)
         {
-            return;
+            std::vector<core::math::vec3> positions;
+            std::vector<core::math::vec3> colors;
+            physics.debug_lines(positions, colors);
+            for (std::size_t i = 0; i + 1 < positions.size(); i += 2)
+            {
+                rendering_engine::debug_draw::line(target, positions[i], positions[i + 1], colors[i]);
+            }
         }
-        m_revision = revision;
-        m_built = true;
-        m_positions.clear();
-        m_colors.clear();
-        m_world.debug_lines(m_positions, m_colors);
-        set_segments(m_positions, m_colors);
     }
 } // namespace runtime::physics

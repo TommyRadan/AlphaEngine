@@ -142,15 +142,25 @@ namespace rendering_engine
         line_material& get_line_material();
 
         /**
-         * @brief Built-in line material for debug gizmos — line topology
+         * @brief Built-in line material for debug drawing — line topology
          *        with depth testing disabled.
          *
          * Shares the scene per-frame layout (camera at slot 0) with
-         * @ref get_line_material, but draws depth-less so the debug
-         * helpers always read on top in the depth-less debug pass. Used by
-         * the @ref debug_draw::helper family.
+         * @ref get_line_material, but draws depth-less so the on-top debug
+         * lines always read on top in the depth-less debug pass (see
+         * @ref debug_draw::line_batches).
          */
         line_material& get_debug_line_material();
+
+        /**
+         * @brief Creates a line material on the built-in line template,
+         *        owned by the caller: depth tested and written, or with
+         *        neither when @p depth_tested is false (see
+         *        @ref line_material). It shares the template's pipeline
+         *        cache. Valid between @ref init and @ref quit; the returned
+         *        material must not outlive the library.
+         */
+        std::unique_ptr<line_material> create_line_material(bool depth_tested);
 
         /**
          * @brief Built-in analytic infinite-grid material (the CAD-style
@@ -187,9 +197,14 @@ namespace rendering_engine
         // the instances; @ref quit releases it last, explicitly.
         std::shared_ptr<material_template> m_standard_template;
 
+        // The line template the built-in line instances and
+        // @ref create_line_material share, held and released like the
+        // standard one.
+        std::shared_ptr<material_template> m_line_template;
+
         // The built-in instances, released in reverse order by @ref quit.
         // Each keeps its template alive; the scene lines and the
-        // depth-disabled debug-gizmo lines are two instances of one line
+        // depth-disabled debug lines are two instances of one line
         // template, bound to two pipeline variants.
         std::unique_ptr<basic_material> m_basic_material;
         std::unique_ptr<instanced_material> m_instanced_material;

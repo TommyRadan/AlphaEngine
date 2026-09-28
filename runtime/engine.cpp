@@ -20,7 +20,6 @@
 #include <platform/audio_device.hpp>
 #include <platform/platform.hpp>
 #include <platform/window.hpp>
-#include <rendering_engine/debug_draw/helper.hpp>
 #include <rendering_engine/gpu/device.hpp>
 #include <rendering_engine/gpu/shader_compiler.hpp>
 #include <rendering_engine/gpu/surface.hpp>
@@ -32,7 +31,6 @@
 #include <runtime/engine_settings.hpp>
 #include <runtime/game_module.hpp>
 #include <runtime/overlay.hpp>
-#include <runtime/physics/physics_debug_draw.hpp>
 #include <runtime/physics/physics_world.hpp>
 #include <runtime/reflection.hpp>
 #include <runtime/render_extraction.hpp>
@@ -223,7 +221,6 @@ namespace runtime
         m_overlay.reset();
         scenes.reset();
         scripts.reset();
-        m_physics_debug.reset();
         physics.reset();
         renderer.reset();
         // Destroyed after its consumers (renderer / scenes) so their handles
@@ -321,11 +318,6 @@ namespace runtime
         assets->enable_hot_reload(content_root);
 #endif
         physics->init();
-#if _DEBUG
-        // After the renderer and the world: the line helper that draws the
-        // world's colliders.
-        m_physics_debug = std::make_unique<runtime::physics::debug_draw>(*renderer, *physics);
-#endif
         // Before the scenes, so the game modules' bootstraps and scene files
         // can attach scripted behaviours; scripts read through the VFS
         // mounted above.
@@ -359,10 +351,7 @@ namespace runtime
         scenes->quit();
         // Every scripted behaviour went with its scene; close the Lua state.
         scripts->quit();
-        // Every physics component has unregistered with its scene; the world
-        // and its debug helper go before the renderer the helper draws
-        // through.
-        m_physics_debug.reset();
+        // Every physics component has unregistered with its scene.
         physics->quit();
         // Scene teardown is where the bulk of the asset handles drop; reclaim
         // the index slots they leave behind before the cache itself goes.
@@ -408,6 +397,18 @@ namespace runtime
         // through event_bus::enqueue since the last frame, then upload the
         // asynchronous asset loads whose decodes have landed, so a texture
         // that finished decoding is drawn this frame.
+#if _DEBUG
+        // Before anything records this frame, age what the debug-draw
+        // functions recorded by the frame's game time (none while paused)
+        // and drop what expired: an entry drawn for no duration was drawn
+        // last frame and goes now.
+        add(stage::input,
+            "debug_draw_expiry",
+            order::debug_draw_expiry,
+            always,
+            [this](const frame_time& frame)
+            { renderer->world().debug_draw_list().advance(static_cast<float>(frame.delta)); });
+#endif
         add(stage::input,
             "window_events",
             order::window_events,
@@ -514,10 +515,11 @@ namespace runtime
         // Render extraction, for a frame that is drawn: build the overlay
         // (which may edit nodes too), then write the meshes, UI elements,
         // lights and cameras the renderer reads into its world, once, from
-        // that final state, then have the debug helpers rebuild what they
-        // follow from it — the proxies just written, the physics world's
-        // lines — so the renderer reads neither the scene nor the physics
-        // world.
+        // that final state, then have the overlay finish its frame from it
+        // — the editor draws its light and camera gizmos from the proxies
+        // just written, and the physics world's colliders, through the
+        // debug-draw functions — so the renderer reads neither the scene nor
+        // the physics world.
         add(stage::render_extract,
             "overlay",
             order::overlay,
@@ -535,10 +537,16 @@ namespace runtime
             always,
             [this](const frame_time&) { extract_render_proxies(*scenes); });
         add(stage::render_extract,
-            "debug_helpers",
-            order::debug_helpers,
+            "overlay_finish",
+            order::overlay_finish,
             always,
-            [this](const frame_time&) { rendering_engine::debug_draw::update_helpers(renderer->world()); });
+            [this](const frame_time&)
+            {
+                if (m_overlay != nullptr)
+                {
+                    m_overlay->end_frame();
+                }
+            });
     }
 
     void engine::tick()

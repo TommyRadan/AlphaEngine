@@ -68,6 +68,24 @@ namespace editor
         float snap_scale{0.1f};
     };
 
+    /**
+     * @brief Which built-in visualisations the editor draws each frame
+     *        through the debug-draw functions; toggled from the Helpers
+     *        panel. The ground grid's toggle is the grid's own visibility
+     *        (@c renderer::editor_grid).
+     */
+    struct debug_visuals
+    {
+        // The world axes at the origin.
+        bool axes{true};
+        // The physics world's colliders and contacts.
+        bool physics{true};
+        // A gizmo per enabled directional, point and spot light.
+        bool lights{false};
+        // The view frustum of every enabled camera but the one rendering.
+        bool cameras{false};
+    };
+
     /** @brief The Console panel's filters. */
     struct console_state
     {
@@ -113,9 +131,12 @@ namespace editor
      * @ref init creates the ImGui context, brings up the SDL3 platform
      * backend and the GPU device's overlay renderer (which the renderer's
      * debug pass then records every frame), and installs the window's
-     * event filter; @ref begin_frame builds every panel and ends in
-     * @c ImGui::Render; @ref shutdown undoes @ref init in reverse. Every
-     * piece of panel state lives in this object.
+     * event filter; @ref begin_frame starts the ImGui frame and builds
+     * every panel; @ref end_frame, once the render extraction has written
+     * the frame's proxies, draws the debug visualisations and the
+     * debug-draw text labels and ends in @c ImGui::Render; @ref shutdown
+     * undoes @ref init in reverse. Every piece of panel state lives in this
+     * object.
      */
     struct editor_layer final : runtime::overlay
     {
@@ -127,6 +148,7 @@ namespace editor
 
         void init(runtime::engine& eng) override;
         void begin_frame() override;
+        void end_frame() override;
         void shutdown() override;
 
     private:
@@ -184,6 +206,10 @@ namespace editor
         // helpers_panel.cpp
         void draw_helpers_window();
 
+        // debug_visuals.cpp
+        void draw_debug_visuals();
+        void draw_debug_text();
+
         // -- State --------------------------------------------------------
 
         // The engine init was handed; null before init.
@@ -221,6 +247,7 @@ namespace editor
         inspector_state m_inspector;
         profiler_state m_profiler;
         post_panel_state m_post;
+        debug_visuals m_visuals;
 
         // The texture the Render Targets panel shows, as an index into
         // its slot list.

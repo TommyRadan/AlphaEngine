@@ -16,8 +16,7 @@
 namespace rendering_engine::debug_draw
 {
     infinite_grid::infinite_grid(renderer& owner, float fade_distance)
-        : helper(owner, "Grid (infinite)"), m_material(owner.create_grid_material(fade_distance)),
-          m_world(&owner.world())
+        : m_material(owner.create_grid_material(fade_distance)), m_world(&owner.world())
     {
         // A single fullscreen triangle in clip space; the grid material's
         // vertex shader unprojects these corners to reconstruct the view
@@ -51,7 +50,7 @@ namespace rendering_engine::debug_draw
 
     void infinite_grid::set_visible(bool visible)
     {
-        helper::set_visible(visible);
+        m_visible = visible;
         m_world->set_mesh_visible(m_proxy, visible);
     }
 } // namespace rendering_engine::debug_draw

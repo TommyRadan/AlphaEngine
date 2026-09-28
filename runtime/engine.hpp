@@ -71,9 +71,8 @@ namespace runtime
 }
 namespace runtime::physics
 {
-    struct debug_draw;
     struct world;
-} // namespace runtime::physics
+}
 
 namespace runtime
 {
@@ -185,9 +184,6 @@ namespace runtime
         core::subscription m_quit_subscription;
         // Frames rendered so far, for diagnostics.frame_limit.
         unsigned int m_frames_rendered{0};
-        // Debug builds: the line helper drawing the physics world's
-        // colliders, alive while both the world and the renderer are up.
-        std::unique_ptr<runtime::physics::debug_draw> m_physics_debug;
         // The tool layer drawn over every rendered frame, when the
         // executable installed one (see set_overlay).
         std::unique_ptr<runtime::overlay> m_overlay;

@@ -44,7 +44,7 @@ namespace runtime
         animation,     ///< Animated poses, sampled between the last two fixed steps.
         transform_propagation, ///< Every world matrix settled.
         audio,                 ///< Listener and source poses handed to the mixer, the mixer fed.
-        render_extract,        ///< The tool overlay built, the render proxies and debug helpers written.
+        render_extract,        ///< The tool overlay built, the render proxies written, the tool overlay finished.
     };
 
     /** @brief Number of @ref stage values. */
@@ -114,10 +114,11 @@ namespace runtime
     namespace engine_order
     {
         // stage::input
-        inline constexpr int window_events = -400; ///< The window pumps OS events onto the event bus.
-        inline constexpr int input_frame = -300;   ///< @c core::input latches the frame's cursor motion.
-        inline constexpr int event_queue = -200;   ///< The events buffered since the last frame are delivered.
-        inline constexpr int asset_uploads = -100; ///< Finished asynchronous asset loads are uploaded.
+        inline constexpr int debug_draw_expiry = -500; ///< Debug builds: the debug-draw list ages; expired entries go.
+        inline constexpr int window_events = -400;     ///< The window pumps OS events onto the event bus.
+        inline constexpr int input_frame = -300;       ///< @c core::input latches the frame's cursor motion.
+        inline constexpr int event_queue = -200;       ///< The events buffered since the last frame are delivered.
+        inline constexpr int asset_uploads = -100;     ///< Finished asynchronous asset loads are uploaded.
 
         // stage::scripts_fixed
         inline constexpr int input_step = -100; ///< @c core::input latches the step's pressed / released edges.
@@ -149,9 +150,9 @@ namespace runtime
         inline constexpr int audio_mix = 0;      ///< The mixer tops the device up, at the time scale.
 
         // stage::render_extract
-        inline constexpr int overlay = -100;      ///< The tool overlay (the editor) builds its frame.
-        inline constexpr int render_proxies = 0;  ///< Meshes, UI, lights and cameras are extracted.
-        inline constexpr int debug_helpers = 100; ///< The debug helpers rebuild what they follow.
+        inline constexpr int overlay = -100;       ///< The tool overlay (the editor) builds its frame.
+        inline constexpr int render_proxies = 0;   ///< Meshes, UI, lights and cameras are extracted.
+        inline constexpr int overlay_finish = 100; ///< The tool overlay finishes its frame from those proxies.
     } // namespace engine_order
 
     /** @brief What one system cost in the latest complete frame. */

@@ -3,8 +3,8 @@
 
 /**
  * @file helpers_panel.cpp
- * @brief The Helpers panel: a visibility toggle for every live debug-
- *        draw helper.
+ * @brief The Helpers panel: a toggle for the ground grid and for each of
+ *        the editor's debug visualisations.
  */
 
 #ifdef ALPHAENGINE_HAS_IMGUI
@@ -13,16 +13,16 @@
 
 #include <imgui.h>
 
-#include <rendering_engine/debug_draw/helper.hpp>
+#include <rendering_engine/debug_draw/infinite_grid.hpp>
 #include <rendering_engine/renderer.hpp>
 #include <runtime/engine.hpp>
 
 namespace editor
 {
-    // Lists every live debug gizmo with
-    // a checkbox bound to its visibility, plus master show / hide
-    // shortcuts. The helper list comes from the renderer's world, so
-    // the toggles take effect on the next debug-pass draw.
+    // One checkbox per visualisation, plus show / hide all shortcuts. The
+    // grid's checkbox is the renderer's grid proxy's visibility; the others
+    // are what draw_debug_visuals records every frame, so a toggle takes
+    // effect on the frame it is flipped in.
     void editor_layer::draw_helpers_window()
     {
         if (!m_show.helpers)
@@ -30,48 +30,45 @@ namespace editor
             return;
         }
 
-        const auto& helpers = m_engine->renderer->world().helpers();
+        rendering_engine::debug_draw::infinite_grid* grid = m_engine->renderer->editor_grid();
 
         ImGui::SetNextWindowSize(ImVec2{260.0f, 0.0f}, ImGuiCond_FirstUseEver);
         if (ImGui::Begin("Helpers", &m_show.helpers))
         {
-            if (helpers.empty())
+            const auto set_all = [this, grid](bool shown)
             {
-                ImGui::TextDisabled("no debug helpers registered");
+                if (grid != nullptr)
+                {
+                    grid->set_visible(shown);
+                }
+                m_visuals.axes = shown;
+                m_visuals.physics = shown;
+                m_visuals.lights = shown;
+                m_visuals.cameras = shown;
+            };
+            if (ImGui::SmallButton("Show all"))
+            {
+                set_all(true);
             }
-            else
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Hide all"))
             {
-                if (ImGui::SmallButton("Show all"))
-                {
-                    for (auto* gizmo : helpers)
-                    {
-                        gizmo->set_visible(true);
-                    }
-                }
-                ImGui::SameLine();
-                if (ImGui::SmallButton("Hide all"))
-                {
-                    for (auto* gizmo : helpers)
-                    {
-                        gizmo->set_visible(false);
-                    }
-                }
-                ImGui::Separator();
+                set_all(false);
+            }
+            ImGui::Separator();
 
-                // Disambiguate the checkbox ids by index so two
-                // helpers sharing a name still toggle independently.
-                int index = 0;
-                for (auto* gizmo : helpers)
+            if (grid != nullptr)
+            {
+                bool shown = grid->is_visible();
+                if (ImGui::Checkbox("Grid", &shown))
                 {
-                    ImGui::PushID(index++);
-                    bool shown = gizmo->is_visible();
-                    if (ImGui::Checkbox(gizmo->name(), &shown))
-                    {
-                        gizmo->set_visible(shown);
-                    }
-                    ImGui::PopID();
+                    grid->set_visible(shown);
                 }
             }
+            ImGui::Checkbox("Axes", &m_visuals.axes);
+            ImGui::Checkbox("Physics", &m_visuals.physics);
+            ImGui::Checkbox("Lights", &m_visuals.lights);
+            ImGui::Checkbox("Cameras", &m_visuals.cameras);
         }
         ImGui::End();
     }
